@@ -1,0 +1,178 @@
+{
+  "name": "WMS Shipment",
+  "module": "WMS Shipping",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "shipment_number",
+    "warehouse",
+    "route",
+    "carrier",
+    "vehicle_registration",
+    "trailer_number",
+    "driver_name",
+    "planned_departure",
+    "actual_departure",
+    "staging_bin",
+    "door",
+    "status",
+    "deliveries",
+    "handling_units",
+    "total_weight",
+    "total_volume",
+    "seal_number"
+  ],
+  "fields": [
+    {
+      "fieldname": "shipment_number",
+      "label": "Shipment Number",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "route",
+      "label": "Route",
+      "fieldtype": "Link",
+      "options": "WMS Route",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "carrier",
+      "label": "Carrier",
+      "fieldtype": "Link",
+      "options": "Supplier"
+    },
+    {
+      "fieldname": "vehicle_registration",
+      "label": "Vehicle Registration",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "trailer_number",
+      "label": "Trailer Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "driver_name",
+      "label": "Driver Name",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "planned_departure",
+      "label": "Planned Departure",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "actual_departure",
+      "label": "Actual Departure",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "staging_bin",
+      "label": "Staging Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "door",
+      "label": "Door",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Planned\nReleased\nStaging\nReady to Load\nLoading\nLoaded\nDeparted\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Planned",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "deliveries",
+      "label": "Deliveries",
+      "fieldtype": "Table",
+      "options": "Shipment Delivery"
+    },
+    {
+      "fieldname": "handling_units",
+      "label": "Handling Units",
+      "fieldtype": "Table",
+      "options": "Shipment Handling Unit"
+    },
+    {
+      "fieldname": "total_weight",
+      "label": "Total Weight",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "total_volume",
+      "label": "Total Volume",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "seal_number",
+      "label": "Seal Number",
+      "fieldtype": "Data"
+    }
+  ],
+  "autoname": "SHIP-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

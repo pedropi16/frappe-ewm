@@ -1,0 +1,126 @@
+{
+  "name": "Goods Issue",
+  "module": "WMS Outbound",
+  "custom": 0,
+  "is_submittable": 1,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "outbound_delivery",
+    "shipment",
+    "warehouse",
+    "staging_bin",
+    "posting_datetime",
+    "status",
+    "items",
+    "reversed",
+    "reversal_document"
+  ],
+  "fields": [
+    {
+      "fieldname": "outbound_delivery",
+      "label": "Outbound Delivery",
+      "fieldtype": "Link",
+      "options": "Outbound Delivery",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "shipment",
+      "label": "Shipment",
+      "fieldtype": "Link",
+      "options": "WMS Shipment"
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1
+    },
+    {
+      "fieldname": "staging_bin",
+      "label": "Staging Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1
+    },
+    {
+      "fieldname": "posting_datetime",
+      "label": "Posting Datetime",
+      "fieldtype": "Datetime",
+      "reqd": 1,
+      "default": "Now"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nPosted\nReversed\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "items",
+      "label": "Items",
+      "fieldtype": "Table",
+      "options": "Goods Issue Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reversed",
+      "label": "Reversed",
+      "fieldtype": "Check",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "reversal_document",
+      "label": "Reversal Document",
+      "fieldtype": "Link",
+      "options": "Goods Issue",
+      "unique": 1
+    }
+  ],
+  "autoname": "GI-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

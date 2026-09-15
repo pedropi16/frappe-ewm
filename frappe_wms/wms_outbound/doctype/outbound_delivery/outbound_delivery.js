@@ -1,0 +1,1 @@
+frappe.ui.form.on("Outbound Delivery", { refresh(frm) { frappe_wms.set_warehouse_filters(frm); if (!frm.is_new() && frm.doc.docstatus<2 && frm.doc.allocation_status!=="Fully Allocated") frm.add_custom_button(__("Allocate Stock"),()=>frappe_wms.call("frappe_wms.api.outbound.allocate_delivery",{delivery_name:frm.doc.name}).then(()=>frm.reload_doc()),__("Actions")); } });

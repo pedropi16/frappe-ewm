@@ -1,0 +1,135 @@
+{
+  "name": "Packing Order",
+  "module": "WMS Outbound",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "outbound_delivery",
+    "work_center_bin",
+    "status",
+    "source_hus",
+    "destination_hus",
+    "physical_hu_verified",
+    "packaging_requirements_verified",
+    "customer_requirements_verified",
+    "verified_by",
+    "completed_at",
+    "remarks"
+  ],
+  "fields": [
+    {
+      "fieldname": "outbound_delivery",
+      "label": "Outbound Delivery",
+      "fieldtype": "Link",
+      "options": "Outbound Delivery",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "work_center_bin",
+      "label": "Work Center Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nOpen\nIn Process\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "source_hus",
+      "label": "Source HUs",
+      "fieldtype": "Table",
+      "options": "Packing Source HU"
+    },
+    {
+      "fieldname": "destination_hus",
+      "label": "Destination HUs",
+      "fieldtype": "Table",
+      "options": "Packing Destination HU"
+    },
+    {
+      "fieldname": "physical_hu_verified",
+      "label": "Physical HU Verified",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "packaging_requirements_verified",
+      "label": "Packaging Requirements Verified",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "customer_requirements_verified",
+      "label": "Customer Requirements Verified",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "verified_by",
+      "label": "Verified By",
+      "fieldtype": "Link",
+      "options": "User",
+      "unique": 1
+    },
+    {
+      "fieldname": "completed_at",
+      "label": "Completed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Small Text"
+    }
+  ],
+  "autoname": "PACK-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

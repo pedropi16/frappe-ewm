@@ -1,0 +1,122 @@
+{
+  "name": "Inbound Delivery Item",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "line_number",
+    "item",
+    "expected_quantity",
+    "received_quantity",
+    "putaway_quantity",
+    "stock_uom",
+    "batch_required",
+    "serial_required",
+    "expected_stock_type",
+    "preferred_storage_type",
+    "source_document_type",
+    "source_document_number",
+    "status"
+  ],
+  "fields": [
+    {
+      "fieldname": "line_number",
+      "label": "Line Number",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "expected_quantity",
+      "label": "Expected Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "received_quantity",
+      "label": "Received Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "putaway_quantity",
+      "label": "Putaway Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "batch_required",
+      "label": "Batch Required",
+      "fieldtype": "Check",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "serial_required",
+      "label": "Serial Required",
+      "fieldtype": "Check",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "expected_stock_type",
+      "label": "Expected Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "preferred_storage_type",
+      "label": "Preferred Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "source_document_type",
+      "label": "Source Document Type",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "source_document_number",
+      "label": "Source Document Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nPartially Received\nReceived\nPutaway In Process\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Open",
+      "read_only": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

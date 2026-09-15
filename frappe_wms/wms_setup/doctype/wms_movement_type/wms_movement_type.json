@@ -1,0 +1,120 @@
+{
+  "name": "WMS Movement Type",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "movement_type_code",
+    "movement_type_name",
+    "movement_category",
+    "requires_source",
+    "requires_destination",
+    "updates_hu",
+    "inventory_effect",
+    "reversal_movement_type",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "movement_type_code",
+      "label": "Movement Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "movement_type_name",
+      "label": "Movement Type Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "movement_category",
+      "label": "Movement Category",
+      "fieldtype": "Select",
+      "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack",
+      "reqd": 1
+    },
+    {
+      "fieldname": "requires_source",
+      "label": "Requires Source",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "requires_destination",
+      "label": "Requires Destination",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "updates_hu",
+      "label": "Updates HU",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "inventory_effect",
+      "label": "Inventory Effect",
+      "fieldtype": "Select",
+      "options": "Transfer\nIncrease\nDecrease\nNo Quantity Change",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reversal_movement_type",
+      "label": "Reversal Movement Type",
+      "fieldtype": "Link",
+      "options": "WMS Movement Type"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:movement_type_code",
+  "title_field": "movement_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

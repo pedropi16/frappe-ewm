@@ -1,0 +1,210 @@
+{
+  "name": "Outbound Delivery",
+  "module": "WMS Outbound",
+  "custom": 0,
+  "is_submittable": 1,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "outbound_delivery_number",
+    "warehouse",
+    "customer",
+    "ship_to_party",
+    "delivery_date",
+    "priority",
+    "route",
+    "staging_bin",
+    "door",
+    "status",
+    "allocation_status",
+    "picking_status",
+    "packing_status",
+    "loading_status",
+    "goods_issue_status",
+    "external_reference",
+    "customer_instruction_reference",
+    "items",
+    "remarks"
+  ],
+  "fields": [
+    {
+      "fieldname": "outbound_delivery_number",
+      "label": "Outbound Delivery Number",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "customer",
+      "label": "Customer",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "ship_to_party",
+      "label": "Ship-to Party",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "delivery_date",
+      "label": "Delivery Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "reqd": 1,
+      "default": "Normal"
+    },
+    {
+      "fieldname": "route",
+      "label": "Route",
+      "fieldtype": "Link",
+      "options": "WMS Route"
+    },
+    {
+      "fieldname": "staging_bin",
+      "label": "Staging Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "door",
+      "label": "Door",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nOpen\nAllocated\nPicking\nPicked\nPacking\nPacked\nStaging\nStaged\nLoading\nLoaded\nGoods Issued\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "allocation_status",
+      "label": "Allocation Status",
+      "fieldtype": "Select",
+      "options": "Not Allocated\nPartially Allocated\nFully Allocated",
+      "reqd": 1,
+      "default": "Not Allocated",
+      "read_only": 1
+    },
+    {
+      "fieldname": "picking_status",
+      "label": "Picking Status",
+      "fieldtype": "Select",
+      "options": "Not Started\nPartially Picked\nPicked",
+      "reqd": 1,
+      "default": "Not Started",
+      "read_only": 1
+    },
+    {
+      "fieldname": "packing_status",
+      "label": "Packing Status",
+      "fieldtype": "Select",
+      "options": "Not Started\nIn Process\nPacked",
+      "reqd": 1,
+      "default": "Not Started",
+      "read_only": 1
+    },
+    {
+      "fieldname": "loading_status",
+      "label": "Loading Status",
+      "fieldtype": "Select",
+      "options": "Not Started\nIn Process\nLoaded",
+      "reqd": 1,
+      "default": "Not Started",
+      "read_only": 1
+    },
+    {
+      "fieldname": "goods_issue_status",
+      "label": "Goods Issue Status",
+      "fieldtype": "Select",
+      "options": "Not Posted\nPartially Posted\nPosted\nReversed",
+      "reqd": 1,
+      "default": "Not Posted",
+      "read_only": 1
+    },
+    {
+      "fieldname": "external_reference",
+      "label": "External Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "customer_instruction_reference",
+      "label": "Customer Instruction Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "items",
+      "label": "Items",
+      "fieldtype": "Table",
+      "options": "Outbound Delivery Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Text Editor"
+    }
+  ],
+  "autoname": "OBD-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}
