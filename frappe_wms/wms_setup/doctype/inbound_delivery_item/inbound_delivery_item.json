@@ -20,6 +20,8 @@
     "preferred_storage_type",
     "source_document_type",
     "source_document_number",
+    "purchase_order",
+    "purchase_order_item",
     "status"
   ],
   "fields": [
@@ -103,6 +105,20 @@
       "fieldname": "source_document_number",
       "label": "Source Document Number",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "purchase_order",
+      "label": "Purchase Order",
+      "fieldtype": "Link",
+      "options": "Purchase Order",
+      "read_only": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "purchase_order_item",
+      "label": "Purchase Order Item",
+      "fieldtype": "Data",
+      "read_only": 1
     },
     {
       "fieldname": "status",

@@ -20,6 +20,8 @@
     "required_serial_no",
     "required_stock_type",
     "partial_delivery_allowed",
+    "sales_order",
+    "sales_order_item",
     "status"
   ],
   "fields": [
@@ -106,6 +108,20 @@
       "label": "Partial Delivery Allowed",
       "fieldtype": "Check",
       "default": 1
+    },
+    {
+      "fieldname": "sales_order",
+      "label": "Sales Order",
+      "fieldtype": "Link",
+      "options": "Sales Order",
+      "read_only": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "sales_order_item",
+      "label": "Sales Order Item",
+      "fieldtype": "Data",
+      "read_only": 1
     },
     {
       "fieldname": "status",

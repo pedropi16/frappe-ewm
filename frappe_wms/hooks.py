@@ -11,6 +11,11 @@ required_apps = ["erpnext"]
 app_include_js = ["/assets/frappe_wms/js/frappe_wms.js"]
 app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
 
+doctype_js = {
+    "Purchase Order": "public/js/purchase_order.js",
+    "Sales Order": "public/js/sales_order.js",
+}
+
 after_install = "frappe_wms.install.after_install"
 
 doc_events = {

@@ -16,7 +16,8 @@
     "items",
     "reversed",
     "reversal_document",
-    "erpnext_stock_entry"
+    "erpnext_stock_entry",
+    "erpnext_purchase_receipt"
   ],
   "fields": [
     {
@@ -88,6 +89,14 @@
       "fieldtype": "Link",
       "options": "Stock Entry",
       "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_purchase_receipt",
+      "label": "ERPNext Purchase Receipt",
+      "fieldtype": "Link",
+      "options": "Purchase Receipt",
+      "read_only": 1,
+      "description": "Set instead of ERPNext Stock Entry when this receipt's items are linked to a Purchase Order."
     }
   ],
   "autoname": "GR-.########",

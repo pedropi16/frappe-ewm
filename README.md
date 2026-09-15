@@ -15,7 +15,15 @@ MVP warehouse management and execution app for Frappe Framework v16.
   ERPNext Warehouse, and posted Goods Receipt/Goods Issue documents mirror
   a Stock Entry (Material Receipt/Material Issue) into ERPNext so its own
   Bin quantities and valuation stay reconciled with the WMS ledger. A daily
-  scheduled job flags any drift between the two.
+  scheduled job flags any drift between the two. When a Goods Receipt/Issue
+  originates from a Purchase Order/Sales Order (via the "Create > Inbound/
+  Outbound Delivery" button on the PO/SO, or
+  `frappe_wms.services.procurement`/`services.sales`), it posts an ERPNext
+  Purchase Receipt/Delivery Note against that order instead of a generic
+  Stock Entry, correctly updating the order's received/delivered
+  percentage; cancelling the Goods Receipt/Issue cancels the matching
+  ERPNext document. A Goods Receipt/Issue must be either fully order-linked
+  or fully standalone — mixed lines are rejected rather than mis-posted.
 - RF/mobile execution UI at `/wms`: a scanner-friendly, chrome-free page
   (not a desk form) for confirming putaway/pick/move tasks, reporting
   exceptions, and looking up HU/bin contents by barcode. Requires the

@@ -17,7 +17,8 @@
     "items",
     "reversed",
     "reversal_document",
-    "erpnext_stock_entry"
+    "erpnext_stock_entry",
+    "erpnext_delivery_note"
   ],
   "fields": [
     {
@@ -94,6 +95,14 @@
       "fieldtype": "Link",
       "options": "Stock Entry",
       "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_delivery_note",
+      "label": "ERPNext Delivery Note",
+      "fieldtype": "Link",
+      "options": "Delivery Note",
+      "read_only": 1,
+      "description": "Set instead of ERPNext Stock Entry when this issue's items are linked to a Sales Order."
     }
   ],
   "autoname": "GI-.########",
