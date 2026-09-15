@@ -27,20 +27,26 @@
 
   header { display: flex; align-items: center; justify-content: space-between;
     padding: 14px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
-    flex: 0 0 auto; }
-  header .title { font-size: 18px; font-weight: 700; }
+    flex: 0 0 auto; gap: 10px; }
+  header .title-wrap { min-width: 0; }
+  header .title { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .user { font-size: 12px; color: var(--muted); }
-
-  nav.tabs { display: flex; flex: 0 0 auto; background: var(--panel); border-bottom: 1px solid var(--border); }
-  nav.tabs button { flex: 1; padding: 14px 0; background: none; border: none; color: var(--muted);
-    font-size: 15px; font-weight: 600; border-bottom: 3px solid transparent; }
-  nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+  header .home-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 14px; font-weight: 600; flex: 0 0 auto; }
 
   main { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
 
   .banner { padding: 12px 14px; border-radius: var(--radius); margin-bottom: 12px; font-size: 14px; }
   .banner.error { background: rgba(229,72,77,0.15); border: 1px solid var(--danger); color: #ffb3b5; }
   .banner.ok { background: rgba(47,179,92,0.15); border: 1px solid var(--ok); color: #a9e8bb; }
+
+  .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .menu-btn { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 10px; text-align: center; font-size: 15px; font-weight: 700; }
+  .menu-btn:active { background: var(--panel-2); }
+  .menu-btn .icon { font-size: 24px; display: block; margin-bottom: 6px; }
+  .menu-btn .count { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 700;
+    color: var(--accent-text); background: var(--accent); border-radius: 999px; padding: 2px 8px; }
 
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 14px; margin-bottom: 10px; }
@@ -73,8 +79,14 @@
   .detail-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 14px; margin-bottom: 14px; }
   .detail-section h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .detail-section + .detail-section { margin-top: -4px; }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
   .detail-grid .label { color: var(--muted); }
+
+  .line-row { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+  .line-row:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  .line-row .line-head { font-weight: 700; margin-bottom: 8px; }
+  .line-row .line-sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
 
   table.result { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.result th, table.result td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
@@ -119,26 +131,69 @@ function extractServerMessage(raw) {
 }
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
+function flt(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
 const state = {
-  view: "tasks",
+  view: "menu",
   loading: false,
   error: null,
   info: null,
-  tasks: [],
   resource: null,
+  hu_types: [],
+
+  // Tasks
+  tasks: [],
   currentTask: null,
   scanSource: "",
   scanDestination: "",
   confirmQty: "",
   exceptionCodes: [],
+
+  // Lookup
   lookupCode: "",
   lookupType: "hu",
   lookupResult: null,
+
+  // Receive
+  inboundDeliveries: [],
+  currentInbound: null,
+  receiveLines: [],
+
+  // Ship
+  shipDeliveries: [],
+  currentShipDelivery: null,
+  shipLines: [],
+
+  // Pack
+  packingOrders: [],
+
+  // Move
+  moveForm: { product: "", quantity: "", stock_uom: "", stock_type: "AVAILABLE", source_bin: "", source_hu: "", destination_bin: "", destination_hu: "" },
+
+  // Count
+  counts: [],
+  currentCount: null,
+
+  // Quality
+  inspections: [],
+  currentInspection: null,
 };
 
 function setState(patch) { Object.assign(state, patch); render(); }
 
+function goHome() {
+  setState({ view: "menu", error: null, info: null, currentTask: null, currentInbound: null, currentShipDelivery: null, currentCount: null, currentInspection: null });
+  loadResource();
+}
+
+async function loadResource() {
+  try {
+    const res = await api("frappe_wms.api.scanner.my_tasks");
+    setState({ resource: res.resource || null, tasks: res.tasks || [] });
+  } catch (e) { /* ignore on menu load */ }
+}
+
+// ---------- Tasks ----------
 async function loadTasks() {
   setState({ loading: true, error: null });
   try {
@@ -151,18 +206,11 @@ async function loadTasks() {
 
 function openTask(task) {
   setState({
-    view: "task-detail",
-    currentTask: task,
-    scanSource: "",
-    scanDestination: "",
+    view: "task-detail", currentTask: task, scanSource: "", scanDestination: "",
     confirmQty: String(flt(task.planned_quantity) - flt(task.confirmed_quantity)),
-    error: null,
-    info: null,
-    exceptionCodes: [],
+    error: null, info: null, exceptionCodes: [],
   });
 }
-
-function flt(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
 async function confirmCurrentTask() {
   const task = state.currentTask;
@@ -204,6 +252,7 @@ async function submitException(code) {
   }
 }
 
+// ---------- Lookup ----------
 async function runLookup() {
   if (!state.lookupCode) return;
   setState({ loading: true, error: null, lookupResult: null });
@@ -217,6 +266,242 @@ async function runLookup() {
   }
 }
 
+// ---------- Receive ----------
+async function loadInboundDeliveries() {
+  setState({ loading: true, error: null, view: "receive" });
+  try {
+    const rows = await api("frappe_wms.api.inbound.list_open_inbound_deliveries");
+    setState({ loading: false, inboundDeliveries: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function openInbound(delivery) {
+  setState({ loading: true, error: null });
+  try {
+    if (!state.hu_types.length) await loadHuTypes();
+    const doc = await api("frappe.client.get", { doctype: "Inbound Delivery", name: delivery.name });
+    const lines = (doc.items || []).map((row) => ({
+      inbound_delivery_item: row.name, item: row.item,
+      remaining: flt(row.expected_quantity) - flt(row.received_quantity),
+      stock_uom: row.stock_uom, stock_type: row.expected_stock_type,
+      handling_unit: "", quantity: String(flt(row.expected_quantity) - flt(row.received_quantity)), hu_type: "",
+    })).filter((l) => l.remaining > 0);
+    setState({ loading: false, view: "receive-detail", currentInbound: delivery, receiveLines: lines });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function loadHuTypes() {
+  try {
+    const rows = await api("frappe.client.get_list", { doctype: "Handling Unit Type", fields: ["name"], limit_page_length: 50 });
+    setState({ hu_types: rows || [] });
+  } catch (e) { /* non-fatal */ }
+}
+
+function updateReceiveLine(i, field, value) {
+  state.receiveLines[i][field] = value;
+}
+
+async function submitReceipt() {
+  const delivery = state.currentInbound;
+  const items = state.receiveLines
+    .filter((l) => l.handling_unit && flt(l.quantity) > 0)
+    .map((l) => ({
+      inbound_delivery_item: l.inbound_delivery_item, item: l.item, quantity: flt(l.quantity),
+      stock_uom: l.stock_uom, handling_unit: l.handling_unit, stock_type: l.stock_type, hu_type: l.hu_type || undefined,
+    }));
+  if (!items.length) { setState({ error: "Scan at least one Handling Unit with a quantity." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.inbound.create_and_submit_goods_receipt", { inbound_delivery: delivery.name, items: JSON.stringify(items) });
+    setState({ loading: false, view: "tasks", info: `Goods Receipt ${result.goods_receipt} posted, ${result.warehouse_tasks.length} putaway task(s) created`, currentInbound: null, receiveLines: [] });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Ship ----------
+async function loadShipDeliveries() {
+  setState({ loading: true, error: null, view: "ship" });
+  try {
+    const rows = await api("frappe_wms.api.outbound.list_ready_to_ship");
+    setState({ loading: false, shipDeliveries: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function openShipDelivery(delivery) {
+  const lines = delivery.items.map((row) => ({
+    outbound_delivery_item: row.name, item: row.item, remaining: row.remaining_quantity,
+    stock_uom: row.stock_uom, stock_type: row.required_stock_type,
+    handling_unit: row.suggested_handling_unit || "", quantity: String(row.remaining_quantity),
+  }));
+  setState({ view: "ship-detail", currentShipDelivery: delivery, shipLines: lines, error: null, info: null });
+}
+
+function updateShipLine(i, field, value) {
+  state.shipLines[i][field] = value;
+}
+
+async function submitGoodsIssue() {
+  const delivery = state.currentShipDelivery;
+  const items = state.shipLines
+    .filter((l) => l.handling_unit && flt(l.quantity) > 0)
+    .map((l) => ({
+      outbound_delivery_item: l.outbound_delivery_item, item: l.item, quantity: flt(l.quantity),
+      stock_uom: l.stock_uom, handling_unit: l.handling_unit, stock_type: l.stock_type,
+    }));
+  if (!items.length) { setState({ error: "Enter the Handling Unit being shipped for at least one line." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.outbound.create_and_submit_goods_issue", { outbound_delivery: delivery.name, items: JSON.stringify(items) });
+    setState({ loading: false, view: "menu", info: `Goods Issue ${result.goods_issue} posted`, currentShipDelivery: null, shipLines: [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Pack ----------
+async function loadPackingOrders() {
+  setState({ loading: true, error: null, view: "pack" });
+  try {
+    const rows = await api("frappe_wms.api.scanner.list_open_packing_orders");
+    setState({ loading: false, packingOrders: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function completePacking(order) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.scanner.complete_packing_order", { packing_order_name: order.name });
+    setState({ loading: false, info: `Packing order ${order.name} completed` });
+    loadPackingOrders();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Move ----------
+function openMove() {
+  setState({
+    view: "move", error: null, info: null,
+    moveForm: { product: "", quantity: "", stock_uom: "", stock_type: "AVAILABLE",
+      source_bin: "", source_hu: "", destination_bin: "", destination_hu: "" },
+  });
+}
+
+async function submitMove() {
+  const f = state.moveForm;
+  if (!f.product || !flt(f.quantity) || !f.stock_uom || !f.destination_bin) {
+    setState({ error: "Product, quantity, UOM and destination bin are required." });
+    return;
+  }
+  if (!f.source_bin && !f.source_hu) {
+    setState({ error: "Scan a source bin or a source Handling Unit." });
+    return;
+  }
+  setState({ loading: true, error: null });
+  try {
+    const warehouse = state.resource ? state.resource.warehouse : f.warehouse;
+    const result = await api("frappe_wms.api.scanner.create_and_confirm_move", {
+      warehouse, product: f.product, quantity: flt(f.quantity), stock_uom: f.stock_uom, stock_type: f.stock_type,
+      source_bin: f.source_bin || undefined, source_hu: f.source_hu || undefined,
+      destination_bin: f.destination_bin, destination_hu: f.destination_hu || undefined,
+    });
+    setState({ loading: false, view: "menu", info: `Moved ${result.quantity} ${f.product} to ${f.destination_bin}` });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Count ----------
+async function loadCounts() {
+  setState({ loading: true, error: null, view: "count" });
+  try {
+    const rows = await api("frappe_wms.api.inventory.list_open_counts");
+    setState({ loading: false, counts: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function openCount(count) {
+  const items = (count.items || []).map((row) => ({ ...row, counted_quantity: row.counted_quantity != null ? String(row.counted_quantity) : "" }));
+  setState({ view: "count-detail", currentCount: count, currentCountItems: items, error: null, info: null });
+}
+
+function updateCountLine(i, value) {
+  state.currentCountItems[i].counted_quantity = value;
+}
+
+async function submitCounts() {
+  const count = state.currentCount;
+  const counted = {};
+  state.currentCountItems.forEach((row) => {
+    if (row.counted_quantity !== "") counted[row.name] = flt(row.counted_quantity);
+  });
+  if (!Object.keys(counted).length) { setState({ error: "Enter at least one counted quantity." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.inventory.record_counts", { count_name: count.name, counted_quantities: JSON.stringify(counted) });
+    if (result.status === "Counted") {
+      try {
+        await api("frappe_wms.api.inventory.post_count", { count_name: count.name });
+        setState({ loading: false, view: "menu", info: `Count ${count.name} fully counted and posted` });
+        return;
+      } catch (e) {
+        setState({ loading: false, view: "menu", info: `Count ${count.name} fully counted; ask a supervisor to post it` });
+        return;
+      }
+    }
+    setState({ loading: false, view: "menu", info: `Saved counts for ${count.name}` });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Quality ----------
+async function loadInspections() {
+  setState({ loading: true, error: null, view: "quality" });
+  try {
+    const rows = await api("frappe_wms.api.inventory.list_open_inspections");
+    setState({ loading: false, inspections: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function openInspection(inspection) {
+  setState({
+    view: "quality-detail", currentInspection: inspection, error: null, info: null,
+    qualityPassed: String(inspection.quantity), qualityFailed: "0",
+  });
+}
+
+async function submitInspection() {
+  const inspection = state.currentInspection;
+  const passed = flt(state.qualityPassed), failed = flt(state.qualityFailed);
+  if (Math.abs((passed + failed) - flt(inspection.quantity)) > 0.0001) {
+    setState({ error: `Passed + failed must equal ${inspection.quantity}` });
+    return;
+  }
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.inventory.complete_inspection", { inspection_name: inspection.name, passed_quantity: passed, failed_quantity: failed });
+    setState({ loading: false, view: "menu", info: `Inspection ${inspection.name} completed`, currentInspection: null });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Rendering ----------
 function el(html) {
   const t = document.createElement("template");
   t.innerHTML = html.trim();
@@ -227,41 +512,69 @@ function render() {
   const app = document.getElementById("app");
   app.innerHTML = "";
   app.appendChild(renderHeader());
-  if (state.view !== "task-detail") app.appendChild(renderTabs());
   const main = el(`<main></main>`);
   if (state.error) main.appendChild(el(`<div class="banner error">${escapeHtml(state.error)}</div>`));
   if (state.info) main.appendChild(el(`<div class="banner ok">${escapeHtml(state.info)}</div>`));
 
-  if (state.view === "tasks") main.appendChild(renderTasks());
-  else if (state.view === "task-detail") main.appendChild(renderTaskDetail());
-  else if (state.view === "lookup") main.appendChild(renderLookup());
+  const renderers = {
+    menu: renderMenu, tasks: renderTasks, "task-detail": renderTaskDetail, lookup: renderLookup,
+    receive: renderReceiveList, "receive-detail": renderReceiveDetail,
+    ship: renderShipList, "ship-detail": renderShipDetail,
+    pack: renderPackList, move: renderMove,
+    count: renderCountList, "count-detail": renderCountDetail,
+    quality: renderQualityList, "quality-detail": renderQualityDetail,
+  };
+  main.appendChild((renderers[state.view] || renderMenu)());
 
   app.appendChild(main);
   if (state.loading) app.appendChild(el(`<div class="overlay"><div class="spinner"></div></div>`));
 }
 
 function renderHeader() {
-  return el(`
+  const header = el(`
     <header>
-      <div>
+      <div class="title-wrap">
         <div class="title">WMS Scanner</div>
         <div class="user">${escapeHtml(USER_FULLNAME)}${state.resource ? " &middot; " + escapeHtml(state.resource.name) : ""}</div>
       </div>
     </header>
   `);
+  if (state.view !== "menu") {
+    const home = el(`<button class="home-btn">&larr; Menu</button>`);
+    home.onclick = goHome;
+    header.appendChild(home);
+  }
+  return header;
 }
 
-function renderTabs() {
-  const nav = el(`<nav class="tabs"></nav>`);
-  const taskBtn = el(`<button class="${state.view === "tasks" ? "active" : ""}">Tasks</button>`);
-  taskBtn.onclick = () => { setState({ view: "tasks" }); loadTasks(); };
-  const lookupBtn = el(`<button class="${state.view === "lookup" ? "active" : ""}">Lookup</button>`);
-  lookupBtn.onclick = () => setState({ view: "lookup", error: null, info: null });
-  nav.appendChild(taskBtn);
-  nav.appendChild(lookupBtn);
-  return nav;
+function renderMenu() {
+  const wrap = el(`<div></div>`);
+  const grid = el(`<div class="menu-grid"></div>`);
+  const items = [
+    { icon: "\u{1F4CB}", label: "Tasks", count: state.tasks.length, action: () => { setState({ view: "tasks" }); loadTasks(); } },
+    { icon: "\u{1F4E5}", label: "Receive", action: loadInboundDeliveries },
+    { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
+    { icon: "\u{1F4E6}", label: "Pack", action: loadPackingOrders },
+    { icon: "\u{2194}\u{FE0F}", label: "Move", action: openMove },
+    { icon: "\u{1F522}", label: "Count", action: loadCounts },
+    { icon: "\u{2705}", label: "Quality", action: loadInspections },
+    { icon: "\u{1F50D}", label: "Lookup", action: () => setState({ view: "lookup", error: null, info: null }) },
+  ];
+  items.forEach((item) => {
+    const btn = el(`
+      <div class="menu-btn">
+        <span class="icon">${item.icon}</span>${escapeHtml(item.label)}
+        ${item.count ? `<div class="count">${item.count}</div>` : ""}
+      </div>
+    `);
+    btn.onclick = item.action;
+    grid.appendChild(btn);
+  });
+  wrap.appendChild(grid);
+  return wrap;
 }
 
+// ----- Tasks -----
 function renderTasks() {
   const wrap = el(`<div></div>`);
   if (!state.tasks.length && !state.loading) {
@@ -315,9 +628,6 @@ function renderTaskDetail() {
     cancel.onclick = () => setState({ exceptionCodes: [] });
     excSection.appendChild(cancel);
     wrap.appendChild(excSection);
-    const back = el(`<button class="btn btn-secondary">Cancel</button>`);
-    back.onclick = () => setState({ view: "tasks", currentTask: null, exceptionCodes: [] });
-    wrap.appendChild(back);
     return wrap;
   }
 
@@ -356,13 +666,10 @@ function renderTaskDetail() {
   excBtn.onclick = openExceptionPicker;
   wrap.appendChild(excBtn);
 
-  const back = el(`<button class="btn btn-secondary">Back to tasks</button>`);
-  back.onclick = () => setState({ view: "tasks", currentTask: null });
-  wrap.appendChild(back);
-
   return wrap;
 }
 
+// ----- Lookup -----
 function renderLookup() {
   const wrap = el(`<div></div>`);
   const form = el(`<div class="detail-section"></div>`);
@@ -423,14 +730,242 @@ function renderLookupResult() {
   return section;
 }
 
+// ----- Receive -----
+function renderReceiveList() {
+  const wrap = el(`<div></div>`);
+  if (!state.inboundDeliveries.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No open inbound deliveries.</div>`));
+    return wrap;
+  }
+  state.inboundDeliveries.forEach((d) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(d.inbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.status)}</span></div>
+        <div class="meta">${escapeHtml(d.supplier || "")}<br>${escapeHtml(d.receiving_bin || "")}</div>
+      </div>
+    `);
+    card.onclick = () => openInbound(d);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderReceiveDetail() {
+  const wrap = el(`<div></div>`);
+  const huTypeOptions = state.hu_types.map((t) => `<option value="${frappeEscapeAttr(t.name)}">${escapeHtml(t.name)}</option>`).join("");
+  state.receiveLines.forEach((line, i) => {
+    const row = el(`
+      <div class="detail-section line-row">
+        <div class="line-head">${escapeHtml(line.item)}</div>
+        <div class="line-sub">Remaining: ${line.remaining} ${escapeHtml(line.stock_uom)} &middot; ${escapeHtml(line.stock_type)}</div>
+        <div class="field"><label>Handling Unit</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="Scan HU barcode"></div>
+        <div class="field"><label>If new HU, type</label><select data-i="${i}" data-f="hu_type"><option value="">&mdash;</option>${huTypeOptions}</select></div>
+        <div class="field"><label>Quantity</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
+      </div>
+    `);
+    row.querySelectorAll("input,select").forEach((input) => {
+      input.oninput = (e) => updateReceiveLine(parseInt(e.target.dataset.i, 10), e.target.dataset.f, e.target.value);
+    });
+    wrap.appendChild(row);
+  });
+  if (!state.receiveLines.length) wrap.appendChild(el(`<div class="empty">Nothing left to receive on this delivery.</div>`));
+  const btn = el(`<button class="btn btn-primary">Submit Goods Receipt</button>`);
+  btn.onclick = submitReceipt;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// ----- Ship -----
+function renderShipList() {
+  const wrap = el(`<div></div>`);
+  if (!state.shipDeliveries.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">Nothing ready to ship.</div>`));
+    return wrap;
+  }
+  state.shipDeliveries.forEach((d) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.status)}</span></div>
+        <div class="meta">${escapeHtml(d.customer || "")}<br>${escapeHtml(d.staging_bin || "")}</div>
+      </div>
+    `);
+    card.onclick = () => openShipDelivery(d);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderShipDetail() {
+  const wrap = el(`<div></div>`);
+  state.shipLines.forEach((line, i) => {
+    const row = el(`
+      <div class="detail-section line-row">
+        <div class="line-head">${escapeHtml(line.item)}</div>
+        <div class="line-sub">Remaining: ${line.remaining} ${escapeHtml(line.stock_uom)} &middot; ${escapeHtml(line.stock_type)}</div>
+        <div class="field"><label>Handling Unit</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="Scan staged HU"></div>
+        <div class="field"><label>Quantity</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
+      </div>
+    `);
+    row.querySelectorAll("input").forEach((input) => {
+      input.oninput = (e) => updateShipLine(parseInt(e.target.dataset.i, 10), e.target.dataset.f, e.target.value);
+    });
+    wrap.appendChild(row);
+  });
+  const btn = el(`<button class="btn btn-primary">Submit Goods Issue</button>`);
+  btn.onclick = submitGoodsIssue;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// ----- Pack -----
+function renderPackList() {
+  const wrap = el(`<div></div>`);
+  if (!state.packingOrders.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No open packing orders.</div>`));
+    return wrap;
+  }
+  state.packingOrders.forEach((order) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(order.name)}</div><span class="badge Normal">${escapeHtml(order.status)}</span></div>
+        <div class="meta">${escapeHtml((order.source_hus || []).join(", "))} &rarr; ${escapeHtml((order.destination_hus || []).join(", "))}</div>
+      </div>
+    `);
+    const btn = el(`<button class="btn btn-primary" style="margin-top:8px;">Complete Packing</button>`);
+    btn.onclick = (e) => { e.stopPropagation(); completePacking(order); };
+    const box = el(`<div></div>`);
+    box.appendChild(card);
+    box.appendChild(btn);
+    wrap.appendChild(box);
+  });
+  return wrap;
+}
+
+// ----- Move -----
+function renderMove() {
+  const wrap = el(`<div></div>`);
+  const f = state.moveForm;
+  const section = el(`<div class="detail-section"><h3>Move stock between bins</h3></div>`);
+  const fields = [
+    ["product", "Product"], ["quantity", "Quantity"], ["stock_uom", "UOM"], ["stock_type", "Stock Type"],
+    ["source_bin", "Source Bin"], ["source_hu", "Source HU (optional)"],
+    ["destination_bin", "Destination Bin"], ["destination_hu", "Destination HU (optional)"],
+  ];
+  fields.forEach(([key, label]) => {
+    const type = key === "quantity" ? "number" : "text";
+    section.appendChild(el(`
+      <div class="field"><label>${escapeHtml(label)}</label>
+        <input type="${type}" inputmode="${type === "number" ? "decimal" : "text"}" data-f="${key}" value="${escapeHtml(f[key])}">
+      </div>
+    `));
+  });
+  section.querySelectorAll("input").forEach((input) => {
+    input.oninput = (e) => { state.moveForm[e.target.dataset.f] = e.target.value; };
+  });
+  wrap.appendChild(section);
+  const btn = el(`<button class="btn btn-primary">Move</button>`);
+  btn.onclick = submitMove;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// ----- Count -----
+function renderCountList() {
+  const wrap = el(`<div></div>`);
+  if (!state.counts.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No open counts.</div>`));
+    return wrap;
+  }
+  state.counts.forEach((count) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(count.name)}</div><span class="badge Normal">${escapeHtml(count.status)}</span></div>
+        <div class="meta">${escapeHtml(count.warehouse)}${count.storage_bin ? " / " + escapeHtml(count.storage_bin) : ""}<br>${(count.items || []).length} line(s) left to count</div>
+      </div>
+    `);
+    card.onclick = () => openCount(count);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderCountDetail() {
+  const wrap = el(`<div></div>`);
+  state.currentCountItems.forEach((row, i) => {
+    const line = el(`
+      <div class="detail-section line-row">
+        <div class="line-head">${escapeHtml(row.product)}</div>
+        <div class="line-sub">${escapeHtml(row.storage_bin)}${row.handling_unit ? " / " + escapeHtml(row.handling_unit) : ""} &middot; book ${row.book_quantity} ${escapeHtml(row.stock_uom)}</div>
+        <div class="field"><label>Counted quantity</label><input type="number" inputmode="decimal" data-i="${i}" value="${escapeHtml(row.counted_quantity)}"></div>
+      </div>
+    `);
+    line.querySelector("input").oninput = (e) => updateCountLine(i, e.target.value);
+    wrap.appendChild(line);
+  });
+  const btn = el(`<button class="btn btn-primary">Save Counts</button>`);
+  btn.onclick = submitCounts;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// ----- Quality -----
+function renderQualityList() {
+  const wrap = el(`<div></div>`);
+  if (!state.inspections.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No open inspections.</div>`));
+    return wrap;
+  }
+  state.inspections.forEach((insp) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(insp.product)}</div><span class="badge Normal">${escapeHtml(insp.from_stock_type)}</span></div>
+        <div class="meta">${escapeHtml(insp.storage_bin)}${insp.handling_unit ? " / " + escapeHtml(insp.handling_unit) : ""}</div>
+        <div class="qty">${insp.quantity} ${escapeHtml(insp.stock_uom)}</div>
+      </div>
+    `);
+    card.onclick = () => openInspection(insp);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderQualityDetail() {
+  const insp = state.currentInspection;
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(insp.product)}</h3>
+      <div class="detail-grid">
+        <div><div class="label">Quantity</div><div>${insp.quantity} ${escapeHtml(insp.stock_uom)}</div></div>
+        <div><div class="label">From</div><div>${escapeHtml(insp.from_stock_type)}</div></div>
+        <div><div class="label">Pass &rarr;</div><div>${escapeHtml(insp.passed_to_stock_type)}</div></div>
+        <div><div class="label">Fail &rarr;</div><div>${escapeHtml(insp.failed_to_stock_type)}</div></div>
+      </div>
+    </div>
+  `));
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`<div class="field"><label>Passed quantity</label><input type="number" inputmode="decimal" id="qty-pass" value="${escapeHtml(state.qualityPassed)}"></div>`));
+  form.appendChild(el(`<div class="field"><label>Failed quantity</label><input type="number" inputmode="decimal" id="qty-fail" value="${escapeHtml(state.qualityFailed)}"></div>`));
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Complete Inspection</button>`);
+  btn.onclick = () => {
+    state.qualityPassed = document.getElementById("qty-pass").value;
+    state.qualityFailed = document.getElementById("qty-fail").value;
+    submitInspection();
+  };
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
+function frappeEscapeAttr(s) { return escapeHtml(s); }
 
 render();
-loadTasks();
+loadResource();
 </script>
 </body>
 </html>

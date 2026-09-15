@@ -24,10 +24,21 @@ MVP warehouse management and execution app for Frappe Framework v16.
   percentage; cancelling the Goods Receipt/Issue cancels the matching
   ERPNext document. A Goods Receipt/Issue must be either fully order-linked
   or fully standalone — mixed lines are rejected rather than mis-posted.
-- RF/mobile execution UI at `/wms`: a scanner-friendly, chrome-free page
-  (not a desk form) for confirming putaway/pick/move tasks, reporting
-  exceptions, and looking up HU/bin contents by barcode. Requires the
-  WMS Operator or WMS Supervisor role (System Manager also allowed).
+- RF/mobile execution UI at `/wms`: a scanner-friendly, chrome-free,
+  menu-driven page (not a desk form) closest in spirit to SAP's RF UI —
+  a home menu leads to Tasks (confirm any planned putaway/pick/move/stage/
+  load task, or report an exception), Receive (pick an open Inbound
+  Delivery, scan a Handling Unit per line — a brand-new HU barcode is
+  auto-registered on the spot — and post the Goods Receipt, which
+  immediately raises its putaway tasks), Ship (pick a delivery that's
+  fully picked but not yet issued, confirm/adjust the suggested staged HU
+  per line, and post the Goods Issue), Pack (complete an open Packing
+  Order in one tap), Move (an ad-hoc bin-to-bin/HU-to-HU transfer with no
+  planning step, for on-the-spot corrections), Count (record physical
+  inventory quantities and auto-post once every line is counted), Quality
+  (complete an inspection's pass/fail split), and Lookup (HU/bin
+  contents by barcode). Requires the WMS Operator/Receiver/Loader/
+  Supervisor role depending on the action (System Manager always allowed).
 - Wave management: a WMS Wave groups outbound deliveries for combined
   release. Releasing a wave allocates every delivery in it and generates
   pick tasks using either the Single Order strategy (one task per

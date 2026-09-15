@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 from frappe_wms.services.stock import transfer_stock
+from frappe_wms.services.task import my_resource
 
 def repack(source_hu, destination_hu, items, reference_name, idempotency_key):
     source=frappe.get_doc("Handling Unit",source_hu); destination=frappe.get_doc("Handling Unit",destination_hu)
@@ -29,3 +30,17 @@ def complete_packing_order(packing_order_name):
     repack(source_hu, destination_hu, items, packing_order_name, f"PACK:{packing_order_name}")
     order.db_set({"status": "Completed", "completed_at": now_datetime(), "verified_by": frappe.session.user})
     return {"packing_order": order.name, "status": "Completed"}
+
+def list_open_packing_orders(user=None):
+    resource = my_resource(user)
+    orders = frappe.get_list("Packing Order", filters={"status": ["in", ["Draft", "Open", "In Process"]]},
+        fields=["name", "outbound_delivery", "work_center_bin", "status"], order_by="creation asc", limit=50)
+    result = []
+    for order in orders:
+        warehouse = frappe.db.get_value("Outbound Delivery", order.outbound_delivery, "warehouse") if order.outbound_delivery else None
+        if resource and warehouse != resource.warehouse: continue
+        order["warehouse"] = warehouse
+        order["source_hus"] = frappe.get_all("Packing Source HU", filters={"parent": order.name}, pluck="handling_unit")
+        order["destination_hus"] = frappe.get_all("Packing Destination HU", filters={"parent": order.name}, pluck="handling_unit")
+        result.append(order)
+    return result

@@ -2,7 +2,17 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock
+from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
+
+def list_open_inspections(user=None):
+    resource = my_resource(user)
+    filters = {"status": "Draft"}
+    if resource: filters["warehouse"] = resource.warehouse
+    return frappe.get_list("WMS Quality Inspection", filters=filters,
+        fields=["name", "warehouse", "product", "handling_unit", "storage_bin", "from_stock_type",
+            "quantity", "stock_uom", "passed_to_stock_type", "failed_to_stock_type", "inspection_date"],
+        order_by="inspection_date asc, creation asc", limit=30)
 
 def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None):
     require_role("WMS Inventory Controller", "WMS Supervisor")

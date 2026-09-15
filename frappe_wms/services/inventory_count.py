@@ -2,7 +2,20 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
+from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
+
+def list_open_counts(user=None):
+    resource = my_resource(user)
+    filters = {"status": ["in", ["Counting", "Counted"]]}
+    if resource: filters["warehouse"] = resource.warehouse
+    counts = frappe.get_list("WMS Physical Inventory Count", filters=filters,
+        fields=["name", "warehouse", "storage_bin", "storage_type", "product", "status", "count_date"],
+        order_by="count_date asc, creation asc", limit=20)
+    for count in counts:
+        count["items"] = frappe.get_all("WMS Physical Inventory Count Item", filters={"parent": count.name, "status": "Open"},
+            fields=["name", "product", "handling_unit", "storage_bin", "stock_type", "stock_uom", "book_quantity", "counted_quantity"])
+    return counts
 
 def snapshot_count(count_name):
     frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)

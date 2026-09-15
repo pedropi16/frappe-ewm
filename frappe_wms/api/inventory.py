@@ -1,8 +1,16 @@
 import frappe
-from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count
-from frappe_wms.services.quality import complete_inspection as _complete_inspection
+from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts
+from frappe_wms.services.quality import complete_inspection as _complete_inspection, list_open_inspections as _list_open_inspections
 from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs
 from frappe_wms.utils import parse_json
+
+@frappe.whitelist()
+def list_open_counts():
+    return _list_open_counts()
+
+@frappe.whitelist()
+def list_open_inspections():
+    return _list_open_inspections()
 
 @frappe.whitelist()
 def snapshot_count(count_name):

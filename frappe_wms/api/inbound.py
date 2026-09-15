@@ -1,7 +1,8 @@
 import frappe
-from frappe_wms.services.receipt import create_putaway_requests
+from frappe_wms.services.receipt import create_putaway_requests, list_open_inbound_deliveries as _list_open_inbound_deliveries, create_and_submit_goods_receipt as _create_and_submit_goods_receipt
 from frappe_wms.services.task import create_tasks_for_request
 from frappe_wms.services.procurement import create_inbound_delivery_from_purchase_order as _create_inbound_delivery_from_purchase_order
+from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
 def create_putaway(receipt_name):
@@ -12,3 +13,11 @@ def create_putaway(receipt_name):
 @frappe.whitelist()
 def create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse):
     return _create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse)
+
+@frappe.whitelist()
+def list_open_inbound_deliveries():
+    return _list_open_inbound_deliveries()
+
+@frappe.whitelist()
+def create_and_submit_goods_receipt(inbound_delivery, items):
+    return _create_and_submit_goods_receipt(inbound_delivery, parse_json(items, "items"))

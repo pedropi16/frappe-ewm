@@ -9,7 +9,7 @@ def ensure_same_warehouse(*docs_or_names):
         frappe.throw(_("Warehouse mismatch between transaction objects"))
 
 def parse_json(value, label="payload"):
-    if isinstance(value, dict):
+    if isinstance(value, (dict, list)):
         return value
     try:
         return json.loads(value or "{}")

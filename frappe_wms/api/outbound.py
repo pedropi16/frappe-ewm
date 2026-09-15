@@ -3,6 +3,8 @@ from frappe_wms.services.allocation import allocate_delivery as _allocate_delive
 from frappe_wms.services.task import create_pick_tasks as _create_pick_tasks
 from frappe_wms.services.picking import release_wave as _release_wave
 from frappe_wms.services.sales import create_outbound_delivery_from_sales_order as _create_outbound_delivery_from_sales_order
+from frappe_wms.services.issue import list_ready_to_ship as _list_ready_to_ship, create_and_submit_goods_issue as _create_and_submit_goods_issue
+from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
 def allocate_delivery(delivery_name):
@@ -19,3 +21,11 @@ def release_wave(wave_name):
 @frappe.whitelist()
 def create_outbound_delivery_from_sales_order(sales_order_name, warehouse):
     return _create_outbound_delivery_from_sales_order(sales_order_name, warehouse)
+
+@frappe.whitelist()
+def list_ready_to_ship():
+    return _list_ready_to_ship()
+
+@frappe.whitelist()
+def create_and_submit_goods_issue(outbound_delivery, items):
+    return _create_and_submit_goods_issue(outbound_delivery, parse_json(items, "items"))

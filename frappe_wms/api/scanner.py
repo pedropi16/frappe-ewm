@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
-from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task
-from frappe_wms.services.packing import repack as _repack, complete_packing_order as _complete_packing_order
+from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move
+from frappe_wms.services.packing import repack as _repack, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
 from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
@@ -54,3 +54,15 @@ def repack(source_hu,destination_hu,items,packing_order,idempotency_key):
 @frappe.whitelist()
 def complete_packing_order(packing_order_name):
     return _complete_packing_order(packing_order_name)
+
+@frappe.whitelist()
+def list_open_packing_orders():
+    return _list_open_packing_orders()
+
+@frappe.whitelist()
+def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None):
+    return _create_and_confirm_move(
+        warehouse=warehouse, product=product, quantity=quantity, stock_uom=stock_uom, stock_type=stock_type,
+        source_bin=source_bin, source_hu=source_hu, destination_bin=destination_bin, destination_hu=destination_hu,
+        batch_no=batch_no, serial_no=serial_no, device=device,
+    )
