@@ -1,0 +1,8 @@
+WMS Core
+WMS Execution
+WMS Handling Units
+WMS Inbound
+WMS Inventory
+WMS Outbound
+WMS Setup
+WMS Shipping

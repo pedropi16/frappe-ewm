@@ -1,0 +1,271 @@
+{
+  "name": "Warehouse Task",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 1,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse_request",
+    "task_type",
+    "warehouse",
+    "product",
+    "planned_quantity",
+    "confirmed_quantity",
+    "stock_uom",
+    "batch_no",
+    "serial_no",
+    "source_bin",
+    "destination_bin",
+    "source_hu",
+    "destination_hu",
+    "move_top_hu",
+    "stock_type_from",
+    "stock_type_to",
+    "movement_type",
+    "queue",
+    "assigned_resource",
+    "priority",
+    "sequence",
+    "status",
+    "started_at",
+    "confirmed_at",
+    "confirmed_by",
+    "confirmation_device",
+    "exception_code",
+    "idempotency_key",
+    "blocking_reason"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse_request",
+      "label": "Warehouse Request",
+      "fieldtype": "Link",
+      "options": "Warehouse Request",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "task_type",
+      "label": "Task Type",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nStage\nLoad\nPosting Change\nInventory Count",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "planned_quantity",
+      "label": "Planned Quantity",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "confirmed_quantity",
+      "label": "Confirmed Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No"
+    },
+    {
+      "fieldname": "source_bin",
+      "label": "Source Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "destination_bin",
+      "label": "Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "source_hu",
+      "label": "Source HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "destination_hu",
+      "label": "Destination HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "move_top_hu",
+      "label": "Move Top HU",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "stock_type_from",
+      "label": "Stock Type From",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "stock_type_to",
+      "label": "Stock Type To",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "movement_type",
+      "label": "Movement Type",
+      "fieldtype": "Link",
+      "options": "WMS Movement Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "queue",
+      "label": "Queue",
+      "fieldtype": "Link",
+      "options": "Warehouse Queue"
+    },
+    {
+      "fieldname": "assigned_resource",
+      "label": "Assigned Resource",
+      "fieldtype": "Link",
+      "options": "WMS Resource"
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "reqd": 1,
+      "default": "Normal",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sequence",
+      "label": "Sequence",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
+      "reqd": 1,
+      "default": "Open",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "started_at",
+      "label": "Started At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "confirmed_at",
+      "label": "Confirmed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "confirmed_by",
+      "label": "Confirmed By",
+      "fieldtype": "Link",
+      "options": "User",
+      "unique": 1
+    },
+    {
+      "fieldname": "confirmation_device",
+      "label": "Confirmation Device",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "exception_code",
+      "label": "Exception Code",
+      "fieldtype": "Link",
+      "options": "WMS Exception Code"
+    },
+    {
+      "fieldname": "idempotency_key",
+      "label": "Idempotency Key",
+      "fieldtype": "Data",
+      "read_only": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "blocking_reason",
+      "label": "Blocking Reason",
+      "fieldtype": "Small Text",
+      "read_only": 1
+    }
+  ],
+  "autoname": "WT-.##########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

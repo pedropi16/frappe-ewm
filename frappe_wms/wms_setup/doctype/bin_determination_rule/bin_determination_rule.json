@@ -1,0 +1,139 @@
+{
+  "name": "Bin Determination Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "activity",
+    "item",
+    "item_group",
+    "stock_type",
+    "hu_type",
+    "source_storage_type",
+    "destination_storage_type",
+    "fixed_destination_bin",
+    "strategy",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Putaway\nPick\nInternal Move\nStage\nLoad",
+      "reqd": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "item_group",
+      "label": "Item Group",
+      "fieldtype": "Link",
+      "options": "Item Group"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "HU Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type"
+    },
+    {
+      "fieldname": "source_storage_type",
+      "label": "Source Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "destination_storage_type",
+      "label": "Destination Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "fixed_destination_bin",
+      "label": "Fixed Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "strategy",
+      "label": "Strategy",
+      "fieldtype": "Select",
+      "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection",
+      "reqd": 1
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "format:BDR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

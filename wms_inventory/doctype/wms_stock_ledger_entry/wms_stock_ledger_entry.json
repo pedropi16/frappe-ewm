@@ -1,0 +1,222 @@
+{
+  "name": "WMS Stock Ledger Entry",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "posting_datetime",
+    "warehouse",
+    "product",
+    "batch_no",
+    "serial_no",
+    "handling_unit",
+    "storage_bin",
+    "stock_type",
+    "quantity",
+    "stock_uom",
+    "movement_type",
+    "reference_doctype",
+    "reference_name",
+    "reference_line",
+    "warehouse_task",
+    "reversal_of",
+    "idempotency_key",
+    "posting_user",
+    "posting_device"
+  ],
+  "fields": [
+    {
+      "fieldname": "posting_datetime",
+      "label": "Posting Datetime",
+      "fieldtype": "Datetime",
+      "reqd": 1,
+      "default": "Now",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch",
+      "unique": 1
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No",
+      "unique": 1
+    },
+    {
+      "fieldname": "handling_unit",
+      "label": "Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Storage Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "movement_type",
+      "label": "Movement Type",
+      "fieldtype": "Link",
+      "options": "WMS Movement Type",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "reference_doctype",
+      "label": "Reference DocType",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "reference_name",
+      "label": "Reference Name",
+      "fieldtype": "Dynamic Link",
+      "options": "reference_doctype",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "reference_line",
+      "label": "Reference Line",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "warehouse_task",
+      "label": "Warehouse Task",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "unique": 1
+    },
+    {
+      "fieldname": "reversal_of",
+      "label": "Reversal Of",
+      "fieldtype": "Link",
+      "options": "WMS Stock Ledger Entry",
+      "unique": 1
+    },
+    {
+      "fieldname": "idempotency_key",
+      "label": "Idempotency Key",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "read_only": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "posting_user",
+      "label": "Posting User",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "posting_device",
+      "label": "Posting Device",
+      "fieldtype": "Data",
+      "read_only": 1
+    }
+  ],
+  "autoname": "WSLE-.##########",
+  "sort_field": "posting_datetime",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

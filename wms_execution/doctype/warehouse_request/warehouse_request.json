@@ -1,0 +1,228 @@
+{
+  "name": "Warehouse Request",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "request_type",
+    "warehouse",
+    "product",
+    "requested_quantity",
+    "stock_uom",
+    "source_area",
+    "destination_area",
+    "source_bin",
+    "destination_bin",
+    "source_hu",
+    "destination_hu",
+    "stock_type",
+    "reference_doctype",
+    "reference_name",
+    "reference_line",
+    "process_type",
+    "storage_process",
+    "process_step",
+    "priority",
+    "requested_date",
+    "status",
+    "created_quantity",
+    "confirmed_quantity"
+  ],
+  "fields": [
+    {
+      "fieldname": "request_type",
+      "label": "Request Type",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nReplenish\nInternal Move\nStage\nLoad\nUnload Vehicle\nPosting Change\nInventory Count",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "requested_quantity",
+      "label": "Requested Quantity",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "source_area",
+      "label": "Source Area",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "destination_area",
+      "label": "Destination Area",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "source_bin",
+      "label": "Source Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "destination_bin",
+      "label": "Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "source_hu",
+      "label": "Source HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "destination_hu",
+      "label": "Destination HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "reference_doctype",
+      "label": "Reference DocType",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reference_name",
+      "label": "Reference Name",
+      "fieldtype": "Dynamic Link",
+      "options": "reference_doctype",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "reference_line",
+      "label": "Reference Line",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "process_type",
+      "label": "Process Type",
+      "fieldtype": "Link",
+      "options": "Warehouse Process Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "storage_process",
+      "label": "Storage Process",
+      "fieldtype": "Link",
+      "options": "Storage Process"
+    },
+    {
+      "fieldname": "process_step",
+      "label": "Process Step Code",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "reqd": 1,
+      "default": "Normal",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "requested_date",
+      "label": "Requested Date",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nOpen\nPartially Tasked\nFully Tasked\nIn Process\nCompleted\nCancelled\nException",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "created_quantity",
+      "label": "Created Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "confirmed_quantity",
+      "label": "Confirmed Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "default": 0,
+      "read_only": 1
+    }
+  ],
+  "autoname": "WR-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

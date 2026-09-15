@@ -1,0 +1,85 @@
+{
+  "name": "Storage Process Step",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "sequence",
+    "step_code",
+    "process_type",
+    "source_storage_type",
+    "destination_storage_type",
+    "destination_bin",
+    "require_hu_close",
+    "create_task_automatically",
+    "next_step_on_confirmation"
+  ],
+  "fields": [
+    {
+      "fieldname": "sequence",
+      "label": "Sequence",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "step_code",
+      "label": "Step Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "process_type",
+      "label": "Process Type",
+      "fieldtype": "Link",
+      "options": "Warehouse Process Type",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "source_storage_type",
+      "label": "Source Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "destination_storage_type",
+      "label": "Destination Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "destination_bin",
+      "label": "Fixed Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "require_hu_close",
+      "label": "Require HU Close",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "create_task_automatically",
+      "label": "Create Task Automatically",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "next_step_on_confirmation",
+      "label": "Create Next Step On Confirmation",
+      "fieldtype": "Check",
+      "default": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

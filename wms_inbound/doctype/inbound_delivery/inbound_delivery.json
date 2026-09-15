@@ -1,0 +1,160 @@
+{
+  "name": "Inbound Delivery",
+  "module": "WMS Inbound",
+  "custom": 0,
+  "is_submittable": 1,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "inbound_delivery_number",
+    "warehouse",
+    "supplier",
+    "company",
+    "external_reference",
+    "expected_arrival",
+    "receiving_bin",
+    "status",
+    "receipt_status",
+    "process_status",
+    "posting_date",
+    "items",
+    "remarks"
+  ],
+  "fields": [
+    {
+      "fieldname": "inbound_delivery_number",
+      "label": "Inbound Delivery Number",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "supplier",
+      "label": "Supplier",
+      "fieldtype": "Link",
+      "options": "Supplier",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "company",
+      "label": "Company",
+      "fieldtype": "Link",
+      "options": "Company",
+      "reqd": 1
+    },
+    {
+      "fieldname": "external_reference",
+      "label": "External Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "expected_arrival",
+      "label": "Expected Arrival",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "receiving_bin",
+      "label": "Receiving Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nExpected\nArrived\nReceiving\nPartially Received\nReceived\nPutaway In Process\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "receipt_status",
+      "label": "Receipt Status",
+      "fieldtype": "Select",
+      "options": "Not Received\nPartially Received\nFully Received",
+      "reqd": 1,
+      "default": "Not Received",
+      "read_only": 1
+    },
+    {
+      "fieldname": "process_status",
+      "label": "Process Status",
+      "fieldtype": "Select",
+      "options": "Not Started\nIn Process\nCompleted\nException",
+      "reqd": 1,
+      "default": "Not Started",
+      "read_only": 1
+    },
+    {
+      "fieldname": "posting_date",
+      "label": "Posting Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "default": "Today"
+    },
+    {
+      "fieldname": "items",
+      "label": "Items",
+      "fieldtype": "Table",
+      "options": "Inbound Delivery Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Text Editor"
+    }
+  ],
+  "autoname": "IBD-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

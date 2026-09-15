@@ -1,0 +1,27 @@
+{
+  "name": "Allowed Task Type",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "task_type"
+  ],
+  "fields": [
+    {
+      "fieldname": "task_type",
+      "label": "Task Type",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nStage\nLoad\nPosting Change\nInventory Count",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

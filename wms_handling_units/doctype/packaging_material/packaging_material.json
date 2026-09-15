@@ -1,0 +1,128 @@
+{
+  "name": "Packaging Material",
+  "module": "WMS Handling Units",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "packaging_material_code",
+    "packaging_material_name",
+    "hu_type",
+    "item",
+    "tare_weight",
+    "length",
+    "width",
+    "height",
+    "maximum_weight",
+    "reusable",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "packaging_material_code",
+      "label": "Packaging Material Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "packaging_material_name",
+      "label": "Packaging Material Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "Handling Unit Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "tare_weight",
+      "label": "Tare Weight",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "length",
+      "label": "Length",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "width",
+      "label": "Width",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "height",
+      "label": "Height",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "maximum_weight",
+      "label": "Maximum Weight",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "reusable",
+      "label": "Reusable",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:packaging_material_code",
+  "title_field": "packaging_material_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

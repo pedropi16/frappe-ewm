@@ -1,0 +1,1 @@
+frappe.ui.form.on("Goods Receipt", { refresh(frm) { frappe_wms.set_warehouse_filters(frm); if (frm.doc.docstatus===1) frm.add_custom_button(__("Create Putaway Requests"),()=>frappe_wms.call("frappe_wms.api.inbound.create_putaway",{receipt_name:frm.doc.name}).then(r=>frappe.msgprint(__("Created {0} requests",[r.message.length])))); } });

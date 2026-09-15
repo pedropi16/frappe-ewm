@@ -1,0 +1,214 @@
+{
+  "name": "Storage Bin",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "bin_code",
+    "bin_name",
+    "warehouse",
+    "storage_type",
+    "parent_bin",
+    "bin_role",
+    "aisle",
+    "rack",
+    "level",
+    "position",
+    "sequence",
+    "maximum_hus",
+    "maximum_weight",
+    "maximum_volume",
+    "current_hu_count",
+    "current_weight",
+    "putaway_blocked",
+    "removal_blocked",
+    "inventory_blocked",
+    "allowed_stock_types",
+    "allowed_hu_types",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "bin_code",
+      "label": "Bin Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "bin_name",
+      "label": "Bin Name",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "storage_type",
+      "label": "Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "parent_bin",
+      "label": "Parent Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "bin_role",
+      "label": "Bin Role",
+      "fieldtype": "Select",
+      "options": "Standard\nReceiving\nTrolley\nPacking\nStaging\nDoor\nDifference",
+      "reqd": 1,
+      "default": "Standard",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "aisle",
+      "label": "Aisle",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "rack",
+      "label": "Rack",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "level",
+      "label": "Level",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "position",
+      "label": "Position",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "sequence",
+      "label": "Sequence",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "maximum_hus",
+      "label": "Maximum HUs",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "maximum_weight",
+      "label": "Maximum Weight",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "maximum_volume",
+      "label": "Maximum Volume",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "current_hu_count",
+      "label": "Current HU Count",
+      "fieldtype": "Int",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "current_weight",
+      "label": "Current Weight",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "putaway_blocked",
+      "label": "Putaway Blocked",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "removal_blocked",
+      "label": "Removal Blocked",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "inventory_blocked",
+      "label": "Inventory Blocked",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "allowed_stock_types",
+      "label": "Allowed Stock Types",
+      "fieldtype": "Table",
+      "options": "Storage Bin Allowed Stock Type"
+    },
+    {
+      "fieldname": "allowed_hu_types",
+      "label": "Allowed HU Types",
+      "fieldtype": "Table",
+      "options": "Storage Bin Allowed HU Type"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    }
+  ],
+  "autoname": "field:bin_code",
+  "title_field": "bin_name",
+  "search_fields": "bin_code, bin_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

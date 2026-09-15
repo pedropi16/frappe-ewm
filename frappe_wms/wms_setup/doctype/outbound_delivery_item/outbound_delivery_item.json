@@ -1,0 +1,125 @@
+{
+  "name": "Outbound Delivery Item",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "line_number",
+    "item",
+    "requested_quantity",
+    "allocated_quantity",
+    "picked_quantity",
+    "packed_quantity",
+    "issued_quantity",
+    "stock_uom",
+    "required_batch",
+    "required_serial_no",
+    "required_stock_type",
+    "partial_delivery_allowed",
+    "status"
+  ],
+  "fields": [
+    {
+      "fieldname": "line_number",
+      "label": "Line Number",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "requested_quantity",
+      "label": "Requested Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allocated_quantity",
+      "label": "Allocated Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "picked_quantity",
+      "label": "Picked Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "packed_quantity",
+      "label": "Packed Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "issued_quantity",
+      "label": "Issued Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "required_batch",
+      "label": "Required Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "required_serial_no",
+      "label": "Required Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No"
+    },
+    {
+      "fieldname": "required_stock_type",
+      "label": "Required Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "partial_delivery_allowed",
+      "label": "Partial Delivery Allowed",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nAllocated\nPartially Picked\nPicked\nPacked\nIssued\nCancelled",
+      "reqd": 1,
+      "default": "Open",
+      "read_only": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

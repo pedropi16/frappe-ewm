@@ -1,0 +1,128 @@
+{
+  "name": "WMS Exception Code",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "exception_code",
+    "exception_name",
+    "category",
+    "allowed_task_types",
+    "requires_supervisor",
+    "requires_comment",
+    "allows_quantity_change",
+    "allows_bin_change",
+    "follow_up_action",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "exception_code",
+      "label": "Exception Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "exception_name",
+      "label": "Exception Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "category",
+      "label": "Category",
+      "fieldtype": "Select",
+      "options": "Stock\nBin\nHandling Unit\nTask\nRoute\nQuality\nSystem",
+      "reqd": 1
+    },
+    {
+      "fieldname": "allowed_task_types",
+      "label": "Allowed Task Types",
+      "fieldtype": "Table",
+      "options": "Allowed Task Type"
+    },
+    {
+      "fieldname": "requires_supervisor",
+      "label": "Requires Supervisor",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "requires_comment",
+      "label": "Requires Comment",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "allows_quantity_change",
+      "label": "Allows Quantity Change",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "allows_bin_change",
+      "label": "Allows Bin Change",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "follow_up_action",
+      "label": "Follow-up Action",
+      "fieldtype": "Select",
+      "options": "None\nBlock Stock\nBlock HU\nCreate Difference Task\nCancel Task\nCreate Follow-up Task",
+      "reqd": 1,
+      "default": "None"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:exception_code",
+  "title_field": "exception_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

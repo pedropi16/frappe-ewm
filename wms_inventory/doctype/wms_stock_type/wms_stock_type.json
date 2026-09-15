@@ -1,0 +1,126 @@
+{
+  "name": "WMS Stock Type",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "stock_type_code",
+    "stock_type_name",
+    "availability_category",
+    "available_for_allocation",
+    "picking_allowed",
+    "shipping_allowed",
+    "movement_allowed",
+    "requires_release",
+    "requires_reason",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "stock_type_code",
+      "label": "Stock Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "stock_type_name",
+      "label": "Stock Type Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "availability_category",
+      "label": "Availability Category",
+      "fieldtype": "Select",
+      "options": "Available\nQuality\nBlocked\nDamaged\nScrap",
+      "reqd": 1
+    },
+    {
+      "fieldname": "available_for_allocation",
+      "label": "Available for Allocation",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "picking_allowed",
+      "label": "Picking Allowed",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "shipping_allowed",
+      "label": "Shipping Allowed",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "movement_allowed",
+      "label": "Movement Allowed",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "requires_release",
+      "label": "Requires Release",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "requires_reason",
+      "label": "Requires Reason",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:stock_type_code",
+  "title_field": "stock_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

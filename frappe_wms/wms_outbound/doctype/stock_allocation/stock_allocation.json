@@ -1,0 +1,160 @@
+{
+  "name": "Stock Allocation",
+  "module": "WMS Outbound",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "outbound_delivery",
+    "outbound_delivery_item",
+    "product",
+    "stock_balance",
+    "storage_bin",
+    "handling_unit",
+    "batch_no",
+    "serial_no",
+    "stock_type",
+    "allocated_quantity",
+    "picked_quantity",
+    "status",
+    "allocation_sequence",
+    "allocation_rule"
+  ],
+  "fields": [
+    {
+      "fieldname": "outbound_delivery",
+      "label": "Outbound Delivery",
+      "fieldtype": "Link",
+      "options": "Outbound Delivery",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "outbound_delivery_item",
+      "label": "Outbound Delivery Item Row",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_balance",
+      "label": "Stock Balance",
+      "fieldtype": "Link",
+      "options": "WMS Stock Balance",
+      "reqd": 1
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Storage Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1
+    },
+    {
+      "fieldname": "handling_unit",
+      "label": "Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "allocated_quantity",
+      "label": "Allocated Quantity",
+      "fieldtype": "Float",
+      "reqd": 1
+    },
+    {
+      "fieldname": "picked_quantity",
+      "label": "Picked Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Allocated\nPartially Picked\nPicked\nReleased\nCancelled",
+      "reqd": 1,
+      "default": "Allocated",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "allocation_sequence",
+      "label": "Allocation Sequence",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "allocation_rule",
+      "label": "Allocation Rule",
+      "fieldtype": "Data"
+    }
+  ],
+  "autoname": "ALLOC-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "name": "Handling Unit",
+  "module": "WMS Handling Units",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "hu_number",
+    "hu_type",
+    "packaging_material",
+    "warehouse",
+    "current_bin",
+    "parent_hu",
+    "top_hu",
+    "hierarchy_level",
+    "status",
+    "stock_status",
+    "gross_weight",
+    "tare_weight",
+    "net_weight",
+    "volume",
+    "outbound_delivery",
+    "shipment",
+    "seal_number",
+    "closed",
+    "loaded",
+    "external_reference"
+  ],
+  "fields": [
+    {
+      "fieldname": "hu_number",
+      "label": "HU Number",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "HU Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "packaging_material",
+      "label": "Packaging Material",
+      "fieldtype": "Link",
+      "options": "Packaging Material"
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "current_bin",
+      "label": "Current Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "unique": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "parent_hu",
+      "label": "Parent HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "unique": 1
+    },
+    {
+      "fieldname": "top_hu",
+      "label": "Top HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "unique": 1
+    },
+    {
+      "fieldname": "hierarchy_level",
+      "label": "Hierarchy Level",
+      "fieldtype": "Int",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Created\nOpen\nClosed\nIn Process\nStaged\nLoaded\nShipped\nEmpty\nBlocked\nCancelled",
+      "reqd": 1,
+      "default": "Created",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "stock_status",
+      "label": "Stock Status",
+      "fieldtype": "Select",
+      "options": "Empty\nPartial\nFull",
+      "reqd": 1,
+      "default": "Empty",
+      "read_only": 1
+    },
+    {
+      "fieldname": "gross_weight",
+      "label": "Gross Weight",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "tare_weight",
+      "label": "Tare Weight",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "net_weight",
+      "label": "Net Weight",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "volume",
+      "label": "Volume",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "outbound_delivery",
+      "label": "Outbound Delivery",
+      "fieldtype": "Link",
+      "options": "Outbound Delivery",
+      "unique": 1
+    },
+    {
+      "fieldname": "shipment",
+      "label": "Shipment",
+      "fieldtype": "Link",
+      "options": "WMS Shipment",
+      "unique": 1
+    },
+    {
+      "fieldname": "seal_number",
+      "label": "Seal Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "closed",
+      "label": "Closed",
+      "fieldtype": "Check",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "loaded",
+      "label": "Loaded",
+      "fieldtype": "Check",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "external_reference",
+      "label": "External Reference",
+      "fieldtype": "Data"
+    }
+  ],
+  "autoname": "field:hu_number",
+  "title_field": "hu_number",
+  "search_fields": "hu_number, external_reference",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

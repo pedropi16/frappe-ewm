@@ -1,0 +1,128 @@
+{
+  "name": "Warehouse Process Type",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "process_type_code",
+    "process_type_name",
+    "activity",
+    "source_required",
+    "destination_required",
+    "hu_required",
+    "stock_required",
+    "confirmation_mode",
+    "movement_type",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "process_type_code",
+      "label": "Process Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "process_type_name",
+      "label": "Process Type Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_required",
+      "label": "Source Required",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "destination_required",
+      "label": "Destination Required",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "hu_required",
+      "label": "HU Required",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "stock_required",
+      "label": "Stock Required",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "confirmation_mode",
+      "label": "Confirmation Mode",
+      "fieldtype": "Select",
+      "options": "Product and Quantity\nHandling Unit\nBin to Bin\nSerial Number",
+      "reqd": 1
+    },
+    {
+      "fieldname": "movement_type",
+      "label": "Movement Type",
+      "fieldtype": "Link",
+      "options": "WMS Movement Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:process_type_code",
+  "title_field": "process_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

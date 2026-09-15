@@ -1,0 +1,112 @@
+{
+  "name": "WMS Resource",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "resource_code",
+    "user",
+    "warehouse",
+    "resource_type",
+    "current_queue",
+    "current_bin",
+    "device_id",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "resource_code",
+      "label": "Resource Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "user",
+      "label": "User",
+      "fieldtype": "Link",
+      "options": "User"
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "resource_type",
+      "label": "Resource Type",
+      "fieldtype": "Select",
+      "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "current_queue",
+      "label": "Current Queue",
+      "fieldtype": "Link",
+      "options": "Warehouse Queue"
+    },
+    {
+      "fieldname": "current_bin",
+      "label": "Current Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "device_id",
+      "label": "Device ID",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:resource_code",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

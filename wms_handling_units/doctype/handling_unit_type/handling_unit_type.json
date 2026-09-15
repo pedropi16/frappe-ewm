@@ -1,0 +1,117 @@
+{
+  "name": "Handling Unit Type",
+  "module": "WMS Handling Units",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "hu_type_code",
+    "hu_type_name",
+    "category",
+    "maximum_weight",
+    "maximum_volume",
+    "nestable",
+    "reusable",
+    "requires_seal",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "hu_type_code",
+      "label": "HU Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "hu_type_name",
+      "label": "HU Type Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "category",
+      "label": "Category",
+      "fieldtype": "Select",
+      "options": "Pallet\nBox\nCrate\nTote\nTrolley\nContainer\nOther",
+      "reqd": 1
+    },
+    {
+      "fieldname": "maximum_weight",
+      "label": "Maximum Weight",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "maximum_volume",
+      "label": "Maximum Volume",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "nestable",
+      "label": "Nestable",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "reusable",
+      "label": "Reusable",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "requires_seal",
+      "label": "Requires Seal",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:hu_type_code",
+  "title_field": "hu_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}
