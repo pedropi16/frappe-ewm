@@ -49,6 +49,15 @@ MVP warehouse management and execution app for Frappe Framework v16.
   type. An hourly job checks every active rule and raises a Warehouse
   Request (and its Warehouse Task) when a pick bin falls to or below its
   minimum, without duplicating a request that's already pending.
+- Warehouse Monitor at `/app/wms-monitor`: a desk page (roles: WMS
+  Supervisor/Administrator/Inventory Controller/Auditor, System Manager)
+  for searching movements and warehouse data across entities, similar in
+  spirit to SAP EWM's monitor — pick a warehouse to see summary counts
+  (open tasks by type, exceptions, pending replenishment, deliveries in
+  progress, open counts/inspections, each linking to the matching filtered
+  desk list view) plus two searchable tables: stock ledger movements
+  (filter by product/bin/HU/movement type/date range) and warehouse tasks
+  (filter by product/type/status/resource).
 
 ## Install
 ```bash
