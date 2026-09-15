@@ -1,0 +1,144 @@
+{
+  "name": "WMS Product",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "item",
+    "stock_uom",
+    "warehouse_managed",
+    "serial_control",
+    "batch_control",
+    "shelf_life_days",
+    "minimum_remaining_shelf_life",
+    "default_hu_type",
+    "preferred_storage_type",
+    "full_hu_quantity",
+    "gross_weight_per_unit",
+    "volume_per_unit",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "warehouse_managed",
+      "label": "Warehouse Managed",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "serial_control",
+      "label": "Serial Control",
+      "fieldtype": "Select",
+      "options": "None\nRequired at Receipt\nRequired at Issue\nAlways",
+      "reqd": 1,
+      "default": "None"
+    },
+    {
+      "fieldname": "batch_control",
+      "label": "Batch Control",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "shelf_life_days",
+      "label": "Shelf Life Days",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "minimum_remaining_shelf_life",
+      "label": "Minimum Remaining Shelf Life",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "default_hu_type",
+      "label": "Default HU Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type"
+    },
+    {
+      "fieldname": "preferred_storage_type",
+      "label": "Preferred Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "full_hu_quantity",
+      "label": "Full HU Quantity",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "gross_weight_per_unit",
+      "label": "Gross Weight per Unit",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "volume_per_unit",
+      "label": "Volume per Unit",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:item",
+  "title_field": "item",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}
