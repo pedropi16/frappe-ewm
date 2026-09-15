@@ -1,0 +1,123 @@
+{
+  "name": "WMS Warehouse",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse_code",
+    "warehouse_name",
+    "company",
+    "default_receiving_bin",
+    "default_shipping_bin",
+    "default_difference_bin",
+    "default_stock_type",
+    "allow_negative_stock",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse_code",
+      "label": "Warehouse Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "depends_on": 1
+    },
+    {
+      "fieldname": "warehouse_name",
+      "label": "Warehouse Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "company",
+      "label": "Company",
+      "fieldtype": "Link",
+      "options": "Company",
+      "reqd": 1
+    },
+    {
+      "fieldname": "default_receiving_bin",
+      "label": "Default Receiving Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "default_shipping_bin",
+      "label": "Default Shipping Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "default_difference_bin",
+      "label": "Default Difference Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "default_stock_type",
+      "label": "Default Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "allow_negative_stock",
+      "label": "Allow Negative Stock",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    }
+  ],
+  "autoname": "field:warehouse_code",
+  "title_field": "warehouse_name",
+  "search_fields": "warehouse_code, warehouse_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "name": "Storage Type",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "storage_type_code",
+    "storage_type_name",
+    "storage_role",
+    "allow_mixed_products",
+    "allow_mixed_stock_types",
+    "allow_mixed_batches",
+    "hu_managed",
+    "capacity_check_method",
+    "putaway_blocked",
+    "removal_blocked",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "storage_type_code",
+      "label": "Storage Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "storage_type_name",
+      "label": "Storage Type Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "storage_role",
+      "label": "Storage Role",
+      "fieldtype": "Select",
+      "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_mixed_products",
+      "label": "Allow Mixed Products",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "allow_mixed_stock_types",
+      "label": "Allow Mixed Stock Types",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "allow_mixed_batches",
+      "label": "Allow Mixed Batches",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "hu_managed",
+      "label": "HU Managed",
+      "fieldtype": "Check",
+      "default": 1
+    },
+    {
+      "fieldname": "capacity_check_method",
+      "label": "Capacity Check Method",
+      "fieldtype": "Select",
+      "options": "None\nHU Count\nWeight\nVolume",
+      "reqd": 1,
+      "default": "None"
+    },
+    {
+      "fieldname": "putaway_blocked",
+      "label": "Putaway Blocked",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "removal_blocked",
+      "label": "Removal Blocked",
+      "fieldtype": "Check",
+      "default": 0
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "format:{warehouse}-{storage_type_code}",
+  "title_field": "storage_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}
