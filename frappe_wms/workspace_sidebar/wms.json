@@ -1,0 +1,101 @@
+{
+ "app": "frappe_wms",
+ "creation": "2026-09-15 10:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "warehouse",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "home",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Home",
+   "link_to": "WMS",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "warehouse",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "WMS Warehouse",
+   "link_to": "WMS Warehouse",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "box",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Storage Bin",
+   "link_to": "Storage Bin",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "package",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Handling Unit",
+   "link_to": "Handling Unit",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "arrow-down-to-line",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Goods Receipt",
+   "link_to": "Goods Receipt",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "arrow-up-from-line",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Goods Issue",
+   "link_to": "Goods Issue",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "truck",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "WMS Shipment",
+   "link_to": "WMS Shipment",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-09-15 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WMS Core",
+ "name": "WMS",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "WMS"
+}
