@@ -1,0 +1,4253 @@
+{
+  "app": "frappe_wms",
+  "framework_target": "Frappe Framework v16",
+  "doctype_count": 41,
+  "notes": [
+    "Generated MVP metadata manifest. Import/generate these as standard DocTypes in developer mode.",
+    "Core stock-posting, locking, hierarchy validation, and reversal logic belongs in Python services, not DocType metadata.",
+    "Add database composite indexes and constraints using patches after creating the DocTypes."
+  ],
+  "doctypes": [
+    {
+      "doctype": "DocType",
+      "name": "Storage Bin Allowed Stock Type",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "stock_type"
+      ],
+      "fields": [
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Storage Bin Allowed HU Type",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "hu_type"
+      ],
+      "fields": [
+        {
+          "fieldname": "hu_type",
+          "label": "Handling Unit Type",
+          "fieldtype": "Link",
+          "options": "Handling Unit Type",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Allowed Task Type",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "task_type"
+      ],
+      "fields": [
+        {
+          "fieldname": "task_type",
+          "label": "Task Type",
+          "fieldtype": "Select",
+          "options": "Unload\nPutaway\nPick\nInternal Move\nStage\nLoad\nPosting Change\nInventory Count",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Storage Process Step",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "sequence",
+        "step_code",
+        "process_type",
+        "source_storage_type",
+        "destination_storage_type",
+        "destination_bin",
+        "require_hu_close",
+        "create_task_automatically",
+        "next_step_on_confirmation"
+      ],
+      "fields": [
+        {
+          "fieldname": "sequence",
+          "label": "Sequence",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "step_code",
+          "label": "Step Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "process_type",
+          "label": "Process Type",
+          "fieldtype": "Link",
+          "options": "Warehouse Process Type",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "source_storage_type",
+          "label": "Source Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "destination_storage_type",
+          "label": "Destination Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "destination_bin",
+          "label": "Fixed Destination Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "require_hu_close",
+          "label": "Require HU Close",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "create_task_automatically",
+          "label": "Create Task Automatically",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "next_step_on_confirmation",
+          "label": "Create Next Step On Confirmation",
+          "fieldtype": "Check",
+          "default": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Inbound Delivery Item",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "line_number",
+        "item",
+        "expected_quantity",
+        "received_quantity",
+        "putaway_quantity",
+        "stock_uom",
+        "batch_required",
+        "serial_required",
+        "expected_stock_type",
+        "preferred_storage_type",
+        "source_document_type",
+        "source_document_number",
+        "status"
+      ],
+      "fields": [
+        {
+          "fieldname": "line_number",
+          "label": "Line Number",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "expected_quantity",
+          "label": "Expected Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "received_quantity",
+          "label": "Received Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "putaway_quantity",
+          "label": "Putaway Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1
+        },
+        {
+          "fieldname": "batch_required",
+          "label": "Batch Required",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "serial_required",
+          "label": "Serial Required",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "expected_stock_type",
+          "label": "Expected Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "preferred_storage_type",
+          "label": "Preferred Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "source_document_type",
+          "label": "Source Document Type",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "source_document_number",
+          "label": "Source Document Number",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Open\nPartially Received\nReceived\nPutaway In Process\nCompleted\nCancelled",
+          "reqd": 1,
+          "default": "Open",
+          "read_only": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Goods Receipt Item",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "inbound_delivery_item",
+        "item",
+        "quantity",
+        "stock_uom",
+        "batch_no",
+        "serial_no",
+        "handling_unit",
+        "stock_type",
+        "discrepancy_code"
+      ],
+      "fields": [
+        {
+          "fieldname": "inbound_delivery_item",
+          "label": "Inbound Delivery Item Row",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "quantity",
+          "label": "Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch"
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No"
+        },
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "discrepancy_code",
+          "label": "Discrepancy Code",
+          "fieldtype": "Link",
+          "options": "WMS Exception Code"
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Outbound Delivery Item",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "line_number",
+        "item",
+        "requested_quantity",
+        "allocated_quantity",
+        "picked_quantity",
+        "packed_quantity",
+        "issued_quantity",
+        "stock_uom",
+        "required_batch",
+        "required_serial_no",
+        "required_stock_type",
+        "partial_delivery_allowed",
+        "status"
+      ],
+      "fields": [
+        {
+          "fieldname": "line_number",
+          "label": "Line Number",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "requested_quantity",
+          "label": "Requested Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "allocated_quantity",
+          "label": "Allocated Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "picked_quantity",
+          "label": "Picked Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "packed_quantity",
+          "label": "Packed Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "issued_quantity",
+          "label": "Issued Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1
+        },
+        {
+          "fieldname": "required_batch",
+          "label": "Required Batch",
+          "fieldtype": "Link",
+          "options": "Batch"
+        },
+        {
+          "fieldname": "required_serial_no",
+          "label": "Required Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No"
+        },
+        {
+          "fieldname": "required_stock_type",
+          "label": "Required Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "partial_delivery_allowed",
+          "label": "Partial Delivery Allowed",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Open\nAllocated\nPartially Picked\nPicked\nPacked\nIssued\nCancelled",
+          "reqd": 1,
+          "default": "Open",
+          "read_only": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Packing Source HU",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "handling_unit"
+      ],
+      "fields": [
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Packing Destination HU",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "handling_unit"
+      ],
+      "fields": [
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Shipment Delivery",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery",
+          "label": "Outbound Delivery",
+          "fieldtype": "Link",
+          "options": "Outbound Delivery",
+          "reqd": 1,
+          "in_list_view": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Shipment Handling Unit",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "handling_unit",
+        "load_sequence",
+        "loaded"
+      ],
+      "fields": [
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "load_sequence",
+          "label": "Load Sequence",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "loaded",
+          "label": "Loaded",
+          "fieldtype": "Check",
+          "default": 0
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Goods Issue Item",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 1,
+      "track_changes": 0,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery_item",
+        "item",
+        "quantity",
+        "stock_uom",
+        "handling_unit",
+        "batch_no",
+        "serial_no",
+        "stock_type"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery_item",
+          "label": "Outbound Delivery Item Row",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "quantity",
+          "label": "Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1
+        },
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "reqd": 1
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch"
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        }
+      ],
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Warehouse",
+      "module": "WMS Core",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "warehouse_code",
+        "warehouse_name",
+        "company",
+        "default_receiving_bin",
+        "default_shipping_bin",
+        "default_difference_bin",
+        "default_stock_type",
+        "allow_negative_stock",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "warehouse_code",
+          "label": "Warehouse Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "warehouse_name",
+          "label": "Warehouse Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "company",
+          "label": "Company",
+          "fieldtype": "Link",
+          "options": "Company",
+          "reqd": 1
+        },
+        {
+          "fieldname": "default_receiving_bin",
+          "label": "Default Receiving Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "default_shipping_bin",
+          "label": "Default Shipping Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "default_difference_bin",
+          "label": "Default Difference Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "default_stock_type",
+          "label": "Default Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "allow_negative_stock",
+          "label": "Allow Negative Stock",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        }
+      ],
+      "autoname": "field:warehouse_code",
+      "title_field": "warehouse_name",
+      "search_fields": "warehouse_code, warehouse_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Stock Type",
+      "module": "WMS Inventory",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "stock_type_code",
+        "stock_type_name",
+        "availability_category",
+        "available_for_allocation",
+        "picking_allowed",
+        "shipping_allowed",
+        "movement_allowed",
+        "requires_release",
+        "requires_reason",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "stock_type_code",
+          "label": "Stock Type Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "stock_type_name",
+          "label": "Stock Type Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "availability_category",
+          "label": "Availability Category",
+          "fieldtype": "Select",
+          "options": "Available\nQuality\nBlocked\nDamaged\nScrap",
+          "reqd": 1
+        },
+        {
+          "fieldname": "available_for_allocation",
+          "label": "Available for Allocation",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "picking_allowed",
+          "label": "Picking Allowed",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "shipping_allowed",
+          "label": "Shipping Allowed",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "movement_allowed",
+          "label": "Movement Allowed",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "requires_release",
+          "label": "Requires Release",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "requires_reason",
+          "label": "Requires Reason",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:stock_type_code",
+      "title_field": "stock_type_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Handling Unit Type",
+      "module": "WMS Handling Units",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "hu_type_code",
+        "hu_type_name",
+        "category",
+        "maximum_weight",
+        "maximum_volume",
+        "nestable",
+        "reusable",
+        "requires_seal",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "hu_type_code",
+          "label": "HU Type Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "hu_type_name",
+          "label": "HU Type Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "category",
+          "label": "Category",
+          "fieldtype": "Select",
+          "options": "Pallet\nBox\nCrate\nTote\nTrolley\nContainer\nOther",
+          "reqd": 1
+        },
+        {
+          "fieldname": "maximum_weight",
+          "label": "Maximum Weight",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "maximum_volume",
+          "label": "Maximum Volume",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "nestable",
+          "label": "Nestable",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "reusable",
+          "label": "Reusable",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "requires_seal",
+          "label": "Requires Seal",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:hu_type_code",
+      "title_field": "hu_type_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Packaging Material",
+      "module": "WMS Handling Units",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "packaging_material_code",
+        "packaging_material_name",
+        "hu_type",
+        "item",
+        "tare_weight",
+        "length",
+        "width",
+        "height",
+        "maximum_weight",
+        "reusable",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "packaging_material_code",
+          "label": "Packaging Material Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "packaging_material_name",
+          "label": "Packaging Material Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "hu_type",
+          "label": "Handling Unit Type",
+          "fieldtype": "Link",
+          "options": "Handling Unit Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item"
+        },
+        {
+          "fieldname": "tare_weight",
+          "label": "Tare Weight",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "length",
+          "label": "Length",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "width",
+          "label": "Width",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "height",
+          "label": "Height",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "maximum_weight",
+          "label": "Maximum Weight",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "reusable",
+          "label": "Reusable",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:packaging_material_code",
+      "title_field": "packaging_material_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Storage Type",
+      "module": "WMS Core",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "warehouse",
+        "storage_type_code",
+        "storage_type_name",
+        "storage_role",
+        "allow_mixed_products",
+        "allow_mixed_stock_types",
+        "allow_mixed_batches",
+        "hu_managed",
+        "capacity_check_method",
+        "putaway_blocked",
+        "removal_blocked",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "storage_type_code",
+          "label": "Storage Type Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "storage_type_name",
+          "label": "Storage Type Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "storage_role",
+          "label": "Storage Role",
+          "fieldtype": "Select",
+          "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "allow_mixed_products",
+          "label": "Allow Mixed Products",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "allow_mixed_stock_types",
+          "label": "Allow Mixed Stock Types",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "allow_mixed_batches",
+          "label": "Allow Mixed Batches",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "hu_managed",
+          "label": "HU Managed",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "capacity_check_method",
+          "label": "Capacity Check Method",
+          "fieldtype": "Select",
+          "options": "None\nHU Count\nWeight\nVolume",
+          "reqd": 1,
+          "default": "None"
+        },
+        {
+          "fieldname": "putaway_blocked",
+          "label": "Putaway Blocked",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "removal_blocked",
+          "label": "Removal Blocked",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "format:{warehouse}-{storage_type_code}",
+      "title_field": "storage_type_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Storage Bin",
+      "module": "WMS Core",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "bin_code",
+        "bin_name",
+        "warehouse",
+        "storage_type",
+        "parent_bin",
+        "bin_role",
+        "aisle",
+        "rack",
+        "level",
+        "position",
+        "sequence",
+        "maximum_hus",
+        "maximum_weight",
+        "maximum_volume",
+        "current_hu_count",
+        "current_weight",
+        "putaway_blocked",
+        "removal_blocked",
+        "inventory_blocked",
+        "allowed_stock_types",
+        "allowed_hu_types",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "bin_code",
+          "label": "Bin Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "bin_name",
+          "label": "Bin Name",
+          "fieldtype": "Data",
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "storage_type",
+          "label": "Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "parent_bin",
+          "label": "Parent Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "bin_role",
+          "label": "Bin Role",
+          "fieldtype": "Select",
+          "options": "Standard\nReceiving\nTrolley\nPacking\nStaging\nDoor\nDifference",
+          "reqd": 1,
+          "default": "Standard",
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "aisle",
+          "label": "Aisle",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "rack",
+          "label": "Rack",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "level",
+          "label": "Level",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "position",
+          "label": "Position",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "sequence",
+          "label": "Sequence",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "maximum_hus",
+          "label": "Maximum HUs",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "maximum_weight",
+          "label": "Maximum Weight",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "maximum_volume",
+          "label": "Maximum Volume",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "current_hu_count",
+          "label": "Current HU Count",
+          "fieldtype": "Int",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "current_weight",
+          "label": "Current Weight",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "putaway_blocked",
+          "label": "Putaway Blocked",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "removal_blocked",
+          "label": "Removal Blocked",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "inventory_blocked",
+          "label": "Inventory Blocked",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "allowed_stock_types",
+          "label": "Allowed Stock Types",
+          "fieldtype": "Table",
+          "options": "Storage Bin Allowed Stock Type"
+        },
+        {
+          "fieldname": "allowed_hu_types",
+          "label": "Allowed HU Types",
+          "fieldtype": "Table",
+          "options": "Storage Bin Allowed HU Type"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        }
+      ],
+      "autoname": "field:bin_code",
+      "title_field": "bin_name",
+      "search_fields": "bin_code, bin_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Product",
+      "module": "WMS Inventory",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "item",
+        "stock_uom",
+        "warehouse_managed",
+        "serial_control",
+        "batch_control",
+        "shelf_life_days",
+        "minimum_remaining_shelf_life",
+        "default_hu_type",
+        "preferred_storage_type",
+        "full_hu_quantity",
+        "gross_weight_per_unit",
+        "volume_per_unit",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1
+        },
+        {
+          "fieldname": "warehouse_managed",
+          "label": "Warehouse Managed",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "serial_control",
+          "label": "Serial Control",
+          "fieldtype": "Select",
+          "options": "None\nRequired at Receipt\nRequired at Issue\nAlways",
+          "reqd": 1,
+          "default": "None"
+        },
+        {
+          "fieldname": "batch_control",
+          "label": "Batch Control",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "shelf_life_days",
+          "label": "Shelf Life Days",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "minimum_remaining_shelf_life",
+          "label": "Minimum Remaining Shelf Life",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "default_hu_type",
+          "label": "Default HU Type",
+          "fieldtype": "Link",
+          "options": "Handling Unit Type"
+        },
+        {
+          "fieldname": "preferred_storage_type",
+          "label": "Preferred Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "full_hu_quantity",
+          "label": "Full HU Quantity",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "gross_weight_per_unit",
+          "label": "Gross Weight per Unit",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "volume_per_unit",
+          "label": "Volume per Unit",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:item",
+      "title_field": "item",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Movement Type",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "movement_type_code",
+        "movement_type_name",
+        "movement_category",
+        "requires_source",
+        "requires_destination",
+        "updates_hu",
+        "inventory_effect",
+        "reversal_movement_type",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "movement_type_code",
+          "label": "Movement Type Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "movement_type_name",
+          "label": "Movement Type Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "movement_category",
+          "label": "Movement Category",
+          "fieldtype": "Select",
+          "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack",
+          "reqd": 1
+        },
+        {
+          "fieldname": "requires_source",
+          "label": "Requires Source",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "requires_destination",
+          "label": "Requires Destination",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "updates_hu",
+          "label": "Updates HU",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "inventory_effect",
+          "label": "Inventory Effect",
+          "fieldtype": "Select",
+          "options": "Transfer\nIncrease\nDecrease\nNo Quantity Change",
+          "reqd": 1
+        },
+        {
+          "fieldname": "reversal_movement_type",
+          "label": "Reversal Movement Type",
+          "fieldtype": "Link",
+          "options": "WMS Movement Type"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:movement_type_code",
+      "title_field": "movement_type_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Warehouse Process Type",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "process_type_code",
+        "process_type_name",
+        "activity",
+        "source_required",
+        "destination_required",
+        "hu_required",
+        "stock_required",
+        "confirmation_mode",
+        "movement_type",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "process_type_code",
+          "label": "Process Type Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "process_type_name",
+          "label": "Process Type Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "activity",
+          "label": "Activity",
+          "fieldtype": "Select",
+          "options": "Unload\nPutaway\nPick\nInternal Move\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+          "reqd": 1
+        },
+        {
+          "fieldname": "source_required",
+          "label": "Source Required",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "destination_required",
+          "label": "Destination Required",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "hu_required",
+          "label": "HU Required",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "stock_required",
+          "label": "Stock Required",
+          "fieldtype": "Check",
+          "default": 1
+        },
+        {
+          "fieldname": "confirmation_mode",
+          "label": "Confirmation Mode",
+          "fieldtype": "Select",
+          "options": "Product and Quantity\nHandling Unit\nBin to Bin\nSerial Number",
+          "reqd": 1
+        },
+        {
+          "fieldname": "movement_type",
+          "label": "Movement Type",
+          "fieldtype": "Link",
+          "options": "WMS Movement Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:process_type_code",
+      "title_field": "process_type_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Storage Process",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "process_code",
+        "process_name",
+        "process_category",
+        "warehouse",
+        "steps",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "process_code",
+          "label": "Process Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "process_name",
+          "label": "Process Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "process_category",
+          "label": "Process Category",
+          "fieldtype": "Select",
+          "options": "Inbound\nOutbound\nInternal",
+          "reqd": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1
+        },
+        {
+          "fieldname": "steps",
+          "label": "Steps",
+          "fieldtype": "Table",
+          "options": "Storage Process Step",
+          "reqd": 1
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:process_code",
+      "title_field": "process_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Process Determination Rule",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "priority",
+        "warehouse",
+        "document_type",
+        "item",
+        "item_group",
+        "stock_type",
+        "source_storage_type",
+        "destination_storage_type",
+        "route",
+        "storage_process",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "priority",
+          "label": "Priority",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "document_type",
+          "label": "Document Type",
+          "fieldtype": "Select",
+          "options": "Inbound Delivery\nOutbound Delivery\nInternal Movement",
+          "reqd": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item"
+        },
+        {
+          "fieldname": "item_group",
+          "label": "Item Group",
+          "fieldtype": "Link",
+          "options": "Item Group"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type"
+        },
+        {
+          "fieldname": "source_storage_type",
+          "label": "Source Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "destination_storage_type",
+          "label": "Destination Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "route",
+          "label": "Route",
+          "fieldtype": "Link",
+          "options": "WMS Route"
+        },
+        {
+          "fieldname": "storage_process",
+          "label": "Storage Process",
+          "fieldtype": "Link",
+          "options": "Storage Process",
+          "reqd": 1
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "format:PDR-.#####",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Bin Determination Rule",
+      "module": "WMS Setup",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "priority",
+        "warehouse",
+        "activity",
+        "item",
+        "item_group",
+        "stock_type",
+        "hu_type",
+        "source_storage_type",
+        "destination_storage_type",
+        "fixed_destination_bin",
+        "strategy",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "priority",
+          "label": "Priority",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "activity",
+          "label": "Activity",
+          "fieldtype": "Select",
+          "options": "Putaway\nPick\nInternal Move\nStage\nLoad",
+          "reqd": 1
+        },
+        {
+          "fieldname": "item",
+          "label": "Item",
+          "fieldtype": "Link",
+          "options": "Item"
+        },
+        {
+          "fieldname": "item_group",
+          "label": "Item Group",
+          "fieldtype": "Link",
+          "options": "Item Group"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type"
+        },
+        {
+          "fieldname": "hu_type",
+          "label": "HU Type",
+          "fieldtype": "Link",
+          "options": "Handling Unit Type"
+        },
+        {
+          "fieldname": "source_storage_type",
+          "label": "Source Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "destination_storage_type",
+          "label": "Destination Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "fixed_destination_bin",
+          "label": "Fixed Destination Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "strategy",
+          "label": "Strategy",
+          "fieldtype": "Select",
+          "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection",
+          "reqd": 1
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "format:BDR-.#####",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Handling Unit",
+      "module": "WMS Handling Units",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "hu_number",
+        "hu_type",
+        "packaging_material",
+        "warehouse",
+        "current_bin",
+        "parent_hu",
+        "top_hu",
+        "hierarchy_level",
+        "status",
+        "stock_status",
+        "gross_weight",
+        "tare_weight",
+        "net_weight",
+        "volume",
+        "outbound_delivery",
+        "shipment",
+        "seal_number",
+        "closed",
+        "loaded",
+        "external_reference"
+      ],
+      "fields": [
+        {
+          "fieldname": "hu_number",
+          "label": "HU Number",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "hu_type",
+          "label": "HU Type",
+          "fieldtype": "Link",
+          "options": "Handling Unit Type",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "packaging_material",
+          "label": "Packaging Material",
+          "fieldtype": "Link",
+          "options": "Packaging Material"
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "current_bin",
+          "label": "Current Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "parent_hu",
+          "label": "Parent HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "unique": 1
+        },
+        {
+          "fieldname": "top_hu",
+          "label": "Top HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "unique": 1
+        },
+        {
+          "fieldname": "hierarchy_level",
+          "label": "Hierarchy Level",
+          "fieldtype": "Int",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Created\nOpen\nClosed\nIn Process\nStaged\nLoaded\nShipped\nEmpty\nBlocked\nCancelled",
+          "reqd": 1,
+          "default": "Created",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "stock_status",
+          "label": "Stock Status",
+          "fieldtype": "Select",
+          "options": "Empty\nPartial\nFull",
+          "reqd": 1,
+          "default": "Empty",
+          "read_only": 1
+        },
+        {
+          "fieldname": "gross_weight",
+          "label": "Gross Weight",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "tare_weight",
+          "label": "Tare Weight",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "net_weight",
+          "label": "Net Weight",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "volume",
+          "label": "Volume",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "outbound_delivery",
+          "label": "Outbound Delivery",
+          "fieldtype": "Link",
+          "options": "Outbound Delivery",
+          "unique": 1
+        },
+        {
+          "fieldname": "shipment",
+          "label": "Shipment",
+          "fieldtype": "Link",
+          "options": "WMS Shipment",
+          "unique": 1
+        },
+        {
+          "fieldname": "seal_number",
+          "label": "Seal Number",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "closed",
+          "label": "Closed",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "loaded",
+          "label": "Loaded",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "external_reference",
+          "label": "External Reference",
+          "fieldtype": "Data"
+        }
+      ],
+      "autoname": "field:hu_number",
+      "title_field": "hu_number",
+      "search_fields": "hu_number, external_reference",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Handling Unit Event",
+      "module": "WMS Handling Units",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "handling_unit",
+        "event_type",
+        "parent_hu_before",
+        "parent_hu_after",
+        "bin_before",
+        "bin_after",
+        "status_before",
+        "status_after",
+        "reference_doctype",
+        "reference_name",
+        "warehouse_task",
+        "event_timestamp",
+        "performed_by",
+        "reason_code",
+        "remarks"
+      ],
+      "fields": [
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "event_type",
+          "label": "Event Type",
+          "fieldtype": "Select",
+          "options": "Created\nPacked\nUnpacked\nNested\nUnnested\nMoved\nClosed\nReopened\nAssigned\nStaged\nLoaded\nUnloaded\nShipped\nBlocked\nUnblocked\nCancelled",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "parent_hu_before",
+          "label": "Parent HU Before",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "parent_hu_after",
+          "label": "Parent HU After",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "bin_before",
+          "label": "Bin Before",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "bin_after",
+          "label": "Bin After",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "status_before",
+          "label": "Status Before",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "status_after",
+          "label": "Status After",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "reference_doctype",
+          "label": "Reference DocType",
+          "fieldtype": "Link",
+          "options": "DocType"
+        },
+        {
+          "fieldname": "reference_name",
+          "label": "Reference Name",
+          "fieldtype": "Dynamic Link",
+          "options": "reference_doctype"
+        },
+        {
+          "fieldname": "warehouse_task",
+          "label": "Warehouse Task",
+          "fieldtype": "Link",
+          "options": "Warehouse Task"
+        },
+        {
+          "fieldname": "event_timestamp",
+          "label": "Event Timestamp",
+          "fieldtype": "Datetime",
+          "reqd": 1,
+          "default": "Now",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "performed_by",
+          "label": "Performed By",
+          "fieldtype": "Link",
+          "options": "User",
+          "reqd": 1,
+          "read_only": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "reason_code",
+          "label": "Reason Code",
+          "fieldtype": "Link",
+          "options": "WMS Exception Code"
+        },
+        {
+          "fieldname": "remarks",
+          "label": "Remarks",
+          "fieldtype": "Small Text"
+        }
+      ],
+      "autoname": "HUE-.########",
+      "sort_field": "event_timestamp",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Stock Ledger Entry",
+      "module": "WMS Inventory",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "posting_datetime",
+        "warehouse",
+        "product",
+        "batch_no",
+        "serial_no",
+        "handling_unit",
+        "storage_bin",
+        "stock_type",
+        "quantity",
+        "stock_uom",
+        "movement_type",
+        "reference_doctype",
+        "reference_name",
+        "reference_line",
+        "warehouse_task",
+        "reversal_of",
+        "idempotency_key",
+        "posting_user",
+        "posting_device"
+      ],
+      "fields": [
+        {
+          "fieldname": "posting_datetime",
+          "label": "Posting Datetime",
+          "fieldtype": "Datetime",
+          "reqd": 1,
+          "default": "Now",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "product",
+          "label": "Product",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch",
+          "unique": 1
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No",
+          "unique": 1
+        },
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "storage_bin",
+          "label": "Storage Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "quantity",
+          "label": "Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "movement_type",
+          "label": "Movement Type",
+          "fieldtype": "Link",
+          "options": "WMS Movement Type",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "reference_doctype",
+          "label": "Reference DocType",
+          "fieldtype": "Link",
+          "options": "DocType",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "reference_name",
+          "label": "Reference Name",
+          "fieldtype": "Dynamic Link",
+          "options": "reference_doctype",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "reference_line",
+          "label": "Reference Line",
+          "fieldtype": "Data",
+          "read_only": 1
+        },
+        {
+          "fieldname": "warehouse_task",
+          "label": "Warehouse Task",
+          "fieldtype": "Link",
+          "options": "Warehouse Task",
+          "unique": 1
+        },
+        {
+          "fieldname": "reversal_of",
+          "label": "Reversal Of",
+          "fieldtype": "Link",
+          "options": "WMS Stock Ledger Entry",
+          "unique": 1
+        },
+        {
+          "fieldname": "idempotency_key",
+          "label": "Idempotency Key",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "read_only": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "posting_user",
+          "label": "Posting User",
+          "fieldtype": "Link",
+          "options": "User",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "posting_device",
+          "label": "Posting Device",
+          "fieldtype": "Data",
+          "read_only": 1
+        }
+      ],
+      "autoname": "WSLE-.##########",
+      "sort_field": "posting_datetime",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Stock Balance",
+      "module": "WMS Inventory",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "warehouse",
+        "product",
+        "batch_no",
+        "serial_no",
+        "handling_unit",
+        "storage_bin",
+        "stock_type",
+        "quantity",
+        "allocated_quantity",
+        "available_quantity",
+        "stock_uom",
+        "first_receipt_date",
+        "last_movement_date",
+        "version"
+      ],
+      "fields": [
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "product",
+          "label": "Product",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch",
+          "unique": 1
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No",
+          "unique": 1
+        },
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit",
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "storage_bin",
+          "label": "Storage Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1,
+          "unique": 1,
+          "in_standard_filter": 1,
+          "depends_on": 1
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "quantity",
+          "label": "Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "allocated_quantity",
+          "label": "Allocated Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "available_quantity",
+          "label": "Available Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM",
+          "reqd": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "first_receipt_date",
+          "label": "First Receipt Date",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "last_movement_date",
+          "label": "Last Movement Date",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "version",
+          "label": "Version",
+          "fieldtype": "Int",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1
+        }
+      ],
+      "autoname": "hash",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Warehouse Queue",
+      "module": "WMS Execution",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "queue_code",
+        "queue_name",
+        "warehouse",
+        "activity",
+        "storage_type",
+        "required_resource_type",
+        "sequence_rule",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "queue_code",
+          "label": "Queue Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "queue_name",
+          "label": "Queue Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "activity",
+          "label": "Activity",
+          "fieldtype": "Select",
+          "options": "Unload\nPutaway\nPick\nInternal Move\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+          "reqd": 1
+        },
+        {
+          "fieldname": "storage_type",
+          "label": "Storage Type",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "required_resource_type",
+          "label": "Required Resource Type",
+          "fieldtype": "Select",
+          "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner"
+        },
+        {
+          "fieldname": "sequence_rule",
+          "label": "Sequence Rule",
+          "fieldtype": "Select",
+          "options": "Priority Then FIFO\nFIFO\nBin Sequence\nDelivery Sequence\nOldest Stock First",
+          "reqd": 1,
+          "default": "Priority Then FIFO"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:queue_code",
+      "title_field": "queue_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Resource",
+      "module": "WMS Execution",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "resource_code",
+        "user",
+        "warehouse",
+        "resource_type",
+        "current_queue",
+        "current_bin",
+        "device_id",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "resource_code",
+          "label": "Resource Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "user",
+          "label": "User",
+          "fieldtype": "Link",
+          "options": "User"
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "resource_type",
+          "label": "Resource Type",
+          "fieldtype": "Select",
+          "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "current_queue",
+          "label": "Current Queue",
+          "fieldtype": "Link",
+          "options": "Warehouse Queue"
+        },
+        {
+          "fieldname": "current_bin",
+          "label": "Current Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "device_id",
+          "label": "Device ID",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:resource_code",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Exception Code",
+      "module": "WMS Execution",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "exception_code",
+        "exception_name",
+        "category",
+        "allowed_task_types",
+        "requires_supervisor",
+        "requires_comment",
+        "allows_quantity_change",
+        "allows_bin_change",
+        "follow_up_action",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "exception_code",
+          "label": "Exception Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "exception_name",
+          "label": "Exception Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "category",
+          "label": "Category",
+          "fieldtype": "Select",
+          "options": "Stock\nBin\nHandling Unit\nTask\nRoute\nQuality\nSystem",
+          "reqd": 1
+        },
+        {
+          "fieldname": "allowed_task_types",
+          "label": "Allowed Task Types",
+          "fieldtype": "Table",
+          "options": "Allowed Task Type"
+        },
+        {
+          "fieldname": "requires_supervisor",
+          "label": "Requires Supervisor",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "requires_comment",
+          "label": "Requires Comment",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "allows_quantity_change",
+          "label": "Allows Quantity Change",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "allows_bin_change",
+          "label": "Allows Bin Change",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "follow_up_action",
+          "label": "Follow-up Action",
+          "fieldtype": "Select",
+          "options": "None\nBlock Stock\nBlock HU\nCreate Difference Task\nCancel Task\nCreate Follow-up Task",
+          "reqd": 1,
+          "default": "None"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:exception_code",
+      "title_field": "exception_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Warehouse Request",
+      "module": "WMS Execution",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "request_type",
+        "warehouse",
+        "product",
+        "requested_quantity",
+        "stock_uom",
+        "source_area",
+        "destination_area",
+        "source_bin",
+        "destination_bin",
+        "source_hu",
+        "destination_hu",
+        "stock_type",
+        "reference_doctype",
+        "reference_name",
+        "reference_line",
+        "process_type",
+        "storage_process",
+        "process_step",
+        "priority",
+        "requested_date",
+        "status",
+        "created_quantity",
+        "confirmed_quantity"
+      ],
+      "fields": [
+        {
+          "fieldname": "request_type",
+          "label": "Request Type",
+          "fieldtype": "Select",
+          "options": "Unload\nPutaway\nPick\nReplenish\nInternal Move\nStage\nLoad\nUnload Vehicle\nPosting Change\nInventory Count",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "product",
+          "label": "Product",
+          "fieldtype": "Link",
+          "options": "Item"
+        },
+        {
+          "fieldname": "requested_quantity",
+          "label": "Requested Quantity",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM"
+        },
+        {
+          "fieldname": "source_area",
+          "label": "Source Area",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "destination_area",
+          "label": "Destination Area",
+          "fieldtype": "Link",
+          "options": "Storage Type"
+        },
+        {
+          "fieldname": "source_bin",
+          "label": "Source Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "destination_bin",
+          "label": "Destination Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "source_hu",
+          "label": "Source HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "destination_hu",
+          "label": "Destination HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type"
+        },
+        {
+          "fieldname": "reference_doctype",
+          "label": "Reference DocType",
+          "fieldtype": "Link",
+          "options": "DocType",
+          "reqd": 1
+        },
+        {
+          "fieldname": "reference_name",
+          "label": "Reference Name",
+          "fieldtype": "Dynamic Link",
+          "options": "reference_doctype",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "reference_line",
+          "label": "Reference Line",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "process_type",
+          "label": "Process Type",
+          "fieldtype": "Link",
+          "options": "Warehouse Process Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "storage_process",
+          "label": "Storage Process",
+          "fieldtype": "Link",
+          "options": "Storage Process"
+        },
+        {
+          "fieldname": "process_step",
+          "label": "Process Step Code",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "priority",
+          "label": "Priority",
+          "fieldtype": "Select",
+          "options": "Low\nNormal\nHigh\nUrgent",
+          "reqd": 1,
+          "default": "Normal",
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "requested_date",
+          "label": "Requested Date",
+          "fieldtype": "Datetime"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nOpen\nPartially Tasked\nFully Tasked\nIn Process\nCompleted\nCancelled\nException",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "created_quantity",
+          "label": "Created Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "confirmed_quantity",
+          "label": "Confirmed Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1
+        }
+      ],
+      "autoname": "WR-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Warehouse Task",
+      "module": "WMS Execution",
+      "custom": 0,
+      "is_submittable": 1,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "warehouse_request",
+        "task_type",
+        "warehouse",
+        "product",
+        "planned_quantity",
+        "confirmed_quantity",
+        "stock_uom",
+        "batch_no",
+        "serial_no",
+        "source_bin",
+        "destination_bin",
+        "source_hu",
+        "destination_hu",
+        "move_top_hu",
+        "stock_type_from",
+        "stock_type_to",
+        "movement_type",
+        "queue",
+        "assigned_resource",
+        "priority",
+        "sequence",
+        "status",
+        "started_at",
+        "confirmed_at",
+        "confirmed_by",
+        "confirmation_device",
+        "exception_code",
+        "idempotency_key",
+        "blocking_reason"
+      ],
+      "fields": [
+        {
+          "fieldname": "warehouse_request",
+          "label": "Warehouse Request",
+          "fieldtype": "Link",
+          "options": "Warehouse Request",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "task_type",
+          "label": "Task Type",
+          "fieldtype": "Select",
+          "options": "Unload\nPutaway\nPick\nInternal Move\nStage\nLoad\nPosting Change\nInventory Count",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "product",
+          "label": "Product",
+          "fieldtype": "Link",
+          "options": "Item"
+        },
+        {
+          "fieldname": "planned_quantity",
+          "label": "Planned Quantity",
+          "fieldtype": "Float"
+        },
+        {
+          "fieldname": "confirmed_quantity",
+          "label": "Confirmed Quantity",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "stock_uom",
+          "label": "Stock UOM",
+          "fieldtype": "Link",
+          "options": "UOM"
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch"
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No"
+        },
+        {
+          "fieldname": "source_bin",
+          "label": "Source Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "destination_bin",
+          "label": "Destination Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "source_hu",
+          "label": "Source HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "destination_hu",
+          "label": "Destination HU",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "move_top_hu",
+          "label": "Move Top HU",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "stock_type_from",
+          "label": "Stock Type From",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type"
+        },
+        {
+          "fieldname": "stock_type_to",
+          "label": "Stock Type To",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type"
+        },
+        {
+          "fieldname": "movement_type",
+          "label": "Movement Type",
+          "fieldtype": "Link",
+          "options": "WMS Movement Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "queue",
+          "label": "Queue",
+          "fieldtype": "Link",
+          "options": "Warehouse Queue"
+        },
+        {
+          "fieldname": "assigned_resource",
+          "label": "Assigned Resource",
+          "fieldtype": "Link",
+          "options": "WMS Resource"
+        },
+        {
+          "fieldname": "priority",
+          "label": "Priority",
+          "fieldtype": "Select",
+          "options": "Low\nNormal\nHigh\nUrgent",
+          "reqd": 1,
+          "default": "Normal",
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "sequence",
+          "label": "Sequence",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Open\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
+          "reqd": 1,
+          "default": "Open",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "started_at",
+          "label": "Started At",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "confirmed_at",
+          "label": "Confirmed At",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "confirmed_by",
+          "label": "Confirmed By",
+          "fieldtype": "Link",
+          "options": "User",
+          "unique": 1
+        },
+        {
+          "fieldname": "confirmation_device",
+          "label": "Confirmation Device",
+          "fieldtype": "Data",
+          "read_only": 1
+        },
+        {
+          "fieldname": "exception_code",
+          "label": "Exception Code",
+          "fieldtype": "Link",
+          "options": "WMS Exception Code"
+        },
+        {
+          "fieldname": "idempotency_key",
+          "label": "Idempotency Key",
+          "fieldtype": "Data",
+          "read_only": 1,
+          "unique": 1
+        },
+        {
+          "fieldname": "blocking_reason",
+          "label": "Blocking Reason",
+          "fieldtype": "Small Text",
+          "read_only": 1
+        }
+      ],
+      "autoname": "WT-.##########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Inbound Delivery",
+      "module": "WMS Inbound",
+      "custom": 0,
+      "is_submittable": 1,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "inbound_delivery_number",
+        "warehouse",
+        "supplier",
+        "company",
+        "external_reference",
+        "expected_arrival",
+        "receiving_bin",
+        "status",
+        "receipt_status",
+        "process_status",
+        "posting_date",
+        "items",
+        "remarks"
+      ],
+      "fields": [
+        {
+          "fieldname": "inbound_delivery_number",
+          "label": "Inbound Delivery Number",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "supplier",
+          "label": "Supplier",
+          "fieldtype": "Link",
+          "options": "Supplier",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "company",
+          "label": "Company",
+          "fieldtype": "Link",
+          "options": "Company",
+          "reqd": 1
+        },
+        {
+          "fieldname": "external_reference",
+          "label": "External Reference",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "expected_arrival",
+          "label": "Expected Arrival",
+          "fieldtype": "Datetime"
+        },
+        {
+          "fieldname": "receiving_bin",
+          "label": "Receiving Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nExpected\nArrived\nReceiving\nPartially Received\nReceived\nPutaway In Process\nCompleted\nCancelled",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "receipt_status",
+          "label": "Receipt Status",
+          "fieldtype": "Select",
+          "options": "Not Received\nPartially Received\nFully Received",
+          "reqd": 1,
+          "default": "Not Received",
+          "read_only": 1
+        },
+        {
+          "fieldname": "process_status",
+          "label": "Process Status",
+          "fieldtype": "Select",
+          "options": "Not Started\nIn Process\nCompleted\nException",
+          "reqd": 1,
+          "default": "Not Started",
+          "read_only": 1
+        },
+        {
+          "fieldname": "posting_date",
+          "label": "Posting Date",
+          "fieldtype": "Date",
+          "reqd": 1,
+          "default": "Today"
+        },
+        {
+          "fieldname": "items",
+          "label": "Items",
+          "fieldtype": "Table",
+          "options": "Inbound Delivery Item",
+          "reqd": 1
+        },
+        {
+          "fieldname": "remarks",
+          "label": "Remarks",
+          "fieldtype": "Text Editor"
+        }
+      ],
+      "autoname": "IBD-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Goods Receipt",
+      "module": "WMS Inbound",
+      "custom": 0,
+      "is_submittable": 1,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "inbound_delivery",
+        "warehouse",
+        "receiving_bin",
+        "posting_datetime",
+        "status",
+        "items",
+        "reversed",
+        "reversal_document"
+      ],
+      "fields": [
+        {
+          "fieldname": "inbound_delivery",
+          "label": "Inbound Delivery",
+          "fieldtype": "Link",
+          "options": "Inbound Delivery",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "receiving_bin",
+          "label": "Receiving Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1
+        },
+        {
+          "fieldname": "posting_datetime",
+          "label": "Posting Datetime",
+          "fieldtype": "Datetime",
+          "reqd": 1,
+          "default": "Now"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nPosted\nReversed\nCancelled",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "items",
+          "label": "Items",
+          "fieldtype": "Table",
+          "options": "Goods Receipt Item",
+          "reqd": 1
+        },
+        {
+          "fieldname": "reversed",
+          "label": "Reversed",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "reversal_document",
+          "label": "Reversal Document",
+          "fieldtype": "Link",
+          "options": "Goods Receipt",
+          "unique": 1
+        }
+      ],
+      "autoname": "GR-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Outbound Delivery",
+      "module": "WMS Outbound",
+      "custom": 0,
+      "is_submittable": 1,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery_number",
+        "warehouse",
+        "customer",
+        "ship_to_party",
+        "delivery_date",
+        "priority",
+        "route",
+        "staging_bin",
+        "door",
+        "status",
+        "allocation_status",
+        "picking_status",
+        "packing_status",
+        "loading_status",
+        "goods_issue_status",
+        "external_reference",
+        "customer_instruction_reference",
+        "items",
+        "remarks"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery_number",
+          "label": "Outbound Delivery Number",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "customer",
+          "label": "Customer",
+          "fieldtype": "Link",
+          "options": "Customer",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "ship_to_party",
+          "label": "Ship-to Party",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "delivery_date",
+          "label": "Delivery Date",
+          "fieldtype": "Date",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "priority",
+          "label": "Priority",
+          "fieldtype": "Select",
+          "options": "Low\nNormal\nHigh\nUrgent",
+          "reqd": 1,
+          "default": "Normal"
+        },
+        {
+          "fieldname": "route",
+          "label": "Route",
+          "fieldtype": "Link",
+          "options": "WMS Route"
+        },
+        {
+          "fieldname": "staging_bin",
+          "label": "Staging Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "door",
+          "label": "Door",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nOpen\nAllocated\nPicking\nPicked\nPacking\nPacked\nStaging\nStaged\nLoading\nLoaded\nGoods Issued\nCompleted\nCancelled",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "allocation_status",
+          "label": "Allocation Status",
+          "fieldtype": "Select",
+          "options": "Not Allocated\nPartially Allocated\nFully Allocated",
+          "reqd": 1,
+          "default": "Not Allocated",
+          "read_only": 1
+        },
+        {
+          "fieldname": "picking_status",
+          "label": "Picking Status",
+          "fieldtype": "Select",
+          "options": "Not Started\nPartially Picked\nPicked",
+          "reqd": 1,
+          "default": "Not Started",
+          "read_only": 1
+        },
+        {
+          "fieldname": "packing_status",
+          "label": "Packing Status",
+          "fieldtype": "Select",
+          "options": "Not Started\nIn Process\nPacked",
+          "reqd": 1,
+          "default": "Not Started",
+          "read_only": 1
+        },
+        {
+          "fieldname": "loading_status",
+          "label": "Loading Status",
+          "fieldtype": "Select",
+          "options": "Not Started\nIn Process\nLoaded",
+          "reqd": 1,
+          "default": "Not Started",
+          "read_only": 1
+        },
+        {
+          "fieldname": "goods_issue_status",
+          "label": "Goods Issue Status",
+          "fieldtype": "Select",
+          "options": "Not Posted\nPartially Posted\nPosted\nReversed",
+          "reqd": 1,
+          "default": "Not Posted",
+          "read_only": 1
+        },
+        {
+          "fieldname": "external_reference",
+          "label": "External Reference",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "customer_instruction_reference",
+          "label": "Customer Instruction Reference",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "items",
+          "label": "Items",
+          "fieldtype": "Table",
+          "options": "Outbound Delivery Item",
+          "reqd": 1
+        },
+        {
+          "fieldname": "remarks",
+          "label": "Remarks",
+          "fieldtype": "Text Editor"
+        }
+      ],
+      "autoname": "OBD-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Stock Allocation",
+      "module": "WMS Outbound",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery",
+        "outbound_delivery_item",
+        "product",
+        "stock_balance",
+        "storage_bin",
+        "handling_unit",
+        "batch_no",
+        "serial_no",
+        "stock_type",
+        "allocated_quantity",
+        "picked_quantity",
+        "status",
+        "allocation_sequence",
+        "allocation_rule"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery",
+          "label": "Outbound Delivery",
+          "fieldtype": "Link",
+          "options": "Outbound Delivery",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "outbound_delivery_item",
+          "label": "Outbound Delivery Item Row",
+          "fieldtype": "Data",
+          "reqd": 1
+        },
+        {
+          "fieldname": "product",
+          "label": "Product",
+          "fieldtype": "Link",
+          "options": "Item",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "stock_balance",
+          "label": "Stock Balance",
+          "fieldtype": "Link",
+          "options": "WMS Stock Balance",
+          "reqd": 1
+        },
+        {
+          "fieldname": "storage_bin",
+          "label": "Storage Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1
+        },
+        {
+          "fieldname": "handling_unit",
+          "label": "Handling Unit",
+          "fieldtype": "Link",
+          "options": "Handling Unit"
+        },
+        {
+          "fieldname": "batch_no",
+          "label": "Batch",
+          "fieldtype": "Link",
+          "options": "Batch"
+        },
+        {
+          "fieldname": "serial_no",
+          "label": "Serial Number",
+          "fieldtype": "Link",
+          "options": "Serial No"
+        },
+        {
+          "fieldname": "stock_type",
+          "label": "Stock Type",
+          "fieldtype": "Link",
+          "options": "WMS Stock Type",
+          "reqd": 1
+        },
+        {
+          "fieldname": "allocated_quantity",
+          "label": "Allocated Quantity",
+          "fieldtype": "Float",
+          "reqd": 1
+        },
+        {
+          "fieldname": "picked_quantity",
+          "label": "Picked Quantity",
+          "fieldtype": "Float",
+          "reqd": 1,
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Allocated\nPartially Picked\nPicked\nReleased\nCancelled",
+          "reqd": 1,
+          "default": "Allocated",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "allocation_sequence",
+          "label": "Allocation Sequence",
+          "fieldtype": "Int"
+        },
+        {
+          "fieldname": "allocation_rule",
+          "label": "Allocation Rule",
+          "fieldtype": "Data"
+        }
+      ],
+      "autoname": "ALLOC-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Packing Order",
+      "module": "WMS Outbound",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery",
+        "work_center_bin",
+        "status",
+        "source_hus",
+        "destination_hus",
+        "physical_hu_verified",
+        "packaging_requirements_verified",
+        "customer_requirements_verified",
+        "verified_by",
+        "completed_at",
+        "remarks"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery",
+          "label": "Outbound Delivery",
+          "fieldtype": "Link",
+          "options": "Outbound Delivery",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "work_center_bin",
+          "label": "Work Center Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nOpen\nIn Process\nCompleted\nCancelled",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "source_hus",
+          "label": "Source HUs",
+          "fieldtype": "Table",
+          "options": "Packing Source HU"
+        },
+        {
+          "fieldname": "destination_hus",
+          "label": "Destination HUs",
+          "fieldtype": "Table",
+          "options": "Packing Destination HU"
+        },
+        {
+          "fieldname": "physical_hu_verified",
+          "label": "Physical HU Verified",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "packaging_requirements_verified",
+          "label": "Packaging Requirements Verified",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "customer_requirements_verified",
+          "label": "Customer Requirements Verified",
+          "fieldtype": "Check",
+          "default": 0
+        },
+        {
+          "fieldname": "verified_by",
+          "label": "Verified By",
+          "fieldtype": "Link",
+          "options": "User",
+          "unique": 1
+        },
+        {
+          "fieldname": "completed_at",
+          "label": "Completed At",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "remarks",
+          "label": "Remarks",
+          "fieldtype": "Small Text"
+        }
+      ],
+      "autoname": "PACK-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Route",
+      "module": "WMS Shipping",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "route_code",
+        "route_name",
+        "origin_warehouse",
+        "default_staging_bin",
+        "default_door",
+        "carrier",
+        "active"
+      ],
+      "fields": [
+        {
+          "fieldname": "route_code",
+          "label": "Route Code",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "route_name",
+          "label": "Route Name",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "origin_warehouse",
+          "label": "Origin Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1
+        },
+        {
+          "fieldname": "default_staging_bin",
+          "label": "Default Staging Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "default_door",
+          "label": "Default Door",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "carrier",
+          "label": "Carrier",
+          "fieldtype": "Link",
+          "options": "Supplier"
+        },
+        {
+          "fieldname": "active",
+          "label": "Active",
+          "fieldtype": "Check",
+          "default": 1,
+          "in_list_view": 1
+        }
+      ],
+      "autoname": "field:route_code",
+      "title_field": "route_name",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "WMS Shipment",
+      "module": "WMS Shipping",
+      "custom": 0,
+      "is_submittable": 0,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "shipment_number",
+        "warehouse",
+        "route",
+        "carrier",
+        "vehicle_registration",
+        "trailer_number",
+        "driver_name",
+        "planned_departure",
+        "actual_departure",
+        "staging_bin",
+        "door",
+        "status",
+        "deliveries",
+        "handling_units",
+        "total_weight",
+        "total_volume",
+        "seal_number"
+      ],
+      "fields": [
+        {
+          "fieldname": "shipment_number",
+          "label": "Shipment Number",
+          "fieldtype": "Data",
+          "reqd": 1,
+          "unique": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "route",
+          "label": "Route",
+          "fieldtype": "Link",
+          "options": "WMS Route",
+          "reqd": 1,
+          "in_list_view": 1
+        },
+        {
+          "fieldname": "carrier",
+          "label": "Carrier",
+          "fieldtype": "Link",
+          "options": "Supplier"
+        },
+        {
+          "fieldname": "vehicle_registration",
+          "label": "Vehicle Registration",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "trailer_number",
+          "label": "Trailer Number",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "driver_name",
+          "label": "Driver Name",
+          "fieldtype": "Data"
+        },
+        {
+          "fieldname": "planned_departure",
+          "label": "Planned Departure",
+          "fieldtype": "Datetime"
+        },
+        {
+          "fieldname": "actual_departure",
+          "label": "Actual Departure",
+          "fieldtype": "Datetime",
+          "read_only": 1
+        },
+        {
+          "fieldname": "staging_bin",
+          "label": "Staging Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "door",
+          "label": "Door",
+          "fieldtype": "Link",
+          "options": "Storage Bin"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Planned\nReleased\nStaging\nReady to Load\nLoading\nLoaded\nDeparted\nCompleted\nCancelled",
+          "reqd": 1,
+          "default": "Planned",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "deliveries",
+          "label": "Deliveries",
+          "fieldtype": "Table",
+          "options": "Shipment Delivery"
+        },
+        {
+          "fieldname": "handling_units",
+          "label": "Handling Units",
+          "fieldtype": "Table",
+          "options": "Shipment Handling Unit"
+        },
+        {
+          "fieldname": "total_weight",
+          "label": "Total Weight",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "total_volume",
+          "label": "Total Volume",
+          "fieldtype": "Float",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "seal_number",
+          "label": "Seal Number",
+          "fieldtype": "Data"
+        }
+      ],
+      "autoname": "SHIP-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    },
+    {
+      "doctype": "DocType",
+      "name": "Goods Issue",
+      "module": "WMS Outbound",
+      "custom": 0,
+      "is_submittable": 1,
+      "istable": 0,
+      "track_changes": 1,
+      "allow_rename": 0,
+      "engine": "InnoDB",
+      "field_order": [
+        "outbound_delivery",
+        "shipment",
+        "warehouse",
+        "staging_bin",
+        "posting_datetime",
+        "status",
+        "items",
+        "reversed",
+        "reversal_document"
+      ],
+      "fields": [
+        {
+          "fieldname": "outbound_delivery",
+          "label": "Outbound Delivery",
+          "fieldtype": "Link",
+          "options": "Outbound Delivery",
+          "reqd": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "shipment",
+          "label": "Shipment",
+          "fieldtype": "Link",
+          "options": "WMS Shipment"
+        },
+        {
+          "fieldname": "warehouse",
+          "label": "Warehouse",
+          "fieldtype": "Link",
+          "options": "WMS Warehouse",
+          "reqd": 1
+        },
+        {
+          "fieldname": "staging_bin",
+          "label": "Staging Bin",
+          "fieldtype": "Link",
+          "options": "Storage Bin",
+          "reqd": 1
+        },
+        {
+          "fieldname": "posting_datetime",
+          "label": "Posting Datetime",
+          "fieldtype": "Datetime",
+          "reqd": 1,
+          "default": "Now"
+        },
+        {
+          "fieldname": "status",
+          "label": "Status",
+          "fieldtype": "Select",
+          "options": "Draft\nPosted\nReversed\nCancelled",
+          "reqd": 1,
+          "default": "Draft",
+          "read_only": 1,
+          "in_list_view": 1,
+          "in_standard_filter": 1
+        },
+        {
+          "fieldname": "items",
+          "label": "Items",
+          "fieldtype": "Table",
+          "options": "Goods Issue Item",
+          "reqd": 1
+        },
+        {
+          "fieldname": "reversed",
+          "label": "Reversed",
+          "fieldtype": "Check",
+          "default": 0,
+          "read_only": 1
+        },
+        {
+          "fieldname": "reversal_document",
+          "label": "Reversal Document",
+          "fieldtype": "Link",
+          "options": "Goods Issue",
+          "unique": 1
+        }
+      ],
+      "autoname": "GI-.########",
+      "sort_field": "modified",
+      "sort_order": "DESC"
+    }
+  ]
+}
