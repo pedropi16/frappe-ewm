@@ -1,5 +1,9 @@
 import frappe
 from frappe.utils import flt
+from frappe_wms.services.replenishment import check_replenishment_needs
+
+def run_replenishment_check():
+    check_replenishment_needs()
 
 def recalculate_stale_bin_capacity():
     bins=frappe.get_all("Storage Bin",filters={"active":1},pluck="name")

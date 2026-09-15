@@ -1,0 +1,130 @@
+{
+  "name": "Replenishment Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "product",
+    "storage_bin",
+    "stock_type",
+    "minimum_quantity",
+    "target_quantity",
+    "source_storage_type",
+    "priority",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Pick Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "The pick-face bin this rule keeps stocked."
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1,
+      "default": "AVAILABLE"
+    },
+    {
+      "fieldname": "minimum_quantity",
+      "label": "Minimum Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "description": "Replenishment is triggered when the pick bin's quantity falls to or below this level."
+    },
+    {
+      "fieldname": "target_quantity",
+      "label": "Target Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "description": "Replenish up to this quantity."
+    },
+    {
+      "fieldname": "source_storage_type",
+      "label": "Source Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "reqd": 1,
+      "description": "Where to pull replenishment stock from (e.g. bulk storage)."
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "reqd": 1,
+      "default": "Normal"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    }
+  ],
+  "autoname": "RR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

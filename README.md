@@ -28,6 +28,19 @@ MVP warehouse management and execution app for Frappe Framework v16.
   and a single confirmation splits the picked quantity back across each
   order's allocation). Pick tasks inherit the source bin's sequence for
   pick-path ordering, which the RF UI's task queue already sorts by.
+- Physical inventory / cycle counting: a WMS Physical Inventory Count
+  snapshots WMS Stock Balance for a warehouse (optionally scoped to a bin,
+  storage type, or product), records counted quantities, then posts any
+  variance as an inventory gain/loss against the immutable ledger.
+- Quality inspection: a WMS Quality Inspection moves a quantity out of an
+  inspection stock type (e.g. QUALITY) and splits it between a
+  passed-to and failed-to stock type (e.g. AVAILABLE / DAMAGED), reusing
+  the existing stock-type-change movement.
+- Slotting & replenishment: a Replenishment Rule pins a minimum/target
+  quantity for a product in a pick-face bin, sourced from a bulk storage
+  type. An hourly job checks every active rule and raises a Warehouse
+  Request (and its Warehouse Task) when a pick bin falls to or below its
+  minimum, without duplicating a request that's already pending.
 
 ## Install
 ```bash

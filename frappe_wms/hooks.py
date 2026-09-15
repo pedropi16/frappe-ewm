@@ -37,7 +37,10 @@ doc_events = {
 }
 
 scheduler_events = {
-    "hourly": ["frappe_wms.tasks.recalculate_stale_bin_capacity"],
+    "hourly": [
+        "frappe_wms.tasks.recalculate_stale_bin_capacity",
+        "frappe_wms.tasks.run_replenishment_check",
+    ],
     "daily": [
         "frappe_wms.tasks.verify_stock_balance_integrity",
         "frappe_wms.tasks.verify_erpnext_stock_reconciliation",
