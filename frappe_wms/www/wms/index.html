@@ -279,7 +279,7 @@ function renderTasks() {
           ${escapeHtml(task.product || "")}<br>
           ${escapeHtml(task.source_bin || task.source_hu || "-")} &rarr; ${escapeHtml(task.destination_bin || task.destination_hu || "-")}
         </div>
-        <div class="qty">${task.confirmed_quantity || 0} / ${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}</div>
+        <div class="qty">${task.confirmed_quantity || 0} / ${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}${task.wave ? " &middot; " + escapeHtml(task.wave) : ""}</div>
       </div>
     `);
     card.onclick = () => openTask(task);

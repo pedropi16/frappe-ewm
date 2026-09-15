@@ -32,6 +32,13 @@ class WMSWarehouse(Document):
 		# frappe_wms.services.erpnext_sync). Auto-create it rather than requiring manual setup.
 		if self.erpnext_warehouse:
 			return
+		existing = frappe.db.get_value('Warehouse', {'warehouse_name': self.warehouse_name, 'company': self.company})
+		if existing:
+			# A Warehouse with this name/company already exists (e.g. a previous WMS
+			# Warehouse of the same name was deleted but its ledger history wasn't) -
+			# link to it rather than failing on the duplicate name.
+			self.db_set('erpnext_warehouse', existing, update_modified=False)
+			return
 		erpnext_warehouse = frappe.get_doc({
 			'doctype': 'Warehouse',
 			'warehouse_name': self.warehouse_name,

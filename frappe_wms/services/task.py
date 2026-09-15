@@ -32,21 +32,76 @@ def create_tasks_for_request(request_name):
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
     return task.name
 
-def create_pick_tasks(delivery_name):
+def create_pick_tasks(delivery_name, strategy="Single Order"):
     delivery = frappe.get_doc("Outbound Delivery", delivery_name)
     if not delivery.staging_bin: frappe.throw(_("Outbound Delivery must have a staging bin before picking tasks can be created"))
-    process_type = frappe.get_cached_doc("Warehouse Process Type", "OB_PICK")
     allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": delivery_name, "status": "Allocated"}, fields=["*"])
     if not allocations: frappe.throw(_("No open allocations to create pick tasks for"))
-    created = []
-    for allocation in allocations:
-        stock_uom = frappe.db.get_value("WMS Stock Balance", allocation.stock_balance, "stock_uom")
-        task = frappe.get_doc({"doctype": "Warehouse Task", "stock_allocation": allocation.name, "task_type": "Pick", "warehouse": delivery.warehouse, "product": allocation.product, "planned_quantity": allocation.allocated_quantity, "stock_uom": stock_uom, "batch_no": allocation.batch_no, "serial_no": allocation.serial_no, "source_bin": allocation.storage_bin, "destination_bin": delivery.staging_bin, "source_hu": allocation.handling_unit, "stock_type_from": allocation.stock_type, "stock_type_to": allocation.stock_type, "movement_type": process_type.movement_type, "priority": delivery.priority or "Normal", "status": "Open", "idempotency_key": f"WT:{allocation.name}"})
-        task.insert(ignore_permissions=True)
-        frappe.db.set_value("Stock Allocation", allocation.name, "status", "Released")
-        created.append(task.name)
+    created = _create_pick_tasks_from_allocations(allocations, strategy)
     delivery.db_set("status", "Picking")
     return created
+
+def create_pick_tasks_for_wave(delivery_names, strategy="Single Order", wave=None):
+    for delivery_name in delivery_names:
+        if not frappe.db.get_value("Outbound Delivery", delivery_name, "staging_bin"):
+            frappe.throw(_("Outbound Delivery {0} must have a staging bin before picking tasks can be created").format(delivery_name))
+    allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", delivery_names], "status": "Allocated"}, fields=["*"])
+    if not allocations: frappe.throw(_("No open allocations to create pick tasks for"))
+    created = _create_pick_tasks_from_allocations(allocations, strategy, wave=wave)
+    for delivery_name in delivery_names:
+        frappe.db.set_value("Outbound Delivery", delivery_name, "status", "Picking")
+    return created
+
+def _create_pick_tasks_from_allocations(allocations, strategy, wave=None):
+    process_type = frappe.get_cached_doc("Warehouse Process Type", "OB_PICK")
+    deliveries = {}
+    for allocation in allocations:
+        if allocation.outbound_delivery not in deliveries:
+            deliveries[allocation.outbound_delivery] = frappe.db.get_value(
+                "Outbound Delivery", allocation.outbound_delivery, ["warehouse", "staging_bin", "priority"], as_dict=True,
+            )
+        delivery = deliveries[allocation.outbound_delivery]
+        allocation["_warehouse"] = delivery.warehouse
+        allocation["_staging_bin"] = delivery.staging_bin
+        allocation["_priority"] = delivery.priority
+
+    if strategy == "Cluster":
+        groups = {}
+        for allocation in allocations:
+            key = (allocation._warehouse, allocation.storage_bin, allocation.handling_unit, allocation.product,
+                allocation.batch_no, allocation.serial_no, allocation.stock_type, allocation._staging_bin)
+            groups.setdefault(key, []).append(allocation)
+        groups = list(groups.values())
+    else:
+        groups = [[allocation] for allocation in allocations]
+
+    created = []
+    for group in groups:
+        created.append(_create_pick_task_for_group(group, process_type, wave))
+    for allocation in allocations:
+        frappe.db.set_value("Stock Allocation", allocation.name, "status", "Released")
+    return created
+
+def _create_pick_task_for_group(allocations, process_type, wave):
+    first = allocations[0]
+    stock_uom = frappe.db.get_value("WMS Stock Balance", first.stock_balance, "stock_uom")
+    total_qty = sum(flt(a.allocated_quantity) for a in allocations)
+    sequence = frappe.db.get_value("Storage Bin", first.storage_bin, "sequence") or 0
+    priority_order = ("Low", "Normal", "High", "Urgent")
+    priority = max((a._priority or "Normal" for a in allocations), key=priority_order.index)
+    task = frappe.get_doc({
+        "doctype": "Warehouse Task", "stock_allocation": first.name, "task_type": "Pick",
+        "warehouse": first._warehouse, "product": first.product, "planned_quantity": total_qty, "stock_uom": stock_uom,
+        "batch_no": first.batch_no, "serial_no": first.serial_no, "source_bin": first.storage_bin,
+        "destination_bin": first._staging_bin, "source_hu": first.handling_unit,
+        "stock_type_from": first.stock_type, "stock_type_to": first.stock_type,
+        "movement_type": process_type.movement_type, "priority": priority or "Normal", "status": "Open",
+        "sequence": sequence, "wave": wave,
+        "idempotency_key": "WT:" + "-".join(a.name for a in allocations),
+        "stock_allocations": [{"stock_allocation": a.name, "allocated_quantity": a.allocated_quantity} for a in allocations],
+    })
+    task.insert(ignore_permissions=True)
+    return task.name
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 
@@ -65,8 +120,8 @@ def list_my_tasks(user=None):
         filters=filters,
         fields=["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
             "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
-            "priority", "status", "movement_type", "sequence", "queue"],
-        order_by="priority desc, sequence asc, creation asc",
+            "priority", "status", "movement_type", "sequence", "queue", "wave"],
+        order_by="priority desc, wave asc, sequence asc, creation asc",
         limit=100,
     )
     return {"resource": resource, "tasks": tasks}
@@ -101,21 +156,31 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if fully_confirmed: updates["docstatus"] = 1
     task.db_set(updates, update_modified=True)
     _update_request(task.warehouse_request)
-    _update_allocation(task, qty)
+    _update_allocations(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
     return {"task": task.name, "status": status, "quantity": qty}
 
-def _update_allocation(task, qty):
-    if not task.stock_allocation: return
-    allocation = frappe.get_doc("Stock Allocation", task.stock_allocation)
-    picked = flt(allocation.picked_quantity) + qty
-    status = "Picked" if picked >= flt(allocation.allocated_quantity) else "Partially Picked"
-    frappe.db.set_value("Stock Allocation", allocation.name, {"picked_quantity": picked, "status": status})
+def _update_allocations(task, qty):
+    rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation, allocated_quantity=qty)] if task.stock_allocation else [])
+    if not rows: return
     release_allocation({"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from}, qty)
-    if allocation.outbound_delivery_item:
-        current = flt(frappe.db.get_value("Outbound Delivery Item", allocation.outbound_delivery_item, "picked_quantity"))
-        frappe.db.set_value("Outbound Delivery Item", allocation.outbound_delivery_item, "picked_quantity", current + qty)
-    _update_delivery_picking_status(allocation.outbound_delivery)
+    remaining = qty
+    for row in rows:
+        if remaining <= 0: break
+        allocation = frappe.get_doc("Stock Allocation", row.stock_allocation)
+        outstanding = flt(allocation.allocated_quantity) - flt(allocation.picked_quantity)
+        if outstanding <= 0: continue
+        take = min(remaining, outstanding)
+        picked = flt(allocation.picked_quantity) + take
+        status = "Picked" if picked >= flt(allocation.allocated_quantity) else "Partially Picked"
+        frappe.db.set_value("Stock Allocation", allocation.name, {"picked_quantity": picked, "status": status})
+        if row.get("name"):
+            frappe.db.set_value("Warehouse Task Allocation", row.name, "picked_quantity", flt(row.picked_quantity) + take)
+        if allocation.outbound_delivery_item:
+            current = flt(frappe.db.get_value("Outbound Delivery Item", allocation.outbound_delivery_item, "picked_quantity"))
+            frappe.db.set_value("Outbound Delivery Item", allocation.outbound_delivery_item, "picked_quantity", current + take)
+        _update_delivery_picking_status(allocation.outbound_delivery)
+        remaining -= take
 
 def _update_delivery_picking_status(delivery_name):
     if not delivery_name: return

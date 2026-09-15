@@ -20,6 +20,14 @@ MVP warehouse management and execution app for Frappe Framework v16.
   (not a desk form) for confirming putaway/pick/move tasks, reporting
   exceptions, and looking up HU/bin contents by barcode. Requires the
   WMS Operator or WMS Supervisor role (System Manager also allowed).
+- Wave management: a WMS Wave groups outbound deliveries for combined
+  release. Releasing a wave allocates every delivery in it and generates
+  pick tasks using either the Single Order strategy (one task per
+  allocation) or Cluster (allocations for the same product/bin/HU/staging
+  bin across every delivery in the wave are combined into one pick task,
+  and a single confirmation splits the picked quantity back across each
+  order's allocation). Pick tasks inherit the source bin's sequence for
+  pick-path ordering, which the RF UI's task queue already sorts by.
 
 ## Install
 ```bash

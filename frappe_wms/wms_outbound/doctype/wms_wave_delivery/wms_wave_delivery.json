@@ -1,0 +1,63 @@
+{
+  "name": "WMS Wave Delivery",
+  "module": "WMS Outbound",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "outbound_delivery",
+    "customer",
+    "requested_ship_date",
+    "allocation_status"
+  ],
+  "fields": [
+    {
+      "fieldname": "outbound_delivery",
+      "label": "Outbound Delivery",
+      "fieldtype": "Link",
+      "options": "Outbound Delivery",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "customer",
+      "label": "Customer",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "read_only": 1,
+      "fetch_from": "outbound_delivery.customer",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "requested_ship_date",
+      "label": "Delivery Date",
+      "fieldtype": "Date",
+      "read_only": 1,
+      "fetch_from": "outbound_delivery.delivery_date",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allocation_status",
+      "label": "Allocation Status",
+      "fieldtype": "Data",
+      "read_only": 1,
+      "fetch_from": "outbound_delivery.allocation_status",
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}
