@@ -48,6 +48,37 @@ def create_pick_tasks(delivery_name):
     delivery.db_set("status", "Picking")
     return created
 
+OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
+
+def my_resource(user=None):
+    user = user or frappe.session.user
+    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue"], as_dict=True)
+
+def list_my_tasks(user=None):
+    resource = my_resource(user)
+    filters = {"status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
+    if resource:
+        filters["warehouse"] = resource.warehouse
+        filters["assigned_resource"] = ["in", [resource.name, ""]]
+    tasks = frappe.get_list(
+        "Warehouse Task",
+        filters=filters,
+        fields=["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
+            "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
+            "priority", "status", "movement_type", "sequence", "queue"],
+        order_by="priority desc, sequence asc, creation asc",
+        limit=100,
+    )
+    return {"resource": resource, "tasks": tasks}
+
+def raise_exception(task_name, exception_code, remarks=None):
+    require_role("WMS Operator", "WMS Supervisor")
+    frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
+    task = frappe.get_doc("Warehouse Task", task_name)
+    if task.docstatus == 1: frappe.throw(_("Task is already confirmed"))
+    task.db_set({"status": "Exception", "exception_code": exception_code, "blocking_reason": remarks}, update_modified=True)
+    return {"task": task.name, "status": "Exception"}
+
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
     require_role("WMS Operator", "WMS Supervisor")
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)

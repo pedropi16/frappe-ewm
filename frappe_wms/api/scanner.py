@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe_wms.services.task import confirm_task as _confirm_task
+from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception
 from frappe_wms.services.packing import repack as _repack
 from frappe_wms.utils import parse_json
 
@@ -10,8 +10,25 @@ def get_task(task_name):
     return doc.as_dict()
 
 @frappe.whitelist()
+def my_tasks():
+    return _list_my_tasks()
+
+@frappe.whitelist()
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
     return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key)
+
+@frappe.whitelist()
+def raise_exception(task_name, exception_code, remarks=None):
+    return _raise_exception(task_name, exception_code, remarks)
+
+@frappe.whitelist()
+def list_exception_codes(task_type=None):
+    filters = {"active": 1}
+    if task_type:
+        codes = frappe.get_all("Allowed Task Type", filters={"task_type": task_type}, pluck="parent")
+        if not codes: return []
+        filters["name"] = ["in", codes]
+    return frappe.get_all("WMS Exception Code", filters=filters, fields=["name", "exception_name", "category", "requires_supervisor", "requires_comment"])
 
 @frappe.whitelist()
 def hu_overview(hu_number):

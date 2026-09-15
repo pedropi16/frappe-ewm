@@ -16,6 +16,10 @@ MVP warehouse management and execution app for Frappe Framework v16.
   a Stock Entry (Material Receipt/Material Issue) into ERPNext so its own
   Bin quantities and valuation stay reconciled with the WMS ledger. A daily
   scheduled job flags any drift between the two.
+- RF/mobile execution UI at `/wms`: a scanner-friendly, chrome-free page
+  (not a desk form) for confirming putaway/pick/move tasks, reporting
+  exceptions, and looking up HU/bin contents by barcode. Requires the
+  WMS Operator or WMS Supervisor role (System Manager also allowed).
 
 ## Install
 ```bash
