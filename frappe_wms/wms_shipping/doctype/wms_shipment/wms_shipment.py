@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsShipment(Document):
+class WMSShipment(Document):
     pass

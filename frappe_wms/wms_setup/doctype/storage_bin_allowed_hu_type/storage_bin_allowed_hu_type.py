@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class StorageBinAllowedHuType(Document):
+class StorageBinAllowedHUType(Document):
     pass

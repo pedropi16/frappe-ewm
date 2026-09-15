@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class PackingSourceHu(Document):
+class PackingSourceHU(Document):
     pass

@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsStockBalance(Document):
+class WMSResource(Document):
     pass

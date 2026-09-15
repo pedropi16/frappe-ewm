@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsMovementType(Document):
+class WMSMovementType(Document):
     pass

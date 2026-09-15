@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsStockType(Document):
+class WMSStockType(Document):
     pass

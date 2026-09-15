@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsWarehouse(Document):
+class WMSExceptionCode(Document):
     pass

@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsRoute(Document):
+class WMSRoute(Document):
     pass

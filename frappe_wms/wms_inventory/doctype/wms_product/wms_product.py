@@ -1,4 +1,4 @@
 from frappe.model.document import Document
 
-class WmsStockLedgerEntry(Document):
+class WMSProduct(Document):
     pass
