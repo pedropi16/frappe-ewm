@@ -11,6 +11,7 @@
     "warehouse_code",
     "warehouse_name",
     "company",
+    "erpnext_warehouse",
     "default_receiving_bin",
     "default_shipping_bin",
     "default_difference_bin",
@@ -41,6 +42,14 @@
       "fieldtype": "Link",
       "options": "Company",
       "reqd": 1
+    },
+    {
+      "fieldname": "erpnext_warehouse",
+      "label": "ERPNext Warehouse",
+      "fieldtype": "Link",
+      "options": "Warehouse",
+      "read_only": 1,
+      "description": "Auto-created and kept in sync so WMS stock postings can be mirrored into ERPNext."
     },
     {
       "fieldname": "default_receiving_bin",

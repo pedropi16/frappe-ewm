@@ -19,6 +19,7 @@ doc_events = {
         "on_update": "frappe_wms.events.handling_unit.on_hu_update",
     },
     "Storage Bin": {"validate": "frappe_wms.events.storage_bin.validate_storage_bin"},
+    "WMS Product": {"validate": "frappe_wms.events.wms_product.validate_product"},
     "Warehouse Task": {
         "validate": "frappe_wms.events.warehouse_task.validate_task",
         "on_cancel": "frappe_wms.events.warehouse_task.prevent_direct_cancel_after_posting",
@@ -37,7 +38,10 @@ doc_events = {
 
 scheduler_events = {
     "hourly": ["frappe_wms.tasks.recalculate_stale_bin_capacity"],
-    "daily": ["frappe_wms.tasks.verify_stock_balance_integrity"],
+    "daily": [
+        "frappe_wms.tasks.verify_stock_balance_integrity",
+        "frappe_wms.tasks.verify_erpnext_stock_reconciliation",
+    ],
 }
 
 permission_query_conditions = {

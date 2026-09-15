@@ -16,7 +16,8 @@
     "status",
     "items",
     "reversed",
-    "reversal_document"
+    "reversal_document",
+    "erpnext_stock_entry"
   ],
   "fields": [
     {
@@ -86,6 +87,13 @@
       "fieldtype": "Link",
       "options": "Goods Issue",
       "unique": 1
+    },
+    {
+      "fieldname": "erpnext_stock_entry",
+      "label": "ERPNext Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1
     }
   ],
   "autoname": "GI-.########",

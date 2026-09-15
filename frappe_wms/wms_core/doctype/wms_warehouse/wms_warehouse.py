@@ -25,3 +25,17 @@ class WMSWarehouse(Document):
 				),
 				title=frappe._("Missing Warehouse Code"),
 			)
+
+	def after_insert(self):
+		# Every WMS Warehouse needs a matching ERPNext Warehouse so goods receipt/issue
+		# postings can be mirrored for accounting and inventory valuation (see
+		# frappe_wms.services.erpnext_sync). Auto-create it rather than requiring manual setup.
+		if self.erpnext_warehouse:
+			return
+		erpnext_warehouse = frappe.get_doc({
+			'doctype': 'Warehouse',
+			'warehouse_name': self.warehouse_name,
+			'company': self.company,
+		})
+		erpnext_warehouse.insert(ignore_permissions=True)
+		self.db_set('erpnext_warehouse', erpnext_warehouse.name, update_modified=False)

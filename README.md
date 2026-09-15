@@ -6,11 +6,16 @@ MVP warehouse management and execution app for Frappe Framework v16.
 - Warehouse structure, bins and stock types
 - Handling units and nested HU hierarchy
 - Immutable WMS stock ledger and rebuildable balances
-- Inbound delivery and goods receipt
-- Warehouse requests and executable tasks
-- Outbound delivery, allocation, packing, shipment and goods issue
+- Inbound delivery, goods receipt and putaway task execution
+- Warehouse requests and executable tasks, including partial confirmation
+- Outbound delivery, allocation, picking, packing, shipment and goods issue
 - Scanner-oriented whitelisted API
 - Process and bin determination rules
+- ERPNext integration: each WMS Warehouse is auto-linked to a matching
+  ERPNext Warehouse, and posted Goods Receipt/Goods Issue documents mirror
+  a Stock Entry (Material Receipt/Material Issue) into ERPNext so its own
+  Bin quantities and valuation stay reconciled with the WMS ledger. A daily
+  scheduled job flags any drift between the two.
 
 ## Install
 ```bash
