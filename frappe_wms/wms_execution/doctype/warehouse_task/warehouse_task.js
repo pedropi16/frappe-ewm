@@ -9,5 +9,12 @@ frappe.ui.form.on("Warehouse Task", {
     {fieldname:"device",label:__("Device"),fieldtype:"Data"}
    ], __("Confirm"), (v,d) => frappe_wms.call("frappe_wms.api.scanner.confirm_task",{task_name:frm.doc.name,...v}).then(()=>{d.hide();frm.reload_doc();})), __("Actions"));
   }
+  if (!frm.is_new() && frm.doc.status === "Confirmed" && !frm.doc.reversal_of) {
+   frm.add_custom_button(__("Reverse Task"), () => frappe.prompt(
+    {fieldname:"reason",label:__("Reason"),fieldtype:"Small Text"},
+    (v) => frappe_wms.call("frappe_wms.api.scanner.reverse_task",{task_name:frm.doc.name,reason:v.reason}).then(()=>frm.reload_doc()),
+    __("Reverse Task")
+   ), __("Actions"));
+  }
  }
 });

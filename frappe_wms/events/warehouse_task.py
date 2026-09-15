@@ -15,4 +15,4 @@ def validate_task(doc, method=None):
 
 def prevent_direct_cancel_after_posting(doc, method=None):
     if frappe.db.exists("WMS Stock Ledger Entry", {"warehouse_task": doc.name}):
-        frappe.throw(_("Reverse the warehouse task through the WMS reversal service"))
+        frappe.throw(_("This task has already posted stock movements and cannot be cancelled directly. Use frappe_wms.services.task.reverse_task to post a compensating reversal instead."))

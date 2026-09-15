@@ -83,10 +83,8 @@ class TestErpnextSync(IntegrationTestCase):
         pick_tasks = create_pick_tasks(obd.name)
         confirm_task(pick_tasks[0], confirmed_quantity=3)
 
-        hu.reload()
-        hu.flags.wms_service_update = True
-        hu.status = "Staged"
-        hu.save(ignore_permissions=True)
+        # No manual HU status override here: picking must auto-stage the HU on its own.
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged")
 
         gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": self.stage_bin,
             "items": [{"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 3, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
@@ -102,6 +100,10 @@ class TestErpnextSync(IntegrationTestCase):
         se2.reload()
         self.assertEqual(se2.docstatus, 2)
         self.assertEqual(self._erpnext_qty(), qty_before + 7)
+        gi.reload()
+        self.assertEqual(gi.status, "Reversed")
+        self.assertEqual(gi.reversed, 1)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged", "reversing the issue should put the HU back into Staged status")
 
         # Reconciliation should find no drift after a clean sequence of postings.
         verify_erpnext_stock_reconciliation()

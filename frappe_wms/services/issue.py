@@ -13,8 +13,15 @@ def post_goods_issue(doc):
     doc.db_set("status","Posted")
 
 def reverse_goods_issue(doc):
-    original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name},fields=["*"])
+    original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
+    if not original: return
+    hus=set()
     for i,row in enumerate(original,1):
         values={k:row.get(k) for k in ("warehouse","product","batch_no","serial_no","handling_unit","storage_bin","stock_type","stock_uom")}
         values.update({"quantity":-row.quantity,"movement_type":"602","reversal_of":row.name})
         post_entries([values],doc.doctype,doc.name,f"GI-REV:{doc.name}:{i}")
+        if row.handling_unit: hus.add(row.handling_unit)
+    for hu_name in hus:
+        hu=frappe.get_doc("Handling Unit",hu_name)
+        hu.flags.wms_service_update=True; hu.status="Staged"; hu.save(ignore_permissions=True)
+    doc.db_set({"status":"Reversed","reversed":1})

@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
-from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception
-from frappe_wms.services.packing import repack as _repack
+from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task
+from frappe_wms.services.packing import repack as _repack, complete_packing_order as _complete_packing_order
 from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
@@ -20,6 +20,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
 @frappe.whitelist()
 def raise_exception(task_name, exception_code, remarks=None):
     return _raise_exception(task_name, exception_code, remarks)
+
+@frappe.whitelist()
+def reverse_task(task_name, reason=None):
+    return _reverse_task(task_name, reason)
 
 @frappe.whitelist()
 def list_exception_codes(task_type=None):
@@ -46,3 +50,7 @@ def bin_overview(bin_code):
 @frappe.whitelist()
 def repack(source_hu,destination_hu,items,packing_order,idempotency_key):
     return _repack(source_hu,destination_hu,parse_json(items,"items"),packing_order,idempotency_key)
+
+@frappe.whitelist()
+def complete_packing_order(packing_order_name):
+    return _complete_packing_order(packing_order_name)

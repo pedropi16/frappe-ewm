@@ -212,8 +212,37 @@ def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
     bin_before = doc.current_bin
     doc.flags.wms_service_update = True
     doc.current_bin = destination_bin
-    if top_level: doc.status = "Staged" if task.task_type == "Stage" else doc.status
+    if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick") else doc.status
     doc.save(ignore_permissions=True)
     frappe.get_doc({"doctype": "Handling Unit Event", "handling_unit": hu, "event_type": "Moved", "bin_before": bin_before or source_bin, "bin_after": destination_bin, "warehouse_task": task.name, "event_timestamp": now_datetime(), "performed_by": frappe.session.user}).insert(ignore_permissions=True)
     for child in frappe.get_all("Handling Unit", filters={"parent_hu": hu}, pluck="name"):
         _move_hu_and_descendants(child, destination_bin, source_bin, task, top_level=False)
+
+def reverse_task(task_name, reason=None):
+    # Creates and confirms a compensating task that moves the confirmed quantity back from
+    # destination to source, rather than un-confirming the original (the stock ledger is
+    # immutable, mirroring how goods receipt/issue reversals work). This corrects the physical
+    # stock position; it does not cascade into the Stock Allocation/Outbound Delivery status
+    # that a Pick task's confirmation may have advanced.
+    require_role("WMS Supervisor")
+    frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
+    original = frappe.get_doc("Warehouse Task", task_name)
+    if original.docstatus != 1 or original.status != "Confirmed":
+        frappe.throw(_("Only a fully confirmed task can be reversed"))
+    if frappe.db.exists("Warehouse Task", {"reversal_of": original.name}):
+        frappe.throw(_("Task has already been reversed"))
+    qty = flt(original.confirmed_quantity)
+    reversal = frappe.get_doc({
+        "doctype": "Warehouse Task", "task_type": original.task_type, "warehouse": original.warehouse,
+        "product": original.product, "planned_quantity": qty, "stock_uom": original.stock_uom,
+        "batch_no": original.batch_no, "serial_no": original.serial_no,
+        "source_bin": original.destination_bin, "destination_bin": original.source_bin,
+        "source_hu": original.destination_hu or original.source_hu, "destination_hu": original.source_hu,
+        "stock_type_from": original.stock_type_to or original.stock_type_from, "stock_type_to": original.stock_type_from,
+        "movement_type": original.movement_type, "priority": original.priority, "status": "Open",
+        "reversal_of": original.name, "idempotency_key": f"{original.idempotency_key or original.name}:reversal",
+    })
+    reversal.insert(ignore_permissions=True)
+    result = confirm_task(reversal.name, confirmed_quantity=qty)
+    frappe.db.set_value("Warehouse Task", original.name, "blocking_reason", reason or _("Reversed by {0}").format(reversal.name))
+    return {"original": original.name, "reversal": reversal.name, "status": result["status"]}

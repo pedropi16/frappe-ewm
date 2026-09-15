@@ -39,7 +39,8 @@
     "confirmation_device",
     "exception_code",
     "idempotency_key",
-    "blocking_reason"
+    "blocking_reason",
+    "reversal_of"
   ],
   "fields": [
     {
@@ -254,6 +255,15 @@
       "label": "Blocking Reason",
       "fieldtype": "Small Text",
       "read_only": 1
+    },
+    {
+      "fieldname": "reversal_of",
+      "label": "Reversal Of",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "read_only": 1,
+      "unique": 1,
+      "in_standard_filter": 1
     }
   ],
   "autoname": "WT-.##########",

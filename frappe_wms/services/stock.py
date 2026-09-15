@@ -76,3 +76,45 @@ def release_allocation(values, quantity):
     doc.available_quantity = flt(doc.quantity) - doc.allocated_quantity
     doc.flags.ignore_permissions = True
     doc.save()
+
+def rebuild_balances(warehouse=None, product=None):
+    # The ledger is the immutable source of truth; balances are a derived, rebuildable
+    # projection of it. allocated_quantity is NOT derived here (allocations aren't part of
+    # the ledger) - existing reservations on a balance row are preserved across a rebuild.
+    filters = {}
+    if warehouse: filters["warehouse"] = warehouse
+    if product: filters["product"] = product
+    condition_sql = " and ".join(f"`{k}`=%({k})s" for k in filters) or "1=1"
+    rows = frappe.db.sql(f"""
+        select warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type,
+               sum(quantity) as quantity, max(stock_uom) as stock_uom,
+               min(case when quantity > 0 then posting_datetime end) as first_receipt_date,
+               max(posting_datetime) as last_movement_date
+        from `tabWMS Stock Ledger Entry`
+        where {condition_sql}
+        group by warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type
+    """, filters, as_dict=True)
+    touched = set()
+    for row in rows:
+        name = _balance_name(row)
+        touched.add(name)
+        _lock_balance(name)
+        doc = frappe.get_doc("WMS Stock Balance", name) if frappe.db.exists("WMS Stock Balance", name) else frappe.new_doc("WMS Stock Balance")
+        if doc.is_new():
+            doc.name = name
+            for key in DIMENSIONS: doc.set(key, row.get(key))
+            doc.allocated_quantity = 0
+        doc.quantity = flt(row.quantity)
+        doc.stock_uom = row.stock_uom
+        doc.first_receipt_date = row.first_receipt_date
+        doc.last_movement_date = row.last_movement_date
+        doc.available_quantity = flt(doc.quantity) - flt(doc.allocated_quantity)
+        doc.version = (doc.version or 0) + 1
+        doc.flags.ignore_permissions = True
+        doc.save()
+    # Any existing balance row in scope with no ledger activity at all should read zero.
+    for name in frappe.get_all("WMS Stock Balance", filters=filters, pluck="name"):
+        if name in touched: continue
+        allocated = flt(frappe.db.get_value("WMS Stock Balance", name, "allocated_quantity"))
+        frappe.db.set_value("WMS Stock Balance", name, {"quantity": 0, "available_quantity": -allocated})
+    return sorted(touched)

@@ -15,12 +15,13 @@ def post_goods_receipt(doc):
     doc.db_set("status","Posted")
 
 def reverse_goods_receipt(doc):
-    original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name},fields=["*"])
+    original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
     if not original: return
     for i,row in enumerate(original,1):
         values={k:row.get(k) for k in ("warehouse","product","batch_no","serial_no","handling_unit","storage_bin","stock_type","stock_uom")}
         values.update({"quantity":-row.quantity,"movement_type":"102","reversal_of":row.name})
         post_entries([values],doc.doctype,doc.name,f"GR-REV:{doc.name}:{i}")
+    doc.db_set({"status":"Reversed","reversed":1})
 
 def create_putaway_requests(receipt_name):
     receipt=frappe.get_doc("Goods Receipt",receipt_name)
