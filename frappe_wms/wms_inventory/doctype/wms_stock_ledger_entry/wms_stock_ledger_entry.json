@@ -45,7 +45,6 @@
       "fieldtype": "Link",
       "options": "WMS Warehouse",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -55,7 +54,6 @@
       "fieldtype": "Link",
       "options": "Item",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -63,22 +61,19 @@
       "fieldname": "batch_no",
       "label": "Batch",
       "fieldtype": "Link",
-      "options": "Batch",
-      "unique": 1
+      "options": "Batch"
     },
     {
       "fieldname": "serial_no",
       "label": "Serial Number",
       "fieldtype": "Link",
-      "options": "Serial No",
-      "unique": 1
+      "options": "Serial No"
     },
     {
       "fieldname": "handling_unit",
       "label": "Handling Unit",
       "fieldtype": "Link",
       "options": "Handling Unit",
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -88,7 +83,6 @@
       "fieldtype": "Link",
       "options": "Storage Bin",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -97,8 +91,7 @@
       "label": "Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "quantity",
@@ -113,8 +106,7 @@
       "label": "Stock UOM",
       "fieldtype": "Link",
       "options": "UOM",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "movement_type",
@@ -122,7 +114,6 @@
       "fieldtype": "Link",
       "options": "WMS Movement Type",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1
     },
     {
@@ -130,16 +121,14 @@
       "label": "Reference DocType",
       "fieldtype": "Link",
       "options": "DocType",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "reference_name",
       "label": "Reference Name",
       "fieldtype": "Dynamic Link",
       "options": "reference_doctype",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "reference_line",
@@ -151,15 +140,13 @@
       "fieldname": "warehouse_task",
       "label": "Warehouse Task",
       "fieldtype": "Link",
-      "options": "Warehouse Task",
-      "unique": 1
+      "options": "Warehouse Task"
     },
     {
       "fieldname": "reversal_of",
       "label": "Reversal Of",
       "fieldtype": "Link",
-      "options": "WMS Stock Ledger Entry",
-      "unique": 1
+      "options": "WMS Stock Ledger Entry"
     },
     {
       "fieldname": "idempotency_key",
@@ -174,8 +161,7 @@
       "label": "Posting User",
       "fieldtype": "Link",
       "options": "User",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "posting_device",

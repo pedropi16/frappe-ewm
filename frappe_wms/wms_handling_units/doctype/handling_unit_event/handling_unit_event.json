@@ -110,8 +110,7 @@
       "fieldtype": "Link",
       "options": "User",
       "reqd": 1,
-      "read_only": 1,
-      "unique": 1
+      "read_only": 1
     },
     {
       "fieldname": "reason_code",

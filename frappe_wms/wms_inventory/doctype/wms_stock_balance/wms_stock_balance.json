@@ -30,7 +30,6 @@
       "fieldtype": "Link",
       "options": "WMS Warehouse",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -40,7 +39,6 @@
       "fieldtype": "Link",
       "options": "Item",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -48,22 +46,19 @@
       "fieldname": "batch_no",
       "label": "Batch",
       "fieldtype": "Link",
-      "options": "Batch",
-      "unique": 1
+      "options": "Batch"
     },
     {
       "fieldname": "serial_no",
       "label": "Serial Number",
       "fieldtype": "Link",
-      "options": "Serial No",
-      "unique": 1
+      "options": "Serial No"
     },
     {
       "fieldname": "handling_unit",
       "label": "Handling Unit",
       "fieldtype": "Link",
       "options": "Handling Unit",
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -73,7 +68,6 @@
       "fieldtype": "Link",
       "options": "Storage Bin",
       "reqd": 1,
-      "unique": 1,
       "in_standard_filter": 1,
       "depends_on": 1
     },
@@ -82,8 +76,7 @@
       "label": "Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "quantity",
@@ -117,8 +110,7 @@
       "label": "Stock UOM",
       "fieldtype": "Link",
       "options": "UOM",
-      "reqd": 1,
-      "unique": 1
+      "reqd": 1
     },
     {
       "fieldname": "first_receipt_date",
@@ -141,7 +133,7 @@
       "read_only": 1
     }
   ],
-  "autoname": "hash",
+  "autoname": "Prompt",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",

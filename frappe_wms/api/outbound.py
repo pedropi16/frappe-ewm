@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt
+from frappe_wms.services.task import create_pick_tasks as _create_pick_tasks
 
 def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
@@ -24,3 +25,7 @@ def allocate_delivery(delivery_name):
         row.db_set("allocated_quantity",flt(row.requested_quantity)-needed)
     doc.db_set("allocation_status","Fully Allocated" if all(flt(x.allocated_quantity)>=flt(x.requested_quantity) for x in doc.items) else "Partially Allocated")
     return created
+
+@frappe.whitelist()
+def create_pick_tasks(delivery_name):
+    return _create_pick_tasks(delivery_name)

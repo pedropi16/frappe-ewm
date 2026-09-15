@@ -9,6 +9,7 @@
   "engine": "InnoDB",
   "field_order": [
     "warehouse_request",
+    "stock_allocation",
     "task_type",
     "warehouse",
     "product",
@@ -44,8 +45,14 @@
       "label": "Warehouse Request",
       "fieldtype": "Link",
       "options": "Warehouse Request",
-      "reqd": 1,
       "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "stock_allocation",
+      "label": "Stock Allocation",
+      "fieldtype": "Link",
+      "options": "Stock Allocation",
       "in_standard_filter": 1
     },
     {
@@ -204,8 +211,7 @@
       "fieldname": "confirmed_by",
       "label": "Confirmed By",
       "fieldtype": "Link",
-      "options": "User",
-      "unique": 1
+      "options": "User"
     },
     {
       "fieldname": "confirmation_device",

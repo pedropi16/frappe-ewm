@@ -66,3 +66,13 @@ def transfer_stock(*, source, destination, quantity, movement_type, reference_do
     negative = {**shared, **source, "quantity": -quantity, "movement_type": movement_type}
     positive = {**shared, **destination, "quantity": quantity, "movement_type": movement_type}
     return post_entries([negative, positive], reference_doctype, reference_name, idempotency_key, warehouse_task, device)
+
+def release_allocation(values, quantity):
+    name = _balance_name(values)
+    _lock_balance(name)
+    if not frappe.db.exists("WMS Stock Balance", name): return
+    doc = frappe.get_doc("WMS Stock Balance", name)
+    doc.allocated_quantity = max(flt(doc.allocated_quantity) - flt(quantity), 0)
+    doc.available_quantity = flt(doc.quantity) - doc.allocated_quantity
+    doc.flags.ignore_permissions = True
+    doc.save()

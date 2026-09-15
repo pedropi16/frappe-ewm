@@ -47,4 +47,5 @@ permission_query_conditions = {
 
 has_permission = {
     "WMS Stock Ledger Entry": "frappe_wms.permissions.ledger_has_permission",
+    "WMS Stock Balance": "frappe_wms.permissions.balance_has_permission",
 }

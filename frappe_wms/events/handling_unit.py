@@ -14,10 +14,19 @@ def validate_hu(doc, method=None):
             if ancestor.name in visited:
                 frappe.throw(_("Circular handling-unit hierarchy detected"))
             visited.add(ancestor.name)
-            ancestor = frappe.get_cached_doc("Handling Unit", ancestor.parent_hu) if ancestor.parent_hu else None
+            if not ancestor.parent_hu:
+                break
+            ancestor = frappe.get_cached_doc("Handling Unit", ancestor.parent_hu)
+        doc.top_hu = ancestor.name
+        doc.hierarchy_level = (parent.hierarchy_level or 0) + 1
+    else:
+        doc.top_hu = doc.name
+        doc.hierarchy_level = 0
     if doc.loaded and doc.status not in {"Loaded", "Shipped"}:
         frappe.throw(_("A loaded handling unit must have Loaded or Shipped status"))
 
 def on_hu_update(doc, method=None):
+    if doc.flags.in_insert:
+        return
     if doc.has_value_changed("parent_hu") and not doc.flags.get("wms_service_update"):
         frappe.throw(_("Change HU hierarchy through the packing service"))

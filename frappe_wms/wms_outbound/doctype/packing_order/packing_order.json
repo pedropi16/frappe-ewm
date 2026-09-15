@@ -82,8 +82,7 @@
       "fieldname": "verified_by",
       "label": "Verified By",
       "fieldtype": "Link",
-      "options": "User",
-      "unique": 1
+      "options": "User"
     },
     {
       "fieldname": "completed_at",

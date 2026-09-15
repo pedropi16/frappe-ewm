@@ -94,7 +94,7 @@
       "in_list_view": 1
     }
   ],
-  "autoname": "format:PDR-.#####",
+  "autoname": "PDR-.#####",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",

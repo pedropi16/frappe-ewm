@@ -101,7 +101,7 @@
       "in_list_view": 1
     }
   ],
-  "autoname": "format:BDR-.#####",
+  "autoname": "BDR-.#####",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
