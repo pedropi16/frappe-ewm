@@ -1214,23 +1214,40 @@ async function completePacking(order) {
 }
 
 // ---------- Move ----------
+const MOVE_STEPS = ["item", "quantity", "source", "destination", "review"];
+
 function openMove() {
   setState({
-    view: "move", section: "internal", error: null, info: null,
+    view: "move", section: "internal", error: null, info: null, moveStep: 0, moveStepError: null,
     moveForm: { product: "", quantity: "", stock_uom: "", stock_type: "AVAILABLE",
       source_bin: "", source_hu: "", destination_bin: "", destination_hu: "" },
   });
 }
 
+function validateMoveStep(stepKey) {
+  const f = state.moveForm;
+  if (stepKey === "item" && (!f.product || !f.stock_uom)) return "Product and UOM are required.";
+  if (stepKey === "quantity" && !(flt(f.quantity) > 0)) return "Enter a quantity greater than zero.";
+  if (stepKey === "source" && !f.source_bin && !f.source_hu) return "Scan a source bin or a source Handling Unit.";
+  if (stepKey === "destination" && !f.destination_bin) return "Scan the destination bin.";
+  return null;
+}
+
+function goMoveStep(delta) {
+  if (delta > 0) {
+    const err = validateMoveStep(MOVE_STEPS[state.moveStep]);
+    if (err) { setState({ moveStepError: err }); return; }
+  }
+  const next = Math.max(0, Math.min(MOVE_STEPS.length - 1, state.moveStep + delta));
+  setState({ moveStep: next, moveStepError: null });
+}
+
 async function submitMove() {
   const f = state.moveForm;
-  if (!f.product || !flt(f.quantity) || !f.stock_uom || !f.destination_bin) {
-    setState({ error: "Product, quantity, UOM and destination bin are required." });
-    return;
-  }
-  if (!f.source_bin && !f.source_hu) {
-    setState({ error: "Scan a source bin or a source Handling Unit." });
-    return;
+  for (const step of MOVE_STEPS) {
+    if (step === "review") continue;
+    const err = validateMoveStep(step);
+    if (err) { setState({ moveStepError: err }); return; }
   }
   setState({ loading: true, error: null });
   try {
@@ -1257,7 +1274,21 @@ async function loadCounts() {
   }
 }
 
-function openCount(count) {
+async function openCount(count) {
+  if (count.status === "Draft") {
+    setState({ loading: true, error: null });
+    try {
+      await api("frappe_wms.api.inventory.snapshot_count", { count_name: count.name });
+      const rows = await api("frappe_wms.api.inventory.list_open_counts");
+      const updated = (rows || []).find((c) => c.name === count.name);
+      setState({ loading: false, counts: rows || [] });
+      if (!updated) { setState({ error: "Count could not be started - it may have no stock in scope." }); return; }
+      count = updated;
+    } catch (e) {
+      setState({ loading: false, error: e.message });
+      return;
+    }
+  }
   const items = (count.items || []).map((row) => ({ ...row, counted_quantity: row.counted_quantity != null ? String(row.counted_quantity) : "" }));
   setState({ view: "count-detail", currentCount: count, currentCountItems: items, error: null, info: null });
 }
