@@ -191,7 +191,8 @@ class WMSMonitor {
           <input class="form-control input-sm wms-mon-obd-customer" placeholder="${__("Customer")}" style="width:160px;">
           <button class="btn btn-primary btn-sm wms-mon-obd-search">${__("Search")}</button>
         </div>
-        <div class="wms-mon-obd-table" style="margin-bottom:24px;"></div>
+        <div class="wms-mon-obd-table" style="margin-bottom:12px;"></div>
+        <div class="wms-mon-obd-detail" style="margin-bottom:24px;"></div>
         <h5>${__("Waves")}</h5>
         <div class="wms-mon-wave-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <input class="form-control input-sm wms-mon-wave-status" placeholder="${__("Status")}" style="width:140px;">
@@ -217,10 +218,104 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.search_outbound_deliveries", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-obd-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No outbound deliveries found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["name", __("Delivery")], ["outbound_delivery_number", __("Number")], ["customer", __("Customer")],
-      ["picking_status", __("Picking")], ["goods_issue_status", __("Goods Issue")], ["status", __("Status")],
-    ], "Outbound Delivery"));
+    const head = [__("Delivery"), __("Number"), __("Customer"), __("Picking"), __("Goods Issue"), __("Status")].map((l) => `<th>${l}</th>`).join("");
+    const body = rows.map((row) => `
+      <tr class="wms-mon-obd-row" data-delivery="${frappe.utils.escape_html(row.name)}" style="cursor:pointer;">
+        <td>${frappe.utils.escape_html(row.name)}</td>
+        <td>${frappe.utils.escape_html(row.outbound_delivery_number || "")}</td>
+        <td>${frappe.utils.escape_html(row.customer || "")}</td>
+        <td>${frappe.utils.escape_html(row.picking_status || "")}</td>
+        <td>${frappe.utils.escape_html(row.goods_issue_status || "")}</td>
+        <td>${frappe.utils.escape_html(row.status || "")}</td>
+      </tr>
+    `).join("");
+    $table.html(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
+    $table.find(".wms-mon-obd-row").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery));
+  }
+
+  async load_delivery_detail(delivery_name) {
+    const $detail = this.body_for("outbound").find(".wms-mon-obd-detail");
+    $detail.html(`<div class="text-muted">${__("Loading...")}</div>`);
+    const status = await frappe.call("frappe_wms.api.monitor.get_delivery_execution_status", { delivery_name }).then((r) => r.message);
+    const d = status.delivery;
+    const docstatusLabel = { 0: __("Draft"), 1: __("Submitted"), 2: __("Cancelled") }[d.docstatus];
+
+    const $wrap = $(`<div class="card" style="padding:14px;"></div>`);
+    $wrap.append(`
+      <h5>${frappe.utils.escape_html(d.name)} <small class="text-muted">(${docstatusLabel})</small></h5>
+      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:10px;">
+        <div><b>${__("Allocation")}:</b> ${frappe.utils.escape_html(d.allocation_status || "-")}</div>
+        <div><b>${__("Picking")}:</b> ${frappe.utils.escape_html(d.picking_status || "-")}</div>
+        <div><b>${__("Packing")}:</b> ${frappe.utils.escape_html(d.packing_status || "-")}</div>
+        <div><b>${__("Loading")}:</b> ${frappe.utils.escape_html(d.loading_status || "-")}</div>
+        <div><b>${__("Goods Issue")}:</b> ${frappe.utils.escape_html(d.goods_issue_status || "-")}</div>
+      </div>
+    `);
+
+    const $actions = $(`<div style="margin-bottom:10px;"></div>`);
+    if (d.docstatus !== 1) {
+      $actions.append(`<span class="text-muted">${__("Submit the document before it can be allocated or picked.")}</span>`);
+    } else {
+      if (d.allocation_status !== "Fully Allocated") {
+        const btn = $(`<button class="btn btn-xs btn-primary">${__("Allocate Stock")}</button>`);
+        btn.on("click", () => frappe.call("frappe_wms.api.outbound.allocate_delivery", { delivery_name }).then(() => this.load_delivery_detail(delivery_name)));
+        $actions.append(btn);
+      } else if (d.picking_status !== "Picked") {
+        const btn = $(`<button class="btn btn-xs btn-primary">${__("Create Pick Tasks")}</button>`);
+        btn.on("click", () => frappe.call("frappe_wms.api.outbound.create_pick_tasks", { delivery_name }).then(() => this.load_delivery_detail(delivery_name)));
+        $actions.append(btn);
+      }
+      if (d.picking_status === "Picked" && d.goods_issue_status !== "Posted") {
+        const btn = $(`<button class="btn btn-xs btn-success" style="margin-left:6px;">${__("Post Goods Issue")}</button>`);
+        btn.on("click", () => frappe.call("frappe_wms.api.outbound.post_goods_issue_for_delivery", { delivery_name })
+          .then(() => { frappe.show_alert({ message: __("Goods Issue posted"), indicator: "green" }); this.load_delivery_detail(delivery_name); this.search_outbound_deliveries(); })
+          .catch(() => {}));
+        $actions.append(btn);
+      }
+    }
+    $wrap.append($actions);
+
+    $wrap.append(`<h6>${__("Pick Tasks")}</h6>`);
+    if (!status.tasks.length) {
+      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
+    } else {
+      $wrap.append(this.render_table(status.tasks, [
+        ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")],
+        ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")],
+        ["source_bin", __("Source")], ["destination_bin", __("Destination")], ["assigned_resource", __("Resource")],
+      ], "Warehouse Task"));
+    }
+    if (status.warehouse_orders.length) {
+      $wrap.append(`<div><b>${__("Warehouse Orders")}:</b> ${status.warehouse_orders.map((wo) =>
+        `<a href="/app/warehouse-order/${encodeURIComponent(wo)}">${frappe.utils.escape_html(wo)}</a>`).join(", ")}</div>`);
+    }
+
+    $wrap.append(`<h6 style="margin-top:10px;">${__("Packing Orders")}</h6>`);
+    if (!status.packing_orders.length) {
+      $wrap.append(`<div class="text-muted">${__("None")}</div>`);
+    } else {
+      $wrap.append(this.render_table(status.packing_orders, [
+        ["name", __("Packing Order")], ["status", __("Status")], ["work_center_bin", __("Work Center Bin")],
+      ], "Packing Order"));
+    }
+
+    $wrap.append(`<h6 style="margin-top:10px;">${__("Goods Issues")}</h6>`);
+    if (!status.goods_issues.length) {
+      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
+    } else {
+      const gi_head = [__("Goods Issue"), __("Status"), __("Posted"), __("Reversed")].map((l) => `<th>${l}</th>`).join("");
+      const gi_body = status.goods_issues.map((g) => `
+        <tr>
+          <td><a href="/app/goods-issue/${encodeURIComponent(g.name)}">${frappe.utils.escape_html(g.name)}</a></td>
+          <td>${frappe.utils.escape_html(g.status || "")}</td>
+          <td>${frappe.utils.escape_html(g.posting_datetime || "")}</td>
+          <td>${g.reversed ? __("Yes") : __("No")}</td>
+        </tr>
+      `).join("");
+      $wrap.append(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${gi_head}</tr></thead><tbody>${gi_body}</tbody></table></div>`);
+    }
+
+    $detail.empty().append($wrap);
   }
 
   async search_waves() {

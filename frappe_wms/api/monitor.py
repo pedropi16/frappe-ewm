@@ -1,7 +1,38 @@
 import frappe
 from frappe.utils import cint
+from frappe_wms.services.task import task_names_for_allocations
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
+
+@frappe.whitelist()
+def get_delivery_execution_status(delivery_name):
+    # Feeds the Outbound Monitor drill-down: everything a supervisor needs to see and drive the
+    # pick -> pack -> ship lifecycle of one delivery in one place, instead of only from the RF app.
+    doc = frappe.get_doc("Outbound Delivery", delivery_name)
+    doc.check_permission("read")
+    allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": delivery_name}, fields=[
+        "name", "product", "storage_bin", "handling_unit", "allocated_quantity", "picked_quantity", "status",
+    ])
+    task_names = list(task_names_for_allocations([a.name for a in allocations]))
+    tasks = frappe.get_all("Warehouse Task", filters={"name": ["in", task_names]}, fields=[
+        "name", "task_type", "status", "planned_quantity", "confirmed_quantity",
+        "source_bin", "destination_bin", "assigned_resource", "warehouse_order",
+    ], order_by="sequence asc, creation asc") if task_names else []
+    warehouse_orders = sorted({t.warehouse_order for t in tasks if t.warehouse_order})
+    packing_orders = frappe.get_all("Packing Order", filters={"outbound_delivery": delivery_name}, fields=[
+        "name", "status", "work_center_bin",
+    ])
+    goods_issues = frappe.get_all("Goods Issue", filters={"outbound_delivery": delivery_name}, fields=[
+        "name", "status", "docstatus", "posting_datetime", "reversed",
+    ])
+    return {
+        "delivery": doc.as_dict(),
+        "allocations": allocations,
+        "tasks": tasks,
+        "warehouse_orders": warehouse_orders,
+        "packing_orders": packing_orders,
+        "goods_issues": goods_issues,
+    }
 
 @frappe.whitelist()
 def get_summary(warehouse):

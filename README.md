@@ -229,19 +229,37 @@ Determination Rule decides if putaway is required → `Warehouse Request` →
 `Warehouse Task` (Putaway) → operator confirms in RF → stock moves from
 receiving bin to its determined destination bin.
 
-**Outbound:** `Outbound Delivery` (against a Sales Order, or standalone) is
-allocated (`services/allocation.py`) — reserves `WMS Stock Balance` rows,
-optionally grouped into a `WMS Wave` for combined release — → pick tasks are
-generated per allocation (or clustered across a wave's deliveries onto shared
-bins/products) → operator picks in RF → stock stages → `Packing Order`
-(optional) groups HUs for shipment → `Goods Issue` posted → ledger decreases
-stock, ERPNext Delivery Note (or generic Stock Entry) mirrored. The RF
-"Release" screen does allocation + pick-task creation for one delivery in a
-single tap (`services/picking.release_delivery_for_picking`) — the same
+**Outbound:** `Outbound Delivery` (against a Sales Order via the order's
+"Create > Outbound Delivery" button, or standalone) **must be submitted**
+before it can be allocated or picked — `services/allocation.allocate_delivery`
+and `services/task.create_pick_tasks`/`create_pick_tasks_for_wave` all reject
+a Draft delivery, the same `docstatus != 1` gate `services/receipt.py` already
+uses for Goods Receipt. Once submitted it's allocated (`services/allocation.py`)
+— reserves `WMS Stock Balance` rows, optionally grouped into a `WMS Wave` for
+combined release — → pick tasks are generated per allocation (or clustered
+across a wave's deliveries onto shared bins/products) → operator picks in RF
+→ stock stages → `Packing Order` (optional) groups HUs for shipment →
+`Goods Issue` posted → ledger decreases stock, ERPNext Delivery Note (or
+generic Stock Entry) mirrored. The RF "Release" screen does allocation +
+pick-task creation for one delivery in a single tap
+(`services/picking.release_delivery_for_picking`) — the same
 allocate-then-create-pick-tasks sequence a Wave's release runs across a
 batch of deliveries, just for one; it's also what the Outbound Delivery desk
 form's "Allocate Stock" / "Create Pick Tasks" buttons call as two separate
-steps.
+steps, and what the WMS Monitor's Outbound Monitor drill-down (below) offers
+alongside a one-tap "Post Goods Issue".
+
+**Cancelling an Outbound Delivery** is validated, not just a bare docstatus
+flip (`events/deliveries.py`): blocked outright if a submitted `Goods Issue`
+already references it (reverse that first), and blocked if any of its Pick
+tasks has a `confirmed_quantity > 0` that hasn't itself been reversed via
+`services/task.reverse_task` (reversing a Goods Issue alone doesn't un-confirm
+the task that picked it — only `reverse_task` does that, by posting a
+compensating task). Once past those checks, cancelling releases every
+still-open (unconfirmed) Pick task's `Stock Allocation` reservation back onto
+`WMS Stock Balance` and hard-cancels those tasks
+(`services/allocation.cancel_allocations_for_delivery`) — nothing is left
+dangling from a delivery that's abandoned before picking actually started.
 
 **Shipping/loading:** once its deliveries are fully picked,
 `services/shipping.create_shipment` picks up their staged HUs, determines a
@@ -461,7 +479,13 @@ endpoints this frontend (and real barcode hardware) call.
     waves, active resources), each linking to its filtered list view.
   - **Inbound Monitor** — searchable Inbound Deliveries.
   - **Outbound Monitor** — searchable Outbound Deliveries plus Waves (with
-    one-click Release per draft wave).
+    one-click Release per draft wave). Clicking a delivery expands a
+    drill-down: its allocation/picking/packing/loading/goods-issue status,
+    its Pick tasks and the Warehouse Order(s) they belong to, its Packing
+    Orders and Goods Issues (with the `reversed` flag), and the Allocate
+    Stock / Create Pick Tasks / Post Goods Issue actions — everything needed
+    to drive and watch the pick-to-ship lifecycle without leaving the
+    Monitor or reaching for the RF app.
   - **Stock Overview** — current `WMS Stock Balance` positions (quantity/
     allocated/available per product/bin/HU/stock type), with a per-stock-type
     summary strip — the current-state counterpart to Stock Movements' history.
