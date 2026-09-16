@@ -290,7 +290,7 @@ behaves as before (assigned/worked directly).
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
 | `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
-| `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail), Packaging Material |
+| `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material |
 | `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Exception Code |
 | `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
@@ -434,12 +434,18 @@ endpoints this frontend (and real barcode hardware) call.
 
 ## Desk surfaces
 
-- **WMS workspace** (`/app/wms`) — every WMS doctype grouped by module, plus
-  shortcuts to the WMS Monitor, RF Scanner, WMS Settings, and the ERPNext
-  masters a warehouse operation regularly needs (Stock Settings, Warehouse,
-  Item, Purchase Order, Sales Order). Visibility follows normal Frappe
-  per-doctype/per-role permissions — this workspace doesn't add or remove
-  access, only groups links.
+- **WMS workspace** (`/app/wms`) — every WMS doctype (including ones with no
+  RF screen, like Warehouse Order or WMS Number Range) grouped by module,
+  plus shortcuts to the WMS Monitor, RF Scanner, WMS Settings, and the
+  ERPNext masters a warehouse operation regularly needs (Stock Settings,
+  Warehouse, Item, Purchase Order, Sales Order). Visibility follows normal
+  Frappe per-doctype/per-role permissions — this workspace doesn't add or
+  remove access, only groups links. Anything that's a *service call* rather
+  than plain CRUD (loading/recycling/etc.) is a custom button on the
+  relevant doctype's form instead of a bare API endpoint you'd have to know
+  to call: **Handling Unit** gets "Recycle" (once Empty) and "HU Overview";
+  **WMS Shipment** gets "Depart" (once Loaded) and "Complete" (once
+  Departed).
 - **WMS Monitor** (`/app/wms-monitor`) — pick a warehouse to see summary
   counts (open tasks by type, exceptions, pending replenishment, deliveries
   in progress, open counts/inspections, open waves, active resources — each

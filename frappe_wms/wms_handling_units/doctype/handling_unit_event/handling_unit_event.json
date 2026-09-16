@@ -28,11 +28,11 @@
     {
       "fieldname": "handling_unit",
       "label": "Handling Unit",
-      "fieldtype": "Link",
-      "options": "Handling Unit",
+      "fieldtype": "Data",
       "reqd": 1,
       "in_list_view": 1,
-      "in_standard_filter": 1
+      "in_standard_filter": 1,
+      "description": "Deliberately not a Link: this is an immutable history log and must survive the Handling Unit being recycled/deleted, or a reused number being reassigned to a different physical HU later."
     },
     {
       "fieldname": "event_type",
@@ -45,26 +45,22 @@
     {
       "fieldname": "parent_hu_before",
       "label": "Parent HU Before",
-      "fieldtype": "Link",
-      "options": "Handling Unit"
+      "fieldtype": "Data"
     },
     {
       "fieldname": "parent_hu_after",
       "label": "Parent HU After",
-      "fieldtype": "Link",
-      "options": "Handling Unit"
+      "fieldtype": "Data"
     },
     {
       "fieldname": "bin_before",
       "label": "Bin Before",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
+      "fieldtype": "Data"
     },
     {
       "fieldname": "bin_after",
       "label": "Bin After",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
+      "fieldtype": "Data"
     },
     {
       "fieldname": "status_before",
