@@ -4,6 +4,7 @@ from frappe.tests import IntegrationTestCase
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.api.inventory import snapshot_count, record_counts, post_count, complete_inspection, check_replenishment_needs
+from frappe_wms.services.inventory_count import list_open_counts
 from frappe_wms.services.stock import transfer_stock
 
 
@@ -83,6 +84,38 @@ class TestPhase4InventoryManagement(IntegrationTestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].movement_type, "702")
         self.assertEqual(entries[0].quantity, -3)
+
+    def test_draft_count_is_visible_in_rf_open_counts_list_before_it_is_started(self):
+        # RF regression: a freshly created count sits in Draft until an operator opens it (which
+        # calls snapshot_count) - it must still show up in the RF "Count" list so there's a way
+        # to start it, not just counts already snapshotted into "Counting"/"Counted". Receives
+        # (without putting away) into recv_bin, rather than reusing self.bulk_bin, so this test
+        # doesn't add stock other tests in this class don't expect.
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "PHASE4-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
+        hu.insert(ignore_permissions=True)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 6, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 6, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.submit()
+
+        count = frappe.get_doc({"doctype": "WMS Physical Inventory Count", "warehouse": self.warehouse, "storage_bin": self.recv_bin, "count_date": frappe.utils.nowdate()})
+        count.insert(ignore_permissions=True)
+        self.assertEqual(count.status, "Draft")
+
+        tester_email = "phase4-count-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "Phase4 Count Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "active": 1}).insert(ignore_permissions=True)
+
+        # Scoped to a resource tied to this test's own warehouse so the assertion isn't at the
+        # mercy of unrelated Draft counts left behind (by other tests/warehouses) in this shared
+        # test-site database.
+        open_counts = list_open_counts(user=tester_email)
+        self.assertIn(count.name, [c["name"] for c in open_counts])
 
     def test_physical_inventory_count_requires_all_lines_counted_before_posting(self):
         self._receive_and_putaway(4)

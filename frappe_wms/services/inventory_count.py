@@ -7,7 +7,7 @@ from frappe_wms.utils import require_role
 
 def list_open_counts(user=None):
     resource = my_resource(user)
-    filters = {"status": ["in", ["Counting", "Counted"]]}
+    filters = {"status": ["in", ["Draft", "Counting", "Counted"]]}
     if resource: filters["warehouse"] = resource.warehouse
     counts = frappe.get_list("WMS Physical Inventory Count", filters=filters,
         fields=["name", "warehouse", "storage_bin", "storage_type", "product", "status", "count_date"],
