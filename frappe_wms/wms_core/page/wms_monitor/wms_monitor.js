@@ -54,7 +54,7 @@ class WMSMonitor {
   render_nav() {
     const $nav = this.$body.find(".wms-mon-nav-list");
     $nav.html(VIEWS.map((v) => `
-      <a href="#" class="list-group-item wms-mon-nav-item" data-view="${v.key}">${frappe.utils.escape_html(v.label)}</a>
+      <a href="#" class="wms-mon-nav-item" data-view="${v.key}">${frappe.utils.escape_html(v.label)}</a>
     `).join(""));
     $nav.find(".wms-mon-nav-item").on("click", (e) => {
       e.preventDefault();
@@ -240,7 +240,7 @@ class WMSMonitor {
     const d = status.delivery;
     const docstatusLabel = { 0: __("Draft"), 1: __("Submitted"), 2: __("Cancelled") }[d.docstatus];
 
-    const $wrap = $(`<div class="card" style="padding:14px;"></div>`);
+    const $wrap = $(`<div class="wms-mon-detail-card" style="padding:14px;"></div>`);
     $wrap.append(`
       <h5>${frappe.utils.escape_html(d.name)} <small class="text-muted">(${docstatusLabel})</small></h5>
       <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:10px;">

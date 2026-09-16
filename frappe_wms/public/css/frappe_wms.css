@@ -1,3 +1,23 @@
 .wms-status-open { color: var(--blue-600); }
 .wms-status-exception { color: var(--red-600); font-weight: 600; }
 .wms-scan-input input { font-size: 1.3rem; min-height: 48px; }
+
+.wms-mon-nav-item {
+	display: block;
+	padding: 8px 12px;
+	border: 1px solid var(--border-color);
+	border-bottom: none;
+	color: var(--text-color);
+	background-color: var(--fg-color);
+}
+.wms-mon-nav-item:first-child { border-radius: var(--border-radius-md) var(--border-radius-md) 0 0; }
+.wms-mon-nav-item:last-child { border-bottom: 1px solid var(--border-color); border-radius: 0 0 var(--border-radius-md) var(--border-radius-md); }
+.wms-mon-nav-item:hover { background-color: var(--fg-hover-color); color: var(--text-color); text-decoration: none; }
+.wms-mon-nav-item.active { background-color: var(--sidebar-select-color); color: var(--text-color); font-weight: 600; }
+
+.wms-mon-detail-card {
+	background-color: var(--card-bg);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius-md);
+	color: var(--text-color);
+}
