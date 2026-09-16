@@ -2055,7 +2055,7 @@ function renderReceiveList() {
   state.inboundDeliveries.forEach((d) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(d.inbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.status)}</span></div>
+        <div class="row1"><div class="task-type">${escapeHtml(d.inbound_delivery_number)}</div>${statusBadgeHtml(d.status)}</div>
         <div class="meta">${escapeHtml(d.supplier || "")}<br>${escapeHtml(d.receiving_bin || "")}</div>
       </div>
     `);
@@ -2100,7 +2100,7 @@ function renderReleaseList() {
   state.releaseDeliveries.forEach((d) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.allocation_status)}</span></div>
+        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div>${statusBadgeHtml(d.allocation_status)}</div>
         <div class="meta">${escapeHtml(d.customer || "")} &middot; ${d.line_count} line(s)${d.staging_bin ? " &middot; " + escapeHtml(d.staging_bin) : ""}</div>
       </div>
     `);
@@ -2154,7 +2154,7 @@ function renderShipList() {
   state.shipDeliveries.forEach((d) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.status)}</span></div>
+        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div>${statusBadgeHtml(d.status)}</div>
         <div class="meta">${escapeHtml(d.customer || "")}<br>${escapeHtml(d.staging_bin || "")}${d.door ? " &middot; Door " + escapeHtml(d.door) : ""}${d.route ? " &middot; " + escapeHtml(d.route) : ""}</div>
       </div>
     `);
@@ -2207,7 +2207,7 @@ function renderPackList() {
   state.packingOrders.forEach((order) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(order.name)}</div><span class="badge Normal">${escapeHtml(order.status)}</span></div>
+        <div class="row1"><div class="task-type">${escapeHtml(order.name)}</div>${statusBadgeHtml(order.status)}</div>
         <div class="meta">${escapeHtml((order.source_hus || []).join(", "))} &rarr; ${escapeHtml((order.destination_hus || []).join(", "))}</div>
       </div>
     `);
@@ -2222,30 +2222,73 @@ function renderPackList() {
 }
 
 // ----- Move -----
+function moveField(key, label, opts) {
+  opts = opts || {};
+  const f = state.moveForm;
+  const type = key === "quantity" ? "number" : "text";
+  const field = el(`
+    <div class="field"><label>${escapeHtml(label)}</label>
+      <input type="${type}" inputmode="${type === "number" ? "decimal" : "text"}" value="${escapeHtml(f[key])}" placeholder="${escapeHtml(opts.placeholder || "")}">
+    </div>
+  `);
+  field.querySelector("input").oninput = (e) => { state.moveForm[key] = e.target.value; };
+  return field;
+}
+
 function renderMove() {
   const wrap = el(`<div></div>`);
+  const stepKey = MOVE_STEPS[state.moveStep];
   const f = state.moveForm;
-  const section = el(`<div class="detail-section"><h3>Move stock between bins</h3></div>`);
-  const fields = [
-    ["product", "Product"], ["quantity", "Quantity"], ["stock_uom", "UOM"], ["stock_type", "Stock Type"],
-    ["source_bin", "Source Bin"], ["source_hu", "Source HU (optional)"],
-    ["destination_bin", "Destination Bin"], ["destination_hu", "Destination HU (optional)"],
-  ];
-  fields.forEach(([key, label]) => {
-    const type = key === "quantity" ? "number" : "text";
+
+  const dots = el(`<div class="step-dots"></div>`);
+  MOVE_STEPS.forEach((_, i) => dots.appendChild(el(`<div class="dot ${i < state.moveStep ? "done" : i === state.moveStep ? "active" : ""}"></div>`)));
+  wrap.appendChild(dots);
+
+  const STEP_LABEL = { item: "Item", quantity: "Quantity", source: "Scan source", destination: "Scan destination", review: "Review & move" };
+  const section = el(`<div class="detail-section"></div>`);
+  section.appendChild(el(`<div class="step-label">Step ${state.moveStep + 1} of ${MOVE_STEPS.length} &middot; ${STEP_LABEL[stepKey]}</div>`));
+
+  if (stepKey === "item") {
+    section.appendChild(moveField("product", "Product"));
+    section.appendChild(moveField("stock_uom", "UOM"));
+    section.appendChild(moveField("stock_type", "Stock Type"));
+  } else if (stepKey === "quantity") {
+    section.appendChild(moveField("quantity", "Quantity"));
+  } else if (stepKey === "source") {
+    section.appendChild(moveField("source_bin", "Source Bin", { placeholder: "Scan bin barcode" }));
+    section.appendChild(moveField("source_hu", "Source HU (optional)", { placeholder: "Scan HU barcode" }));
+  } else if (stepKey === "destination") {
+    section.appendChild(moveField("destination_bin", "Destination Bin", { placeholder: "Scan bin barcode" }));
+    section.appendChild(moveField("destination_hu", "Destination HU (optional)", { placeholder: "Scan HU barcode" }));
+  } else if (stepKey === "review") {
     section.appendChild(el(`
-      <div class="field"><label>${escapeHtml(label)}</label>
-        <input type="${type}" inputmode="${type === "number" ? "decimal" : "text"}" data-f="${key}" value="${escapeHtml(f[key])}">
+      <div class="detail-grid">
+        <div><div class="label">Product</div><div>${escapeHtml(f.product)} &middot; ${escapeHtml(f.quantity)} ${escapeHtml(f.stock_uom)}</div></div>
+        <div><div class="label">Stock type</div><div>${escapeHtml(f.stock_type)}</div></div>
+        <div><div class="label">From</div><div>${escapeHtml(f.source_bin || f.source_hu || "-")}</div></div>
+        <div><div class="label">To</div><div>${escapeHtml(f.destination_bin)}${f.destination_hu ? " / " + escapeHtml(f.destination_hu) : ""}</div></div>
       </div>
     `));
-  });
-  section.querySelectorAll("input").forEach((input) => {
-    input.oninput = (e) => { state.moveForm[e.target.dataset.f] = e.target.value; };
-  });
+  }
+  if (state.moveStepError) section.appendChild(el(`<div class="field-error">${escapeHtml(state.moveStepError)}</div>`));
   wrap.appendChild(section);
-  const btn = el(`<button class="btn btn-primary">Move</button>`);
-  btn.onclick = submitMove;
-  wrap.appendChild(btn);
+
+  const nav = el(`<div style="display:flex; gap:10px;"></div>`);
+  if (state.moveStep > 0) {
+    const back = el(`<button class="btn btn-secondary" style="flex:1;">Back</button>`);
+    back.onclick = () => goMoveStep(-1);
+    nav.appendChild(back);
+  }
+  if (stepKey === "review") {
+    const moveBtn = el(`<button class="btn btn-primary" style="flex:2;">Move</button>`);
+    moveBtn.onclick = submitMove;
+    nav.appendChild(moveBtn);
+  } else {
+    const next = el(`<button class="btn btn-primary" style="flex:2;">Next</button>`);
+    next.onclick = () => goMoveStep(1);
+    nav.appendChild(next);
+  }
+  wrap.appendChild(nav);
   return wrap;
 }
 
@@ -2259,8 +2302,8 @@ function renderCountList() {
   state.counts.forEach((count) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(count.name)}</div><span class="badge Normal">${escapeHtml(count.status)}</span></div>
-        <div class="meta">${escapeHtml(count.warehouse)}${count.storage_bin ? " / " + escapeHtml(count.storage_bin) : ""}<br>${(count.items || []).length} line(s) left to count</div>
+        <div class="row1"><div class="task-type">${escapeHtml(count.name)}</div>${statusBadgeHtml(count.status)}</div>
+        <div class="meta">${escapeHtml(count.warehouse)}${count.storage_bin ? " / " + escapeHtml(count.storage_bin) : ""}<br>${count.status === "Draft" ? "Tap to start counting" : (count.items || []).length + " line(s) left to count"}</div>
       </div>
     `);
     card.onclick = () => openCount(count);
@@ -2324,8 +2367,20 @@ function renderQualityDetail() {
     </div>
   `));
   const form = el(`<div class="detail-section"></div>`);
-  form.appendChild(el(`<div class="field"><label>Passed quantity</label><input type="number" inputmode="decimal" id="qty-pass" value="${escapeHtml(state.qualityPassed)}"></div>`));
-  form.appendChild(el(`<div class="field"><label>Failed quantity</label><input type="number" inputmode="decimal" id="qty-fail" value="${escapeHtml(state.qualityFailed)}"></div>`));
+  const passField = el(`<div class="field"><label>Passed quantity</label><input type="number" inputmode="decimal" id="qty-pass" value="${escapeHtml(state.qualityPassed)}"></div>`);
+  const failField = el(`<div class="field"><label>Failed quantity (auto)</label><input type="number" inputmode="decimal" id="qty-fail" value="${escapeHtml(state.qualityFailed)}"></div>`);
+  passField.querySelector("input").oninput = (e) => {
+    state.qualityPassed = e.target.value;
+    state.qualityFailed = String(Math.max(0, flt(insp.quantity) - flt(e.target.value)));
+    failField.querySelector("input").value = state.qualityFailed;
+  };
+  failField.querySelector("input").oninput = (e) => {
+    state.qualityFailed = e.target.value;
+    state.qualityPassed = String(Math.max(0, flt(insp.quantity) - flt(e.target.value)));
+    passField.querySelector("input").value = state.qualityPassed;
+  };
+  form.appendChild(passField);
+  form.appendChild(failField);
   wrap.appendChild(form);
   const btn = el(`<button class="btn btn-primary">Complete Inspection</button>`);
   btn.onclick = () => {
@@ -2461,6 +2516,11 @@ function renderHUDetail() {
     recycleBtn.onclick = submitRecycleHU;
     actions.appendChild(recycleBtn);
   }
+  if (hu.current_bin && hu.stock_status !== "Empty") {
+    const closeBtn = el(`<button class="btn btn-secondary">Close Movement (advance to next bin)</button>`);
+    closeBtn.onclick = () => { state.closeMovementHu = hu.name; submitCloseMovement(); };
+    actions.appendChild(closeBtn);
+  }
   wrap.appendChild(actions);
 
   const backBtn = el(`<button class="btn btn-secondary">Back to Handling Units</button>`);
@@ -2479,7 +2539,7 @@ function renderLoadList() {
   state.shipments.forEach((s) => {
     const card = el(`
       <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(s.shipment_number)}</div><span class="badge Normal">${escapeHtml(s.status)}</span></div>
+        <div class="row1"><div class="task-type">${escapeHtml(s.shipment_number)}</div>${statusBadgeHtml(s.status)}</div>
         <div class="meta">${escapeHtml(s.route || "-")}${s.door ? " &middot; Door " + escapeHtml(s.door) : ""}</div>
         <div class="qty">${s.loaded_count} / ${s.total_count} loaded</div>
       </div>
