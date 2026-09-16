@@ -235,8 +235,14 @@ before it can be allocated or picked — `services/allocation.allocate_delivery`
 and `services/task.create_pick_tasks`/`create_pick_tasks_for_wave` all reject
 a Draft delivery, the same `docstatus != 1` gate `services/receipt.py` already
 uses for Goods Receipt. Once submitted it's allocated (`services/allocation.py`)
-— reserves `WMS Stock Balance` rows, optionally grouped into a `WMS Wave` for
-combined release — → pick tasks are generated per allocation (or clustered
+— reserves `WMS Stock Balance` rows, sourced only from bins in a "general
+inventory" storage role (`_candidate_balances` excludes `Receiving`, `Staging`,
+`Shipping`, `Door` and `Packing` roles, plus any bin with `removal_blocked`
+set — stock already committed to one outbound movement, still awaiting
+putaway, or manually blocked isn't up for grabs by a *different* delivery's
+FIFO just because the ledger still shows it as available there) — optionally
+grouped into a `WMS Wave` for combined release — → pick tasks are generated
+per allocation (or clustered
 across a wave's deliveries onto shared bins/products) → operator picks in RF
 → stock stages → `Packing Order` (optional) groups HUs for shipment →
 `Goods Issue` posted → ledger decreases stock, ERPNext Delivery Note (or

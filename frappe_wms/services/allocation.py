@@ -5,11 +5,26 @@ from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
 from frappe_wms.utils import require_role
 
+# Storage roles that don't hold general on-hand inventory available for a *new* outbound
+# allocation: Receiving is unputaway stock still awaiting putaway, Staging/Shipping/Door hold
+# stock already committed to (picked or loaded for) a specific outbound movement, Packing is
+# mid-repack. None of that should be up for grabs by a delivery's FIFO allocation just because
+# the ledger still shows it as "available" there - nothing else marks staged/received stock as
+# reserved or in-transit once it physically arrives at that bin.
+NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing")
+
 def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
     if row.required_batch: filters["batch_no"]=row.required_batch
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
-    return frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc")
+    balances = frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc")
+    bin_names = {b.storage_bin for b in balances if b.storage_bin}
+    if not bin_names: return balances
+    non_allocatable_bins = set(frappe.get_all("Storage Bin", filters={"name": ["in", list(bin_names)], "removal_blocked": 1}, pluck="name"))
+    blocked_types = frappe.get_all("Storage Type", filters={"warehouse": warehouse, "storage_role": ["in", NON_ALLOCATABLE_STORAGE_ROLES]}, pluck="name")
+    if blocked_types:
+        non_allocatable_bins |= set(frappe.get_all("Storage Bin", filters={"name": ["in", list(bin_names)], "storage_type": ["in", blocked_types]}, pluck="name"))
+    return [b for b in balances if not b.storage_bin or b.storage_bin not in non_allocatable_bins]
 
 def allocate_delivery(delivery_name):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
