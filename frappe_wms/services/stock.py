@@ -57,6 +57,11 @@ def post_entries(entries, reference_doctype, reference_name, idempotency_key, wa
         sle.flags.ignore_permissions = True
         sle.insert()
         created.append(sle.name)
+    # Deferred import: services/handling_unit.py -> services/task.py -> services/stock.py would
+    # otherwise cycle at module load time.
+    from frappe_wms.services.handling_unit import recompute_measurements
+    for hu in {e.get("handling_unit") for e in entries if e.get("handling_unit")}:
+        recompute_measurements(hu)
     return created
 
 def transfer_stock(*, source, destination, quantity, movement_type, reference_doctype, reference_name, idempotency_key, warehouse_task=None, device=None):

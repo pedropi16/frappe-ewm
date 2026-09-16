@@ -733,6 +733,19 @@ async function submitUnnestHU() {
   }
 }
 
+async function submitRecycleHU() {
+  const hu = state.currentHU;
+  if (!confirm(`Recycle ${hu.name}? This deletes it and frees its number for reuse.`)) return;
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.handling_unit.recycle_handling_unit", { hu_name: hu.name });
+    setState({ loading: false, info: `${hu.name} recycled`, view: "hu", currentHU: null });
+    loadHUHome();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
 async function toggleBlockHU() {
   const hu = state.currentHU;
   const blocking = hu.status !== "Blocked";
@@ -1480,6 +1493,11 @@ function renderHUDetail() {
   const blockBtn = el(`<button class="btn ${hu.status === "Blocked" ? "btn-primary" : "btn-danger"}">${hu.status === "Blocked" ? "Unblock" : "Block"}</button>`);
   blockBtn.onclick = toggleBlockHU;
   actions.appendChild(blockBtn);
+  if (hu.stock_status === "Empty" && !hu.parent_hu) {
+    const recycleBtn = el(`<button class="btn btn-danger">Recycle</button>`);
+    recycleBtn.onclick = submitRecycleHU;
+    actions.appendChild(recycleBtn);
+  }
   wrap.appendChild(actions);
 
   const backBtn = el(`<button class="btn btn-secondary">Back to Handling Units</button>`);

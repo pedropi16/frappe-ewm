@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 def determine_storage_process(context):
     rules=frappe.get_all("Process Determination Rule",filters={"active":1,"warehouse":context["warehouse"]},fields=["*"],order_by="priority asc")
@@ -16,11 +17,24 @@ def determine_destination_bin(context):
         if rule.fixed_destination_bin: return rule.fixed_destination_bin
         if rule.strategy=="Manual Selection": frappe.throw(_("Bin determination rule {0} requires manual bin selection").format(rule.name))
         filters={"warehouse":context["warehouse"],"storage_type":rule.destination_storage_type,"active":1,"putaway_blocked":0}
-        bins=frappe.get_all("Storage Bin",filters=filters,fields=["name","current_hu_count","sequence"],order_by="sequence asc")
+        bins=frappe.get_all("Storage Bin",filters=filters,
+            fields=["name","current_hu_count","current_weight","maximum_hus","maximum_weight","sequence"],order_by="sequence asc")
+        bins=_bins_with_capacity(bins,context.get("incoming_weight"))
         if not bins: continue
         bin_name=_apply_bin_strategy(rule.strategy,bins,context)
         if bin_name: return bin_name
     frappe.throw(_("No destination bin could be determined"))
+
+def _bins_with_capacity(bins, incoming_weight):
+    # A bin already at its HU-count or weight limit is not a valid putaway target - SAP EWM
+    # never assigns stock to a full storage bin. incoming_weight is optional (only known when
+    # the caller can price it from WMS Product.gross_weight_per_unit); a bin with no configured
+    # maximum_hus/maximum_weight is never excluded on that dimension.
+    def has_room(b):
+        if b.maximum_hus and flt(b.current_hu_count) >= flt(b.maximum_hus): return False
+        if b.maximum_weight and incoming_weight and (flt(b.current_weight) + flt(incoming_weight)) > flt(b.maximum_weight): return False
+        return True
+    return [b for b in bins if has_room(b)]
 
 def determine_route(warehouse, carrier=None):
     filters = {"active": 1, "origin_warehouse": warehouse}

@@ -1,0 +1,60 @@
+{
+  "name": "WMS HU Number Pool",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "number_range",
+    "hu_number"
+  ],
+  "fields": [
+    {
+      "fieldname": "number_range",
+      "label": "Number Range",
+      "fieldtype": "Link",
+      "options": "WMS Number Range",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "hu_number",
+      "label": "HU Number",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "description": "A number freed by recycling a reusable, empty Handling Unit - handed out again by services/numbering.next_number before the range increments further."
+    }
+  ],
+  "autoname": "hash",
+  "sort_field": "creation",
+  "sort_order": "ASC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    }
+  ]
+}

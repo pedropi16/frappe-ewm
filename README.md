@@ -77,7 +77,16 @@ Company
   put a number on the physical HU - the operator scans it and the system just
   registers it) or **Internal** (the system always assigns the next number
   itself from a **WMS Number Range**, ignoring any number a caller passes) -
-  see [Numbering](#numbering-hu-and-shipment-number-ranges).
+  see [Numbering](#numbering-hu-and-shipment-number-ranges). An HU Type
+  marked `reusable` can be recycled once empty, returning its number to the
+  pool for reissue. **Packaging Material** attaches physical dimensions
+  (length/width/height/tare weight/maximum weight) to an HU Type; picking one
+  when creating an HU fills in HU Type and Tare Weight for you.
+- **WMS Product** (per warehouse-agnostic Item) carries `gross_weight_per_unit`
+  and `volume_per_unit`, used to keep an HU's `gross_weight`/`net_weight`/
+  `volume` live as stock moves in and out of it - which in turn feeds bin
+  capacity checks during putaway (see
+  [Bin Determination Rule](#2-bin-determination-rule--which-bin-a-movement-lands-in)).
 - **WMS Stock Type** is *not* a physical location — it's a status dimension
   layered on top of the physical location (e.g. `AVAILABLE`, `QUALITY`,
   `DAMAGED`, `SCRAP`, `WAREHOUSE_BLOCKED`). Each stock type independently
@@ -128,6 +137,19 @@ combination of item / item group / stock type / HU type / source or
 destination storage type — narrower, higher-priority rules should sit above
 broader fallback rules.
 
+Before any strategy runs, candidate bins are filtered to ones with room:
+a bin at its `maximum_hus` is dropped, and one whose `current_weight` plus
+the incoming weight (`WMS Product.gross_weight_per_unit` × quantity, when
+that's configured) would exceed `maximum_weight` is dropped too
+(`services/determination._bins_with_capacity`). A bin with no
+`maximum_hus`/`maximum_weight` set is never excluded on that dimension. This
+is also why `Handling Unit.gross_weight`/`net_weight`/`volume` are kept live
+(`services/handling_unit.recompute_measurements`, called from every
+`services/stock.post_entries` posting) instead of sitting at zero forever -
+`Storage Bin.current_weight` and the hourly `recalculate_stale_bin_capacity`
+job both depend on it, and it's what makes a Packaging Material's
+weight/dimensions actually feed back into putaway decisions.
+
 ### Supporting config that feeds the rules
 - **Warehouse Process Type** — defines what a step of activity actually
   requires (source/destination/HU/stock required?), its `confirmation_mode`,
@@ -149,38 +171,54 @@ warehouse-specific and must be configured per site.
 
 ## Numbering (HU and shipment number ranges)
 
-`Handling Unit` numbers and `WMS Shipment` numbers are both handed out by
-**WMS Number Range** (`services/numbering.py`), the same "narrower match wins"
-pattern as the rule tables above: a range can be scoped to a specific
-`warehouse` + `hu_type`, just one of the two, or neither (a global fallback).
-`after_install` seeds one global fallback range for each (`HU-########` and
-`SHIP-########`) so a fresh site works immediately; add a narrower range
-(e.g. one per warehouse, or one per HU Type for reusable totes vs. one-way
-pallets) to change the prefix/length/start-end window for that scope.
+Creating a Handling Unit - from the Desk "New" form, the RF app, or Goods
+Receipt auto-registration - only ever *requires* a **Storage Bin** (or a
+parent HU to nest into) and an **HU Type** (directly, or implied by a
+**Packaging Material**), same as SAP EWM. Everything else (Warehouse, HU
+Number) is derived. All of this lives in the `Handling Unit` controller's
+`before_insert`/`after_insert` (`wms_handling_units/doctype/handling_unit/handling_unit.py`)
+so every creation path behaves identically instead of three services each
+re-implementing the same rules:
 
-- **Handling Unit**: whether a number is auto-assigned depends on the HU
-  Type's `numbering_mode`. **External** (the default) means the number is a
-  barcode a person or a label printer already put on the physical HU -
-  `create_handling_unit` requires it and checks it isn't already in use.
-  **Internal** means the system always calls `next_number` itself and
-  ignores any number the caller passes - use this for HU Types that only
-  ever get created at a packing station inside this app (never scanned in
-  from an outside source). The RF "New Handling Unit" screen disables the
-  barcode field once an Internal type is selected.
-- **WMS Shipment**: always internally numbered - `create_shipment` calls
-  `next_number("WMS Shipment", warehouse=...)` instead of generating a random
-  suffix, so shipment numbers are sequential and auditable per warehouse.
+- **Warehouse** is always derived from the Storage Bin (or the parent HU's
+  warehouse when nesting) - it's never asked for.
+- **HU Type** can be typed directly, or left blank if a **Packaging
+  Material** is set (its `hu_type` is copied across); a Packaging Material
+  also copies its `tare_weight` onto the HU.
+- **HU Number** is handed out by **WMS Number Range** (`services/numbering.py`),
+  the same "narrower match wins" pattern as the rule tables above: a range
+  can be scoped to a specific `warehouse` + `hu_type`, just one of the two,
+  or neither (a global fallback). `after_install` seeds one global fallback
+  range for Handling Units (`HU-########`) and one for `WMS Shipment`
+  (`SHIP-########`) so a fresh site works immediately.
+  - **External** HU Types (the default) carry a number a person or a label
+    printer already put on the physical HU - it's required and checked
+    against existing HUs.
+  - **Internal** HU Types are always system-numbered - `next_number` is
+    always called and any number the caller passed is silently replaced.
+    The Desk form and the RF "New Handling Unit" screen both disable/hide
+    the barcode field once an Internal type is selected.
+- **WMS Shipment** numbers are always internal - `create_shipment` calls
+  `next_number("WMS Shipment", warehouse=...)`.
 - Numbers are handed out under a row lock (`select ... for update` on the
   matching `WMS Number Range`), so concurrent RF scans or shipment creation
   can't collide. A range throws once `current_number` reaches `end_number`
   rather than wrapping around - raise `end_number` or add a new range to keep
   going.
+- **Reuse**: recycling an empty HU whose HU Type is `reusable`
+  (`services/handling_unit.recycle_handling_unit` - RF "Handling Units" detail
+  screen, or the Desk "Recycle" button once it's Empty) deletes the HU and,
+  for Internal numbering, frees its number into **WMS HU Number Pool** first.
+  `next_number` always drains that pool before incrementing the range
+  further, so a reusable tote's number comes back into circulation instead
+  of numbers only ever climbing forward.
 - **Auto-registration**: an unknown HU barcode scanned during Goods Receipt
-  (`services/receipt.create_and_submit_goods_receipt`) or the RF app now
-  falls back to `WMS Settings.default_handling_unit_type` when no HU Type is
-  given, and always goes through the same `services.handling_unit` creation
-  path (so it's numbered/validated and logs an HU Event) instead of a bare
-  insert.
+  (`services/receipt.create_and_submit_goods_receipt`) falls back to
+  `WMS Settings.default_handling_unit_type` when no HU Type is given, and
+  goes through the same controller (numbered/validated, logs an HU Event)
+  instead of a bare insert. Scanning a barcode against an Internal HU Type is
+  rejected (an Internal type's HUs only ever get created at a packing
+  station inside this app, never scanned in from outside).
 
 ## Core flows
 
@@ -248,7 +286,7 @@ behaves as before (assigned/worked directly).
 | Module | Contains |
 |---|---|
 | `wms_core` | Warehouse/Storage Type/Storage Bin structure, WMS Settings, the WMS Monitor page, the WMS workspace |
-| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules, process types, movement types, replenishment rules, WMS Number Range, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
+| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules, process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
 | `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
@@ -385,7 +423,7 @@ leads to:
 | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested staged HU per line, post the Goods Issue |
 | Pack | Complete an open Packing Order in one tap |
 | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
-| Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, or block/unblock an HU |
+| Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
 | Move | Ad-hoc bin-to-bin/HU-to-HU transfer with no planning step |
 | Count | Record physical inventory quantities, auto-posts once every line is counted |
 | Quality | Complete an inspection's pass/fail split |

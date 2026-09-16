@@ -34,11 +34,10 @@
       "fieldname": "hu_number",
       "label": "HU Number",
       "fieldtype": "Data",
-      "reqd": 1,
       "unique": 1,
       "in_list_view": 1,
       "in_standard_filter": 1,
-      "depends_on": 1
+      "description": "Leave blank to auto-assign the next number from a WMS Number Range (only allowed when HU Type uses Internal numbering)."
     },
     {
       "fieldname": "hu_type",
@@ -46,37 +45,39 @@
       "fieldtype": "Link",
       "options": "Handling Unit Type",
       "reqd": 1,
-      "in_list_view": 1
+      "in_list_view": 1,
+      "description": "Auto-filled from Packaging Material if left blank there first."
     },
     {
       "fieldname": "packaging_material",
       "label": "Packaging Material",
       "fieldtype": "Link",
-      "options": "Packaging Material"
+      "options": "Packaging Material",
+      "description": "Optional. Auto-fills HU Type and Tare Weight from the Packaging Material's own dimensions/weight."
     },
     {
       "fieldname": "warehouse",
       "label": "Warehouse",
       "fieldtype": "Link",
       "options": "WMS Warehouse",
-      "reqd": 1,
       "in_standard_filter": 1,
-      "depends_on": 1
+      "read_only": 1,
+      "description": "Derived from Storage Bin (or the parent Handling Unit)."
     },
     {
       "fieldname": "current_bin",
       "label": "Current Bin",
       "fieldtype": "Link",
       "options": "Storage Bin",
-      "reqd": 1,
-      "in_standard_filter": 1,
-      "depends_on": 1
+      "mandatory_depends_on": "eval:!doc.parent_hu",
+      "in_standard_filter": 1
     },
     {
       "fieldname": "parent_hu",
       "label": "Parent HU",
       "fieldtype": "Link",
-      "options": "Handling Unit"
+      "options": "Handling Unit",
+      "description": "Alternative to Current Bin - nests this HU inside another one, in that HU's bin."
     },
     {
       "fieldname": "top_hu",

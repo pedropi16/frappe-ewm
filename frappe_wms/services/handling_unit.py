@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
-from frappe_wms.services.numbering import next_number
+from frappe.utils import flt, now_datetime
+from frappe_wms.services.numbering import find_number_range
 from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
 
@@ -24,35 +24,20 @@ def list_handling_units(search=None, warehouse=None, storage_bin=None):
         fields=["name", "hu_number", "hu_type", "warehouse", "current_bin", "parent_hu", "status", "stock_status"],
         order_by="modified desc", limit=50)
 
-def _resolve_hu_number(hu_number, hu_type, warehouse):
-    # Internal HU types are always system-numbered (SAP EWM: an internal HU number range) -
-    # any number passed by the caller (e.g. a stale RF form value) is ignored. External HU
-    # types carry a number a person or a label printer already assigned, so it's required.
-    numbering_mode = frappe.db.get_value("Handling Unit Type", hu_type, "numbering_mode") or "External"
-    if numbering_mode == "Internal":
-        return next_number("Handling Unit", warehouse=warehouse, hu_type=hu_type)
-    if not hu_number: frappe.throw(_("HU Type {0} uses external numbering; an HU Number is required").format(hu_type))
-    return hu_number
-
 def create_handling_unit(hu_number, hu_type, storage_bin=None, parent_hu=None, warehouse=None):
+    # Numbering, warehouse derivation, bin-vs-parent resolution and the "Created" HU Event all
+    # live in the Handling Unit controller (before_insert/after_insert) so every creation path -
+    # this API, Goods Receipt auto-registration, and a plain Desk "New Handling Unit" - behaves
+    # identically instead of re-implementing the same rules three times.
     require_role(*HU_ROLES)
     resource = my_resource()
     warehouse = warehouse or (resource.warehouse if resource else None)
-    if not warehouse: frappe.throw(_("A warehouse is required to create a Handling Unit"))
-    if not storage_bin and not parent_hu: frappe.throw(_("A storage bin or a parent Handling Unit is required"))
-    if parent_hu:
-        parent = frappe.get_doc("Handling Unit", parent_hu)
-        storage_bin = storage_bin or parent.current_bin
-        if parent.current_bin != storage_bin: frappe.throw(_("A nested Handling Unit must be created in its parent's bin"))
-    hu_number = _resolve_hu_number(hu_number, hu_type, warehouse)
-    if frappe.db.exists("Handling Unit", hu_number): frappe.throw(_("Handling Unit {0} already exists").format(hu_number))
     hu = frappe.get_doc({
-        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type, "warehouse": warehouse,
-        "current_bin": storage_bin, "parent_hu": parent_hu, "status": "Created", "stock_status": "Empty",
+        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type,
+        "warehouse": warehouse, "current_bin": storage_bin, "parent_hu": parent_hu,
     })
     hu.flags.wms_service_update = True
     hu.insert(ignore_permissions=True)
-    _log_event(hu.name, "Created", bin_after=storage_bin, parent_hu_after=parent_hu, status_after=hu.status)
     return hu.as_dict()
 
 def get_or_create_handling_unit(hu_number, hu_type=None, storage_bin=None, warehouse=None):
@@ -61,19 +46,69 @@ def get_or_create_handling_unit(hu_number, hu_type=None, storage_bin=None, wareh
     # Falls back to WMS Settings.default_handling_unit_type so an unconfigured hu_type doesn't
     # dead-end receiving, matching the RF "Receive" behavior documented in the README.
     if frappe.db.exists("Handling Unit", hu_number):
-        return frappe.get_doc("Handling Unit", hu_number).name
+        return hu_number
     hu_type = hu_type or frappe.db.get_single_value("WMS Settings", "default_handling_unit_type")
     if not hu_type: frappe.throw(_("Handling Unit {0} does not exist; specify a Handling Unit Type to create it").format(hu_number))
     if frappe.db.get_value("Handling Unit Type", hu_type, "numbering_mode") == "Internal":
         frappe.throw(_("HU Type {0} is internally numbered; scan an existing Handling Unit instead").format(hu_type))
     doc = frappe.get_doc({
-        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type, "warehouse": warehouse,
-        "current_bin": storage_bin, "status": "Open", "stock_status": "Empty",
+        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type,
+        "warehouse": warehouse, "current_bin": storage_bin,
     })
     doc.flags.wms_service_update = True
     doc.insert(ignore_permissions=True)
-    _log_event(doc.name, "Created", bin_after=storage_bin, status_after=doc.status)
     return doc.name
+
+def recycle_handling_unit(hu_name):
+    # SAP EWM: an empty, reusable HU can be taken out of service and its number returned to the
+    # pool so the next HU created against that Number Range gets it back, instead of numbers
+    # only ever climbing forward.
+    require_role(*HU_ROLES)
+    hu = frappe.get_doc("Handling Unit", hu_name)
+    if hu.stock_status != "Empty": frappe.throw(_("Only an empty Handling Unit can be recycled"))
+    if hu.parent_hu: frappe.throw(_("Unnest {0} before recycling it").format(hu_name))
+    if frappe.db.exists("Handling Unit", {"parent_hu": hu_name}):
+        frappe.throw(_("{0} still has nested Handling Units; unnest them first").format(hu_name))
+    hu_type = frappe.get_cached_doc("Handling Unit Type", hu.hu_type)
+    if not hu_type.reusable: frappe.throw(_("HU Type {0} is not marked Reusable").format(hu.hu_type))
+    range_name = None
+    if hu_type.numbering_mode == "Internal":
+        range_name = find_number_range("Handling Unit", warehouse=hu.warehouse, hu_type=hu.hu_type)
+    _log_event(hu.name, "Cancelled", status_before=hu.status, bin_before=hu.current_bin)
+    # Delete first, free the number only once that succeeds - otherwise a failed delete would
+    # leave the number in the pool while the original document still physically exists.
+    frappe.delete_doc("Handling Unit", hu.name, ignore_permissions=True, force=True)
+    if range_name:
+        frappe.get_doc({"doctype": "WMS HU Number Pool", "number_range": range_name, "hu_number": hu.hu_number}).insert(ignore_permissions=True)
+    return {"handling_unit": hu_name, "recycled": True}
+
+def recompute_measurements(hu_name):
+    # The single choke point every stock posting against an HU passes through
+    # (services/stock.post_entries calls this) - keeps gross/net weight, volume and stock_status
+    # live from WMS Product.gross_weight_per_unit/volume_per_unit instead of the dead fields
+    # they started as. Storage Bin.current_weight (tasks.recalculate_stale_bin_capacity) and
+    # capacity-aware putaway (services/determination.py) both depend on this being accurate.
+    hu = frappe.db.get_value("Handling Unit", hu_name, ["tare_weight", "hu_type"], as_dict=True)
+    if not hu: return
+    rows = frappe.db.sql("""
+        select b.quantity, p.gross_weight_per_unit, p.volume_per_unit
+        from `tabWMS Stock Balance` b left join `tabWMS Product` p on p.item = b.product
+        where b.handling_unit=%s and b.quantity > 0
+    """, hu_name, as_dict=True)
+    total_qty = sum(flt(r.quantity) for r in rows)
+    net_weight = sum(flt(r.quantity) * flt(r.gross_weight_per_unit) for r in rows)
+    volume = sum(flt(r.quantity) * flt(r.volume_per_unit) for r in rows)
+    gross_weight = net_weight + flt(hu.tare_weight)
+    limits = frappe.db.get_value("Handling Unit Type", hu.hu_type, ["maximum_weight", "maximum_volume"], as_dict=True) if hu.hu_type else None
+    if total_qty <= 0:
+        stock_status = "Empty"
+    elif limits and ((limits.maximum_weight and gross_weight >= limits.maximum_weight) or (limits.maximum_volume and volume >= limits.maximum_volume)):
+        stock_status = "Full"
+    else:
+        stock_status = "Partial"
+    frappe.db.set_value("Handling Unit", hu_name,
+        {"net_weight": net_weight, "gross_weight": gross_weight, "volume": volume, "stock_status": stock_status},
+        update_modified=False)
 
 def nest_handling_unit(hu_name, parent_hu):
     require_role(*HU_ROLES)

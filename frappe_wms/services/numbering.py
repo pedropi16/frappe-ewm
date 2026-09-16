@@ -30,6 +30,12 @@ def next_number(range_for, warehouse=None, hu_type=None):
         frappe.throw(_("No active Number Range is configured for {0}").format(range_for))
     # Row-lock so concurrent RF scans/shipment creation never hand out the same number twice.
     frappe.db.sql("select name from `tabWMS Number Range` where name=%s for update", range_name)
+    # A reusable HU (services/handling_unit.recycle_handling_unit) frees its number back into this
+    # range's pool - SAP EWM reissues those before ever incrementing further.
+    pooled = frappe.db.get_value("WMS HU Number Pool", {"number_range": range_name}, ["name", "hu_number"], as_dict=True, order_by="creation asc")
+    if pooled:
+        frappe.delete_doc("WMS HU Number Pool", pooled.name, ignore_permissions=True)
+        return pooled.hu_number
     doc = frappe.get_doc("WMS Number Range", range_name)
     next_value = max(doc.current_number or 0, doc.start_number - 1) + 1
     if next_value > doc.end_number:

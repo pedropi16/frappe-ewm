@@ -6,6 +6,7 @@ from frappe_wms.services.handling_unit import (
     unnest_handling_unit as _unnest_handling_unit,
     set_handling_unit_blocked as _set_handling_unit_blocked,
     handling_unit_detail as _handling_unit_detail,
+    recycle_handling_unit as _recycle_handling_unit,
 )
 
 @frappe.whitelist()
@@ -35,3 +36,7 @@ def unblock_handling_unit(hu_name):
 @frappe.whitelist()
 def handling_unit_detail(hu_name):
     return _handling_unit_detail(hu_name)
+
+@frappe.whitelist()
+def recycle_handling_unit(hu_name):
+    return _recycle_handling_unit(hu_name)

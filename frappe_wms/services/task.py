@@ -27,7 +27,9 @@ def create_tasks_for_request(request_name, batch_key=None):
     if not destination_bin and process_type and process_type.destination_required:
         hu_type = frappe.db.get_value("Handling Unit", request.source_hu, "hu_type") if request.source_hu else None
         source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
-        destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product, "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type})
+        gross_weight_per_unit = frappe.db.get_value("WMS Product", request.product, "gross_weight_per_unit")
+        incoming_weight = flt(gross_weight_per_unit) * remaining if gross_weight_per_unit else None
+        destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product, "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type, "incoming_weight": incoming_weight})
     task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": remaining, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": f"WT:{request.name}"})
     attach_task(task, batch_key or frappe.generate_hash(length=10), reference_doctype="Warehouse Request", reference_name=request.name)
     task.insert(ignore_permissions=True)
