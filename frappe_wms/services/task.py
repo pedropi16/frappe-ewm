@@ -54,6 +54,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
     return confirm_task(task.name, confirmed_quantity=quantity, device=device)
 
 def create_pick_tasks(delivery_name, strategy="Single Order"):
+    require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     delivery = frappe.get_doc("Outbound Delivery", delivery_name)
     if not delivery.staging_bin: frappe.throw(_("Outbound Delivery must have a staging bin before picking tasks can be created"))
     allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": delivery_name, "status": "Allocated"}, fields=["*"])
@@ -63,6 +64,7 @@ def create_pick_tasks(delivery_name, strategy="Single Order"):
     return created
 
 def create_pick_tasks_for_wave(delivery_names, strategy="Single Order", wave=None):
+    require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     for delivery_name in delivery_names:
         if not frappe.db.get_value("Outbound Delivery", delivery_name, "staging_bin"):
             frappe.throw(_("Outbound Delivery {0} must have a staging bin before picking tasks can be created").format(delivery_name))

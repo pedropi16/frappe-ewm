@@ -1,5 +1,6 @@
 import frappe
 from frappe.utils import flt
+from frappe_wms.utils import require_role
 
 def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
@@ -8,6 +9,7 @@ def _candidate_balances(row, warehouse):
     return frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc")
 
 def allocate_delivery(delivery_name):
+    require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     doc=frappe.get_doc("Outbound Delivery",delivery_name); doc.check_permission("write")
     created=[]
     for row in doc.items:

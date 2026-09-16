@@ -235,7 +235,13 @@ optionally grouped into a `WMS Wave` for combined release — → pick tasks are
 generated per allocation (or clustered across a wave's deliveries onto shared
 bins/products) → operator picks in RF → stock stages → `Packing Order`
 (optional) groups HUs for shipment → `Goods Issue` posted → ledger decreases
-stock, ERPNext Delivery Note (or generic Stock Entry) mirrored.
+stock, ERPNext Delivery Note (or generic Stock Entry) mirrored. The RF
+"Release" screen does allocation + pick-task creation for one delivery in a
+single tap (`services/picking.release_delivery_for_picking`) — the same
+allocate-then-create-pick-tasks sequence a Wave's release runs across a
+batch of deliveries, just for one; it's also what the Outbound Delivery desk
+form's "Allocate Stock" / "Create Pick Tasks" buttons call as two separate
+steps.
 
 **Shipping/loading:** once its deliveries are fully picked,
 `services/shipping.create_shipment` picks up their staged HUs, determines a
@@ -420,6 +426,7 @@ leads to:
 |---|---|
 | Tasks | Confirm any planned putaway/pick/move/stage/load task, or report an exception |
 | Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises putaway tasks |
+| Release | Pick an unallocated/unpicked Outbound Delivery, choose a picking strategy (Single Order / Cluster), allocate + raise its pick tasks in one tap — they then show up under Pick Tasks |
 | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested staged HU per line, post the Goods Issue |
 | Pack | Complete an open Packing Order in one tap |
 | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
