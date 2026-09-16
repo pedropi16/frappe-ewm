@@ -52,6 +52,22 @@ def _update_delivery_issue_status(delivery_name):
     values = {"goods_issue_status": goods_issue_status, "status": "Goods Issued" if fully_issued else "Staged"}
     frappe.db.set_value("Outbound Delivery", delivery_name, values)
 
+def _ready_lines_for_delivery(delivery_name):
+    # Each line still owing a goods issue, with a suggested staged HU if one can be inferred -
+    # shared by the RF Ship screen (list_ready_to_ship) and the Monitor's one-tap
+    # post_goods_issue_for_delivery, so both agree on what's actually ready.
+    rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name},
+        fields=["name", "item", "picked_quantity", "issued_quantity", "stock_uom", "required_stock_type"])
+    lines = []
+    for row in rows:
+        remaining = flt(row.picked_quantity) - flt(row.issued_quantity)
+        if remaining <= 0: continue
+        allocation = frappe.get_all("Stock Allocation", filters={"outbound_delivery_item": row.name, "status": ["in", ["Picked", "Partially Picked"]]}, fields=["handling_unit"], limit=1)
+        row["remaining_quantity"] = remaining
+        row["suggested_handling_unit"] = allocation[0].handling_unit if allocation else None
+        lines.append(row)
+    return lines
+
 def list_ready_to_ship(user=None):
     resource = my_resource(user)
     filters = {"picking_status": "Picked", "goods_issue_status": ["!=", "Posted"], "status": ["in", READY_TO_SHIP_STATUSES]}
@@ -60,12 +76,7 @@ def list_ready_to_ship(user=None):
         fields=["name", "outbound_delivery_number", "warehouse", "customer", "staging_bin", "route", "door", "status", "delivery_date"],
         order_by="delivery_date asc, creation asc", limit=50)
     for delivery in deliveries:
-        rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery.name}, fields=["name", "item", "picked_quantity", "issued_quantity", "stock_uom", "required_stock_type"])
-        for row in rows:
-            row["remaining_quantity"] = flt(row.picked_quantity) - flt(row.issued_quantity)
-            allocation = frappe.get_all("Stock Allocation", filters={"outbound_delivery_item": row.name, "status": ["in", ["Picked", "Partially Picked"]]}, fields=["handling_unit"], limit=1)
-            row["suggested_handling_unit"] = allocation[0].handling_unit if allocation else None
-        delivery["items"] = [r for r in rows if r["remaining_quantity"] > 0]
+        delivery["items"] = _ready_lines_for_delivery(delivery.name)
     return [d for d in deliveries if d["items"]]
 
 def create_and_submit_goods_issue(outbound_delivery, items):
@@ -81,3 +92,17 @@ def create_and_submit_goods_issue(outbound_delivery, items):
     gi.flags.ignore_permissions = True
     gi.submit()
     return {"goods_issue": gi.name}
+
+def post_goods_issue_for_delivery(delivery_name):
+    # The Monitor's one-tap "Post Goods Issue" - auto-builds the same payload the RF Ship
+    # screen's per-line form would, using whatever staged HU was already suggested per line.
+    require_role("WMS Operator", "WMS Loader", "WMS Supervisor")
+    lines = _ready_lines_for_delivery(delivery_name)
+    if not lines: frappe.throw(_("Nothing left to issue for this delivery"))
+    missing = [l.item for l in lines if not l.suggested_handling_unit]
+    if missing: frappe.throw(_("No staged Handling Unit found for: {0}. Use the RF Ship screen to pick one manually.").format(", ".join(missing)))
+    items = [{
+        "outbound_delivery_item": l.name, "item": l.item, "quantity": l.remaining_quantity,
+        "stock_uom": l.stock_uom, "handling_unit": l.suggested_handling_unit, "stock_type": l.required_stock_type,
+    } for l in lines]
+    return create_and_submit_goods_issue(delivery_name, items)
