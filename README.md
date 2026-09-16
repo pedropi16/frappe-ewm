@@ -453,13 +453,24 @@ endpoints this frontend (and real barcode hardware) call.
   to call: **Handling Unit** gets "Recycle" (once Empty) and "HU Overview";
   **WMS Shipment** gets "Depart" (once Loaded) and "Complete" (once
   Departed).
-- **WMS Monitor** (`/app/wms-monitor`) — pick a warehouse to see summary
-  counts (open tasks by type, exceptions, pending replenishment, deliveries
-  in progress, open counts/inspections, open waves, active resources — each
-  linking to its filtered list view), plus searchable sections for ledger
-  movements, tasks, HUs, deliveries, waves (with one-click Release per draft
-  wave), resource workload, and warehouse queues. Roles: WMS Supervisor /
-  Administrator / Inventory Controller / Auditor, System Manager.
+- **WMS Monitor** (`/app/wms-monitor`) — pick a warehouse, then a node from
+  the left-hand list, SAP EWM Warehouse Management Monitor-style, instead of
+  one long scrolling page:
+  - **Overview** — summary counts (open tasks by type, exceptions, pending
+    replenishment, deliveries in progress, open counts/inspections, open
+    waves, active resources), each linking to its filtered list view.
+  - **Inbound Monitor** — searchable Inbound Deliveries.
+  - **Outbound Monitor** — searchable Outbound Deliveries plus Waves (with
+    one-click Release per draft wave).
+  - **Stock Overview** — current `WMS Stock Balance` positions (quantity/
+    allocated/available per product/bin/HU/stock type), with a per-stock-type
+    summary strip — the current-state counterpart to Stock Movements' history.
+  - **Warehouse Tasks**, **Handling Units** — searchable, each its own node.
+  - **Stock Movements** — searchable `WMS Stock Ledger Entry` history.
+  - **Resources & Queues** — resource workload and warehouse queues.
+
+  Roles: WMS Supervisor / Administrator / Inventory Controller / Auditor,
+  System Manager.
 
 ## Install
 
