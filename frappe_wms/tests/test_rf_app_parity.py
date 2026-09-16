@@ -97,6 +97,7 @@ class TestRfAppParity(IntegrationTestCase):
         obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
             "items": [{"line_number": 1, "item": self.item, "requested_quantity": 1, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
         obd.insert(ignore_permissions=True)
+        obd.submit()
         order = frappe.get_doc({"doctype": "Packing Order", "outbound_delivery": obd.name, "work_center_bin": self.bulk_bin,
             "source_hus": [{"handling_unit": hu}], "destination_hus": [{"handling_unit": hu2.name}]})
         order.insert(ignore_permissions=True)
@@ -114,6 +115,7 @@ class TestRfAppParity(IntegrationTestCase):
         obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
             "items": [{"line_number": 1, "item": self.item, "requested_quantity": 7, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
         obd.insert(ignore_permissions=True)
+        obd.submit()
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
         picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")

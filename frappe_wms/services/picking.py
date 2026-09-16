@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.allocation import allocate_delivery
-from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES
+from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES, task_names_for_allocations
 from frappe_wms.utils import require_role
 
 OPEN_RELEASE_STATUSES = ("Draft", "Open", "Allocated")
@@ -28,10 +28,7 @@ def find_pick_tasks(reference):
         tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=PICK_TASK_FIELDS)
     elif frappe.db.exists("Outbound Delivery", reference):
         allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": reference}, pluck="name")
-        if not allocation_names: return []
-        cluster_task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
-        direct_task_names = frappe.get_all("Warehouse Task", filters={"stock_allocation": ["in", allocation_names]}, pluck="name")
-        task_names = list(set(cluster_task_names) | set(direct_task_names))
+        task_names = list(task_names_for_allocations(allocation_names))
         tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": ["in", task_names]}, fields=PICK_TASK_FIELDS) if task_names else []
     else:
         by_source = frappe.get_all("Warehouse Task", filters={**base_filters, "source_hu": reference}, fields=PICK_TASK_FIELDS)

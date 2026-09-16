@@ -62,6 +62,7 @@ class TestWavePicking(IntegrationTestCase):
         obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
             "items": [{"line_number": 1, "item": self.item, "requested_quantity": qty, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
         obd.insert(ignore_permissions=True)
+        obd.submit()
         return obd
 
     def test_cluster_strategy_combines_allocations_from_multiple_deliveries(self):

@@ -56,6 +56,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
 def create_pick_tasks(delivery_name, strategy="Single Order"):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     delivery = frappe.get_doc("Outbound Delivery", delivery_name)
+    if delivery.docstatus != 1: frappe.throw(_("Outbound Delivery must be submitted before picking tasks can be created"))
     if not delivery.staging_bin: frappe.throw(_("Outbound Delivery must have a staging bin before picking tasks can be created"))
     allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": delivery_name, "status": "Allocated"}, fields=["*"])
     if not allocations: frappe.throw(_("No open allocations to create pick tasks for"))
@@ -66,7 +67,9 @@ def create_pick_tasks(delivery_name, strategy="Single Order"):
 def create_pick_tasks_for_wave(delivery_names, strategy="Single Order", wave=None):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     for delivery_name in delivery_names:
-        if not frappe.db.get_value("Outbound Delivery", delivery_name, "staging_bin"):
+        docstatus, staging_bin = frappe.db.get_value("Outbound Delivery", delivery_name, ["docstatus", "staging_bin"])
+        if docstatus != 1: frappe.throw(_("Outbound Delivery {0} must be submitted before picking tasks can be created").format(delivery_name))
+        if not staging_bin:
             frappe.throw(_("Outbound Delivery {0} must have a staging bin before picking tasks can be created").format(delivery_name))
     allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", delivery_names], "status": "Allocated"}, fields=["*"])
     if not allocations: frappe.throw(_("No open allocations to create pick tasks for"))
@@ -129,6 +132,16 @@ def _create_pick_task_for_group(allocations, process_type, wave, batch_key):
     return task.name
 
 OPEN_TASK_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed")
+
+def task_names_for_allocations(allocation_names):
+    # Every Warehouse Task tied to a set of Stock Allocations, whether picked individually
+    # (Warehouse Task.stock_allocation) or as part of a cluster pick (the Warehouse Task
+    # Allocation child table) - shared by the RF picking-entry lookup, the Outbound Delivery
+    # cancel cascade, and the Monitor's per-delivery execution status.
+    if not allocation_names: return set()
+    cluster_task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
+    direct_task_names = frappe.get_all("Warehouse Task", filters={"stock_allocation": ["in", allocation_names]}, pluck="name")
+    return set(cluster_task_names) | set(direct_task_names)
 
 def my_resource(user=None):
     user = user or frappe.session.user

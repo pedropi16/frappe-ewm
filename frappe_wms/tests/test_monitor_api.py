@@ -136,6 +136,7 @@ class TestMonitorApi(IntegrationTestCase):
             "delivery_date": frappe.utils.nowdate(), "staging_bin": self.bulk_bin,
             "items": [{"line_number": 1, "item": self.item, "requested_quantity": 1, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
         obd.insert(ignore_permissions=True)
+        obd.submit()
         rows = search_outbound_deliveries(self.warehouse)
         self.assertTrue(any(r["name"] == obd.name for r in rows))
 

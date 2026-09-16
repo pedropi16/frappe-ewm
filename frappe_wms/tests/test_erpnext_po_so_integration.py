@@ -125,6 +125,7 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         obd = frappe.get_doc("Outbound Delivery", obd_name)
         self.assertEqual(obd.items[0].sales_order, so.name)
         self.assertEqual(obd.items[0].requested_quantity, 4)
+        obd.submit()
 
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)

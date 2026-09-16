@@ -42,7 +42,11 @@ doc_events = {
         "on_cancel": "frappe_wms.events.warehouse_task.prevent_direct_cancel_after_posting",
     },
     "Inbound Delivery": {"validate": "frappe_wms.events.deliveries.validate_inbound_delivery"},
-    "Outbound Delivery": {"validate": "frappe_wms.events.deliveries.validate_outbound_delivery"},
+    "Outbound Delivery": {
+        "validate": "frappe_wms.events.deliveries.validate_outbound_delivery",
+        "before_cancel": "frappe_wms.events.deliveries.before_cancel_outbound_delivery",
+        "on_cancel": "frappe_wms.events.deliveries.on_cancel_outbound_delivery",
+    },
     "WMS Shipment": {"validate": "frappe_wms.events.shipment.validate_shipment"},
     "Goods Receipt": {
         "on_submit": "frappe_wms.events.goods_receipt.on_submit",

@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 from frappe_wms.services.determination import determine_route
+from frappe_wms.services.allocation import cancel_allocations_for_delivery
+from frappe_wms.services.task import task_names_for_allocations
 
 def _validate_lines(doc, quantity_field):
     if not doc.items:
@@ -27,3 +29,21 @@ def _apply_route_defaults(doc):
     route = frappe.get_cached_doc("WMS Route", doc.route)
     if not doc.staging_bin and route.default_staging_bin: doc.staging_bin = route.default_staging_bin
     if not doc.door and route.default_door: doc.door = route.default_door
+
+def before_cancel_outbound_delivery(doc, method=None):
+    if frappe.db.exists("Goods Issue", {"outbound_delivery": doc.name, "docstatus": 1}):
+        frappe.throw(_("Cannot cancel: a Goods Issue is posted against this delivery. Reverse it first."))
+    allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": doc.name, "status": ["!=", "Cancelled"]}, pluck="name")
+    task_names = list(task_names_for_allocations(allocation_names))
+    if not task_names: return
+    picked_tasks = frappe.get_all("Warehouse Task", filters={"name": ["in", task_names], "confirmed_quantity": [">", 0]}, pluck="name")
+    if not picked_tasks: return
+    # reverse_task() doesn't un-confirm the original task, it posts a compensating reversal task
+    # instead - so a picked task that's already been reversed shouldn't still block cancellation.
+    reversed_originals = set(frappe.get_all("Warehouse Task", filters={"reversal_of": ["in", picked_tasks]}, pluck="reversal_of"))
+    if set(picked_tasks) - reversed_originals:
+        frappe.throw(_("Cannot cancel: picking has already started on this delivery. Reverse the confirmed task(s) first."))
+
+def on_cancel_outbound_delivery(doc, method=None):
+    cancel_allocations_for_delivery(doc.name)
+    doc.db_set("status", "Cancelled")
