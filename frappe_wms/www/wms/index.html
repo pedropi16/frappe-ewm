@@ -1020,6 +1020,17 @@ function el(html) {
 function render() {
   const app = document.getElementById("app");
   app.innerHTML = "";
+
+  if (!state.loggedOn) {
+    app.appendChild(renderLogonHeader());
+    const logonMain = el(`<main></main>`);
+    if (state.error) logonMain.appendChild(el(`<div class="banner error">${escapeHtml(state.error)}</div>`));
+    logonMain.appendChild(renderLogon());
+    app.appendChild(logonMain);
+    if (state.loading) app.appendChild(el(`<div class="overlay"><div class="spinner"></div></div>`));
+    return;
+  }
+
   app.appendChild(renderHeader());
   const main = el(`<main></main>`);
   if (state.error) main.appendChild(el(`<div class="banner error">${escapeHtml(state.error)}</div>`));
@@ -1035,12 +1046,71 @@ function render() {
     quality: renderQualityList, "quality-detail": renderQualityDetail,
     hu: renderHUList, "hu-create": renderHUCreate, "hu-detail": renderHUDetail,
     load: renderLoadList, "load-detail": renderLoadDetail,
+    decon: renderDeconScan, "decon-detail": renderDeconDetail,
+    "picking-entry": renderPickingEntry, "close-movement": renderCloseMovement, repack: renderRepack, "repack-detail": renderRepackDetail,
+    vas: renderVASList, "vas-detail": renderVASDetail,
   };
   main.appendChild((renderers[state.view] || renderMenu)());
+  main.appendChild(renderFnKeyBar());
 
   app.appendChild(main);
   if (state.loading) app.appendChild(el(`<div class="overlay"><div class="spinner"></div></div>`));
 }
+
+// ---------- Function-key footer (authentic SAP RF terminal touch) ----------
+// Executes the same action as the current screen's primary button - wired to F8/Enter so a
+// scanner's Enter-after-scan keystroke (or a real RF handheld's F8 key) advances the screen
+// exactly like tapping it would.
+function primaryAction() {
+  const view = state.view;
+  if (view === "task-detail" && state.currentTask && state.currentTask.status !== "On Hold" && !state.exceptionCodesLoaded) {
+    const stepKey = state.taskSteps[state.taskStep];
+    if (stepKey === "review") confirmCurrentTask(); else goTaskStep(1);
+    return;
+  }
+  if (view === "move") {
+    const stepKey = MOVE_STEPS[state.moveStep];
+    if (stepKey === "review") submitMove(); else goMoveStep(1);
+    return;
+  }
+  const ACTIONS = {
+    decon: scanDeconHU, "decon-detail": submitDeconsolidation,
+    "receive-detail": submitReceipt, "release-detail": submitReleaseDelivery, "ship-detail": submitGoodsIssue,
+    "count-detail": submitCounts, "quality-detail": submitInspection, "hu-create": submitCreateHU, lookup: runLookup,
+  };
+  if (ACTIONS[view]) ACTIONS[view]();
+}
+
+function renderFnKeyBar() {
+  const bar = el(`<div class="fnkey-bar"></div>`);
+  const keys = [];
+  if (state.view !== "menu") keys.push({ key: "F3", label: "Back", action: goBack });
+  const reload = VIEW_RELOAD[state.view];
+  if (reload) keys.push({ key: "F5", label: "Refresh", action: reload });
+  if (state.view === "task-detail" && state.currentTask && state.currentTask.status !== "On Hold" && !state.exceptionCodesLoaded) {
+    keys.push({ key: "F7", label: "Exception", action: openExceptionPicker });
+  }
+  keys.push({ key: "F8", label: "Enter", action: primaryAction });
+  keys.forEach((k) => {
+    const btn = el(`<button class="fnkey"><span class="fnkey-num">${k.key}</span><span class="fnkey-label">${escapeHtml(k.label)}</span></button>`);
+    btn.onclick = k.action;
+    bar.appendChild(btn);
+  });
+  return bar;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!state.loggedOn) return;
+  if (e.target && e.target.tagName === "TEXTAREA") return;
+  const FN_MAP = {
+    F3: goBack,
+    F5: () => { const reload = VIEW_RELOAD[state.view]; if (reload) reload(); },
+    F7: () => { if (state.view === "task-detail" && !state.exceptionCodesLoaded) openExceptionPicker(); },
+    F8: primaryAction,
+    Enter: primaryAction,
+  };
+  if (FN_MAP[e.key]) { e.preventDefault(); FN_MAP[e.key](); }
+});
 
 function breadcrumb() {
   const section = state.section && SECTIONS[state.section];
@@ -1051,6 +1121,8 @@ function breadcrumb() {
     ship: "Ship", "ship-detail": "Ship", pack: "Pack", move: "Move", count: "Count", "count-detail": "Count",
     quality: "Quality", "quality-detail": "Quality", hu: "Handling Units", "hu-create": "New Handling Unit", "hu-detail": "Handling Unit",
     load: "Load", "load-detail": "Load",
+    decon: "Deconsolidate", "decon-detail": "Deconsolidate", vas: "VAS", "vas-detail": "VAS",
+    "picking-entry": "Picking", "close-movement": "Close Movement", repack: "Repack", "repack-detail": "Repack",
   };
   const leaf = VIEW_LABEL[state.view];
   return `${section.icon} ${escapeHtml(section.label)}${leaf ? " &rsaquo; " + escapeHtml(leaf) : ""}`;
@@ -1058,11 +1130,14 @@ function breadcrumb() {
 
 function renderHeader() {
   const crumb = breadcrumb();
+  const resourceChip = state.resource
+    ? `<span class="resource-chip">\u{1F4E1} ${escapeHtml(state.resource.name)}${state.resource.current_queue ? " &middot; " + escapeHtml(state.resource.current_queue) : ""}</span>`
+    : "";
   const header = el(`
     <header>
       <div class="title-wrap">
         <div class="title">${crumb || "WMS Scanner"}</div>
-        <div class="user">${escapeHtml(USER_FULLNAME)}${state.resource ? " &middot; " + escapeHtml(state.resource.name) : ""}</div>
+        <div class="user">${escapeHtml(USER_FULLNAME)} ${resourceChip}</div>
       </div>
     </header>
   `);
@@ -1077,6 +1152,57 @@ function renderHeader() {
     header.appendChild(home);
   }
   return header;
+}
+
+// ---------- Logon (EWM RF-style: confirm warehouse/resource/queue before the main menu) ----------
+function renderLogonHeader() {
+  return el(`
+    <header class="logon-header">
+      <div class="title-wrap">
+        <div class="title">WMS RF Logon</div>
+        <div class="user">${escapeHtml(USER_FULLNAME)}</div>
+      </div>
+    </header>
+  `);
+}
+
+function renderLogon() {
+  const wrap = el(`<div class="logon-wrap"></div>`);
+  if (!state.resourceLoaded) {
+    wrap.appendChild(el(`<div class="empty">Connecting to warehouse…</div>`));
+    return wrap;
+  }
+  const card = el(`<div class="detail-section logon-card"></div>`);
+  if (!state.resource) {
+    card.appendChild(el(`
+      <div class="banner error">\u{1F512} No WMS Resource is linked to your user. Ask your supervisor to
+      assign one under WMS Resource before you can log on to the RF environment.</div>
+    `));
+    const retry = el(`<button class="btn btn-secondary">Retry</button>`);
+    retry.onclick = loadResource;
+    card.appendChild(retry);
+  } else {
+    card.appendChild(el(`
+      <div class="detail-grid">
+        <div><div class="label">User</div><div>${escapeHtml(USER_FULLNAME)}</div></div>
+        <div><div class="label">Resource</div><div>${escapeHtml(state.resource.name)}</div></div>
+        <div><div class="label">Warehouse</div><div>${escapeHtml(state.resource.warehouse || "-")}</div></div>
+        <div><div class="label">Queue</div><div>${escapeHtml(state.resource.current_queue || "Not joined")}</div></div>
+      </div>
+    `));
+  }
+  wrap.appendChild(card);
+  if (state.resource) {
+    wrap.appendChild(renderQueueBar());
+    const btn = el(`<button class="btn btn-primary">Log On</button>`);
+    btn.onclick = logOn;
+    wrap.appendChild(btn);
+  }
+  return wrap;
+}
+
+function logOn() {
+  setState({ loggedOn: true, view: "menu", error: null, info: null });
 }
 
 function renderMenu() {
