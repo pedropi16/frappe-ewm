@@ -18,6 +18,8 @@ def get_summary(warehouse):
         "outbound_in_progress": frappe.db.count("Outbound Delivery", {"warehouse": warehouse, "status": ["not in", ["Completed", "Cancelled"]]}),
         "open_counts": frappe.db.count("WMS Physical Inventory Count", {"warehouse": warehouse, "status": ["not in", ["Posted", "Cancelled"]]}),
         "open_inspections": frappe.db.count("WMS Quality Inspection", {"warehouse": warehouse, "status": "Draft"}),
+        "open_waves": frappe.db.count("WMS Wave", {"warehouse": warehouse, "status": ["not in", ["Completed", "Cancelled"]]}),
+        "active_resources": frappe.db.count("WMS Resource", {"warehouse": warehouse, "active": 1}),
     }
 
 @frappe.whitelist()
@@ -49,3 +51,69 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
         "source_bin", "destination_bin", "source_hu", "destination_hu", "priority", "status",
         "assigned_resource", "wave", "queue", "modified",
     ], order_by="modified desc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None, limit=100):
+    filters = {"warehouse": warehouse}
+    if hu_number: filters["hu_number"] = ["like", f"%{hu_number}%"]
+    if status: filters["status"] = status
+    if hu_type: filters["hu_type"] = hu_type
+    if current_bin: filters["current_bin"] = current_bin
+    return frappe.get_list("Handling Unit", filters=filters, fields=[
+        "name", "hu_number", "hu_type", "current_bin", "parent_hu", "status", "stock_status",
+        "outbound_delivery", "shipment", "closed", "loaded", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def search_inbound_deliveries(warehouse, status=None, supplier=None, limit=100):
+    filters = {"warehouse": warehouse}
+    if status: filters["status"] = status
+    if supplier: filters["supplier"] = supplier
+    return frappe.get_list("Inbound Delivery", filters=filters, fields=[
+        "name", "inbound_delivery_number", "supplier", "receiving_bin", "status", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def search_outbound_deliveries(warehouse, status=None, customer=None, limit=100):
+    filters = {"warehouse": warehouse}
+    if status: filters["status"] = status
+    if customer: filters["customer"] = customer
+    return frappe.get_list("Outbound Delivery", filters=filters, fields=[
+        "name", "outbound_delivery_number", "customer", "staging_bin", "picking_status",
+        "goods_issue_status", "status", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def resource_workload(warehouse):
+    resources = frappe.get_list("WMS Resource", filters={"warehouse": warehouse, "active": 1}, fields=[
+        "name", "resource_code", "user", "resource_type", "current_queue", "current_bin",
+    ], order_by="resource_code asc", limit=200)
+    rows = frappe.db.sql(
+        "select assigned_resource, count(*) from `tabWarehouse Task` "
+        "where warehouse=%s and status in %s and docstatus < 2 and assigned_resource is not null "
+        "group by assigned_resource",
+        (warehouse, OPEN_TASK_STATUSES),
+    )
+    open_counts = dict(rows)
+    for r in resources:
+        r["open_tasks"] = open_counts.get(r["name"], 0)
+    return resources
+
+@frappe.whitelist()
+def search_queues(warehouse, activity=None, limit=100):
+    filters = {"warehouse": warehouse}
+    if activity: filters["activity"] = activity
+    return frappe.get_list("Warehouse Queue", filters=filters, fields=[
+        "name", "queue_code", "queue_name", "activity", "storage_type", "required_resource_type", "active",
+    ], order_by="queue_code asc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def search_waves(warehouse, status=None, limit=100):
+    filters = {"warehouse": warehouse}
+    if status: filters["status"] = status
+    waves = frappe.get_list("WMS Wave", filters=filters, fields=[
+        "name", "route", "ship_date", "priority", "picking_strategy", "status", "released_at", "released_by", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 100)
+    for wave in waves:
+        wave["delivery_count"] = frappe.db.count("WMS Wave Delivery", {"parent": wave.name})
+    return waves

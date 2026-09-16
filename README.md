@@ -65,10 +65,39 @@ MVP warehouse management and execution app for Frappe Framework v16.
   for searching movements and warehouse data across entities, similar in
   spirit to SAP EWM's monitor — pick a warehouse to see summary counts
   (open tasks by type, exceptions, pending replenishment, deliveries in
-  progress, open counts/inspections, each linking to the matching filtered
-  desk list view) plus two searchable tables: stock ledger movements
-  (filter by product/bin/HU/movement type/date range) and warehouse tasks
-  (filter by product/type/status/resource).
+  progress, open counts/inspections, open waves, active resources, each
+  linking to the matching filtered desk list view) plus searchable sections
+  for stock ledger movements, warehouse tasks, handling units, inbound and
+  outbound deliveries, waves (with a one-click Release action per draft
+  wave), resource workload (open task count per active WMS Resource), and
+  warehouse queues.
+- Centralized workspace at `/app/wms`: every WMS doctype (structure,
+  inbound, inventory, outbound, handling units, execution, shipping,
+  setup) is reachable from a single desk workspace, plus quick-access
+  shortcuts to the WMS Monitor, the RF Scanner, WMS Settings, and the
+  ERPNext masters/settings a warehouse operation regularly needs (Stock
+  Settings, Warehouse, Item, Purchase Order, Sales Order) so day-to-day
+  work doesn't require leaving the WMS workspace. Visibility is left to
+  Frappe's normal per-doctype/per-role permissions; nothing here restricts
+  access beyond that.
+- WMS Settings (`/app/wms-settings`): a single app-wide configuration
+  doctype, starting with `enforce_wms_only_stock_movements` (below) and a
+  default Handling Unit Type for the RF app's auto-registration flow.
+- ERPNext stock enforcement: once a `WMS Warehouse` is linked to an
+  ERPNext `Warehouse` (which happens automatically - see above), direct
+  Stock Entry, Delivery Note, Purchase Receipt, or Stock Reconciliation
+  postings against that warehouse from ERPNext's own desk are blocked with
+  a message pointing at the matching WMS transaction (Goods Receipt/Goods
+  Issue/Physical Inventory Count/RF Move). This keeps the WMS stock ledger
+  authoritative: all movement on a WMS-managed warehouse must go through
+  frappe_wms, which mirrors it into ERPNext itself (see ERPNext
+  integration, above). Warehouses that are *not* linked to a WMS Warehouse
+  are completely unaffected, so other ERPNext flows (manufacturing,
+  subcontracting, etc.) on other warehouses keep working normally. This
+  can be turned off site-wide from WMS Settings as an escape hatch.
+  Known gap: this does not cover every ERPNext path that can move stock
+  (e.g. Purchase/Sales Invoice with "Update Stock", Subcontracting, Asset
+  scrapping, Job Card) - only the four primary stock documents.
 
 ## Install
 ```bash

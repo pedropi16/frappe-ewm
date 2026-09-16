@@ -1,7 +1,7 @@
 {
  "app": "frappe_wms",
  "charts": [],
- "content": "",
+ "content": "[{\"id\": \"QqfVnWlsBD\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>WMS</b></span>\", \"col\": 12}}, {\"id\": \"wmssettingsshort01\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"WMS Settings\", \"col\": 3}}, {\"id\": \"iFa8Q1kiTc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"WMS Monitor\", \"col\": 3}}, {\"id\": \"EMbqUtn09j\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"WMS Scanner (RF)\", \"col\": 3}}, {\"id\": \"1PvxtA2fTR\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stock Settings\", \"col\": 3}}, {\"id\": \"K3u8OBrqHc\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Warehouse\", \"col\": 3}}, {\"id\": \"u0y9HQNEAl\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Item\", \"col\": 3}}, {\"id\": \"zl9u7IFuit\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Purchase Order\", \"col\": 3}}, {\"id\": \"ONNYfcDaU3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Sales Order\", \"col\": 3}}, {\"id\": \"cTCtSZeftY\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Warehouse Structure & Execution</b></span>\", \"col\": 12}}, {\"id\": \"4jCwaQIrnK\", \"type\": \"card\", \"data\": {\"card_name\": \"WMS Core\", \"col\": 4}}, {\"id\": \"JxXQN6xaiF\", \"type\": \"card\", \"data\": {\"card_name\": \"Inbound\", \"col\": 4}}, {\"id\": \"AXf-lrCyUn\", \"type\": \"card\", \"data\": {\"card_name\": \"Inventory\", \"col\": 4}}, {\"id\": \"6eiObd4iod\", \"type\": \"card\", \"data\": {\"card_name\": \"Inventory Management\", \"col\": 4}}, {\"id\": \"cFagmEm5iF\", \"type\": \"card\", \"data\": {\"card_name\": \"Outbound\", \"col\": 4}}, {\"id\": \"ylnxpLylX7\", \"type\": \"card\", \"data\": {\"card_name\": \"Handling Units\", \"col\": 4}}, {\"id\": \"xsqy3nutfi\", \"type\": \"card\", \"data\": {\"card_name\": \"Execution\", \"col\": 4}}, {\"id\": \"4x3N-CPm4t\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping\", \"col\": 4}}, {\"id\": \"t2HMQhMzQi\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"Ewlqc7GPpQ\", \"type\": \"card\", \"data\": {\"card_name\": \"ERPNext Masters & Settings\", \"col\": 4}}]",
  "creation": "2026-09-15 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -189,6 +189,17 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Wave",
+   "link_count": 0,
+   "link_to": "WMS Wave",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Handling Units",
@@ -336,6 +347,36 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Inventory Management",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Physical Inventory Count",
+   "link_count": 0,
+   "link_to": "WMS Physical Inventory Count",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Quality Inspection",
+   "link_count": 0,
+   "link_to": "WMS Quality Inspection",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Setup",
    "link_count": 0,
    "onboard": 0,
@@ -395,6 +436,157 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Replenishment Rule",
+   "link_count": 0,
+   "link_to": "Replenishment Rule",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Settings",
+   "link_count": 0,
+   "link_to": "WMS Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "ERPNext Masters & Settings",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Warehouse",
+   "link_count": 0,
+   "link_to": "Warehouse",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Item",
+   "link_count": 0,
+   "link_to": "Item",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UOM",
+   "link_count": 0,
+   "link_to": "UOM",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Batch",
+   "link_count": 0,
+   "link_to": "Batch",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Serial No",
+   "link_count": 0,
+   "link_to": "Serial No",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Company",
+   "link_count": 0,
+   "link_to": "Company",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Supplier",
+   "link_count": 0,
+   "link_to": "Supplier",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Customer",
+   "link_count": 0,
+   "link_to": "Customer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Order",
+   "link_count": 0,
+   "link_to": "Purchase Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Order",
+   "link_count": 0,
+   "link_to": "Sales Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stock Settings",
+   "link_count": 0,
+   "link_to": "Stock Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
  "modified": "2026-09-15 10:00:00.000000",
@@ -409,7 +601,64 @@
  "restrict_to_domain": "",
  "roles": [],
  "sequence_id": 1.0,
- "shortcuts": [],
+ "shortcuts": [
+  {
+   "type": "Page",
+   "label": "WMS Monitor",
+   "link_to": "wms-monitor",
+   "icon": "dashboard",
+   "color": "Blue"
+  },
+  {
+   "type": "URL",
+   "label": "WMS Scanner (RF)",
+   "url": "/wms",
+   "icon": "scan",
+   "color": "Green"
+  },
+  {
+   "type": "DocType",
+   "label": "WMS Settings",
+   "link_to": "WMS Settings",
+   "doc_view": "",
+   "color": "Grey"
+  },
+  {
+   "type": "DocType",
+   "label": "Stock Settings",
+   "link_to": "Stock Settings",
+   "doc_view": "",
+   "color": "Grey"
+  },
+  {
+   "type": "DocType",
+   "label": "Warehouse",
+   "link_to": "Warehouse",
+   "doc_view": "List",
+   "color": "Grey"
+  },
+  {
+   "type": "DocType",
+   "label": "Item",
+   "link_to": "Item",
+   "doc_view": "List",
+   "color": "Grey"
+  },
+  {
+   "type": "DocType",
+   "label": "Purchase Order",
+   "link_to": "Purchase Order",
+   "doc_view": "List",
+   "color": "Grey"
+  },
+  {
+   "type": "DocType",
+   "label": "Sales Order",
+   "link_to": "Sales Order",
+   "doc_view": "List",
+   "color": "Grey"
+  }
+ ],
  "title": "WMS",
  "type": "Workspace"
 }

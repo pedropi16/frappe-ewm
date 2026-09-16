@@ -3,7 +3,11 @@ from frappe.tests import IntegrationTestCase
 
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.scanner import confirm_task, raise_exception
-from frappe_wms.api.monitor import get_summary, search_ledger, search_tasks
+from frappe_wms.api.monitor import (
+    get_summary, search_ledger, search_tasks, search_handling_units,
+    search_inbound_deliveries, search_outbound_deliveries, search_waves,
+    resource_workload, search_queues,
+)
 
 
 class TestMonitorApi(IntegrationTestCase):
@@ -98,3 +102,46 @@ class TestMonitorApi(IntegrationTestCase):
     def test_get_summary_rejects_unknown_warehouse(self):
         with self.assertRaises(frappe.DoesNotExistError):
             get_summary("NON-EXISTENT-WAREHOUSE-XYZ")
+
+    def test_search_handling_units_filters_by_status_and_type(self):
+        hu, _task = self._receive(4)
+        rows = search_handling_units(self.warehouse, hu_type="MONITOR-PALLET")
+        self.assertTrue(any(r["name"] == hu.name for r in rows))
+        rows_wrong_status = search_handling_units(self.warehouse, status="Shipped")
+        self.assertFalse(any(r["name"] == hu.name for r in rows_wrong_status))
+
+    def test_search_inbound_deliveries_filters_by_status(self):
+        _hu, _task = self._receive(2)
+        rows = search_inbound_deliveries(self.warehouse)
+        self.assertTrue(rows)
+        self.assertTrue(all("inbound_delivery_number" in r for r in rows))
+
+    def test_search_outbound_deliveries_and_waves_and_resources(self):
+        customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": customer,
+            "delivery_date": frappe.utils.nowdate(), "staging_bin": self.bulk_bin,
+            "items": [{"line_number": 1, "item": self.item, "requested_quantity": 1, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
+        obd.insert(ignore_permissions=True)
+        rows = search_outbound_deliveries(self.warehouse)
+        self.assertTrue(any(r["name"] == obd.name for r in rows))
+
+        wave = frappe.get_doc({"doctype": "WMS Wave", "warehouse": self.warehouse, "picking_strategy": "Single Order",
+            "deliveries": [{"outbound_delivery": obd.name, "customer": customer}]})
+        wave.insert(ignore_permissions=True)
+        waves = search_waves(self.warehouse, status="Draft")
+        match = [w for w in waves if w["name"] == wave.name]
+        self.assertTrue(match)
+        self.assertEqual(match[0]["delivery_count"], 1)
+
+        resource = frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "warehouse": self.warehouse, "resource_type": "Operator", "active": 1})
+        resource.insert(ignore_permissions=True)
+        workload = resource_workload(self.warehouse)
+        self.assertTrue(any(r["name"] == resource.name for r in workload))
+        self.assertEqual([r for r in workload if r["name"] == resource.name][0]["open_tasks"], 0)
+
+    def test_search_queues_scoped_to_warehouse(self):
+        code = frappe.generate_hash(length=8)
+        queue = frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": code, "queue_name": code, "warehouse": self.warehouse, "activity": "Putaway", "active": 1})
+        queue.insert(ignore_permissions=True)
+        rows = search_queues(self.warehouse)
+        self.assertTrue(any(r["name"] == queue.name for r in rows))

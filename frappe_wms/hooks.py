@@ -39,6 +39,10 @@ doc_events = {
         "on_submit": "frappe_wms.events.goods_issue.on_submit",
         "on_cancel": "frappe_wms.events.goods_issue.on_cancel",
     },
+    "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Delivery Note": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Purchase Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Stock Reconciliation": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
 }
 
 scheduler_events = {

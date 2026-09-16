@@ -57,6 +57,7 @@ def _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse):
     se = _make_stock_entry(stock_entry_type="Material Receipt", company=company, remarks=f"frappe_wms Goods Receipt {doc.name}")
     for row in doc.items:
         _append_row(se, row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
+    se.flags.wms_managed_posting = True
     se.insert(ignore_permissions=True)
     se.submit()
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
@@ -82,6 +83,7 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
     if not kept: frappe.throw(_("No matching Purchase Order rows found for Goods Receipt {0}").format(doc.name))
     pr.items = kept
     pr.flags.ignore_permissions = True
+    pr.flags.wms_managed_posting = True
     pr.insert(ignore_permissions=True)
     pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
@@ -116,6 +118,7 @@ def _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse):
     se = _make_stock_entry(stock_entry_type="Material Issue", company=company, remarks=f"frappe_wms Goods Issue {doc.name}")
     for row in doc.items:
         _append_row(se, row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
+    se.flags.wms_managed_posting = True
     se.insert(ignore_permissions=True)
     se.submit()
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
@@ -141,6 +144,7 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
     if not kept: frappe.throw(_("No matching Sales Order rows found for Goods Issue {0}").format(doc.name))
     dn.items = kept
     dn.flags.ignore_permissions = True
+    dn.flags.wms_managed_posting = True
     dn.insert(ignore_permissions=True)
     dn.submit()
     doc.db_set("erpnext_delivery_note", dn.name, update_modified=False)

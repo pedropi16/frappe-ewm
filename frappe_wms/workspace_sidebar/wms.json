@@ -21,6 +21,30 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "WMS Monitor",
+   "link_to": "wms-monitor",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "scan",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "WMS Scanner (RF)",
+   "link_type": "URL",
+   "url": "/wms",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
@@ -86,6 +110,42 @@
    "keep_closed": 0,
    "label": "WMS Shipment",
    "link_to": "WMS Shipment",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "sort-desc",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "WMS Wave",
+   "link_to": "WMS Wave",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "list-checked",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Physical Inventory Count",
+   "link_to": "WMS Physical Inventory Count",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "check-circle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Quality Inspection",
+   "link_to": "WMS Quality Inspection",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"

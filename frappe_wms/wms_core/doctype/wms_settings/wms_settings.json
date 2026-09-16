@@ -1,0 +1,72 @@
+{
+ "actions": [],
+ "creation": "2026-09-16 00:00:00.000000",
+ "description": "App-wide configuration for frappe_wms.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enforcement_section",
+  "enforce_wms_only_stock_movements",
+  "column_break_enforcement",
+  "defaults_section",
+  "default_handling_unit_type"
+ ],
+ "fields": [
+  {
+   "fieldname": "enforcement_section",
+   "fieldtype": "Section Break",
+   "label": "ERPNext Stock Enforcement"
+  },
+  {
+   "default": "1",
+   "description": "When enabled, WMS-managed warehouses (any ERPNext Warehouse linked from a WMS Warehouse) cannot receive direct Stock Entry, Delivery Note, Purchase Receipt, or Stock Reconciliation postings from ERPNext's own desk. All stock movement must go through frappe_wms (Goods Receipt / Goods Issue / RF app), which mirrors it into ERPNext automatically. Turn this off only as a temporary escape hatch.",
+   "fieldname": "enforce_wms_only_stock_movements",
+   "fieldtype": "Check",
+   "label": "Enforce WMS-Only Stock Movements"
+  },
+  {
+   "fieldname": "column_break_enforcement",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "description": "Used by the RF app when a scanned Handling Unit barcode does not exist yet and needs to be auto-registered without asking the operator to pick a type.",
+   "fieldname": "default_handling_unit_type",
+   "fieldtype": "Link",
+   "label": "Default Handling Unit Type",
+   "options": "Handling Unit Type"
+  }
+ ],
+ "icon": "icon-cog",
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "WMS Core",
+ "name": "WMS Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "WMS Administrator"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
