@@ -40,7 +40,7 @@
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
       "reqd": 1
     },
     {
