@@ -215,7 +215,7 @@
       "fieldname": "status",
       "label": "Status",
       "fieldtype": "Select",
-      "options": "Open\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
+      "options": "Open\nOn Hold\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
       "reqd": 1,
       "default": "Open",
       "read_only": 1,

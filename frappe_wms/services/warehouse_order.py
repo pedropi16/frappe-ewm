@@ -63,7 +63,43 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
     task_doc.queue = queue
     task_doc.assigned_resource = wo.assigned_resource
     if wo.assigned_resource: task_doc.status = "Assigned"
-    frappe.db.set_value("Warehouse Order", wo_name, "task_count", (frappe.db.get_value("Warehouse Order", wo_name, "task_count") or 0) + 1)
+    task_count = frappe.db.get_value("Warehouse Order", wo_name, "task_count") or 0
+    frappe.db.set_value("Warehouse Order", wo_name, "task_count", task_count + 1)
+    _gate_on_sequence(task_doc, wo_name, task_count)
+
+NON_TERMINAL_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Exception")
+
+def _gate_on_sequence(task_doc, wo_name, arrival_index):
+    # SAP EWM-style strict sequence: within one Warehouse Order, only the lowest-sequence
+    # not-yet-confirmed task is workable - everything behind it sits On Hold until its turn.
+    if task_doc.sequence is None:
+        task_doc.sequence = arrival_index
+    siblings = frappe.get_all(
+        "Warehouse Task", filters={"warehouse_order": wo_name, "docstatus": ["<", 2], "status": ["in", NON_TERMINAL_STATUSES]},
+        fields=["name", "task_type", "sequence"], order_by="sequence asc",
+    )
+    blocker = next((s for s in siblings if (s.sequence or 0) < task_doc.sequence), None)
+    if blocker:
+        task_doc.status = "On Hold"
+        task_doc.blocking_reason = _("Waiting on {0} ({1}) in this Warehouse Order").format(blocker.name, blocker.task_type)
+
+def release_next_in_sequence(wo_name):
+    if not wo_name: return []
+    on_hold = frappe.get_all("Warehouse Task", filters={"warehouse_order": wo_name, "status": "On Hold", "docstatus": ["<", 2]},
+        fields=["name", "sequence"], order_by="sequence asc")
+    if not on_hold: return []
+    still_blocking = frappe.get_all("Warehouse Task",
+        filters={"warehouse_order": wo_name, "docstatus": ["<", 2], "status": ["in", ("Open", "Available", "Assigned", "In Process", "Partially Confirmed", "Exception")]},
+        fields=["sequence"])
+    blocking_sequences = [s.sequence or 0 for s in still_blocking]
+    min_on_hold = min(s.sequence or 0 for s in on_hold)
+    if any(seq < min_on_hold for seq in blocking_sequences): return []
+    resource = frappe.db.get_value("Warehouse Order", wo_name, "assigned_resource")
+    released = [s.name for s in on_hold if (s.sequence or 0) == min_on_hold]
+    new_status = "Assigned" if resource else "Open"
+    for name in released:
+        frappe.db.set_value("Warehouse Task", name, {"status": new_status, "blocking_reason": None}, update_modified=True)
+    return released
 
 def sync_warehouse_order(wo_name):
     if not wo_name: return

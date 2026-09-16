@@ -3,7 +3,7 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin
-from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order
+from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -128,7 +128,7 @@ def _create_pick_task_for_group(allocations, process_type, wave, batch_key):
     task.insert(ignore_permissions=True)
     return task.name
 
-OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
+OPEN_TASK_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed")
 
 def my_resource(user=None):
     user = user or frappe.session.user
@@ -143,7 +143,8 @@ def list_my_tasks(user=None):
         filters=filters,
         fields=["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
             "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
-            "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource"],
+            "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
+            "blocking_reason"],
         order_by="priority desc, wave asc, sequence asc, creation asc",
         limit=200,
     )
@@ -172,6 +173,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     task = frappe.get_doc("Warehouse Task", task_name)
     if task.status == "Confirmed": return {"task": task.name, "status": task.status, "already_confirmed": True}
     if task.docstatus == 2 or task.status in {"Cancelled", "Exception"}: frappe.throw(_("Task is not confirmable"))
+    if task.status == "On Hold": frappe.throw(task.blocking_reason or _("Task is on hold behind an earlier task in its Warehouse Order"))
     if scanned_source and scanned_source not in {task.source_bin, task.source_hu}: frappe.throw(_("Scanned source does not match the task"))
     if scanned_destination and scanned_destination not in {task.destination_bin, task.destination_hu}: frappe.throw(_("Scanned destination does not match the task"))
     already_confirmed = flt(task.confirmed_quantity)
@@ -192,7 +194,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     _update_allocations(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
     sync_warehouse_order(task.warehouse_order)
-    return {"task": task.name, "status": status, "quantity": qty}
+    released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
+    return {"task": task.name, "status": status, "quantity": qty, "released_tasks": released_tasks}
 
 def _update_allocations(task, qty):
     rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation, allocated_quantity=qty)] if task.stock_allocation else [])
