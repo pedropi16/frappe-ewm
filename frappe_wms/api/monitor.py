@@ -23,6 +23,33 @@ def get_summary(warehouse):
     }
 
 @frappe.whitelist()
+def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None, stock_type=None, handling_unit=None, limit=200):
+    # Current on-hand positions (WMS Stock Balance), as opposed to search_ledger's movement
+    # history - EWM's "Stock Overview" node vs. its "Document Monitor".
+    filters = {"warehouse": warehouse, "quantity": [">", 0]}
+    if product: filters["product"] = product
+    if storage_bin: filters["storage_bin"] = storage_bin
+    if stock_type: filters["stock_type"] = stock_type
+    if handling_unit: filters["handling_unit"] = handling_unit
+    rows = frappe.get_list("WMS Stock Balance", filters=filters, fields=[
+        "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type",
+        "quantity", "allocated_quantity", "available_quantity", "stock_uom", "last_movement_date",
+    ], order_by="storage_bin asc, product asc", limit=cint(limit) or 200)
+    if storage_type:
+        bins_in_type = set(frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": storage_type}, pluck="name"))
+        rows = [r for r in rows if r.storage_bin in bins_in_type]
+    return rows
+
+@frappe.whitelist()
+def stock_overview_summary(warehouse):
+    rows = frappe.db.sql(
+        "select stock_type, sum(quantity), sum(allocated_quantity), sum(available_quantity), count(*) "
+        "from `tabWMS Stock Balance` where warehouse=%s and quantity > 0 group by stock_type",
+        warehouse,
+    )
+    return [{"stock_type": r[0], "quantity": r[1], "allocated_quantity": r[2], "available_quantity": r[3], "balance_rows": r[4]} for r in rows]
+
+@frappe.whitelist()
 def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None, movement_type=None, from_date=None, to_date=None, limit=100):
     filters = {"warehouse": warehouse}
     if product: filters["product"] = product

@@ -6,7 +6,7 @@ from frappe_wms.api.scanner import confirm_task, raise_exception
 from frappe_wms.api.monitor import (
     get_summary, search_ledger, search_tasks, search_handling_units,
     search_inbound_deliveries, search_outbound_deliveries, search_waves,
-    resource_workload, search_queues,
+    resource_workload, search_queues, stock_overview, stock_overview_summary,
 )
 
 
@@ -88,6 +88,20 @@ class TestMonitorApi(IntegrationTestCase):
         rows = search_ledger(self.warehouse, storage_bin=self.bulk_bin)
         self.assertTrue(all(r["storage_bin"] == self.bulk_bin for r in rows))
         self.assertTrue(any(r["handling_unit"] == hu.name for r in rows))
+
+    def test_stock_overview_reflects_current_balances_and_summary(self):
+        hu, task = self._receive(9)
+        confirm_task(task, confirmed_quantity=9)
+
+        rows = stock_overview(self.warehouse, storage_bin=self.bulk_bin)
+        self.assertTrue(any(r["handling_unit"] == hu.name and r["quantity"] == 9 for r in rows))
+
+        filtered_out = stock_overview(self.warehouse, storage_bin=self.recv_bin)
+        self.assertFalse(any(r["handling_unit"] == hu.name for r in filtered_out), "stock already moved out of the receiving bin should not show there")
+
+        summary = stock_overview_summary(self.warehouse)
+        available_row = next(r for r in summary if r["stock_type"] == "AVAILABLE")
+        self.assertGreaterEqual(available_row["quantity"], 9)
 
     def test_search_tasks_filters_by_status(self):
         _hu, task = self._receive(3)
