@@ -6,6 +6,7 @@ from frappe_wms.api.inbound import list_open_inbound_deliveries, create_and_subm
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_ready_to_ship, create_and_submit_goods_issue
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, list_open_packing_orders, complete_packing_order
 from frappe_wms.api.inventory import list_open_counts, list_open_inspections
+from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
 
 
 class TestRfAppParity(IntegrationTestCase):
@@ -17,6 +18,7 @@ class TestRfAppParity(IntegrationTestCase):
         cls.recv_bin = f"{cls.warehouse}-RECV"
         cls.bulk_bin = f"{cls.warehouse}-BULK"
         cls.stage_bin = f"{cls.warehouse}-STAGE"
+        cls.door_bin = f"{cls.warehouse}-DOOR"
         cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         cls.supplier = frappe.get_all("Supplier", limit=1, pluck="name")[0]
@@ -30,7 +32,9 @@ class TestRfAppParity(IntegrationTestCase):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("Storage Type", f"{cls.warehouse}-BULK"):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "BULK", "storage_type_name": "BULK", "storage_role": "Storage", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
-        for bin_name, st in ((cls.recv_bin, f"{cls.warehouse}-GR"), (cls.bulk_bin, f"{cls.warehouse}-BULK"), (cls.stage_bin, f"{cls.warehouse}-GR")):
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-DOOR"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        for bin_name, st in ((cls.recv_bin, f"{cls.warehouse}-GR"), (cls.bulk_bin, f"{cls.warehouse}-BULK"), (cls.stage_bin, f"{cls.warehouse}-GR"), (cls.door_bin, f"{cls.warehouse}-DOOR")):
             if not frappe.db.exists("Storage Bin", bin_name):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
         if not cls.wh.default_receiving_bin:
@@ -44,6 +48,9 @@ class TestRfAppParity(IntegrationTestCase):
             frappe.get_doc({"doctype": "WMS Product", "item": cls.item, "stock_uom": cls.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("Handling Unit Type", "RFPARITY-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "RFPARITY-PALLET", "hu_type_name": "RF Parity Pallet"}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Route", f"{cls.warehouse}-ROUTE"):
+            frappe.get_doc({"doctype": "WMS Route", "route_code": f"{cls.warehouse}-ROUTE", "route_name": f"{cls.warehouse}-ROUTE",
+                "origin_warehouse": cls.warehouse, "default_staging_bin": cls.stage_bin, "default_door": cls.door_bin, "active": 1}).insert(ignore_permissions=True)
 
     def _receive_and_putaway(self, qty, hu_number=None):
         hu_number = hu_number or frappe.generate_hash(length=10)
@@ -125,6 +132,14 @@ class TestRfAppParity(IntegrationTestCase):
         matching = [d for d in ready if d["name"] == obd.name]
         self.assertTrue(matching)
         self.assertEqual(matching[0]["items"][0]["remaining_quantity"], 7)
+        # Staged only, not yet loaded onto a Shipment - nothing to suggest yet.
+        self.assertIsNone(matching[0]["items"][0]["suggested_handling_unit"])
+
+        shipment = create_shipment(self.warehouse, [obd.name])
+        confirm_hu_loaded(shipment, picked_hu)
+
+        ready = list_ready_to_ship()
+        matching = [d for d in ready if d["name"] == obd.name]
         self.assertEqual(matching[0]["items"][0]["suggested_handling_unit"], picked_hu)
 
         result = create_and_submit_goods_issue(obd.name, [

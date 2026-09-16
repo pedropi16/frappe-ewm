@@ -266,11 +266,15 @@ class WMSMonitor {
         $actions.append(btn);
       }
       if (d.picking_status === "Picked" && d.goods_issue_status !== "Posted") {
-        const btn = $(`<button class="btn btn-xs btn-success" style="margin-left:6px;">${__("Post Goods Issue")}</button>`);
-        btn.on("click", () => frappe.call("frappe_wms.api.outbound.post_goods_issue_for_delivery", { delivery_name })
-          .then(() => { frappe.show_alert({ message: __("Goods Issue posted"), indicator: "green" }); this.load_delivery_detail(delivery_name); this.search_outbound_deliveries(); })
-          .catch(() => {}));
-        $actions.append(btn);
+        if (d.loading_status === "Loaded") {
+          const btn = $(`<button class="btn btn-xs btn-success" style="margin-left:6px;">${__("Post Goods Issue")}</button>`);
+          btn.on("click", () => frappe.call("frappe_wms.api.outbound.post_goods_issue_for_delivery", { delivery_name })
+            .then(() => { frappe.show_alert({ message: __("Goods Issue posted"), indicator: "green" }); this.load_delivery_detail(delivery_name); this.search_outbound_deliveries(); })
+            .catch(() => {}));
+          $actions.append(btn);
+        } else {
+          $actions.append(`<span class="text-muted" style="margin-left:6px;">${__("Load the Handling Unit onto a Shipment before Goods Issue can be posted.")}</span>`);
+        }
       }
     }
     $wrap.append($actions);

@@ -3,16 +3,24 @@ from frappe import _
 from frappe.utils import flt
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.task import my_resource
-from frappe_wms.utils import require_role
+from frappe_wms.utils import require_role, storage_bin_role
 
-READY_TO_SHIP_STATUSES = ("Picking", "Picked", "Packing", "Packed", "Staging", "Staged")
+READY_TO_SHIP_STATUSES = ("Picking", "Picked", "Packing", "Packed", "Staging", "Staged", "Loading", "Loaded")
 
 def post_goods_issue(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype":doc.doctype,"reference_name":doc.name}): return
     for i,row in enumerate(doc.items,1):
         hu=frappe.get_doc("Handling Unit",row.handling_unit)
-        if hu.status not in {"Loaded","Staged"}: frappe.throw(_("HU {0} is not staged or loaded").format(hu.name))
-        entry={"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.staging_bin,"stock_type":row.stock_type,"quantity":-row.quantity,"stock_uom":row.stock_uom,"movement_type":"601","reference_line":row.name}
+        if hu.status != "Loaded": frappe.throw(_("HU {0} must be loaded (via a Shipment) before Goods Issue can be posted").format(hu.name))
+        # Mirrors SAP EWM: Goods Issue may only be posted out of a Door bin - configure which
+        # Storage Bins are doors via their Storage Type's "Door" role (see WMS Route/Shipment
+        # default_door, which are validated against the same role on save).
+        if storage_bin_role(hu.current_bin) != "Door":
+            frappe.throw(_("HU {0} is in bin {1}, which is not configured as a Door - Goods Issue can only be posted from a Door bin").format(hu.name, hu.current_bin))
+        # The HU's actual current bin (the door it was loaded to), not the delivery's staging
+        # bin - loading may have moved it on since staging, and the stock ledger only has a
+        # balance wherever the HU physically is now.
+        entry={"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":hu.current_bin,"stock_type":row.stock_type,"quantity":-row.quantity,"stock_uom":row.stock_uom,"movement_type":"601","reference_line":row.name}
         post_entries([entry],doc.doctype,doc.name,f"GI:{doc.name}:{i}")
         hu.flags.wms_service_update=True; hu.status="Shipped"; hu.save(ignore_permissions=True)
         if row.outbound_delivery_item:
@@ -52,8 +60,26 @@ def _update_delivery_issue_status(delivery_name):
     values = {"goods_issue_status": goods_issue_status, "status": "Goods Issued" if fully_issued else "Staged"}
     frappe.db.set_value("Outbound Delivery", delivery_name, values)
 
+def _loaded_handling_unit_for_line(outbound_delivery_item):
+    # Stock Allocation.handling_unit is the pre-pick source HU, not where the line actually
+    # ended up - only a confirmed Pick task's destination_hu records the real HU it was staged
+    # into (see the identical walk in services/shipping.py). Goods Issue additionally requires
+    # that HU to have since been loaded onto a Shipment (see post_goods_issue), so only a
+    # destination_hu whose current status is "Loaded" is offered up here.
+    allocation_names = frappe.get_all("Stock Allocation",
+        filters={"outbound_delivery_item": outbound_delivery_item, "status": ["in", ["Picked", "Partially Picked"]]}, pluck="name")
+    if not allocation_names: return None
+    task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
+    if not task_names: return None
+    destination_hus = frappe.get_all("Warehouse Task",
+        filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
+        pluck="destination_hu")
+    for hu_name in destination_hus:
+        if frappe.db.get_value("Handling Unit", hu_name, "status") == "Loaded": return hu_name
+    return None
+
 def _ready_lines_for_delivery(delivery_name):
-    # Each line still owing a goods issue, with a suggested staged HU if one can be inferred -
+    # Each line still owing a goods issue, with a suggested loaded HU if one can be inferred -
     # shared by the RF Ship screen (list_ready_to_ship) and the Monitor's one-tap
     # post_goods_issue_for_delivery, so both agree on what's actually ready.
     rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name},
@@ -62,9 +88,8 @@ def _ready_lines_for_delivery(delivery_name):
     for row in rows:
         remaining = flt(row.picked_quantity) - flt(row.issued_quantity)
         if remaining <= 0: continue
-        allocation = frappe.get_all("Stock Allocation", filters={"outbound_delivery_item": row.name, "status": ["in", ["Picked", "Partially Picked"]]}, fields=["handling_unit"], limit=1)
         row["remaining_quantity"] = remaining
-        row["suggested_handling_unit"] = allocation[0].handling_unit if allocation else None
+        row["suggested_handling_unit"] = _loaded_handling_unit_for_line(row.name)
         lines.append(row)
     return lines
 
@@ -95,12 +120,12 @@ def create_and_submit_goods_issue(outbound_delivery, items):
 
 def post_goods_issue_for_delivery(delivery_name):
     # The Monitor's one-tap "Post Goods Issue" - auto-builds the same payload the RF Ship
-    # screen's per-line form would, using whatever staged HU was already suggested per line.
+    # screen's per-line form would, using whatever loaded HU was already suggested per line.
     require_role("WMS Operator", "WMS Loader", "WMS Supervisor")
     lines = _ready_lines_for_delivery(delivery_name)
     if not lines: frappe.throw(_("Nothing left to issue for this delivery"))
     missing = [l.item for l in lines if not l.suggested_handling_unit]
-    if missing: frappe.throw(_("No staged Handling Unit found for: {0}. Use the RF Ship screen to pick one manually.").format(", ".join(missing)))
+    if missing: frappe.throw(_("No loaded Handling Unit found for: {0}. Load it onto a Shipment first.").format(", ".join(missing)))
     items = [{
         "outbound_delivery_item": l.name, "item": l.item, "quantity": l.remaining_quantity,
         "stock_uom": l.stock_uom, "handling_unit": l.suggested_handling_unit, "stock_type": l.required_stock_type,

@@ -4,6 +4,7 @@ from frappe.utils import flt
 from frappe_wms.services.determination import determine_route
 from frappe_wms.services.allocation import cancel_allocations_for_delivery
 from frappe_wms.services.task import task_names_for_allocations
+from frappe_wms.utils import require_storage_role
 
 def _validate_lines(doc, quantity_field):
     if not doc.items:
@@ -25,10 +26,11 @@ def validate_outbound_delivery(doc, method=None):
 
 def _apply_route_defaults(doc):
     if not doc.route: doc.route = determine_route(doc.warehouse)
-    if not doc.route: return
-    route = frappe.get_cached_doc("WMS Route", doc.route)
-    if not doc.staging_bin and route.default_staging_bin: doc.staging_bin = route.default_staging_bin
-    if not doc.door and route.default_door: doc.door = route.default_door
+    if doc.route:
+        route = frappe.get_cached_doc("WMS Route", doc.route)
+        if not doc.staging_bin and route.default_staging_bin: doc.staging_bin = route.default_staging_bin
+        if not doc.door and route.default_door: doc.door = route.default_door
+    if doc.door: require_storage_role(doc.door, "Door", label=_("Door"))
 
 def before_cancel_outbound_delivery(doc, method=None):
     if frappe.db.exists("Goods Issue", {"outbound_delivery": doc.name, "docstatus": 1}):

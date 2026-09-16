@@ -3,9 +3,10 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
 
 from frappe_wms.api.inbound import create_putaway
-from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, post_goods_issue_for_delivery
+from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, post_goods_issue_for_delivery, create_and_submit_goods_issue
 from frappe_wms.api.scanner import confirm_task, reverse_task
 from frappe_wms.api.monitor import get_delivery_execution_status
+from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
 
 
 class TestOutboundDeliveryLifecycle(IntegrationTestCase):
@@ -31,11 +32,12 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         # FIFO allocation pick up an earlier test's already-staged stock. A real allocation-engine
         # quirk, but not one this test is about.
         warehouse = f"WMS-TEST-OBDLIFE-{frappe.generate_hash(length=6).upper()}"
-        recv_bin, bulk_bin, stage_bin = f"{warehouse}-RECV", f"{warehouse}-BULK", f"{warehouse}-STAGE"
+        recv_bin, bulk_bin, stage_bin, door_bin = f"{warehouse}-RECV", f"{warehouse}-BULK", f"{warehouse}-STAGE", f"{warehouse}-DOOR"
         frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": warehouse, "warehouse_name": warehouse, "company": self.company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
         frappe.get_doc({"doctype": "Storage Type", "warehouse": warehouse, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         frappe.get_doc({"doctype": "Storage Type", "warehouse": warehouse, "storage_type_code": "BULK", "storage_type_name": "BULK", "storage_role": "Storage", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
-        for bin_name, st in ((recv_bin, f"{warehouse}-GR"), (bulk_bin, f"{warehouse}-BULK"), (stage_bin, f"{warehouse}-GR")):
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        for bin_name, st in ((recv_bin, f"{warehouse}-GR"), (bulk_bin, f"{warehouse}-BULK"), (stage_bin, f"{warehouse}-GR"), (door_bin, f"{warehouse}-DOOR")):
             frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
         wh = frappe.get_doc("WMS Warehouse", warehouse)
         wh.default_receiving_bin = recv_bin
@@ -43,7 +45,16 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         wh.default_difference_bin = recv_bin
         wh.save(ignore_permissions=True)
         frappe.get_doc({"doctype": "Bin Determination Rule", "warehouse": warehouse, "activity": "Putaway", "active": 1, "priority": 1, "destination_storage_type": f"{warehouse}-BULK", "strategy": "Least Utilized Bin"}).insert(ignore_permissions=True)
-        return frappe._dict(warehouse=warehouse, recv_bin=recv_bin, bulk_bin=bulk_bin, stage_bin=stage_bin)
+        frappe.get_doc({"doctype": "WMS Route", "route_code": f"{warehouse}-ROUTE", "route_name": f"{warehouse}-ROUTE",
+            "origin_warehouse": warehouse, "default_staging_bin": stage_bin, "default_door": door_bin, "active": 1}).insert(ignore_permissions=True)
+        return frappe._dict(warehouse=warehouse, recv_bin=recv_bin, bulk_bin=bulk_bin, stage_bin=stage_bin, door_bin=door_bin)
+
+    def _load_hu(self, scenario, delivery_name, hu_name):
+        # Mirrors the real Ready-to-Load -> loading flow: Goods Issue requires the HU to have
+        # actually been loaded onto a Shipment, not merely staged after picking.
+        shipment_name = create_shipment(scenario.warehouse, [delivery_name])
+        confirm_hu_loaded(shipment_name, hu_name)
+        return shipment_name
 
     def _receive_and_putaway(self, scenario, qty):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "OBDLIFE-PALLET", "warehouse": scenario.warehouse, "current_bin": scenario.recv_bin, "status": "Open"})
@@ -85,6 +96,14 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
         confirm_task(pick_tasks[0], confirmed_quantity=6)
+        hu_name = frappe.db.get_value("Warehouse Task", pick_tasks[0], "destination_hu")
+        # This test is about cancel-blocking once Goods Issue is posted, not about the physical
+        # loading flow (that's covered by test_post_goods_issue_for_delivery_requires_the_hu_to_be_loaded
+        # and the RF parity ship test) - flip the HU straight to Loaded in place, and the staging
+        # bin to a Door bin in place, so the stock stays put and the later reverse_task below has
+        # something to undo (a real load would relocate it, which reverse_task can't unwind).
+        frappe.db.set_value("Storage Bin", scenario.stage_bin, "storage_type", f"{scenario.warehouse}-DOOR")
+        frappe.db.set_value("Handling Unit", hu_name, "status", "Loaded")
 
         result = post_goods_issue_for_delivery(obd.name)
         gi = frappe.get_doc("Goods Issue", result["goods_issue"])
@@ -149,6 +168,61 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             post_goods_issue_for_delivery(obd.name)
 
+    def test_post_goods_issue_for_delivery_requires_the_hu_to_be_loaded(self):
+        # Picking only stages the HU (see task.py's _move_hu_if_complete); Goods Issue must not
+        # be postable until it has actually been loaded onto a Shipment.
+        scenario = self._new_scenario()
+        self._receive_and_putaway(scenario, 4)
+        obd = self._make_delivery(scenario, 4)
+        obd.submit()
+        allocate_delivery(obd.name)
+        pick_tasks = create_pick_tasks(obd.name)
+        confirm_task(pick_tasks[0], confirmed_quantity=4)
+        hu_name = frappe.db.get_value("Warehouse Task", pick_tasks[0], "destination_hu")
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu_name, "status"), "Staged")
+
+        with self.assertRaises(frappe.ValidationError):
+            post_goods_issue_for_delivery(obd.name)
+
+        self._load_hu(scenario, obd.name, hu_name)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu_name, "status"), "Loaded")
+        result = post_goods_issue_for_delivery(obd.name)
+        self.assertEqual(frappe.db.get_value("Goods Issue", result["goods_issue"], "status"), "Posted")
+
+    def test_route_default_door_must_be_a_door_bin(self):
+        scenario = self._new_scenario()
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc({"doctype": "WMS Route", "route_code": f"{scenario.warehouse}-BADROUTE", "route_name": f"{scenario.warehouse}-BADROUTE",
+                "origin_warehouse": scenario.warehouse, "default_staging_bin": scenario.stage_bin,
+                "default_door": scenario.stage_bin, "active": 1}).insert(ignore_permissions=True)
+
+    def test_shipment_door_must_be_a_door_bin_even_if_set_manually(self):
+        scenario = self._new_scenario()
+        route = f"{scenario.warehouse}-ROUTE"
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc({"doctype": "WMS Shipment", "shipment_number": frappe.generate_hash(length=8), "warehouse": scenario.warehouse,
+                "route": route, "status": "Planned", "door": scenario.stage_bin}).insert(ignore_permissions=True)
+
+    def test_post_goods_issue_rejects_a_loaded_hu_outside_a_door_bin(self):
+        # Even if something (a manual status edit, a future bug) marks the HU Loaded without it
+        # actually sitting in a Door bin, Goods Issue must still refuse to post - the door is
+        # what makes the posting legitimate, not the status flag alone.
+        scenario = self._new_scenario()
+        self._receive_and_putaway(scenario, 4)
+        obd = self._make_delivery(scenario, 4)
+        obd.submit()
+        allocate_delivery(obd.name)
+        pick_tasks = create_pick_tasks(obd.name)
+        confirm_task(pick_tasks[0], confirmed_quantity=4)
+        hu_name = frappe.db.get_value("Warehouse Task", pick_tasks[0], "destination_hu")
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu_name, "current_bin"), scenario.stage_bin)
+        frappe.db.set_value("Handling Unit", hu_name, "status", "Loaded")
+
+        with self.assertRaises(frappe.ValidationError):
+            create_and_submit_goods_issue(obd.name, [
+                {"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 4, "stock_uom": self.uom, "handling_unit": hu_name, "stock_type": "AVAILABLE"},
+            ])
+
     def test_get_delivery_execution_status_reports_the_full_picture(self):
         scenario = self._new_scenario()
         self._receive_and_putaway(scenario, 8)
@@ -157,6 +231,8 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
         confirm_task(pick_tasks[0], confirmed_quantity=8)
+        hu_name = frappe.db.get_value("Warehouse Task", pick_tasks[0], "destination_hu")
+        self._load_hu(scenario, obd.name, hu_name)
         result = post_goods_issue_for_delivery(obd.name)
 
         status = get_delivery_execution_status(obd.name)

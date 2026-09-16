@@ -30,6 +30,8 @@ class TestErpnextSync(IntegrationTestCase):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("Storage Type", f"{cls.warehouse}-BULK"):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "BULK", "storage_type_name": "BULK", "storage_role": "Storage", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-DOOR"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         for bin_name, st in ((cls.recv_bin, f"{cls.warehouse}-GR"), (cls.bulk_bin, f"{cls.warehouse}-BULK"), (cls.stage_bin, f"{cls.warehouse}-GR")):
             if not frappe.db.exists("Storage Bin", bin_name):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
@@ -86,6 +88,11 @@ class TestErpnextSync(IntegrationTestCase):
 
         # No manual HU status override here: picking must auto-stage the HU on its own.
         self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged")
+
+        # Goods Issue requires the HU to be Loaded and sitting in a Door bin, not merely staged -
+        # this test is about the ERPNext sync wiring, not the loading flow itself.
+        frappe.db.set_value("Storage Bin", self.stage_bin, "storage_type", f"{self.warehouse}-DOOR")
+        frappe.db.set_value("Handling Unit", hu.name, "status", "Loaded")
 
         gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": self.stage_bin,
             "items": [{"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 3, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
