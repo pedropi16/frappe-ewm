@@ -4,7 +4,7 @@ from frappe.utils import nowdate
 
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
-from frappe_wms.api.scanner import confirm_task, reverse_task, complete_packing_order
+from frappe_wms.api.scanner import confirm_task, reverse_task, complete_packing_order, repack
 
 
 class TestTaskReversalAndPacking(IntegrationTestCase):
@@ -136,6 +136,22 @@ class TestTaskReversalAndPacking(IntegrationTestCase):
         order.insert(ignore_permissions=True)
         with self.assertRaises(frappe.ValidationError):
             complete_packing_order(order.name)
+
+    def test_repack_without_a_packing_order_references_the_source_hu(self):
+        # A standalone RF repack (no Packing Order involved) must not hardcode a reference to a
+        # document that doesn't exist - it should reference the Handling Unit itself instead.
+        hu, _task = self._receive_and_putaway(9)
+        hu2 = self._make_hu(self.bulk_bin)
+
+        repack(hu.name, hu2.name, [{"item": self.item, "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 4}], "test-repack-1")
+
+        source_qty = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu.name, "storage_bin": self.bulk_bin}, fields=["quantity"])[0].quantity
+        dest_qty = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu2.name, "storage_bin": self.bulk_bin}, fields=["quantity"])[0].quantity
+        self.assertEqual(source_qty, 5)
+        self.assertEqual(dest_qty, 4)
+
+        entry = frappe.get_all("WMS Stock Ledger Entry", filters={"handling_unit": hu2.name, "reference_doctype": "Handling Unit"}, fields=["reference_name"], limit=1)[0]
+        self.assertEqual(entry.reference_name, hu.name)
 
     def test_pick_auto_stages_handling_unit_and_goods_issue_succeeds(self):
         hu, _task = self._receive_and_putaway(8)

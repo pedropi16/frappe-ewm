@@ -4,14 +4,14 @@ from frappe.utils import now_datetime
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.task import my_resource
 
-def repack(source_hu, destination_hu, items, reference_name, idempotency_key):
+def repack(source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
     source=frappe.get_doc("Handling Unit",source_hu); destination=frappe.get_doc("Handling Unit",destination_hu)
     if source.warehouse != destination.warehouse or source.current_bin != destination.current_bin: frappe.throw(_("Source and destination HUs must be in the same bin"))
     for i,item in enumerate(items,1):
         src={"warehouse":source.warehouse,"product":item["item"],"batch_no":item.get("batch_no"),"serial_no":item.get("serial_no"),"handling_unit":source.name,"storage_bin":source.current_bin,"stock_type":item["stock_type"],"stock_uom":item["stock_uom"]}
         dst={"handling_unit":destination.name,"storage_bin":destination.current_bin,"stock_type":item["stock_type"]}
-        transfer_stock(source=src,destination=dst,quantity=item["quantity"],movement_type="801",reference_doctype="Packing Order",reference_name=reference_name,idempotency_key=f"{idempotency_key}:{i}")
-    frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination.name,"event_type":"Packed","bin_after":destination.current_bin,"reference_doctype":"Packing Order","reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
+        transfer_stock(source=src,destination=dst,quantity=item["quantity"],movement_type="801",reference_doctype=reference_doctype,reference_name=reference_name,idempotency_key=f"{idempotency_key}:{i}")
+    frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination.name,"event_type":"Packed","bin_after":destination.current_bin,"reference_doctype":reference_doctype,"reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
 
 def complete_packing_order(packing_order_name):
     # Packing Order only records which HUs are involved, not a per-item/qty breakdown, so the
@@ -27,7 +27,7 @@ def complete_packing_order(packing_order_name):
     balances = frappe.get_all("WMS Stock Balance", filters={"handling_unit": source_hu, "quantity": [">", 0]}, fields=["product", "batch_no", "serial_no", "stock_type", "quantity", "stock_uom"])
     if not balances: frappe.throw(_("Source HU {0} has no stock to pack").format(source_hu))
     items = [{"item": b.product, "batch_no": b.batch_no, "serial_no": b.serial_no, "stock_type": b.stock_type, "quantity": b.quantity, "stock_uom": b.stock_uom} for b in balances]
-    repack(source_hu, destination_hu, items, packing_order_name, f"PACK:{packing_order_name}")
+    repack(source_hu, destination_hu, items, "Packing Order", packing_order_name, f"PACK:{packing_order_name}")
     order.db_set({"status": "Completed", "completed_at": now_datetime(), "verified_by": frappe.session.user})
     return {"packing_order": order.name, "status": "Completed"}
 

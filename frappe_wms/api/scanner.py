@@ -48,8 +48,10 @@ def bin_overview(bin_code):
     return {"storage_bin":bin_doc.as_dict(),"stock":stock}
 
 @frappe.whitelist()
-def repack(source_hu,destination_hu,items,packing_order,idempotency_key):
-    return _repack(source_hu,destination_hu,parse_json(items,"items"),packing_order,idempotency_key)
+def repack(source_hu,destination_hu,items,idempotency_key,packing_order=None):
+    reference_doctype = "Packing Order" if packing_order else "Handling Unit"
+    reference_name = packing_order or source_hu
+    return _repack(source_hu,destination_hu,parse_json(items,"items"),reference_doctype,reference_name,idempotency_key)
 
 @frappe.whitelist()
 def complete_packing_order(packing_order_name):

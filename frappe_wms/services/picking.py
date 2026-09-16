@@ -2,10 +2,43 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.allocation import allocate_delivery
-from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource
+from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES
 from frappe_wms.utils import require_role
 
 OPEN_RELEASE_STATUSES = ("Draft", "Open", "Allocated")
+
+PICK_TASK_FIELDS = ["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
+    "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
+    "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
+    "blocking_reason"]
+
+def find_pick_tasks(reference):
+    # SAP EWM-style picking entry points: jump straight into the pick-task wizard by scanning
+    # the Warehouse Order or Outbound Delivery it belongs to, or a Handling Unit involved in it -
+    # rather than only browsing the full "Pick Tasks" list.
+    require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
+    reference = (reference or "").strip()
+    if not reference:
+        frappe.throw(_("Scan or enter a Warehouse Order, Outbound Delivery, or Handling Unit"))
+    resource = my_resource()
+    base_filters = {"task_type": "Pick", "status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
+    if resource: base_filters["warehouse"] = resource.warehouse
+
+    if frappe.db.exists("Warehouse Order", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=PICK_TASK_FIELDS)
+    elif frappe.db.exists("Outbound Delivery", reference):
+        allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": reference}, pluck="name")
+        if not allocation_names: return []
+        cluster_task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
+        direct_task_names = frappe.get_all("Warehouse Task", filters={"stock_allocation": ["in", allocation_names]}, pluck="name")
+        task_names = list(set(cluster_task_names) | set(direct_task_names))
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": ["in", task_names]}, fields=PICK_TASK_FIELDS) if task_names else []
+    else:
+        by_source = frappe.get_all("Warehouse Task", filters={**base_filters, "source_hu": reference}, fields=PICK_TASK_FIELDS)
+        by_dest = frappe.get_all("Warehouse Task", filters={**base_filters, "destination_hu": reference}, fields=PICK_TASK_FIELDS)
+        seen = {t.name for t in by_source}
+        tasks = by_source + [t for t in by_dest if t.name not in seen]
+    return sorted(tasks, key=lambda t: (t.sequence or 0, t.name))
 
 def release_wave(wave_name):
     require_role("WMS Supervisor")
