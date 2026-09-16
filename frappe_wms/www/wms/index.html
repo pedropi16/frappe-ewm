@@ -197,9 +197,14 @@ function extractServerMessage(raw) {
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function flt(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function statusClass(status) { return String(status || "").replace(/[^A-Za-z0-9]+/g, ""); }
+function statusBadgeHtml(status) {
+  const lock = status === "On Hold" ? "\u{1F512} " : "";
+  return `<span class="badge ${statusClass(status)}">${lock}${escapeHtml(status)}</span>`;
+}
 
 const TASK_TYPE_GROUPS = {
-  inbound: ["Unload", "Putaway"],
+  inbound: ["Unload", "Putaway", "Deconsolidation"],
   internal: ["Internal Move", "Posting Change", "Inventory Count"],
   outbound: ["Pick", "Stage", "Load"],
 };
@@ -210,6 +215,7 @@ const SECTIONS = {
     items: [
       { icon: "\u{1F4E5}", label: "Receive", action: loadInboundDeliveries },
       { icon: "\u{1F4CB}", label: "Putaway Tasks", taskGroup: "inbound", action: () => openTasksFiltered("inbound") },
+      { icon: "\u{1F4E6}", label: "Deconsolidate", action: openDeconsolidation },
       { icon: "\u{2705}", label: "Quality", action: loadInspections },
     ],
   },
@@ -218,6 +224,8 @@ const SECTIONS = {
     items: [
       { icon: "\u{2194}\u{FE0F}", label: "Move", action: openMove },
       { icon: "\u{1F4CB}", label: "Internal Tasks", taskGroup: "internal", action: () => openTasksFiltered("internal") },
+      { icon: "\u{27A1}\u{FE0F}", label: "Close Movement", action: openCloseMovement },
+      { icon: "\u{1F501}", label: "Repack", action: openRepack },
       { icon: "\u{1F522}", label: "Count", action: loadCounts },
       { icon: "\u{1F3F7}\u{FE0F}", label: "Handling Units", action: loadHUHome },
     ],
@@ -226,9 +234,11 @@ const SECTIONS = {
     label: "Outbound", icon: "\u{1F4E4}",
     items: [
       { icon: "\u{1F3AF}", label: "Release", action: loadReleaseDeliveries },
+      { icon: "\u{1F3AF}", label: "Picking", action: openPickingEntry },
       { icon: "\u{1F4CB}", label: "Pick Tasks", taskGroup: "outbound", action: () => openTasksFiltered("outbound") },
       { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
       { icon: "\u{1F4E6}", label: "Pack", action: loadPackingOrders },
+      { icon: "\u{1F9F0}", label: "VAS", action: loadVASOrders },
       { icon: "\u{1F69B}", label: "Load", action: loadShipments },
     ],
   },
@@ -255,6 +265,14 @@ const VIEW_PARENT = {
   "hu-detail": () => "hu",
   load: () => "section",
   "load-detail": () => "load",
+  decon: () => "section",
+  "decon-detail": () => "decon",
+  vas: () => "section",
+  "vas-detail": () => "vas",
+  "picking-entry": () => "section",
+  "close-movement": () => "section",
+  repack: () => "section",
+  "repack-detail": () => "repack",
   lookup: () => "menu",
 };
 
@@ -262,10 +280,12 @@ const VIEW_PARENT = {
 const VIEW_RELOAD = {
   tasks: loadTasks, receive: loadInboundDeliveries, release: loadReleaseDeliveries, ship: loadShipDeliveries,
   pack: loadPackingOrders, count: loadCounts, quality: loadInspections, hu: loadHUHome,
-  load: loadShipments,
+  load: loadShipments, vas: loadVASOrders,
 };
 
 const state = {
+  loggedOn: false,
+  resourceLoaded: false,
   view: "menu",
   section: null,
   loading: false,
@@ -280,8 +300,12 @@ const state = {
   availableQueues: [],
   showQueuePicker: false,
   currentTask: null,
+  taskSteps: [],
+  taskStep: 0,
+  stepError: null,
   scanSource: "",
   scanDestination: "",
+  destinationHu: "",
   confirmQty: "",
   exceptionCodes: [],
   exceptionCodesLoaded: false,
@@ -323,6 +347,8 @@ const state = {
 
   // Move
   moveForm: { product: "", quantity: "", stock_uom: "", stock_type: "AVAILABLE", source_bin: "", source_hu: "", destination_bin: "", destination_hu: "" },
+  moveStep: 0,
+  moveStepError: null,
 
   // Count
   counts: [],
@@ -331,6 +357,29 @@ const state = {
   // Quality
   inspections: [],
   currentInspection: null,
+
+  // Deconsolidation
+  deconHuSearch: "",
+  deconHu: null,
+  deconLines: [],
+
+  // VAS
+  vasOrders: [],
+  currentVAS: null,
+
+  // Picking entry
+  pickingReference: "",
+  pickingSearchType: "document",
+
+  // Close Movement
+  closeMovementHu: "",
+
+  // Repack
+  repackHuSearch: "",
+  repackHu: null,
+  repackLines: [],
+  repackDestination: "",
+  repackDestNewType: "",
 };
 
 function setState(patch) { Object.assign(state, patch); render(); }
@@ -361,8 +410,8 @@ function openTasksFiltered(group) {
 async function loadResource() {
   try {
     const res = await api("frappe_wms.api.scanner.my_tasks");
-    setState({ resource: res.resource || null, tasks: res.tasks || [] });
-  } catch (e) { /* ignore on menu load */ }
+    setState({ resource: res.resource || null, tasks: res.tasks || [], resourceLoaded: true });
+  } catch (e) { setState({ resourceLoaded: true }); }
 }
 
 // ---------- Tasks ----------
