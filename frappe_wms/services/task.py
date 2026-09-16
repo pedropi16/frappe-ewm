@@ -3,6 +3,7 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin
+from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -11,7 +12,7 @@ TASK_TYPE_BY_REQUEST = {
     "Unload Vehicle": "Unload", "Posting Change": "Posting Change", "Inventory Count": "Inventory Count",
 }
 
-def create_tasks_for_request(request_name):
+def create_tasks_for_request(request_name, batch_key=None):
     frappe.db.sql("select name from `tabWarehouse Request` where name=%s for update", request_name)
     request = frappe.get_doc("Warehouse Request", request_name)
     if request.status not in {"Draft", "Open", "Partially Tasked"}: frappe.throw(_("Warehouse Request is not open for tasking"))
@@ -28,6 +29,7 @@ def create_tasks_for_request(request_name):
         source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
         destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product, "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type})
     task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": remaining, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": f"WT:{request.name}"})
+    attach_task(task, batch_key or frappe.generate_hash(length=10), reference_doctype="Warehouse Request", reference_name=request.name)
     task.insert(ignore_permissions=True)
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
     return task.name
@@ -92,14 +94,15 @@ def _create_pick_tasks_from_allocations(allocations, strategy, wave=None):
     else:
         groups = [[allocation] for allocation in allocations]
 
+    batch_key = frappe.generate_hash(length=10)
     created = []
     for group in groups:
-        created.append(_create_pick_task_for_group(group, process_type, wave))
+        created.append(_create_pick_task_for_group(group, process_type, wave, batch_key))
     for allocation in allocations:
         frappe.db.set_value("Stock Allocation", allocation.name, "status", "Released")
     return created
 
-def _create_pick_task_for_group(allocations, process_type, wave):
+def _create_pick_task_for_group(allocations, process_type, wave, batch_key):
     first = allocations[0]
     stock_uom = frappe.db.get_value("WMS Stock Balance", first.stock_balance, "stock_uom")
     total_qty = sum(flt(a.allocated_quantity) for a in allocations)
@@ -117,6 +120,7 @@ def _create_pick_task_for_group(allocations, process_type, wave):
         "idempotency_key": "WT:" + "-".join(a.name for a in allocations),
         "stock_allocations": [{"stock_allocation": a.name, "allocated_quantity": a.allocated_quantity} for a in allocations],
     })
+    attach_task(task, batch_key, reference_doctype="Outbound Delivery", reference_name=first.outbound_delivery)
     task.insert(ignore_permissions=True)
     return task.name
 
@@ -129,26 +133,33 @@ def my_resource(user=None):
 def list_my_tasks(user=None):
     resource = my_resource(user)
     filters = {"status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
-    if resource:
-        filters["warehouse"] = resource.warehouse
-        filters["assigned_resource"] = ["in", [resource.name, ""]]
+    if resource: filters["warehouse"] = resource.warehouse
     tasks = frappe.get_list(
         "Warehouse Task",
         filters=filters,
         fields=["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
             "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
-            "priority", "status", "movement_type", "sequence", "queue", "wave"],
+            "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource"],
         order_by="priority desc, wave asc, sequence asc, creation asc",
-        limit=100,
+        limit=200,
     )
+    if resource:
+        # Visible if it's mine, unrouted (no queue configured), or sitting unclaimed in my current queue.
+        tasks = [t for t in tasks if t.assigned_resource == resource.name
+            or (not t.assigned_resource and (not t.queue or t.queue == resource.current_queue))][:100]
     return {"resource": resource, "tasks": tasks}
 
 def raise_exception(task_name, exception_code, remarks=None):
     require_role("WMS Operator", "WMS Supervisor")
+    code = frappe.get_cached_doc("WMS Exception Code", exception_code)
+    if not code.active: frappe.throw(_("Exception code {0} is not active").format(exception_code))
+    if code.requires_supervisor: require_role("WMS Supervisor")
+    if code.requires_comment and not (remarks or "").strip(): frappe.throw(_("This exception requires a comment"))
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
     task = frappe.get_doc("Warehouse Task", task_name)
     if task.docstatus == 1: frappe.throw(_("Task is already confirmed"))
     task.db_set({"status": "Exception", "exception_code": exception_code, "blocking_reason": remarks}, update_modified=True)
+    sync_warehouse_order(task.warehouse_order)
     return {"task": task.name, "status": "Exception"}
 
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
@@ -163,18 +174,20 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed
     new_confirmed = already_confirmed + qty
     if qty <= 0 or round(new_confirmed, 6) > round(flt(task.planned_quantity), 6): frappe.throw(_("Invalid confirmed quantity"))
+    resolved_destination_hu = destination_hu or task.destination_hu or task.source_hu
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
-    destination = {"handling_unit": destination_hu or task.destination_hu or task.source_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
+    destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
     transfer_stock(source=source, destination=destination, quantity=qty, movement_type=task.movement_type, reference_doctype=task.doctype, reference_name=task.name, idempotency_key=key, warehouse_task=task.name, device=device)
     fully_confirmed = round(new_confirmed, 6) >= round(flt(task.planned_quantity), 6)
     status = "Confirmed" if fully_confirmed else "Partially Confirmed"
-    updates = {"confirmed_quantity": new_confirmed, "status": status, "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "confirmation_device": device, "idempotency_key": key}
+    updates = {"confirmed_quantity": new_confirmed, "status": status, "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "confirmation_device": device, "idempotency_key": key, "destination_hu": resolved_destination_hu}
     if fully_confirmed: updates["docstatus"] = 1
     task.db_set(updates, update_modified=True)
     _update_request(task.warehouse_request)
     _update_allocations(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
+    sync_warehouse_order(task.warehouse_order)
     return {"task": task.name, "status": status, "quantity": qty}
 
 def _update_allocations(task, qty):

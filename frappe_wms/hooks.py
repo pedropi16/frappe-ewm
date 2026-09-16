@@ -5,8 +5,20 @@ app_description = "Warehouse Management and Execution System"
 app_email = ""
 app_license = "MIT"
 app_version = "0.1.0"
+app_logo_url = "/assets/frappe_wms/images/wms-logo.svg"
+app_home = "/app/wms"
 
 required_apps = ["erpnext"]
+
+add_to_apps_screen = [
+    {
+        "name": "frappe_wms",
+        "logo": app_logo_url,
+        "title": app_title,
+        "route": app_home,
+        "has_permission": "frappe_wms.permissions.has_app_permission",
+    }
+]
 
 app_include_js = ["/assets/frappe_wms/js/frappe_wms.js"]
 app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
@@ -31,6 +43,7 @@ doc_events = {
     },
     "Inbound Delivery": {"validate": "frappe_wms.events.deliveries.validate_inbound_delivery"},
     "Outbound Delivery": {"validate": "frappe_wms.events.deliveries.validate_outbound_delivery"},
+    "WMS Shipment": {"validate": "frappe_wms.events.shipment.validate_shipment"},
     "Goods Receipt": {
         "on_submit": "frappe_wms.events.goods_receipt.on_submit",
         "on_cancel": "frappe_wms.events.goods_receipt.on_cancel",

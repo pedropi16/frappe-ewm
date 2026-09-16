@@ -15,6 +15,7 @@ top to bottom by someone configuring the app for the first time.
 - [Mental model](#mental-model)
 - [Data model](#data-model)
 - [The rule engine (how config drives behavior)](#the-rule-engine-how-config-drives-behavior)
+- [Numbering (HU and shipment number ranges)](#numbering-hu-and-shipment-number-ranges)
 - [Core flows](#core-flows)
 - [Modules](#modules)
 - [Configuration reference](#configuration-reference)
@@ -72,6 +73,11 @@ Company
   can nest inside another HU (`parent_hu`) up to an arbitrary depth
   (`hierarchy_level`, `top_hu` cached for fast lookups). Stock quantities are
   usually tracked per HU, not per bin, when the storage type is HU-managed.
+  Every HU Type is either **External** (a person or a label printer already
+  put a number on the physical HU - the operator scans it and the system just
+  registers it) or **Internal** (the system always assigns the next number
+  itself from a **WMS Number Range**, ignoring any number a caller passes) -
+  see [Numbering](#numbering-hu-and-shipment-number-ranges).
 - **WMS Stock Type** is *not* a physical location — it's a status dimension
   layered on top of the physical location (e.g. `AVAILABLE`, `QUALITY`,
   `DAMAGED`, `SCRAP`, `WAREHOUSE_BLOCKED`). Each stock type independently
@@ -141,6 +147,41 @@ and Warehouse Process Types (see `install.py`) so a fresh site isn't empty,
 but Process/Bin Determination Rules and Replenishment Rules are
 warehouse-specific and must be configured per site.
 
+## Numbering (HU and shipment number ranges)
+
+`Handling Unit` numbers and `WMS Shipment` numbers are both handed out by
+**WMS Number Range** (`services/numbering.py`), the same "narrower match wins"
+pattern as the rule tables above: a range can be scoped to a specific
+`warehouse` + `hu_type`, just one of the two, or neither (a global fallback).
+`after_install` seeds one global fallback range for each (`HU-########` and
+`SHIP-########`) so a fresh site works immediately; add a narrower range
+(e.g. one per warehouse, or one per HU Type for reusable totes vs. one-way
+pallets) to change the prefix/length/start-end window for that scope.
+
+- **Handling Unit**: whether a number is auto-assigned depends on the HU
+  Type's `numbering_mode`. **External** (the default) means the number is a
+  barcode a person or a label printer already put on the physical HU -
+  `create_handling_unit` requires it and checks it isn't already in use.
+  **Internal** means the system always calls `next_number` itself and
+  ignores any number the caller passes - use this for HU Types that only
+  ever get created at a packing station inside this app (never scanned in
+  from an outside source). The RF "New Handling Unit" screen disables the
+  barcode field once an Internal type is selected.
+- **WMS Shipment**: always internally numbered - `create_shipment` calls
+  `next_number("WMS Shipment", warehouse=...)` instead of generating a random
+  suffix, so shipment numbers are sequential and auditable per warehouse.
+- Numbers are handed out under a row lock (`select ... for update` on the
+  matching `WMS Number Range`), so concurrent RF scans or shipment creation
+  can't collide. A range throws once `current_number` reaches `end_number`
+  rather than wrapping around - raise `end_number` or add a new range to keep
+  going.
+- **Auto-registration**: an unknown HU barcode scanned during Goods Receipt
+  (`services/receipt.create_and_submit_goods_receipt`) or the RF app now
+  falls back to `WMS Settings.default_handling_unit_type` when no HU Type is
+  given, and always goes through the same `services.handling_unit` creation
+  path (so it's numbered/validated and logs an HU Event) instead of a bare
+  insert.
+
 ## Core flows
 
 **Inbound:** `Inbound Delivery` (expected receipt, e.g. against a Purchase
@@ -158,6 +199,24 @@ bins/products) → operator picks in RF → stock stages → `Packing Order`
 (optional) groups HUs for shipment → `Goods Issue` posted → ledger decreases
 stock, ERPNext Delivery Note (or generic Stock Entry) mirrored.
 
+**Shipping/loading:** once its deliveries are fully picked,
+`services/shipping.create_shipment` picks up their staged HUs, determines a
+**WMS Route** (`services/determination.determine_route`, matched by warehouse
++ carrier same as the other rule tables), and creates a `WMS Shipment`
+(`Ready to Load`, numbered from the `WMS Shipment` number range). The RF
+"Load" action then confirms each HU one at a time
+(`services/shipping.confirm_hu_loaded`): if the Route has **Stops**
+configured — an ordered list of intermediate bins, e.g. a marshalling bin for
+cross-dock or a yard checkpoint — the HU is walked through them one hop at a
+time (`_advance_hu_through_hops`) instead of teleporting straight to the
+door, each hop posting a real ledger transfer and an HU Event (`Staged` for
+an intermediate stop, `Loaded` for the final hop into the door), using the
+movement type of the matching Warehouse Process Type (`OB_STAGE` /
+`OB_LOAD`) rather than a hardcoded code. Once every HU on the shipment is
+loaded the shipment becomes `Loaded`; `depart_shipment` moves it to
+`Departed`; `complete_shipment` (a logistics-only milestone, e.g. proof of
+delivery received) closes it out as `Completed` and marks its HUs `Shipped`.
+
 **Physical count:** `WMS Physical Inventory Count` snapshots `WMS Stock
 Balance` for a warehouse (optionally scoped to bin/storage type/product) →
 operator records counted quantities in RF → posting the count writes the
@@ -172,18 +231,30 @@ physical relocation required.
 entirely and calls `services/task.create_and_confirm_move` directly — for
 on-the-spot corrections where a plan isn't needed.
 
+**Task queueing (Warehouse Order):** if a **Warehouse Queue** is configured
+for a warehouse/activity(/storage type), every `Warehouse Task` created for
+that activity is attached (`services/warehouse_order.attach_task`) to a
+**Warehouse Order** — a batch of tasks sharing the same `batch_key` (e.g. one
+putaway request, one pick-task group) — which is auto-assigned to whichever
+active `WMS Resource` on that queue currently has the fewest open Warehouse
+Orders. A resource without a standing assignment joins a queue
+(`join_queue`) and pulls the next one itself (`pull_next_warehouse_order`,
+oldest-priority-first). This is optional infrastructure: a task type with no
+matching Warehouse Queue is simply never routed through a Warehouse Order and
+behaves as before (assigned/worked directly).
+
 ## Modules
 
 | Module | Contains |
 |---|---|
 | `wms_core` | Warehouse/Storage Type/Storage Bin structure, WMS Settings, the WMS Monitor page, the WMS workspace |
-| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules, process types, movement types, replenishment rules, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
+| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules, process types, movement types, replenishment rules, WMS Number Range, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
 | `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
 | `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail), Packaging Material |
-| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Queue, WMS Resource, WMS Exception Code |
-| `wms_shipping` | WMS Route, WMS Shipment |
+| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Exception Code |
+| `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
 `services/*.py` holds the transactional logic each doctype's controller calls
 into (allocation, determination, receipt, issue, picking, packing,
@@ -215,18 +286,26 @@ on a new site:
    `OB_PICK`, `OB_STAGE`, `OB_LOAD`, `INTERNAL_MOVE`, `PACK_REPACK`,
    `STOCK_TYPE_CHANGE`, `REPLENISH`) usually covers an MVP; add more only if
    you need a new activity/movement-type combination.
-5. **Bin Determination Rule** — at least one fallback rule per
+6. **Bin Determination Rule** — at least one fallback rule per
    (warehouse, activity) with no item/stock-type filters, so determination
    never dead-ends; add narrower higher-priority rules on top for exceptions.
-6. **Process Determination Rule** — at least one fallback per (warehouse,
+7. **Process Determination Rule** — at least one fallback per (warehouse,
    document type) pointing at a Storage Process (or Route).
-7. **Storage Process** / **Storage Process Step** — only needed where a
+8. **Storage Process** / **Storage Process Step** — only needed where a
    document type must run more than one step (e.g. unload, then putaway).
-8. **Replenishment Rule** — one per (warehouse, product, pick bin) you want
+9. **Replenishment Rule** — one per (warehouse, product, pick bin) you want
    auto-replenished; the hourly job does the rest.
-9. **Roles** — assign the roles below to users; optionally add **User
-   Permission** rows restricting a user to specific `WMS Warehouse` values
-   (see [Roles & permissions](#roles--permissions)).
+10. **WMS Number Range** — the seeded global fallback (`HU-########`,
+    `SHIP-########`) works out of the box; add a narrower one per warehouse
+    or per HU Type where you need a different prefix/window (see
+    [Numbering](#numbering-hu-and-shipment-number-ranges)).
+11. **WMS Route** / **Route Stop** — at least one active Route per warehouse
+    (with a `default_staging_bin`/`default_door`) so `create_shipment` can
+    determine one; add ordered **Stops** only where HUs must physically pass
+    through intermediate bins (marshalling, yard checkpoint) before the door.
+12. **Roles** — assign the roles below to users; optionally add **User
+    Permission** rows restricting a user to specific `WMS Warehouse` values
+    (see [Roles & permissions](#roles--permissions)).
 
 ## Roles & permissions
 
@@ -305,6 +384,8 @@ leads to:
 | Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises putaway tasks |
 | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested staged HU per line, post the Goods Issue |
 | Pack | Complete an open Packing Order in one tap |
+| Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
+| Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, or block/unblock an HU |
 | Move | Ad-hoc bin-to-bin/HU-to-HU transfer with no planning step |
 | Count | Record physical inventory quantities, auto-posts once every line is counted |
 | Quality | Complete an inspection's pass/fail split |

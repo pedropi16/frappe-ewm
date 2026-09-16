@@ -1,5 +1,10 @@
 import frappe
 
+def has_app_permission(app_name=None):
+    if "System Manager" in frappe.get_roles():
+        return True
+    return any(role.startswith("WMS ") for role in frappe.get_roles())
+
 def _warehouse_clause(user):
     # User Permissions remain authoritative. Empty means no additional SQL restriction.
     allowed = frappe.get_all("User Permission", filters={"user": user, "allow": "WMS Warehouse"}, pluck="for_value")

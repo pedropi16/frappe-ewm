@@ -28,6 +28,7 @@
     "stock_type_from",
     "stock_type_to",
     "movement_type",
+    "warehouse_order",
     "queue",
     "assigned_resource",
     "priority",
@@ -175,6 +176,14 @@
       "fieldtype": "Link",
       "options": "WMS Movement Type",
       "reqd": 1
+    },
+    {
+      "fieldname": "warehouse_order",
+      "label": "Warehouse Order",
+      "fieldtype": "Link",
+      "options": "Warehouse Order",
+      "in_list_view": 1,
+      "in_standard_filter": 1
     },
     {
       "fieldname": "queue",

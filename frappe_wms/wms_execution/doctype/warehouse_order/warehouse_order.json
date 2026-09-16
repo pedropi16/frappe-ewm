@@ -1,0 +1,168 @@
+{
+  "name": "Warehouse Order",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "activity",
+    "queue",
+    "wave",
+    "batch_key",
+    "assigned_resource",
+    "priority",
+    "status",
+    "task_count",
+    "confirmed_count",
+    "reference_doctype",
+    "reference_name",
+    "started_at",
+    "completed_at"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nStage\nLoad\nPosting Change\nInventory Count",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "queue",
+      "label": "Queue",
+      "fieldtype": "Link",
+      "options": "Warehouse Queue",
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "wave",
+      "label": "Wave",
+      "fieldtype": "Link",
+      "options": "WMS Wave",
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "batch_key",
+      "label": "Batch Key",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "assigned_resource",
+      "label": "Assigned Resource",
+      "fieldtype": "Link",
+      "options": "WMS Resource",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "reqd": 1,
+      "default": "Normal",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nAssigned\nIn Process\nCompleted\nCancelled",
+      "reqd": 1,
+      "default": "Open",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "task_count",
+      "label": "Task Count",
+      "fieldtype": "Int",
+      "read_only": 1,
+      "default": 0
+    },
+    {
+      "fieldname": "confirmed_count",
+      "label": "Confirmed Count",
+      "fieldtype": "Int",
+      "read_only": 1,
+      "default": 0
+    },
+    {
+      "fieldname": "reference_doctype",
+      "label": "Reference Document Type",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "read_only": 1
+    },
+    {
+      "fieldname": "reference_name",
+      "label": "Reference Name",
+      "fieldtype": "Dynamic Link",
+      "options": "reference_doctype",
+      "read_only": 1
+    },
+    {
+      "fieldname": "started_at",
+      "label": "Started At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "completed_at",
+      "label": "Completed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    }
+  ],
+  "autoname": "WO-.##########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

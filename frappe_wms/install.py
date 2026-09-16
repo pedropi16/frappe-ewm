@@ -14,5 +14,38 @@ def after_install():
     process=[("GR_UNLOAD","Goods Receipt Unload","Unload","301"),("GR_PUTAWAY","Goods Receipt Putaway","Putaway","201"),("OB_PICK","Outbound Picking","Pick","401"),("OB_STAGE","Outbound Staging","Stage","301"),("OB_LOAD","Outbound Loading","Load","301"),("INTERNAL_MOVE","Internal Movement","Internal Move","301"),("PACK_REPACK","Packing and Repacking","Pack","801"),("STOCK_TYPE_CHANGE","Stock Type Change","Posting Change","501"),("REPLENISH","Pick Face Replenishment","Putaway","201")]
     for code,name,activity,movement in process: _insert("Warehouse Process Type",{"process_type_code":code,"process_type_name":name,"activity":activity,"source_required":1,"destination_required":1,"stock_required":1,"confirmation_mode":"Handling Unit","movement_type":movement,"active":1})
 
+    all_task_types=["Unload","Putaway","Pick","Internal Move","Stage","Load","Posting Change","Inventory Count"]
+    exceptions=[
+        ("OOS","Out of Stock at Location","Stock",0,0,["Pick"]),
+        ("DAMAGED","Damaged Product Found","Stock",0,1,["Unload","Putaway","Pick","Internal Move"]),
+        ("BIN_BLOCKED","Bin Blocked or Inaccessible","Bin",0,0,["Putaway","Pick","Internal Move","Stage"]),
+        ("HU_DAMAGED","Handling Unit Damaged","Handling Unit",0,1,["Unload","Putaway","Pick","Internal Move","Load"]),
+        ("WRONG_ITEM","Wrong Item Scanned","Task",0,1,all_task_types),
+        ("QTY_MISMATCH","Quantity Mismatch","Task",0,1,["Unload","Putaway","Pick","Inventory Count"]),
+        ("ROUTE_ISSUE","Route Not Deliverable","Route",1,1,["Load","Stage"]),
+        ("SYSTEM_ERROR","System or Scanner Error","System",1,1,all_task_types),
+    ]
+    for code,name,category,requires_supervisor,requires_comment,task_types in exceptions:
+        _insert("WMS Exception Code",{
+            "exception_code":code,"exception_name":name,"category":category,
+            "requires_supervisor":requires_supervisor,"requires_comment":requires_comment,"active":1,
+            "allowed_task_types":[{"task_type":t} for t in task_types],
+        })
+
+    for range_for, prefix in [("Handling Unit", "HU-"), ("WMS Shipment", "SHIP-")]:
+        if frappe.db.exists("WMS Number Range", {"range_for": range_for, "warehouse": ["in", ["", None]], "hu_type": ["in", ["", None]]}):
+            continue
+        frappe.get_doc({
+            "doctype": "WMS Number Range", "range_for": range_for, "prefix": prefix,
+            "number_length": 8, "start_number": 1, "end_number": 99999999, "active": 1,
+        }).insert(ignore_permissions=True)
+
     from frappe_wms.setup.roles import ensure_roles
     ensure_roles()
+
+    if not frappe.db.exists("Desktop Icon", "WMS"):
+        frappe.get_doc({
+            "doctype": "Desktop Icon", "label": "WMS", "app": "frappe_wms",
+            "link_type": "Workspace Sidebar", "link_to": "WMS",
+            "icon_type": "Link", "icon": "warehouse", "bg_color": "blue", "hidden": 0,
+        }).insert(ignore_permissions=True)

@@ -3,6 +3,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 from frappe_wms.services.stock import post_entries
+from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
 from frappe_wms.utils import require_role
 
@@ -46,18 +47,16 @@ def list_open_inbound_deliveries(user=None):
 
 def create_and_submit_goods_receipt(inbound_delivery, items):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
-    # hu_type is only required when handling_unit doesn't already exist (received onto a
-    # fresh pallet/carton scanned for the first time) - it is then auto-created in place.
+    # hu_type is optional when handling_unit doesn't already exist - it falls back to
+    # WMS Settings.default_handling_unit_type so a scan of a fresh pallet/carton auto-registers
+    # in place, same as the RF "Receive" flow described in the README.
     require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
     delivery = frappe.get_doc("Inbound Delivery", inbound_delivery)
     if not items: frappe.throw(_("At least one receipt line is required"))
     for item in items:
-        if not frappe.db.exists("Handling Unit", item.get("handling_unit")):
-            if not item.get("hu_type"): frappe.throw(_("Handling Unit {0} does not exist; specify a Handling Unit Type to create it").format(item.get("handling_unit")))
-            frappe.get_doc({
-                "doctype": "Handling Unit", "hu_number": item["handling_unit"], "hu_type": item["hu_type"],
-                "warehouse": delivery.warehouse, "current_bin": delivery.receiving_bin, "status": "Open",
-            }).insert(ignore_permissions=True)
+        item["handling_unit"] = get_or_create_handling_unit(
+            item.get("handling_unit"), item.get("hu_type"), delivery.receiving_bin, delivery.warehouse,
+        )
     gr = frappe.get_doc({
         "doctype": "Goods Receipt", "inbound_delivery": delivery.name, "warehouse": delivery.warehouse,
         "receiving_bin": delivery.receiving_bin, "items": items,
@@ -66,5 +65,6 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.flags.ignore_permissions = True
     gr.submit()
     request_names = create_putaway_requests(gr.name)
-    task_names = [create_tasks_for_request(name) for name in request_names]
+    batch_key = frappe.generate_hash(length=10)
+    task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
     return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names}

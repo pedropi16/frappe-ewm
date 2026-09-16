@@ -16,6 +16,7 @@
     "nestable",
     "reusable",
     "requires_seal",
+    "numbering_mode",
     "active"
   ],
   "fields": [
@@ -69,6 +70,15 @@
       "label": "Requires Seal",
       "fieldtype": "Check",
       "default": 0
+    },
+    {
+      "fieldname": "numbering_mode",
+      "label": "Numbering Mode",
+      "fieldtype": "Select",
+      "options": "External\nInternal",
+      "default": "External",
+      "reqd": 1,
+      "description": "External: the HU number is a pre-printed/scanned barcode supplied by the operator. Internal: the system always assigns the next number from a WMS Number Range, ignoring any number the caller passes."
     },
     {
       "fieldname": "active",

@@ -57,7 +57,7 @@ def list_ready_to_ship(user=None):
     filters = {"picking_status": "Picked", "goods_issue_status": ["!=", "Posted"], "status": ["in", READY_TO_SHIP_STATUSES]}
     if resource: filters["warehouse"] = resource.warehouse
     deliveries = frappe.get_list("Outbound Delivery", filters=filters,
-        fields=["name", "outbound_delivery_number", "warehouse", "customer", "staging_bin", "status", "delivery_date"],
+        fields=["name", "outbound_delivery_number", "warehouse", "customer", "staging_bin", "route", "door", "status", "delivery_date"],
         order_by="delivery_date asc, creation asc", limit=50)
     for delivery in deliveries:
         rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery.name}, fields=["name", "item", "picked_quantity", "issued_quantity", "stock_uom", "required_stock_type"])

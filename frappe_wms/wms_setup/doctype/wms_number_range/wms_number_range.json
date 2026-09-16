@@ -1,0 +1,129 @@
+{
+  "name": "WMS Number Range",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "range_for",
+    "warehouse",
+    "hu_type",
+    "column_break_1",
+    "prefix",
+    "number_length",
+    "start_number",
+    "end_number",
+    "current_number",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "range_for",
+      "label": "Range For",
+      "fieldtype": "Select",
+      "options": "Handling Unit\nWMS Shipment",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "description": "Leave blank for a range that applies to every warehouse.",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "Handling Unit Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "depends_on": "eval:doc.range_for=='Handling Unit'",
+      "description": "Only used when Range For is Handling Unit. Leave blank for a range that applies to every HU type."
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "prefix",
+      "label": "Prefix",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "number_length",
+      "label": "Number Length",
+      "fieldtype": "Int",
+      "default": 8,
+      "description": "The numeric portion is zero-padded to this many digits."
+    },
+    {
+      "fieldname": "start_number",
+      "label": "Start Number",
+      "fieldtype": "Int",
+      "default": 1,
+      "reqd": 1
+    },
+    {
+      "fieldname": "end_number",
+      "label": "End Number",
+      "fieldtype": "Int",
+      "default": 99999999,
+      "reqd": 1
+    },
+    {
+      "fieldname": "current_number",
+      "label": "Current Number",
+      "fieldtype": "Int",
+      "default": 0,
+      "read_only": 1,
+      "description": "The last number handed out. Never edit this directly while the range is active."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "hash",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

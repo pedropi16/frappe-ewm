@@ -33,6 +33,7 @@
   header .user { font-size: 12px; color: var(--muted); }
   header .home-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
     border-radius: 8px; padding: 8px 12px; font-size: 14px; font-weight: 600; flex: 0 0 auto; }
+  header .home-btn-secondary { background: transparent; color: var(--muted); font-weight: 500; }
 
   main { flex: 1 1 auto; overflow-y: auto; padding: 12px; }
 
@@ -133,8 +134,73 @@ function extractServerMessage(raw) {
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function flt(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
+const TASK_TYPE_GROUPS = {
+  inbound: ["Unload", "Putaway"],
+  internal: ["Internal Move", "Posting Change", "Inventory Count"],
+  outbound: ["Pick", "Stage", "Load"],
+};
+
+const SECTIONS = {
+  inbound: {
+    label: "Inbound", icon: "\u{1F4E5}",
+    items: [
+      { icon: "\u{1F4E5}", label: "Receive", action: loadInboundDeliveries },
+      { icon: "\u{1F4CB}", label: "Putaway Tasks", taskGroup: "inbound", action: () => openTasksFiltered("inbound") },
+      { icon: "\u{2705}", label: "Quality", action: loadInspections },
+    ],
+  },
+  internal: {
+    label: "Internal", icon: "\u{2194}\u{FE0F}",
+    items: [
+      { icon: "\u{2194}\u{FE0F}", label: "Move", action: openMove },
+      { icon: "\u{1F4CB}", label: "Internal Tasks", taskGroup: "internal", action: () => openTasksFiltered("internal") },
+      { icon: "\u{1F522}", label: "Count", action: loadCounts },
+      { icon: "\u{1F3F7}\u{FE0F}", label: "Handling Units", action: loadHUHome },
+    ],
+  },
+  outbound: {
+    label: "Outbound", icon: "\u{1F4E4}",
+    items: [
+      { icon: "\u{1F4CB}", label: "Pick Tasks", taskGroup: "outbound", action: () => openTasksFiltered("outbound") },
+      { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
+      { icon: "\u{1F4E6}", label: "Pack", action: loadPackingOrders },
+      { icon: "\u{1F69B}", label: "Load", action: loadShipments },
+    ],
+  },
+};
+
+// Maps a view to the view it should return to when the header Back button is pressed.
+const VIEW_PARENT = {
+  section: () => "menu",
+  tasks: () => "section",
+  "task-detail": () => "tasks",
+  receive: () => "section",
+  "receive-detail": () => "receive",
+  ship: () => "section",
+  "ship-detail": () => "ship",
+  pack: () => "section",
+  move: () => "section",
+  count: () => "section",
+  "count-detail": () => "count",
+  quality: () => "section",
+  "quality-detail": () => "quality",
+  hu: () => "section",
+  "hu-detail": () => "hu",
+  load: () => "section",
+  "load-detail": () => "load",
+  lookup: () => "menu",
+};
+
+// Reloads the list for a view when navigating back into it, so data is never stale.
+const VIEW_RELOAD = {
+  tasks: loadTasks, receive: loadInboundDeliveries, ship: loadShipDeliveries,
+  pack: loadPackingOrders, count: loadCounts, quality: loadInspections, hu: loadHUHome,
+  load: loadShipments,
+};
+
 const state = {
   view: "menu",
+  section: null,
   loading: false,
   error: null,
   info: null,
@@ -143,11 +209,27 @@ const state = {
 
   // Tasks
   tasks: [],
+  taskTypeFilter: null,
+  availableQueues: [],
+  showQueuePicker: false,
   currentTask: null,
   scanSource: "",
   scanDestination: "",
   confirmQty: "",
   exceptionCodes: [],
+  exceptionCodesLoaded: false,
+  exceptionRemarks: "",
+
+  // Handling Units
+  huList: [],
+  huSearch: "",
+  currentHU: null,
+  huNestTarget: "",
+  newHU: { hu_number: "", hu_type: "", storage_bin: "", parent_hu: "" },
+
+  // Load / Shipments
+  shipments: [],
+  currentShipment: null,
 
   // Lookup
   lookupCode: "",
@@ -182,8 +264,26 @@ const state = {
 function setState(patch) { Object.assign(state, patch); render(); }
 
 function goHome() {
-  setState({ view: "menu", error: null, info: null, currentTask: null, currentInbound: null, currentShipDelivery: null, currentCount: null, currentInspection: null });
+  setState({ view: "menu", section: null, error: null, info: null, currentTask: null, currentInbound: null, currentShipDelivery: null, currentCount: null, currentInspection: null, currentHU: null, taskTypeFilter: null });
   loadResource();
+}
+
+function goSection(key) {
+  setState({ view: "section", section: key, error: null, info: null });
+}
+
+function goBack() {
+  const parentFn = VIEW_PARENT[state.view];
+  if (!parentFn) { goHome(); return; }
+  const parent = parentFn();
+  setState({ view: parent, error: null, info: null });
+  const reload = VIEW_RELOAD[parent];
+  if (reload) reload();
+}
+
+function openTasksFiltered(group) {
+  setState({ view: "tasks", section: group, taskTypeFilter: TASK_TYPE_GROUPS[group] || null, error: null, info: null });
+  loadTasks();
 }
 
 async function loadResource() {
@@ -204,11 +304,56 @@ async function loadTasks() {
   }
 }
 
+// ---------- Queues & Warehouse Orders ----------
+async function openQueuePicker() {
+  setState({ loading: true, error: null });
+  try {
+    const warehouse = state.resource ? state.resource.warehouse : undefined;
+    const queues = await api("frappe_wms.api.warehouse_order.list_queues", { warehouse });
+    setState({ loading: false, availableQueues: queues || [], showQueuePicker: true });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function pickQueue(queueName) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.warehouse_order.join_queue", { queue_name: queueName });
+    setState({ loading: false, showQueuePicker: false, info: `Joined ${queueName}` });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function leaveCurrentQueue() {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.warehouse_order.leave_queue", {});
+    setState({ loading: false, info: "Left queue" });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function pullWork() {
+  setState({ loading: true, error: null });
+  try {
+    const wo = await api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {});
+    setState({ loading: false, info: wo ? `Assigned ${wo}` : "No work waiting in this queue" });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
 function openTask(task) {
   setState({
     view: "task-detail", currentTask: task, scanSource: "", scanDestination: "",
     confirmQty: String(flt(task.planned_quantity) - flt(task.confirmed_quantity)),
-    error: null, info: null, exceptionCodes: [],
+    error: null, info: null, exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "",
   });
 }
 
@@ -234,7 +379,7 @@ async function openExceptionPicker() {
   setState({ loading: true, error: null });
   try {
     const codes = await api("frappe_wms.api.scanner.list_exception_codes", { task_type: state.currentTask.task_type });
-    setState({ loading: false, exceptionCodes: codes });
+    setState({ loading: false, exceptionCodes: codes, exceptionCodesLoaded: true, exceptionRemarks: "" });
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -242,10 +387,16 @@ async function openExceptionPicker() {
 
 async function submitException(code) {
   const task = state.currentTask;
+  const requiresComment = state.exceptionCodes.find((c) => c.name === code)?.requires_comment;
+  const remarks = state.exceptionRemarks.trim();
+  if (requiresComment && !remarks) {
+    setState({ error: "This exception requires a comment before it can be reported." });
+    return;
+  }
   setState({ loading: true, error: null });
   try {
-    await api("frappe_wms.api.scanner.raise_exception", { task_name: task.name, exception_code: code });
-    setState({ loading: false, view: "tasks", info: `${task.task_type} flagged as exception`, currentTask: null, exceptionCodes: [] });
+    await api("frappe_wms.api.scanner.raise_exception", { task_name: task.name, exception_code: code, remarks: remarks || undefined });
+    setState({ loading: false, view: "tasks", info: `${task.task_type} flagged as exception`, currentTask: null, exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "" });
     loadTasks();
   } catch (e) {
     setState({ loading: false, error: e.message });
@@ -268,7 +419,7 @@ async function runLookup() {
 
 // ---------- Receive ----------
 async function loadInboundDeliveries() {
-  setState({ loading: true, error: null, view: "receive" });
+  setState({ loading: true, error: null, view: "receive", section: "inbound" });
   try {
     const rows = await api("frappe_wms.api.inbound.list_open_inbound_deliveries");
     setState({ loading: false, inboundDeliveries: rows || [] });
@@ -296,7 +447,7 @@ async function openInbound(delivery) {
 
 async function loadHuTypes() {
   try {
-    const rows = await api("frappe.client.get_list", { doctype: "Handling Unit Type", fields: ["name"], limit_page_length: 50 });
+    const rows = await api("frappe.client.get_list", { doctype: "Handling Unit Type", fields: ["name", "numbering_mode"], limit_page_length: 50 });
     setState({ hu_types: rows || [] });
   } catch (e) { /* non-fatal */ }
 }
@@ -317,7 +468,7 @@ async function submitReceipt() {
   setState({ loading: true, error: null });
   try {
     const result = await api("frappe_wms.api.inbound.create_and_submit_goods_receipt", { inbound_delivery: delivery.name, items: JSON.stringify(items) });
-    setState({ loading: false, view: "tasks", info: `Goods Receipt ${result.goods_receipt} posted, ${result.warehouse_tasks.length} putaway task(s) created`, currentInbound: null, receiveLines: [] });
+    setState({ loading: false, view: "tasks", section: "inbound", taskTypeFilter: TASK_TYPE_GROUPS.inbound, info: `Goods Receipt ${result.goods_receipt} posted, ${result.warehouse_tasks.length} putaway task(s) created`, currentInbound: null, receiveLines: [] });
     loadTasks();
   } catch (e) {
     setState({ loading: false, error: e.message });
@@ -326,7 +477,7 @@ async function submitReceipt() {
 
 // ---------- Ship ----------
 async function loadShipDeliveries() {
-  setState({ loading: true, error: null, view: "ship" });
+  setState({ loading: true, error: null, view: "ship", section: "outbound" });
   try {
     const rows = await api("frappe_wms.api.outbound.list_ready_to_ship");
     setState({ loading: false, shipDeliveries: rows || [] });
@@ -360,7 +511,7 @@ async function submitGoodsIssue() {
   setState({ loading: true, error: null });
   try {
     const result = await api("frappe_wms.api.outbound.create_and_submit_goods_issue", { outbound_delivery: delivery.name, items: JSON.stringify(items) });
-    setState({ loading: false, view: "menu", info: `Goods Issue ${result.goods_issue} posted`, currentShipDelivery: null, shipLines: [] });
+    setState({ loading: false, view: "section", section: "outbound", info: `Goods Issue ${result.goods_issue} posted`, currentShipDelivery: null, shipLines: [] });
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -368,7 +519,7 @@ async function submitGoodsIssue() {
 
 // ---------- Pack ----------
 async function loadPackingOrders() {
-  setState({ loading: true, error: null, view: "pack" });
+  setState({ loading: true, error: null, view: "pack", section: "outbound" });
   try {
     const rows = await api("frappe_wms.api.scanner.list_open_packing_orders");
     setState({ loading: false, packingOrders: rows || [] });
@@ -391,7 +542,7 @@ async function completePacking(order) {
 // ---------- Move ----------
 function openMove() {
   setState({
-    view: "move", error: null, info: null,
+    view: "move", section: "internal", error: null, info: null,
     moveForm: { product: "", quantity: "", stock_uom: "", stock_type: "AVAILABLE",
       source_bin: "", source_hu: "", destination_bin: "", destination_hu: "" },
   });
@@ -415,7 +566,7 @@ async function submitMove() {
       source_bin: f.source_bin || undefined, source_hu: f.source_hu || undefined,
       destination_bin: f.destination_bin, destination_hu: f.destination_hu || undefined,
     });
-    setState({ loading: false, view: "menu", info: `Moved ${result.quantity} ${f.product} to ${f.destination_bin}` });
+    setState({ loading: false, view: "section", section: "internal", info: `Moved ${result.quantity} ${f.product} to ${f.destination_bin}` });
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -423,7 +574,7 @@ async function submitMove() {
 
 // ---------- Count ----------
 async function loadCounts() {
-  setState({ loading: true, error: null, view: "count" });
+  setState({ loading: true, error: null, view: "count", section: "internal" });
   try {
     const rows = await api("frappe_wms.api.inventory.list_open_counts");
     setState({ loading: false, counts: rows || [] });
@@ -454,14 +605,14 @@ async function submitCounts() {
     if (result.status === "Counted") {
       try {
         await api("frappe_wms.api.inventory.post_count", { count_name: count.name });
-        setState({ loading: false, view: "menu", info: `Count ${count.name} fully counted and posted` });
+        setState({ loading: false, view: "section", section: "internal", info: `Count ${count.name} fully counted and posted` });
         return;
       } catch (e) {
-        setState({ loading: false, view: "menu", info: `Count ${count.name} fully counted; ask a supervisor to post it` });
+        setState({ loading: false, view: "section", section: "internal", info: `Count ${count.name} fully counted; ask a supervisor to post it` });
         return;
       }
     }
-    setState({ loading: false, view: "menu", info: `Saved counts for ${count.name}` });
+    setState({ loading: false, view: "section", section: "internal", info: `Saved counts for ${count.name}` });
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -469,7 +620,7 @@ async function submitCounts() {
 
 // ---------- Quality ----------
 async function loadInspections() {
-  setState({ loading: true, error: null, view: "quality" });
+  setState({ loading: true, error: null, view: "quality", section: state.section || "inbound" });
   try {
     const rows = await api("frappe_wms.api.inventory.list_open_inspections");
     setState({ loading: false, inspections: rows || [] });
@@ -495,7 +646,143 @@ async function submitInspection() {
   setState({ loading: true, error: null });
   try {
     await api("frappe_wms.api.inventory.complete_inspection", { inspection_name: inspection.name, passed_quantity: passed, failed_quantity: failed });
-    setState({ loading: false, view: "menu", info: `Inspection ${inspection.name} completed`, currentInspection: null });
+    setState({ loading: false, view: "section", section: state.section || "inbound", info: `Inspection ${inspection.name} completed`, currentInspection: null });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Handling Units ----------
+async function loadHUHome() {
+  setState({ loading: true, error: null, view: "hu", section: "internal" });
+  try {
+    if (!state.hu_types.length) await loadHuTypes();
+    const rows = await api("frappe_wms.api.handling_unit.list_handling_units", { search: state.huSearch || undefined });
+    setState({ loading: false, huList: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function searchHU(value) {
+  state.huSearch = value;
+  loadHUHome();
+}
+
+function openHUCreate() {
+  setState({ view: "hu-create", section: "internal", error: null, info: null, newHU: { hu_number: "", hu_type: "", storage_bin: "", parent_hu: "" } });
+}
+
+async function submitCreateHU() {
+  const f = state.newHU;
+  const huType = state.hu_types.find((t) => t.name === f.hu_type);
+  const isInternal = huType && huType.numbering_mode === "Internal";
+  if (!f.hu_type || (!isInternal && !f.hu_number) || (!f.storage_bin && !f.parent_hu)) {
+    setState({ error: isInternal ? "Pick an HU type, and scan a bin or a parent HU." : "Scan a barcode, pick an HU type, and scan a bin or a parent HU." });
+    return;
+  }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.handling_unit.create_handling_unit", {
+      hu_number: f.hu_number || undefined, hu_type: f.hu_type, storage_bin: f.storage_bin || undefined, parent_hu: f.parent_hu || undefined,
+    });
+    setState({ loading: false, view: "hu", info: `Handling Unit ${result.name} created` });
+    loadHUHome();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function openHU(hu) {
+  setState({ loading: true, error: null });
+  try {
+    const detail = await api("frappe_wms.api.handling_unit.handling_unit_detail", { hu_name: hu.name });
+    setState({ loading: false, view: "hu-detail", currentHU: detail, huNestTarget: "" });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function refreshCurrentHU() {
+  if (!state.currentHU) return;
+  const detail = await api("frappe_wms.api.handling_unit.handling_unit_detail", { hu_name: state.currentHU.name });
+  setState({ currentHU: detail });
+}
+
+async function submitNestHU() {
+  const target = (state.huNestTarget || "").trim();
+  if (!target) { setState({ error: "Scan the parent Handling Unit's barcode." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.handling_unit.nest_handling_unit", { hu_name: state.currentHU.name, parent_hu: target });
+    setState({ loading: false, info: `Nested inside ${target}` });
+    refreshCurrentHU();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function submitUnnestHU() {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.handling_unit.unnest_handling_unit", { hu_name: state.currentHU.name });
+    setState({ loading: false, info: "Unnested" });
+    refreshCurrentHU();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function toggleBlockHU() {
+  const hu = state.currentHU;
+  const blocking = hu.status !== "Blocked";
+  setState({ loading: true, error: null });
+  try {
+    const method = blocking ? "frappe_wms.api.handling_unit.block_handling_unit" : "frappe_wms.api.handling_unit.unblock_handling_unit";
+    await api(method, { hu_name: hu.name });
+    setState({ loading: false, info: blocking ? `${hu.name} blocked` : `${hu.name} unblocked` });
+    refreshCurrentHU();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Load / Shipments ----------
+async function loadShipments() {
+  setState({ loading: true, error: null, view: "load", section: "outbound" });
+  try {
+    const rows = await api("frappe_wms.api.shipping.list_loadable_shipments", {});
+    setState({ loading: false, shipments: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function openShipment(shipment) {
+  setState({ view: "load-detail", currentShipment: shipment, error: null, info: null });
+}
+
+async function confirmHULoaded(huName) {
+  const shipment = state.currentShipment;
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.shipping.confirm_hu_loaded", { shipment_name: shipment.name, hu_name: huName });
+    shipment.handling_units.find((h) => h.handling_unit === huName).loaded = 1;
+    shipment.loaded_count += 1;
+    shipment.status = result.shipment_status;
+    setState({ loading: false, currentShipment: shipment, info: `${huName} loaded` });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function departCurrentShipment() {
+  const shipment = state.currentShipment;
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.shipping.depart_shipment", { shipment_name: shipment.name });
+    setState({ loading: false, view: "load", info: `${shipment.name} departed`, currentShipment: null });
+    loadShipments();
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -517,12 +804,14 @@ function render() {
   if (state.info) main.appendChild(el(`<div class="banner ok">${escapeHtml(state.info)}</div>`));
 
   const renderers = {
-    menu: renderMenu, tasks: renderTasks, "task-detail": renderTaskDetail, lookup: renderLookup,
+    menu: renderMenu, section: renderSection, tasks: renderTasks, "task-detail": renderTaskDetail, lookup: renderLookup,
     receive: renderReceiveList, "receive-detail": renderReceiveDetail,
     ship: renderShipList, "ship-detail": renderShipDetail,
     pack: renderPackList, move: renderMove,
     count: renderCountList, "count-detail": renderCountDetail,
     quality: renderQualityList, "quality-detail": renderQualityDetail,
+    hu: renderHUList, "hu-create": renderHUCreate, "hu-detail": renderHUDetail,
+    load: renderLoadList, "load-detail": renderLoadDetail,
   };
   main.appendChild((renderers[state.view] || renderMenu)());
 
@@ -530,17 +819,36 @@ function render() {
   if (state.loading) app.appendChild(el(`<div class="overlay"><div class="spinner"></div></div>`));
 }
 
+function breadcrumb() {
+  const section = state.section && SECTIONS[state.section];
+  if (!section) return null;
+  const VIEW_LABEL = {
+    section: null, tasks: "Tasks", "task-detail": "Task", receive: "Receive", "receive-detail": "Receive",
+    ship: "Ship", "ship-detail": "Ship", pack: "Pack", move: "Move", count: "Count", "count-detail": "Count",
+    quality: "Quality", "quality-detail": "Quality", hu: "Handling Units", "hu-create": "New Handling Unit", "hu-detail": "Handling Unit",
+    load: "Load", "load-detail": "Load",
+  };
+  const leaf = VIEW_LABEL[state.view];
+  return `${section.icon} ${escapeHtml(section.label)}${leaf ? " &rsaquo; " + escapeHtml(leaf) : ""}`;
+}
+
 function renderHeader() {
+  const crumb = breadcrumb();
   const header = el(`
     <header>
       <div class="title-wrap">
-        <div class="title">WMS Scanner</div>
+        <div class="title">${crumb || "WMS Scanner"}</div>
         <div class="user">${escapeHtml(USER_FULLNAME)}${state.resource ? " &middot; " + escapeHtml(state.resource.name) : ""}</div>
       </div>
     </header>
   `);
   if (state.view !== "menu") {
-    const home = el(`<button class="home-btn">&larr; Menu</button>`);
+    const back = el(`<button class="home-btn">&larr; Back</button>`);
+    back.onclick = goBack;
+    header.appendChild(back);
+  }
+  if (state.view !== "menu" && state.view !== "section") {
+    const home = el(`<button class="home-btn home-btn-secondary">Home</button>`);
     home.onclick = goHome;
     header.appendChild(home);
   }
@@ -551,20 +859,33 @@ function renderMenu() {
   const wrap = el(`<div></div>`);
   const grid = el(`<div class="menu-grid"></div>`);
   const items = [
-    { icon: "\u{1F4CB}", label: "Tasks", count: state.tasks.length, action: () => { setState({ view: "tasks" }); loadTasks(); } },
-    { icon: "\u{1F4E5}", label: "Receive", action: loadInboundDeliveries },
-    { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
-    { icon: "\u{1F4E6}", label: "Pack", action: loadPackingOrders },
-    { icon: "\u{2194}\u{FE0F}", label: "Move", action: openMove },
-    { icon: "\u{1F522}", label: "Count", action: loadCounts },
-    { icon: "\u{2705}", label: "Quality", action: loadInspections },
-    { icon: "\u{1F50D}", label: "Lookup", action: () => setState({ view: "lookup", error: null, info: null }) },
+    ...Object.keys(SECTIONS).map((key) => ({ icon: SECTIONS[key].icon, label: SECTIONS[key].label, action: () => goSection(key) })),
+    { icon: "\u{1F50D}", label: "Lookup", action: () => setState({ view: "lookup", section: null, error: null, info: null }) },
   ];
   items.forEach((item) => {
     const btn = el(`
       <div class="menu-btn">
         <span class="icon">${item.icon}</span>${escapeHtml(item.label)}
-        ${item.count ? `<div class="count">${item.count}</div>` : ""}
+      </div>
+    `);
+    btn.onclick = item.action;
+    grid.appendChild(btn);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+function renderSection() {
+  const section = SECTIONS[state.section];
+  const wrap = el(`<div></div>`);
+  if (!section) { goHome(); return wrap; }
+  const grid = el(`<div class="menu-grid"></div>`);
+  section.items.forEach((item) => {
+    const count = item.taskGroup ? state.tasks.filter((t) => TASK_TYPE_GROUPS[item.taskGroup].includes(t.task_type)).length : 0;
+    const btn = el(`
+      <div class="menu-btn">
+        <span class="icon">${item.icon}</span>${escapeHtml(item.label)}
+        ${count ? `<div class="count">${count}</div>` : ""}
       </div>
     `);
     btn.onclick = item.action;
@@ -575,28 +896,87 @@ function renderMenu() {
 }
 
 // ----- Tasks -----
+function taskCard(task) {
+  const card = el(`
+    <div class="card">
+      <div class="row1">
+        <div class="task-type">${escapeHtml(task.task_type)}</div>
+        <span class="badge ${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>
+      </div>
+      <div class="meta">
+        ${escapeHtml(task.product || "")}<br>
+        ${escapeHtml(task.source_bin || task.source_hu || "-")} &rarr; ${escapeHtml(task.destination_bin || task.destination_hu || "-")}
+      </div>
+      <div class="qty">${task.confirmed_quantity || 0} / ${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}${task.wave ? " &middot; " + escapeHtml(task.wave) : ""}</div>
+    </div>
+  `);
+  card.onclick = () => openTask(task);
+  return card;
+}
+
+function renderQueueBar() {
+  const bar = el(`<div class="detail-section"></div>`);
+  const resource = state.resource;
+  const queue = resource && resource.current_queue;
+  bar.appendChild(el(`<h3>Queue</h3>`));
+  const row = el(`<div class="row1"></div>`);
+  row.appendChild(el(`<div>${queue ? "\u{1F4E1} " + escapeHtml(queue) : "Not joined to a queue"}</div>`));
+  const actions = el(`<div></div>`);
+  if (queue) {
+    const pullBtn = el(`<button class="btn btn-secondary">Get Work</button>`);
+    pullBtn.onclick = pullWork;
+    actions.appendChild(pullBtn);
+    const leaveBtn = el(`<button class="btn btn-secondary">Leave</button>`);
+    leaveBtn.onclick = leaveCurrentQueue;
+    actions.appendChild(leaveBtn);
+  } else {
+    const joinBtn = el(`<button class="btn btn-primary">Join Queue</button>`);
+    joinBtn.onclick = openQueuePicker;
+    actions.appendChild(joinBtn);
+  }
+  row.appendChild(actions);
+  bar.appendChild(row);
+
+  if (state.showQueuePicker) {
+    if (!state.availableQueues.length) {
+      bar.appendChild(el(`<div class="hint">No queues configured for your warehouse.</div>`));
+    }
+    state.availableQueues.forEach((q) => {
+      const b = el(`<button class="btn btn-secondary">${escapeHtml(q.queue_name)} (${escapeHtml(q.activity)})</button>`);
+      b.onclick = () => pickQueue(q.name);
+      bar.appendChild(b);
+    });
+    const cancel = el(`<button class="btn btn-secondary">Cancel</button>`);
+    cancel.onclick = () => setState({ showQueuePicker: false });
+    bar.appendChild(cancel);
+  }
+  return bar;
+}
+
 function renderTasks() {
   const wrap = el(`<div></div>`);
+  if (state.resource) wrap.appendChild(renderQueueBar());
   if (!state.tasks.length && !state.loading) {
     wrap.appendChild(el(`<div class="empty">No open tasks right now.</div>`));
     return wrap;
   }
+  const groups = [];
+  const groupByWO = {};
   state.tasks.forEach((task) => {
-    const card = el(`
-      <div class="card">
-        <div class="row1">
-          <div class="task-type">${escapeHtml(task.task_type)}</div>
-          <span class="badge ${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>
-        </div>
-        <div class="meta">
-          ${escapeHtml(task.product || "")}<br>
-          ${escapeHtml(task.source_bin || task.source_hu || "-")} &rarr; ${escapeHtml(task.destination_bin || task.destination_hu || "-")}
-        </div>
-        <div class="qty">${task.confirmed_quantity || 0} / ${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}${task.wave ? " &middot; " + escapeHtml(task.wave) : ""}</div>
-      </div>
-    `);
-    card.onclick = () => openTask(task);
-    wrap.appendChild(card);
+    if (!task.warehouse_order) { groups.push({ wo: null, tasks: [task] }); return; }
+    if (!groupByWO[task.warehouse_order]) {
+      const group = { wo: task.warehouse_order, tasks: [] };
+      groupByWO[task.warehouse_order] = group;
+      groups.push(group);
+    }
+    groupByWO[task.warehouse_order].tasks.push(task);
+  });
+  groups.forEach((group) => {
+    if (!group.wo) { wrap.appendChild(taskCard(group.tasks[0])); return; }
+    const confirmed = group.tasks.filter((t) => t.status === "Confirmed").length;
+    const section = el(`<div class="detail-section"><h3>${escapeHtml(group.wo)} &middot; ${confirmed}/${group.tasks.length} confirmed</h3></div>`);
+    group.tasks.forEach((task) => section.appendChild(taskCard(task)));
+    wrap.appendChild(section);
   });
   return wrap;
 }
@@ -617,15 +997,28 @@ function renderTaskDetail() {
     </div>
   `));
 
-  if (state.exceptionCodes.length) {
+  if (state.exceptionCodesLoaded) {
     const excSection = el(`<div class="detail-section"><h3>Select exception</h3></div>`);
+    if (!state.exceptionCodes.length) {
+      excSection.appendChild(el(`<div class="hint">No exception codes are configured for this task type. Ask a supervisor to set one up under WMS Exception Code.</div>`));
+    }
     state.exceptionCodes.forEach((code) => {
-      const b = el(`<button class="btn btn-danger">${escapeHtml(code.exception_name)}</button>`);
+      const b = el(`<button class="btn btn-danger">${escapeHtml(code.exception_name)}${code.requires_supervisor ? " \u{1F512}" : ""}</button>`);
       b.onclick = () => submitException(code.name);
       excSection.appendChild(b);
     });
+    if (state.exceptionCodes.some((c) => c.requires_comment)) {
+      const field = el(`
+        <div class="field">
+          <label>Comment (required for some exceptions)</label>
+          <input type="text" placeholder="What happened?" value="${escapeHtml(state.exceptionRemarks)}">
+        </div>
+      `);
+      field.querySelector("input").oninput = (e) => { state.exceptionRemarks = e.target.value; };
+      excSection.appendChild(field);
+    }
     const cancel = el(`<button class="btn btn-secondary">Back</button>`);
-    cancel.onclick = () => setState({ exceptionCodes: [] });
+    cancel.onclick = () => setState({ exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "" });
     excSection.appendChild(cancel);
     wrap.appendChild(excSection);
     return wrap;
@@ -786,7 +1179,7 @@ function renderShipList() {
     const card = el(`
       <div class="card">
         <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div><span class="badge Normal">${escapeHtml(d.status)}</span></div>
-        <div class="meta">${escapeHtml(d.customer || "")}<br>${escapeHtml(d.staging_bin || "")}</div>
+        <div class="meta">${escapeHtml(d.customer || "")}<br>${escapeHtml(d.staging_bin || "")}${d.door ? " &middot; Door " + escapeHtml(d.door) : ""}${d.route ? " &middot; " + escapeHtml(d.route) : ""}</div>
       </div>
     `);
     card.onclick = () => openShipDelivery(d);
@@ -797,6 +1190,17 @@ function renderShipList() {
 
 function renderShipDetail() {
   const wrap = el(`<div></div>`);
+  const delivery = state.currentShipDelivery;
+  if (delivery.route || delivery.door) {
+    wrap.appendChild(el(`
+      <div class="detail-section">
+        <div class="detail-grid">
+          <div><div class="label">Route</div><div>${escapeHtml(delivery.route || "-")}</div></div>
+          <div><div class="label">Door</div><div>${escapeHtml(delivery.door || "-")}</div></div>
+        </div>
+      </div>
+    `));
+  }
   state.shipLines.forEach((line, i) => {
     const row = el(`
       <div class="detail-section line-row">
@@ -954,6 +1358,188 @@ function renderQualityDetail() {
     submitInspection();
   };
   wrap.appendChild(btn);
+  return wrap;
+}
+
+// ----- Handling Units -----
+function renderHUList() {
+  const wrap = el(`<div></div>`);
+  const searchField = el(`
+    <div class="field">
+      <label>Search by barcode</label>
+      <input type="text" placeholder="Scan or type an HU barcode" value="${escapeHtml(state.huSearch)}">
+    </div>
+  `);
+  const input = searchField.querySelector("input");
+  input.oninput = (e) => { state.huSearch = e.target.value; };
+  input.onkeydown = (e) => { if (e.key === "Enter") searchHU(input.value); };
+  wrap.appendChild(searchField);
+
+  const newBtn = el(`<button class="btn btn-primary">+ Create Handling Unit</button>`);
+  newBtn.onclick = openHUCreate;
+  wrap.appendChild(newBtn);
+
+  if (!state.huList.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No handling units found.</div>`));
+    return wrap;
+  }
+  state.huList.forEach((hu) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1">
+          <div class="task-type">${escapeHtml(hu.hu_number)}</div>
+          <span class="badge ${hu.status === "Blocked" ? "High" : "Normal"}">${escapeHtml(hu.status)}</span>
+        </div>
+        <div class="meta">${escapeHtml(hu.hu_type)} &middot; ${escapeHtml(hu.current_bin || "-")}${hu.parent_hu ? " &middot; in " + escapeHtml(hu.parent_hu) : ""}</div>
+        <div class="qty">${escapeHtml(hu.stock_status)}</div>
+      </div>
+    `);
+    card.onclick = () => openHU(hu);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderHUCreate() {
+  const wrap = el(`<div></div>`);
+  const form = el(`<div class="detail-section"></div>`);
+  const selectedType = state.hu_types.find((t) => t.name === state.newHU.hu_type);
+  const isInternal = selectedType && selectedType.numbering_mode === "Internal";
+  const barcodeField = el(`<div class="field"><label>Barcode</label><input type="text" id="hu-number" placeholder="${isInternal ? "Leave blank - number is auto-assigned" : "Scan the blank HU barcode"}" value="${escapeHtml(state.newHU.hu_number)}" ${isInternal ? "disabled" : ""}></div>`);
+  form.appendChild(barcodeField);
+  const typeField = el(`<div class="field"><label>Handling Unit Type</label><select id="hu-type"><option value="">Select type</option></select></div>`);
+  const select = typeField.querySelector("select");
+  state.hu_types.forEach((t) => select.appendChild(el(`<option value="${escapeHtml(t.name)}" ${t.name === state.newHU.hu_type ? "selected" : ""}>${escapeHtml(t.name)}</option>`)));
+  select.onchange = () => {
+    setState({ newHU: { ...state.newHU, hu_type: select.value, hu_number: document.getElementById("hu-number").value } });
+  };
+  form.appendChild(typeField);
+  form.appendChild(el(`<div class="field"><label>Storage bin</label><input type="text" id="hu-bin" placeholder="Scan a bin (or leave blank if nesting)" value="${escapeHtml(state.newHU.storage_bin)}"></div>`));
+  form.appendChild(el(`<div class="field"><label>Parent Handling Unit</label><input type="text" id="hu-parent" placeholder="Scan a parent HU to nest into (optional)" value="${escapeHtml(state.newHU.parent_hu)}"></div>`));
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Create</button>`);
+  btn.onclick = () => {
+    state.newHU = {
+      hu_number: document.getElementById("hu-number").value,
+      hu_type: document.getElementById("hu-type").value,
+      storage_bin: document.getElementById("hu-bin").value,
+      parent_hu: document.getElementById("hu-parent").value,
+    };
+    submitCreateHU();
+  };
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function renderHUDetail() {
+  const hu = state.currentHU;
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(hu.hu_number)} &middot; ${escapeHtml(hu.status)}</h3>
+      <div class="detail-grid">
+        <div><div class="label">Type</div><div>${escapeHtml(hu.hu_type)}</div></div>
+        <div><div class="label">Bin</div><div>${escapeHtml(hu.current_bin || "-")}</div></div>
+        <div><div class="label">Parent HU</div><div>${escapeHtml(hu.parent_hu || "-")}</div></div>
+        <div><div class="label">Stock</div><div>${escapeHtml(hu.stock_status)}</div></div>
+      </div>
+    </div>
+  `));
+
+  if (hu.stock && hu.stock.length) {
+    const stockSection = el(`<div class="detail-section"><h3>Contents</h3></div>`);
+    hu.stock.forEach((row) => {
+      stockSection.appendChild(el(`<div class="meta">${escapeHtml(row.product)} &middot; ${row.quantity} ${escapeHtml(row.stock_uom)} &middot; ${escapeHtml(row.stock_type)}</div>`));
+    });
+    wrap.appendChild(stockSection);
+  }
+
+  if (hu.children && hu.children.length) {
+    const childSection = el(`<div class="detail-section"><h3>Nested Handling Units</h3></div>`);
+    hu.children.forEach((child) => {
+      const row = el(`<div class="meta">${escapeHtml(child.hu_number)} &middot; ${escapeHtml(child.status)}</div>`);
+      row.onclick = () => openHU(child);
+      childSection.appendChild(row);
+    });
+    wrap.appendChild(childSection);
+  }
+
+  const actions = el(`<div class="detail-section"><h3>Actions</h3></div>`);
+  if (hu.parent_hu) {
+    const unnestBtn = el(`<button class="btn btn-secondary">Unnest from ${escapeHtml(hu.parent_hu)}</button>`);
+    unnestBtn.onclick = submitUnnestHU;
+    actions.appendChild(unnestBtn);
+  } else {
+    const nestField = el(`<div class="field"><label>Nest into parent HU</label><input type="text" placeholder="Scan parent HU barcode" value="${escapeHtml(state.huNestTarget)}"></div>`);
+    nestField.querySelector("input").oninput = (e) => { state.huNestTarget = e.target.value; };
+    actions.appendChild(nestField);
+    const nestBtn = el(`<button class="btn btn-secondary">Nest</button>`);
+    nestBtn.onclick = submitNestHU;
+    actions.appendChild(nestBtn);
+  }
+  const blockBtn = el(`<button class="btn ${hu.status === "Blocked" ? "btn-primary" : "btn-danger"}">${hu.status === "Blocked" ? "Unblock" : "Block"}</button>`);
+  blockBtn.onclick = toggleBlockHU;
+  actions.appendChild(blockBtn);
+  wrap.appendChild(actions);
+
+  const backBtn = el(`<button class="btn btn-secondary">Back to Handling Units</button>`);
+  backBtn.onclick = loadHUHome;
+  wrap.appendChild(backBtn);
+  return wrap;
+}
+
+// ----- Load / Shipments -----
+function renderLoadList() {
+  const wrap = el(`<div></div>`);
+  if (!state.shipments.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">Nothing ready to load.</div>`));
+    return wrap;
+  }
+  state.shipments.forEach((s) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(s.shipment_number)}</div><span class="badge Normal">${escapeHtml(s.status)}</span></div>
+        <div class="meta">${escapeHtml(s.route || "-")}${s.door ? " &middot; Door " + escapeHtml(s.door) : ""}</div>
+        <div class="qty">${s.loaded_count} / ${s.total_count} loaded</div>
+      </div>
+    `);
+    card.onclick = () => openShipment(s);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+function renderLoadDetail() {
+  const shipment = state.currentShipment;
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(shipment.shipment_number)} &middot; ${escapeHtml(shipment.status)}</h3>
+      <div class="detail-grid">
+        <div><div class="label">Route</div><div>${escapeHtml(shipment.route || "-")}</div></div>
+        <div><div class="label">Door</div><div>${escapeHtml(shipment.door || shipment.staging_bin || "-")}</div></div>
+      </div>
+    </div>
+  `));
+  const list = el(`<div class="detail-section"><h3>Handling Units</h3></div>`);
+  shipment.handling_units.forEach((h) => {
+    const row = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(h.handling_unit)}</div><span class="badge ${h.loaded ? "Normal" : "High"}">${h.loaded ? "Loaded" : "Pending"}</span></div>
+      </div>
+    `);
+    if (!h.loaded) row.onclick = () => confirmHULoaded(h.handling_unit);
+    list.appendChild(row);
+  });
+  wrap.appendChild(list);
+  if (shipment.status === "Loaded") {
+    const departBtn = el(`<button class="btn btn-primary">Depart</button>`);
+    departBtn.onclick = departCurrentShipment;
+    wrap.appendChild(departBtn);
+  }
+  const backBtn = el(`<button class="btn btn-secondary">Back to Shipments</button>`);
+  backBtn.onclick = loadShipments;
+  wrap.appendChild(backBtn);
   return wrap;
 }
 

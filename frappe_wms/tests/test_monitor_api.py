@@ -64,7 +64,7 @@ class TestMonitorApi(IntegrationTestCase):
         code = frappe.get_all("WMS Exception Code", filters={"active": 1}, limit=1, pluck="name")
         if not code:
             self.skipTest("no WMS Exception Code configured")
-        raise_exception(task2, code[0])
+        raise_exception(task2, code[0], remarks="test")
         confirm_task(task1, confirmed_quantity=10)
 
         summary = get_summary(self.warehouse)
@@ -94,7 +94,7 @@ class TestMonitorApi(IntegrationTestCase):
         code = frappe.get_all("WMS Exception Code", filters={"active": 1}, limit=1, pluck="name")
         if not code:
             self.skipTest("no WMS Exception Code configured")
-        raise_exception(task, code[0])
+        raise_exception(task, code[0], remarks="test")
         rows = search_tasks(self.warehouse, status="Exception")
         self.assertTrue(any(r["name"] == task for r in rows))
         self.assertTrue(all(r["status"] == "Exception" for r in rows))

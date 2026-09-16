@@ -22,6 +22,13 @@ def determine_destination_bin(context):
         if bin_name: return bin_name
     frappe.throw(_("No destination bin could be determined"))
 
+def determine_route(warehouse, carrier=None):
+    filters = {"active": 1, "origin_warehouse": warehouse}
+    if carrier:
+        route = frappe.db.get_value("WMS Route", {**filters, "carrier": carrier}, "name")
+        if route: return route
+    return frappe.db.get_value("WMS Route", {**filters, "carrier": ["in", ["", None]]}, "name", order_by="route_code asc")
+
 def _apply_bin_strategy(strategy,bins,context):
     if strategy=="Least Utilized Bin":
         bins=sorted(bins,key=lambda x:x.current_hu_count or 0)
