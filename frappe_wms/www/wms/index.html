@@ -657,6 +657,471 @@ async function submitReceipt() {
   }
 }
 
+// ---------- Deconsolidation ----------
+function openDeconsolidation() {
+  setState({ view: "decon", section: "inbound", error: null, info: null, deconHuSearch: "", deconHu: null, deconLines: [] });
+}
+
+function renderDeconScan() {
+  const wrap = el(`<div></div>`);
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`
+    <div class="field">
+      <label>Scan the Handling Unit to break down</label>
+      <input type="text" id="decon-hu" placeholder="Scan HU barcode" value="${escapeHtml(state.deconHuSearch)}" autofocus>
+    </div>
+  `));
+  form.querySelector("input").oninput = (e) => { state.deconHuSearch = e.target.value; };
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Load Handling Unit</button>`);
+  btn.onclick = scanDeconHU;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+async function scanDeconHU() {
+  const barcode = state.deconHuSearch.trim();
+  if (!barcode) { setState({ error: "Scan a Handling Unit barcode." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const detail = await api("frappe_wms.api.scanner.hu_overview", { hu_number: barcode });
+    if (!detail.stock || !detail.stock.length) { setState({ loading: false, error: "This Handling Unit has no stock to deconsolidate." }); return; }
+    const lines = detail.stock.map((row) => ({
+      product: row.product, batch_no: row.batch_no || "", serial_no: row.serial_no || "", stock_type: row.stock_type,
+      stock_uom: row.stock_uom, available: row.quantity, quantity: String(row.quantity), destination_bin: "", destination_hu: "",
+    }));
+    setState({ loading: false, view: "decon-detail", deconHu: detail.handling_unit, deconLines: lines });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function addDeconSplit(i) {
+  const src = state.deconLines[i];
+  state.deconLines.splice(i + 1, 0, { ...src, quantity: "0", destination_bin: "", destination_hu: "" });
+  render();
+}
+
+function removeDeconLine(i) {
+  state.deconLines.splice(i, 1);
+  render();
+}
+
+function renderDeconDetail() {
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(state.deconHu.hu_number)} · ${escapeHtml(state.deconHu.current_bin || "-")}</h3>
+      <div class="hint">Split each line's quantity across one or more destination bins/HUs. Use "+ Split" to divide one product across multiple destinations.</div>
+    </div>
+  `));
+  state.deconLines.forEach((line, i) => {
+    const row = el(`
+      <div class="detail-section line-row">
+        <div class="line-head">${escapeHtml(line.product)}</div>
+        <div class="line-sub">${escapeHtml(line.batch_no || "")} ${escapeHtml(line.stock_type)} · available on HU: ${line.available} ${escapeHtml(line.stock_uom || "")}</div>
+        <div class="field"><label>Quantity</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
+        <div class="field"><label>Destination Bin</label><input type="text" data-i="${i}" data-f="destination_bin" placeholder="Scan bin barcode" value="${escapeHtml(line.destination_bin)}"></div>
+        <div class="field"><label>Destination HU (optional)</label><input type="text" data-i="${i}" data-f="destination_hu" placeholder="Scan HU barcode" value="${escapeHtml(line.destination_hu)}"></div>
+      </div>
+    `);
+    row.querySelectorAll("input").forEach((input) => {
+      input.oninput = (e) => updateDeconLine(parseInt(e.target.dataset.i, 10), e.target.dataset.f, e.target.value);
+    });
+    const actions = el(`<div style="display:flex; gap:10px;"></div>`);
+    const splitBtn = el(`<button class="btn btn-secondary" style="flex:1;">+ Split</button>`);
+    splitBtn.onclick = () => addDeconSplit(i);
+    actions.appendChild(splitBtn);
+    if (state.deconLines.length > 1) {
+      const removeBtn = el(`<button class="btn btn-danger" style="flex:1;">Remove</button>`);
+      removeBtn.onclick = () => removeDeconLine(i);
+      actions.appendChild(removeBtn);
+    }
+    row.appendChild(actions);
+    wrap.appendChild(row);
+  });
+  const btn = el(`<button class="btn btn-primary">Create Tasks</button>`);
+  btn.onclick = submitDeconsolidation;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function updateDeconLine(i, field, value) { state.deconLines[i][field] = value; }
+
+async function submitDeconsolidation() {
+  const lines = state.deconLines
+    .filter((l) => flt(l.quantity) > 0)
+    .map((l) => ({
+      product: l.product, batch_no: l.batch_no || undefined, serial_no: l.serial_no || undefined, stock_type: l.stock_type,
+      quantity: flt(l.quantity), destination_bin: l.destination_bin || undefined, destination_hu: l.destination_hu || undefined,
+    }));
+  if (!lines.length) { setState({ error: "Enter a quantity for at least one line." }); return; }
+  if (lines.some((l) => !l.destination_bin && !l.destination_hu)) { setState({ error: "Every line needs a destination bin or Handling Unit." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const created = await api("frappe_wms.api.deconsolidation.create_deconsolidation_tasks", {
+      source_hu: state.deconHu.name, lines: JSON.stringify(lines),
+    });
+    setState({ loading: false, view: "tasks", section: "inbound", taskTypeFilter: TASK_TYPE_GROUPS.inbound,
+      info: `${created.length} deconsolidation task(s) created`, deconHu: null, deconLines: [] });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- VAS (Value Added Services) ----------
+async function loadVASOrders() {
+  setState({ loading: true, error: null, view: "vas", section: "outbound" });
+  try {
+    const rows = await api("frappe_wms.api.vas.list_open_vas_orders");
+    setState({ loading: false, vasOrders: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderVASList() {
+  const wrap = el(`<div></div>`);
+  if (!state.vasOrders.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">No open VAS orders.</div>`));
+    return wrap;
+  }
+  state.vasOrders.forEach((order) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(order.name)}</div>${statusBadgeHtml(order.status)}</div>
+        <div class="meta">${escapeHtml(order.handling_unit)}${order.work_center_bin ? " · " + escapeHtml(order.work_center_bin) : ""}</div>
+        <div class="qty">${order.completed_count} / ${order.activity_count} steps done</div>
+      </div>
+    `);
+    card.onclick = () => openVASOrder(order.name);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+async function openVASOrder(name) {
+  setState({ loading: true, error: null });
+  try {
+    const order = await api("frappe_wms.api.vas.get_vas_order", { vas_order_name: name });
+    setState({ loading: false, view: "vas-detail", currentVAS: order });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderVASDetail() {
+  const order = state.currentVAS;
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(order.name)} ${statusBadgeHtml(order.status)}</h3>
+      <div class="detail-grid">
+        <div><div class="label">Handling Unit</div><div>${escapeHtml(order.handling_unit)}</div></div>
+        <div><div class="label">Work Center</div><div>${escapeHtml(order.work_center_bin || "-")}</div></div>
+      </div>
+    </div>
+  `));
+  const activities = [...(order.activities || [])].sort((a, b) => (a.step_no || 0) - (b.step_no || 0));
+  const timeline = el(`<div class="timeline"></div>`);
+  activities.forEach((row, idx) => {
+    const line = el(`<div class="timeline-row"><div class="timeline-dot ${row.completed ? "done" : "active"}">${row.completed ? "✓" : idx + 1}</div></div>`);
+    const cardWrap = el(`<div class="timeline-card"></div>`);
+    const card = el(`
+      <div class="card ${row.completed ? "card-blocked" : ""}">
+        <div class="row1"><div class="task-type">${escapeHtml(row.activity_type)}</div>${row.completed ? `<span class="badge Confirmed">Done</span>` : ""}</div>
+        <div class="meta">${escapeHtml(row.instruction || "")}</div>
+        ${row.quantity ? `<div class="qty">${row.quantity} ${escapeHtml(row.stock_uom || "")}</div>` : ""}
+      </div>
+    `);
+    if (!row.completed) card.onclick = () => completeVASActivity(order.name, row.name);
+    cardWrap.appendChild(card);
+    line.appendChild(cardWrap);
+    timeline.appendChild(line);
+  });
+  wrap.appendChild(timeline);
+  const backBtn = el(`<button class="btn btn-secondary">Back to VAS Orders</button>`);
+  backBtn.onclick = loadVASOrders;
+  wrap.appendChild(backBtn);
+  return wrap;
+}
+
+async function completeVASActivity(vasOrderName, activityRowName) {
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.vas.complete_activity", { vas_order_name: vasOrderName, activity_row_name: activityRowName });
+    if (result.status === "Completed") {
+      setState({ loading: false, view: "vas", info: `${vasOrderName} completed`, currentVAS: null });
+      loadVASOrders();
+    } else {
+      const order = await api("frappe_wms.api.vas.get_vas_order", { vas_order_name: vasOrderName });
+      setState({ loading: false, currentVAS: order });
+    }
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Picking entry points ----------
+function openPickingEntry() {
+  setState({ view: "picking-entry", section: "outbound", error: null, info: null, pickingReference: "" });
+}
+
+async function submitPickingEntry() {
+  const reference = state.pickingReference.trim();
+  if (!reference) { setState({ error: "Scan or enter a Warehouse Order, Outbound Delivery, or Handling Unit." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const tasks = await api("frappe_wms.api.outbound.find_pick_tasks", { reference });
+    if (!tasks.length) { setState({ loading: false, error: `No open pick tasks found for ${reference}.` }); return; }
+    if (tasks.length === 1) {
+      setState({ loading: false });
+      openTask(tasks[0]);
+      return;
+    }
+    setState({ loading: false, view: "tasks", section: "outbound", taskTypeFilter: ["Pick"], tasks, info: `${tasks.length} pick task(s) found for ${reference}` });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderPickingEntry() {
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>Enter picking</h3>
+      <div class="hint">Scan a Warehouse Order, an Outbound Delivery, or a Handling Unit involved in
+      the pick - whichever's on hand - to jump straight into that pick task.</div>
+    </div>
+  `));
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`
+    <div class="field">
+      <label>Warehouse Order / Outbound Delivery / Handling Unit</label>
+      <input type="text" id="picking-reference" placeholder="Scan or type a barcode" value="${escapeHtml(state.pickingReference)}" autofocus>
+    </div>
+  `));
+  form.querySelector("input").oninput = (e) => { state.pickingReference = e.target.value; };
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Find Pick Task</button>`);
+  btn.onclick = submitPickingEntry;
+  wrap.appendChild(btn);
+  const browseBtn = el(`<button class="btn btn-secondary">Browse all Pick Tasks instead</button>`);
+  browseBtn.onclick = () => openTasksFiltered("outbound");
+  wrap.appendChild(browseBtn);
+  return wrap;
+}
+
+// ---------- Close Movement ----------
+function openCloseMovement() {
+  setState({ view: "close-movement", section: "internal", error: null, info: null, closeMovementHu: "" });
+}
+
+async function submitCloseMovement() {
+  const huName = state.closeMovementHu.trim();
+  if (!huName) { setState({ error: "Scan the Handling Unit to advance." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.movement.close_movement", { hu_name: huName });
+    setState({
+      loading: false, view: "tasks", section: "internal", taskTypeFilter: TASK_TYPE_GROUPS.internal,
+      info: `${result.tasks.length} task(s) created toward ${result.destination_bin}`, closeMovementHu: "",
+    });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderCloseMovement() {
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>Close Movement</h3>
+      <div class="hint">Scan the Handling Unit that just finished its current step. The system
+      determines its next bin and opens a task there - confirm it by scanning the HU and the
+      destination bin once it arrives. Run this again at each stop to keep it moving.</div>
+    </div>
+  `));
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`
+    <div class="field">
+      <label>Handling Unit</label>
+      <input type="text" id="close-movement-hu" placeholder="Scan HU barcode" value="${escapeHtml(state.closeMovementHu)}" autofocus>
+    </div>
+  `));
+  form.querySelector("input").oninput = (e) => { state.closeMovementHu = e.target.value; };
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Close Movement</button>`);
+  btn.onclick = submitCloseMovement;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// ---------- Repack ----------
+function openRepack() {
+  setState({
+    view: "repack", section: "internal", error: null, info: null,
+    repackHu: null, repackLines: [], repackDestination: "", repackDestNewType: "",
+  });
+}
+
+async function scanRepackHU() {
+  const barcode = (state.repackHuSearch || "").trim();
+  if (!barcode) { setState({ error: "Scan a Handling Unit barcode." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    if (!state.hu_types.length) await loadHuTypes();
+    const detail = await api("frappe_wms.api.scanner.hu_overview", { hu_number: barcode });
+    const lines = [
+      { kind: "hu", label: "This entire Handling Unit", handling_unit: detail.handling_unit.name, selected: false },
+      ...detail.children.map((c) => ({ kind: "hu", label: `Nested HU: ${c.name} (${c.hu_type})`, handling_unit: c.name, selected: false })),
+      ...detail.stock.map((s) => ({
+        kind: "item", label: s.product, product: s.product, batch_no: s.batch_no || "", serial_no: s.serial_no || "",
+        stock_type: s.stock_type, stock_uom: s.stock_uom, available: s.quantity, quantity: "0",
+      })),
+    ];
+    setState({ loading: false, view: "repack-detail", repackHu: detail.handling_unit, repackLines: lines });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function toggleRepackLine(i) { state.repackLines[i].selected = !state.repackLines[i].selected; render(); }
+function updateRepackLineQty(i, value) { state.repackLines[i].quantity = value; }
+
+async function submitRepack() {
+  const hu = state.repackHu;
+  const destination = state.repackDestination.trim();
+  const huLines = state.repackLines.filter((l) => l.kind === "hu" && l.selected);
+  const itemLines = state.repackLines.filter((l) => l.kind === "item" && flt(l.quantity) > 0);
+  if (!huLines.length && !itemLines.length) { setState({ error: "Select at least one Handling Unit or enter a quantity to repack." }); return; }
+  if (!destination) { setState({ error: "Scan the destination Handling Unit (or create a new one below)." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    for (const line of huLines) {
+      const childDoc = line.handling_unit === hu.name ? hu : (await api("frappe_wms.api.handling_unit.handling_unit_detail", { hu_name: line.handling_unit }));
+      if (childDoc.parent_hu) {
+        await api("frappe_wms.api.handling_unit.unnest_handling_unit", { hu_name: line.handling_unit });
+      }
+      await api("frappe_wms.api.handling_unit.nest_handling_unit", { hu_name: line.handling_unit, parent_hu: destination });
+    }
+    if (itemLines.length) {
+      const items = itemLines.map((l) => ({ item: l.product, batch_no: l.batch_no || undefined, serial_no: l.serial_no || undefined, stock_type: l.stock_type, stock_uom: l.stock_uom, quantity: flt(l.quantity) }));
+      await api("frappe_wms.api.scanner.repack", { source_hu: hu.name, destination_hu: destination, items: JSON.stringify(items), idempotency_key: `RF-REPACK:${hu.name}:${uid()}` });
+    }
+    setState({ loading: false, view: "hu", info: `Repacked into ${destination}`, repackHu: null, repackLines: [] });
+    loadHUHome();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function createRepackDestination() {
+  const huType = state.repackDestNewType;
+  if (!huType) { setState({ error: "Pick a Handling Unit Type to create a new destination." }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const result = await api("frappe_wms.api.handling_unit.create_handling_unit", { hu_type: huType, storage_bin: state.repackHu.current_bin });
+    state.repackDestination = result.name;
+    setState({ loading: false, info: `Created ${result.name} as the destination` });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderRepack() {
+  const wrap = el(`<div></div>`);
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`
+    <div class="field">
+      <label>Scan the Handling Unit to repack</label>
+      <input type="text" placeholder="Scan HU barcode" value="${escapeHtml(state.repackHuSearch || "")}" autofocus>
+    </div>
+  `));
+  form.querySelector("input").oninput = (e) => { state.repackHuSearch = e.target.value; };
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">Load Handling Unit</button>`);
+  btn.onclick = scanRepackHU;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function renderRepackDetail() {
+  const wrap = el(`<div></div>`);
+  const hu = state.repackHu;
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(hu.hu_number)} · ${escapeHtml(hu.current_bin || "-")}</h3>
+      <div class="hint">Pick whole Handling Units to move (they must land on a destination in the
+      same bin, or be physically moved together afterward) and/or enter quantities to repack
+      individual items. Item repack requires the destination HU to already be in this same bin.</div>
+    </div>
+  `));
+
+  const huLines = state.repackLines.filter((l) => l.kind === "hu");
+  if (huLines.length) {
+    const section = el(`<div class="detail-section"><h3>Handling Units</h3></div>`);
+    state.repackLines.forEach((line, i) => {
+      if (line.kind !== "hu") return;
+      const row = el(`
+        <div class="card ${line.selected ? "" : "card-blocked"}">
+          <div class="row1"><div class="task-type">${escapeHtml(line.label)}</div>${line.selected ? `<span class="badge Confirmed">Selected</span>` : ""}</div>
+        </div>
+      `);
+      row.onclick = () => toggleRepackLine(i);
+      section.appendChild(row);
+    });
+    wrap.appendChild(section);
+  }
+
+  const itemLines = state.repackLines.filter((l) => l.kind === "item");
+  if (itemLines.length) {
+    const section = el(`<div class="detail-section"><h3>Items</h3></div>`);
+    state.repackLines.forEach((line, i) => {
+      if (line.kind !== "item") return;
+      const row = el(`
+        <div class="line-row">
+          <div class="line-head">${escapeHtml(line.product)}</div>
+          <div class="line-sub">${escapeHtml(line.batch_no || "")} ${escapeHtml(line.stock_type)} · available ${line.available} ${escapeHtml(line.stock_uom || "")}</div>
+          <div class="field"><label>Quantity to repack</label><input type="number" inputmode="decimal" data-i="${i}" value="${escapeHtml(line.quantity)}"></div>
+        </div>
+      `);
+      row.querySelector("input").oninput = (e) => updateRepackLineQty(i, e.target.value);
+      section.appendChild(row);
+    });
+    wrap.appendChild(section);
+  }
+
+  const destSection = el(`<div class="detail-section"><h3>Destination</h3></div>`);
+  destSection.appendChild(el(`
+    <div class="field">
+      <label>Destination Handling Unit</label>
+      <input type="text" id="repack-destination" placeholder="Scan an existing HU barcode" value="${escapeHtml(state.repackDestination)}">
+    </div>
+  `));
+  destSection.querySelector("input").oninput = (e) => { state.repackDestination = e.target.value; };
+  const huTypeOptions = state.hu_types.map((t) => `<option value="${frappeEscapeAttr(t.name)}" ${t.name === state.repackDestNewType ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
+  const newHuField = el(`
+    <div class="field">
+      <label>...or create a new one</label>
+      <select id="repack-new-type"><option value="">Select HU type</option>${huTypeOptions}</select>
+    </div>
+  `);
+  newHuField.querySelector("select").onchange = (e) => { state.repackDestNewType = e.target.value; };
+  destSection.appendChild(newHuField);
+  const createBtn = el(`<button class="btn btn-secondary">Create as destination</button>`);
+  createBtn.onclick = createRepackDestination;
+  destSection.appendChild(createBtn);
+  wrap.appendChild(destSection);
+
+  const submitBtn = el(`<button class="btn btn-primary">Repack</button>`);
+  submitBtn.onclick = submitRepack;
+  wrap.appendChild(submitBtn);
+  return wrap;
+}
+
 // ---------- Ship ----------
 // ---------- Release (allocate + create pick tasks) ----------
 async function loadReleaseDeliveries() {
