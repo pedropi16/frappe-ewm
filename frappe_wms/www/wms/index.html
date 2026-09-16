@@ -470,16 +470,68 @@ async function pullWork() {
   }
 }
 
+function buildTaskSteps(task) {
+  const steps = [];
+  if (task.source_bin || task.source_hu) steps.push("source");
+  steps.push("quantity");
+  if (task.destination_bin || task.destination_hu) steps.push("destination");
+  steps.push("hu");
+  steps.push("review");
+  return steps;
+}
+
 function openTask(task) {
+  if (task.status === "On Hold") {
+    setState({ view: "task-detail", currentTask: task, error: null, info: null });
+    return;
+  }
   setState({
-    view: "task-detail", currentTask: task, scanSource: "", scanDestination: "",
+    view: "task-detail", currentTask: task, taskSteps: buildTaskSteps(task), taskStep: 0, stepError: null,
+    scanSource: "", scanDestination: "", destinationHu: task.destination_hu || "",
     confirmQty: String(flt(task.planned_quantity) - flt(task.confirmed_quantity)),
     error: null, info: null, exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "",
   });
 }
 
+// Validates the current wizard step client-side, mirroring what confirm_task checks
+// server-side, so a mis-scan is caught before the round trip instead of after.
+function validateTaskStep(task, stepKey) {
+  if (stepKey === "source") {
+    const expected = [task.source_bin, task.source_hu].filter(Boolean);
+    if (!state.scanSource.trim()) return "Scan the source bin or Handling Unit.";
+    if (!expected.includes(state.scanSource.trim())) return `Expected ${expected.join(" or ")}.`;
+  }
+  if (stepKey === "quantity") {
+    const remaining = flt(task.planned_quantity) - flt(task.confirmed_quantity);
+    const qty = flt(state.confirmQty);
+    if (qty <= 0) return "Enter a quantity greater than zero.";
+    if (round2(qty) > round2(remaining)) return `Cannot exceed the remaining ${remaining} ${task.stock_uom || ""}.`;
+  }
+  if (stepKey === "destination") {
+    const expected = [task.destination_bin, task.destination_hu].filter(Boolean);
+    if (!state.scanDestination.trim()) return "Scan the destination bin or Handling Unit.";
+    if (!expected.includes(state.scanDestination.trim())) return `Expected ${expected.join(" or ")}.`;
+  }
+  return null;
+}
+function round2(n) { return Math.round(flt(n) * 1e6) / 1e6; }
+
+function goTaskStep(delta) {
+  const task = state.currentTask;
+  const steps = state.taskSteps;
+  if (delta > 0) {
+    const err = validateTaskStep(task, steps[state.taskStep]);
+    if (err) { setState({ stepError: err }); return; }
+  }
+  const next = Math.max(0, Math.min(steps.length - 1, state.taskStep + delta));
+  setState({ taskStep: next, stepError: null });
+}
+
 async function confirmCurrentTask() {
   const task = state.currentTask;
+  const err = validateTaskStep(task, "quantity") || (state.taskSteps.includes("destination") ? validateTaskStep(task, "destination") : null)
+    || (state.taskSteps.includes("source") ? validateTaskStep(task, "source") : null);
+  if (err) { setState({ stepError: err }); return; }
   setState({ loading: true, error: null });
   try {
     const result = await api("frappe_wms.api.scanner.confirm_task", {
@@ -487,10 +539,19 @@ async function confirmCurrentTask() {
       scanned_source: state.scanSource || undefined,
       scanned_destination: state.scanDestination || undefined,
       confirmed_quantity: state.confirmQty,
+      destination_hu: state.destinationHu || undefined,
       idempotency_key: `${task.name}:${task.confirmed_quantity}:${uid()}`,
     });
-    setState({ loading: false, view: "tasks", info: `${task.task_type} ${result.status.toLowerCase()} (${result.quantity})`, currentTask: null });
-    loadTasks();
+    const msg = `${task.task_type} ${result.status.toLowerCase()} (${result.quantity})`;
+    await loadTasks();
+    const released = result.released_tasks || [];
+    const next = released.length ? state.tasks.find((t) => released.includes(t.name)) : null;
+    if (next) {
+      openTask(next);
+      setState({ loading: false, info: `${msg} — next: ${next.task_type} · ${next.source_bin || next.source_hu || ""}` });
+    } else {
+      setState({ loading: false, view: "tasks", info: msg, currentTask: null });
+    }
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
