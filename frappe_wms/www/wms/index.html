@@ -1105,11 +1105,16 @@ function renderSection() {
   if (!section) { goHome(); return wrap; }
   const grid = el(`<div class="menu-grid"></div>`);
   section.items.forEach((item) => {
-    const count = item.taskGroup ? state.tasks.filter((t) => TASK_TYPE_GROUPS[item.taskGroup].includes(t.task_type)).length : 0;
+    const groupTasks = item.taskGroup ? state.tasks.filter((t) => TASK_TYPE_GROUPS[item.taskGroup].includes(t.task_type)) : [];
+    const activeCount = groupTasks.filter((t) => t.status !== "On Hold").length;
+    const holdCount = groupTasks.filter((t) => t.status === "On Hold").length;
     const btn = el(`
       <div class="menu-btn">
         <span class="icon">${item.icon}</span>${escapeHtml(item.label)}
-        ${count ? `<div class="count">${count}</div>` : ""}
+        <div>
+          ${activeCount ? `<span class="count">${activeCount}</span>` : ""}
+          ${holdCount ? `<span class="count" style="background:var(--panel-2); color:var(--muted); margin-left:4px;">\u{1F512}${holdCount}</span>` : ""}
+        </div>
       </div>
     `);
     btn.onclick = item.action;
@@ -1121,15 +1126,17 @@ function renderSection() {
 
 // ----- Tasks -----
 function taskCard(task) {
+  const onHold = task.status === "On Hold";
   const card = el(`
-    <div class="card">
+    <div class="card ${onHold ? "card-blocked" : ""}">
       <div class="row1">
         <div class="task-type">${escapeHtml(task.task_type)}</div>
-        <span class="badge ${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span>
+        <div>${statusBadgeHtml(task.status)}<span class="badge ${escapeHtml(task.priority)}">${escapeHtml(task.priority)}</span></div>
       </div>
       <div class="meta">
         ${escapeHtml(task.product || "")}<br>
         ${escapeHtml(task.source_bin || task.source_hu || "-")} &rarr; ${escapeHtml(task.destination_bin || task.destination_hu || "-")}
+        ${onHold ? `<br><span class="blocked-reason">${escapeHtml(task.blocking_reason || "Waiting on an earlier task in this Warehouse Order")}</span>` : ""}
       </div>
       <div class="qty">${task.confirmed_quantity || 0} / ${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}${task.wave ? " &middot; " + escapeHtml(task.wave) : ""}</div>
     </div>
@@ -1197,9 +1204,19 @@ function renderTasks() {
   });
   groups.forEach((group) => {
     if (!group.wo) { wrap.appendChild(taskCard(group.tasks[0])); return; }
-    const confirmed = group.tasks.filter((t) => t.status === "Confirmed").length;
-    const section = el(`<div class="detail-section"><h3>${escapeHtml(group.wo)} &middot; ${confirmed}/${group.tasks.length} confirmed</h3></div>`);
-    group.tasks.forEach((task) => section.appendChild(taskCard(task)));
+    const sorted = [...group.tasks].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const confirmed = sorted.filter((t) => t.status === "Confirmed").length;
+    const section = el(`<div class="detail-section"><h3>${escapeHtml(group.wo)} &middot; ${confirmed}/${sorted.length} confirmed</h3></div>`);
+    const timeline = el(`<div class="timeline"></div>`);
+    sorted.forEach((task, idx) => {
+      const dotState = task.status === "Confirmed" ? "done" : task.status === "On Hold" ? "pending" : "active";
+      const row = el(`<div class="timeline-row"><div class="timeline-dot ${dotState}">${idx + 1}</div></div>`);
+      const cardWrap = el(`<div class="timeline-card"></div>`);
+      cardWrap.appendChild(taskCard(task));
+      row.appendChild(cardWrap);
+      timeline.appendChild(row);
+    });
+    section.appendChild(timeline);
     wrap.appendChild(section);
   });
   return wrap;
@@ -1211,7 +1228,7 @@ function renderTaskDetail() {
 
   wrap.appendChild(el(`
     <div class="detail-section">
-      <h3>${escapeHtml(task.task_type)} &middot; ${escapeHtml(task.priority)}</h3>
+      <h3>${escapeHtml(task.task_type)} &middot; ${escapeHtml(task.priority)} ${statusBadgeHtml(task.status)}</h3>
       <div class="detail-grid">
         <div><div class="label">Product</div><div>${escapeHtml(task.product || "-")}</div></div>
         <div><div class="label">Planned</div><div>${task.planned_quantity} ${escapeHtml(task.stock_uom || "")}</div></div>
@@ -1220,6 +1237,17 @@ function renderTaskDetail() {
       </div>
     </div>
   `));
+
+  if (task.status === "On Hold") {
+    wrap.appendChild(el(`
+      <div class="detail-section">
+        <div class="banner error" style="margin-bottom:0;">
+          \u{1F512} ${escapeHtml(task.blocking_reason || "Waiting on an earlier task in this Warehouse Order.")}
+        </div>
+      </div>
+    `));
+    return wrap;
+  }
 
   if (state.exceptionCodesLoaded) {
     const excSection = el(`<div class="detail-section"><h3>Select exception</h3></div>`);
@@ -1248,36 +1276,84 @@ function renderTaskDetail() {
     return wrap;
   }
 
-  const form = el(`<div class="detail-section"></div>`);
-  form.appendChild(el(`
-    <div class="field">
-      <label>Scan source</label>
-      <input type="text" id="scan-source" placeholder="Bin or HU barcode" value="${escapeHtml(state.scanSource)}">
-    </div>
-  `));
-  form.appendChild(el(`
-    <div class="field">
-      <label>Scan destination</label>
-      <input type="text" id="scan-destination" placeholder="Bin or HU barcode" value="${escapeHtml(state.scanDestination)}">
-    </div>
-  `));
-  form.appendChild(el(`
-    <div class="field">
-      <label>Confirmed quantity</label>
-      <input type="number" inputmode="decimal" id="confirm-qty" value="${escapeHtml(state.confirmQty)}">
-      <div class="hint">Remaining: ${flt(task.planned_quantity) - flt(task.confirmed_quantity)} ${escapeHtml(task.stock_uom || "")}</div>
-    </div>
-  `));
-  wrap.appendChild(form);
+  const steps = state.taskSteps;
+  const stepKey = steps[state.taskStep];
+  const remaining = flt(task.planned_quantity) - flt(task.confirmed_quantity);
 
-  const confirmBtn = el(`<button class="btn btn-primary">Confirm</button>`);
-  confirmBtn.onclick = () => {
-    state.scanSource = document.getElementById("scan-source").value;
-    state.scanDestination = document.getElementById("scan-destination").value;
-    state.confirmQty = document.getElementById("confirm-qty").value;
-    confirmCurrentTask();
-  };
-  wrap.appendChild(confirmBtn);
+  const dots = el(`<div class="step-dots"></div>`);
+  steps.forEach((_, i) => dots.appendChild(el(`<div class="dot ${i < state.taskStep ? "done" : i === state.taskStep ? "active" : ""}"></div>`)));
+  wrap.appendChild(dots);
+
+  const section = el(`<div class="detail-section"></div>`);
+  const STEP_LABEL = { source: "Scan source", quantity: "Quantity", destination: "Scan destination", hu: "Destination Handling Unit", review: "Review & confirm" };
+  section.appendChild(el(`<div class="step-label">Step ${state.taskStep + 1} of ${steps.length} &middot; ${STEP_LABEL[stepKey]}</div>`));
+
+  if (stepKey === "source") {
+    const expected = [task.source_bin, task.source_hu].filter(Boolean).join(" or ");
+    section.appendChild(el(`
+      <div class="field">
+        <label>Expecting: ${escapeHtml(expected)}</label>
+        <input type="text" id="scan-source" placeholder="Scan bin or HU barcode" value="${escapeHtml(state.scanSource)}" autofocus>
+        ${state.stepError ? `<div class="field-error">${escapeHtml(state.stepError)}</div>` : ""}
+      </div>
+    `));
+    section.querySelector("input").oninput = (e) => { state.scanSource = e.target.value; };
+  } else if (stepKey === "quantity") {
+    section.appendChild(el(`
+      <div class="field">
+        <label>Confirmed quantity &middot; remaining ${remaining} ${escapeHtml(task.stock_uom || "")}</label>
+        <input type="number" inputmode="decimal" id="confirm-qty" value="${escapeHtml(state.confirmQty)}">
+        ${state.stepError ? `<div class="field-error">${escapeHtml(state.stepError)}</div>` : ""}
+      </div>
+    `));
+    section.querySelector("input").oninput = (e) => { state.confirmQty = e.target.value; };
+  } else if (stepKey === "destination") {
+    const expected = [task.destination_bin, task.destination_hu].filter(Boolean).join(" or ");
+    section.appendChild(el(`
+      <div class="field">
+        <label>Expecting: ${escapeHtml(expected)}</label>
+        <input type="text" id="scan-destination" placeholder="Scan bin or HU barcode" value="${escapeHtml(state.scanDestination)}">
+        ${state.stepError ? `<div class="field-error">${escapeHtml(state.stepError)}</div>` : ""}
+      </div>
+    `));
+    section.querySelector("input").oninput = (e) => { state.scanDestination = e.target.value; };
+  } else if (stepKey === "hu") {
+    section.appendChild(el(`
+      <div class="field">
+        <label>Destination Handling Unit (optional)</label>
+        <input type="text" id="destination-hu" placeholder="Scan or leave as suggested" value="${escapeHtml(state.destinationHu)}">
+        <div class="hint">Defaults to ${escapeHtml(task.destination_hu || task.source_hu || "no HU")} if left as is.</div>
+      </div>
+    `));
+    section.querySelector("input").oninput = (e) => { state.destinationHu = e.target.value; };
+  } else if (stepKey === "review") {
+    section.appendChild(el(`
+      <div class="detail-grid">
+        <div><div class="label">From</div><div>${escapeHtml(state.scanSource || task.source_bin || task.source_hu || "-")}</div></div>
+        <div><div class="label">To</div><div>${escapeHtml(state.scanDestination || task.destination_bin || task.destination_hu || "-")}</div></div>
+        <div><div class="label">Quantity</div><div>${escapeHtml(state.confirmQty)} ${escapeHtml(task.stock_uom || "")}</div></div>
+        <div><div class="label">Destination HU</div><div>${escapeHtml(state.destinationHu || task.destination_hu || task.source_hu || "-")}</div></div>
+      </div>
+    `));
+  }
+  wrap.appendChild(section);
+
+  const nav = el(`<div style="display:flex; gap:10px;"></div>`);
+  if (state.taskStep > 0) {
+    const back = el(`<button class="btn btn-secondary" style="flex:1;">Back</button>`);
+    back.onclick = () => goTaskStep(-1);
+    nav.appendChild(back);
+  }
+  if (stepKey === "review") {
+    const confirmBtn = el(`<button class="btn btn-primary" style="flex:2;">Confirm</button>`);
+    confirmBtn.onclick = confirmCurrentTask;
+    nav.appendChild(confirmBtn);
+  } else {
+    const next = el(`<button class="btn btn-primary" style="flex:2;">Next</button>`);
+    next.onclick = () => goTaskStep(1);
+    nav.appendChild(next);
+  }
+  wrap.appendChild(nav);
 
   const excBtn = el(`<button class="btn btn-danger">Report exception</button>`);
   excBtn.onclick = openExceptionPicker;
