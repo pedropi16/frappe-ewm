@@ -15,7 +15,7 @@ top to bottom by someone configuring the app for the first time.
 - [Mental model](#mental-model)
 - [Data model](#data-model)
 - [The rule engine (how config drives behavior)](#the-rule-engine-how-config-drives-behavior)
-- [Numbering (HU and shipment number ranges)](#numbering-hu-and-shipment-number-ranges)
+- [Numbering (WMS Number Range)](#numbering-wms-number-range)
 - [Core flows](#core-flows)
 - [Modules](#modules)
 - [Configuration reference](#configuration-reference)
@@ -77,7 +77,7 @@ Company
   put a number on the physical HU - the operator scans it and the system just
   registers it) or **Internal** (the system always assigns the next number
   itself from a **WMS Number Range**, ignoring any number a caller passes) -
-  see [Numbering](#numbering-hu-and-shipment-number-ranges). An HU Type
+  see [Numbering](#numbering-wms-number-range). An HU Type
   marked `reusable` can be recycled once empty, returning its number to the
   pool for reissue. **Packaging Material** attaches physical dimensions
   (length/width/height/tare weight/maximum weight) to an HU Type; picking one
@@ -102,6 +102,14 @@ Company
   `name`) and holds the running `quantity`, `allocated_quantity`, and derived
   `available_quantity`. It is written *only* by `services/stock.py` — direct
   edits are blocked by `permissions.balance_has_permission`.
+- A **Door** is not a separate doctype — it's a **Storage Bin** whose
+  **Storage Type** has `storage_role = Door`. This is enforced, not just a
+  label: `WMS Route.default_door`, `WMS Shipment.door`, and `Outbound
+  Delivery.door` are all validated to point at a Door-role bin (whether the
+  value came from the Route's default or was set directly), and **Goods
+  Issue refuses to post unless the Handling Unit's current bin is one**
+  (`services/issue.post_goods_issue`) — see
+  [Shipping/loading](#core-flows) and configuration step 11 below.
 
 ## The rule engine (how config drives behavior)
 
@@ -169,9 +177,28 @@ and Warehouse Process Types (see `install.py`) so a fresh site isn't empty,
 but Process/Bin Determination Rules and Replenishment Rules are
 warehouse-specific and must be configured per site.
 
-## Numbering (HU and shipment number ranges)
+## Numbering (WMS Number Range)
 
-Creating a Handling Unit - from the Desk "New" form, the RF app, or Goods
+**WMS Number Range** isn't limited to Handling Units and Shipments — it
+covers every major transactional doctype: Warehouse Order, Warehouse Task,
+Warehouse Request, Inbound/Outbound Delivery, Goods Receipt/Issue, Packing
+Order, VAS Order, WMS Wave, Physical Inventory Count, and Quality Inspection,
+alongside Handling Unit and WMS Shipment. One generic hook
+(`services/numbering.autoname_from_range`, wired per doctype in `hooks.py`'s
+`doc_events["autoname"]`) checks for an active range matching that doctype
+(optionally scoped to a warehouse — see `_warehouse_of`, which special-cases
+Packing Order since it has no warehouse field of its own, deriving it from
+the delivery being packed) and uses it if found; **it is entirely opt-in per
+doctype and per warehouse** — a doctype or warehouse with no range configured
+keeps using its ordinary naming-series `autoname` (`WO-.##########`,
+`OBD-.########`, etc.) exactly as before. Nothing breaks by not configuring
+one; you only add a range where you actually want a specific prefix/window
+(e.g. one number range per warehouse for Outbound Delivery numbers a 3PL
+customer expects in their own format).
+
+**Handling Unit** numbering is more involved and pre-dates the generic hook
+above — it lives directly in the doctype controller, not the shared
+autoname hook. Creating one - from the Desk "New" form, the RF app, or Goods
 Receipt auto-registration - only ever *requires* a **Storage Bin** (or a
 parent HU to nest into) and an **HU Type** (directly, or implied by a
 **Packaging Material**), same as SAP EWM. Everything else (Warehouse, HU
@@ -244,16 +271,21 @@ FIFO just because the ledger still shows it as available there) — optionally
 grouped into a `WMS Wave` for combined release — → pick tasks are generated
 per allocation (or clustered
 across a wave's deliveries onto shared bins/products) → operator picks in RF
-→ stock stages → `Packing Order` (optional) groups HUs for shipment →
-`Goods Issue` posted → ledger decreases stock, ERPNext Delivery Note (or
-generic Stock Entry) mirrored. The RF "Release" screen does allocation +
-pick-task creation for one delivery in a single tap
-(`services/picking.release_delivery_for_picking`) — the same
+→ stock stages → `Packing Order` (optional) groups HUs for shipment → HUs are
+loaded onto a `WMS Shipment` → **Goods Issue posts automatically** the moment
+every HU on the shipment for that delivery is loaded (see
+[Shipping/loading](#core-flows) below) → ledger decreases stock, ERPNext
+Delivery Note (or generic Stock Entry) mirrored. Allocation + pick-task
+creation is release: `services/picking.release_delivery_for_picking` does
+both for one delivery in a single call — the same
 allocate-then-create-pick-tasks sequence a Wave's release runs across a
-batch of deliveries, just for one; it's also what the Outbound Delivery desk
+batch of deliveries, just for one. This is deliberately **desk-only**, not
+exposed on the RF scanner (which stays focused on physical execution — pick,
+repack, confirm tasks, load, etc.): it's what the Outbound Delivery desk
 form's "Allocate Stock" / "Create Pick Tasks" buttons call as two separate
 steps, and what the WMS Monitor's Outbound Monitor drill-down (below) offers
-alongside a one-tap "Post Goods Issue".
+in one tap, alongside a manual "Post Goods Issue" fallback for whenever
+auto-posting hasn't (or can't yet) run.
 
 **Cancelling an Outbound Delivery** is validated, not just a bare docstatus
 flip (`events/deliveries.py`): blocked outright if a submitted `Goods Issue`
@@ -278,12 +310,23 @@ configured — an ordered list of intermediate bins, e.g. a marshalling bin for
 cross-dock or a yard checkpoint — the HU is walked through them one hop at a
 time (`_advance_hu_through_hops`) instead of teleporting straight to the
 door, each hop posting a real ledger transfer and an HU Event (`Staged` for
-an intermediate stop, `Loaded` for the final hop into the door), using the
-movement type of the matching Warehouse Process Type (`OB_STAGE` /
-`OB_LOAD`) rather than a hardcoded code. Once every HU on the shipment is
-loaded the shipment becomes `Loaded`; `depart_shipment` moves it to
-`Departed`; `complete_shipment` (a logistics-only milestone, e.g. proof of
-delivery received) closes it out as `Completed` and marks its HUs `Shipped`.
+an intermediate stop, `Loaded` for the final hop into the door — which must
+be a Door-role bin, see [Data model](#data-model)), using the movement type
+of the matching Warehouse Process Type (`OB_STAGE` / `OB_LOAD`) rather than a
+hardcoded code. Once every HU on the shipment is loaded the shipment becomes
+`Loaded`, every Outbound Delivery riding on it becomes `Loaded` too, and
+**Goods Issue is posted automatically for each of those deliveries** right
+there (`services/shipping._auto_post_goods_issue`) — no separate tap needed.
+A delivery isn't necessarily fully postable just because *this* shipment
+finished (e.g. its lines could be split across two shipments); that "nothing
+to post yet" case is silently retried the next time a HU for it is loaded,
+and any genuine posting failure is logged (`frappe.log_error`) rather than
+blocking the loading confirmation that triggered it — the HU is physically
+loaded either way. `depart_shipment` moves the shipment to `Departed`;
+`complete_shipment` (a logistics-only milestone, e.g. proof of delivery
+received) closes it out as `Completed` and marks its HUs `Shipped` (Goods
+Issue already marked them `Shipped` when it posted, so this is normally a
+no-op by the time it runs).
 
 **Physical count:** `WMS Physical Inventory Count` snapshots `WMS Stock
 Balance` for a warehouse (optionally scoped to bin/storage type/product) →
@@ -348,6 +391,9 @@ on a new site:
    type once bins exist below.
 3. **Storage Type** per warehouse (e.g. RECEIVING, BULK, PICK, STAGING, SHIP,
    QUALITY, DAMAGE) — decide mixing rules and whether it's HU-managed.
+   **Include at least one with `storage_role = Door`** — step 11 below can't
+   configure a Route's door without a Door-role bin to point it at, and
+   Goods Issue can't post without one either.
 4. **Storage Bin** per storage type — physical layout, capacity limits,
    optional stock-type/HU-type whitelists.
 5. **Warehouse Process Type** — the seeded set (`GR_UNLOAD`, `GR_PUTAWAY`,
@@ -364,13 +410,20 @@ on a new site:
 9. **Replenishment Rule** — one per (warehouse, product, pick bin) you want
    auto-replenished; the hourly job does the rest.
 10. **WMS Number Range** — the seeded global fallback (`HU-########`,
-    `SHIP-########`) works out of the box; add a narrower one per warehouse
-    or per HU Type where you need a different prefix/window (see
-    [Numbering](#numbering-hu-and-shipment-number-ranges)).
+    `SHIP-########`) works out of the box; every other doctype it now covers
+    (Warehouse Order/Task, deliveries, receipts/issues, packing, waves,
+    counts, inspections) is untouched until you add one — configure a
+    narrower range per warehouse, HU Type, or doctype only where you need a
+    different prefix/window (see [Numbering](#numbering-wms-number-range)).
 11. **WMS Route** / **Route Stop** — at least one active Route per warehouse
-    (with a `default_staging_bin`/`default_door`) so `create_shipment` can
-    determine one; add ordered **Stops** only where HUs must physically pass
-    through intermediate bins (marshalling, yard checkpoint) before the door.
+    (with a `default_staging_bin` and a `default_door` **that must be a
+    Door-role bin from step 3** — Route save is rejected otherwise) so
+    `create_shipment` can determine one; add ordered **Stops** only where
+    HUs must physically pass through intermediate bins (marshalling, yard
+    checkpoint) before the door. Skip this and `create_shipment` has nothing
+    to determine, which means HUs can never reach `Loaded` status, which
+    means Goods Issue can never post for anything shipped through this
+    warehouse — this step is not optional despite being listed near the end.
 12. **Roles** — assign the roles below to users; optionally add **User
     Permission** rows restricting a user to specific `WMS Warehouse` values
     (see [Roles & permissions](#roles--permissions)).
@@ -450,8 +503,7 @@ leads to:
 |---|---|
 | Tasks | Confirm any planned putaway/pick/move/stage/load task, or report an exception |
 | Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises putaway tasks |
-| Release | Pick an unallocated/unpicked Outbound Delivery, choose a picking strategy (Single Order / Cluster), allocate + raise its pick tasks in one tap — they then show up under Pick Tasks |
-| Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested staged HU per line, post the Goods Issue |
+| Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
 | Pack | Complete an open Packing Order in one tap |
 | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
 | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
@@ -489,7 +541,9 @@ endpoints this frontend (and real barcode hardware) call.
     drill-down: its allocation/picking/packing/loading/goods-issue status,
     its Pick tasks and the Warehouse Order(s) they belong to, its Packing
     Orders and Goods Issues (with the `reversed` flag), and the Allocate
-    Stock / Create Pick Tasks / Post Goods Issue actions — everything needed
+    Stock / Create Pick Tasks actions, plus a manual Post Goods Issue action
+    once the delivery is Loaded (normally unnecessary - loading already
+    auto-posts it, see [Shipping/loading](#core-flows)) — everything needed
     to drive and watch the pick-to-ship lifecycle without leaving the
     Monitor or reaching for the RF app.
   - **Stock Overview** — current `WMS Stock Balance` positions (quantity/
