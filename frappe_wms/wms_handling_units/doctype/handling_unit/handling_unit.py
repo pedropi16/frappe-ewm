@@ -3,6 +3,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 from frappe_wms.services.numbering import next_number
+from frappe_wms.services.printing import create_print_spool
 
 
 class HandlingUnit(Document):
@@ -50,3 +51,4 @@ class HandlingUnit(Document):
             "bin_after": self.current_bin, "parent_hu_after": self.parent_hu, "status_after": self.status,
             "event_timestamp": now_datetime(), "performed_by": frappe.session.user,
         }).insert(ignore_permissions=True)
+        create_print_spool("Handling Unit", self.name, "HU Created", self.warehouse)

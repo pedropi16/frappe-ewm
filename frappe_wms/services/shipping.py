@@ -6,6 +6,7 @@ from frappe_wms.services.determination import determine_route
 from frappe_wms.services.numbering import next_number
 from frappe_wms.services.task import my_resource
 from frappe_wms.services.issue import post_goods_issue_for_delivery
+from frappe_wms.services.printing import create_print_spool
 from frappe_wms.utils import require_role
 
 LOAD_ROLES = ("WMS Operator", "WMS Loader", "WMS Supervisor")
@@ -97,6 +98,7 @@ def confirm_hu_loaded(shipment_name, hu_name):
     if fully_loaded:
         delivery_names = frappe.get_all("Shipment Delivery", filters={"parent": shipment.name}, pluck="outbound_delivery")
         frappe.db.set_value("Outbound Delivery", {"name": ["in", delivery_names]}, {"status": "Loaded", "loading_status": "Loaded"})
+        create_print_spool("WMS Shipment", shipment.name, "Shipment Loaded", shipment.warehouse)
         for delivery_name in delivery_names:
             _auto_post_goods_issue(delivery_name)
     return {"shipment": shipment.name, "handling_unit": hu_name, "shipment_status": "Loaded" if fully_loaded else "Loading"}

@@ -16,6 +16,7 @@ top to bottom by someone configuring the app for the first time.
 - [Data model](#data-model)
 - [The rule engine (how config drives behavior)](#the-rule-engine-how-config-drives-behavior)
 - [Numbering (WMS Number Range)](#numbering-wms-number-range)
+- [Printing (spool)](#printing-spool)
 - [Core flows](#core-flows)
 - [Modules](#modules)
 - [Configuration reference](#configuration-reference)
@@ -247,6 +248,40 @@ re-implementing the same rules:
   rejected (an Internal type's HUs only ever get created at a packing
   station inside this app, never scanned in from outside).
 
+## Printing (spool)
+
+Mirrors SAP EWM's spool control: printing is entirely config-driven and
+opt-in, with the same two-layer split as everything else in this app —
+*structure* (what output devices exist) and *rules* (when they print).
+
+- **Output Device = WMS Resource with `resource_type = Printer`.** No
+  separate doctype — a printer is just another physical device, like a
+  Forklift or a Scanner (see [Resources, Resource
+  Groups](#core-flows) above), identified by its `device_id`.
+- **WMS Print Determination Rule** (`services/printing._matching_rule`,
+  same "priority ascending, first match wins" pattern as [the rule
+  engine](#the-rule-engine-how-config-drives-behavior)) maps a
+  (`warehouse`, `event`) pair to an `output_device` (validated on save to
+  actually be a Printer in that same warehouse) and an optional `print_format`.
+  Four events are wired in today: `HU Created`, `Putaway Confirmed`, `Goods
+  Issue Posted`, `Shipment Loaded`.
+- **`services/printing.create_print_spool`** is called from each of those
+  four trigger points (`Handling Unit.after_insert`, `services/task.confirm_task`
+  for a fully-confirmed Putaway task, `services/issue.post_goods_issue`,
+  `services/shipping.confirm_hu_loaded` once a shipment is fully loaded) and
+  looks up a matching rule for that warehouse+event. **No matching rule means
+  nothing happens** — exactly like a doctype with no `WMS Number Range`
+  configured, this is opt-in per warehouse and per event, not a hard
+  dependency the rest of the app breaks without.
+- A match creates a **WMS Print Spool** row (`Queued`, referencing whatever
+  document raised the event — the Handling Unit, Warehouse Task, Goods
+  Issue, or WMS Shipment) instead of talking to a printer directly. This is
+  a spool queue, not real printer output: something (a Print Station report,
+  a kiosk screen, a background poller) is expected to list `Queued` rows for
+  its device (`api/printing.list_queued_spools`) and, once actually printed,
+  call `api/printing.mark_printed` (or `mark_failed` with a reason on error)
+  — the app ships the queue and its API, not printer hardware integration.
+
 ## Core flows
 
 **Inbound:** `Inbound Delivery` (expected receipt, e.g. against a Purchase
@@ -369,18 +404,18 @@ behaves as before (assigned/worked directly).
 | Module | Contains |
 |---|---|
 | `wms_core` | Warehouse/Storage Type/Storage Bin structure, WMS Settings, the WMS Monitor page, the WMS workspace |
-| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules, process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
+| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules (including WMS Print Determination Rule), process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
 | `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
 | `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material |
-| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Exception Code |
+| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Print Spool, WMS Exception Code |
 | `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
 `services/*.py` holds the transactional logic each doctype's controller calls
 into (allocation, determination, receipt, issue, picking, packing,
-replenishment, quality, inventory_count, procurement/sales — the PO/SO
-integration, erpnext_sync). `events/*.py` wires those services (and guard
+replenishment, quality, inventory_count, printing, procurement/sales — the
+PO/SO integration, erpnext_sync). `events/*.py` wires those services (and guard
 logic) to `hooks.py`'s `doc_events`. `api/*.py` is the whitelisted surface the
 RF frontend and scanner hardware call.
 
@@ -434,7 +469,13 @@ on a new site:
     to determine, which means HUs can never reach `Loaded` status, which
     means Goods Issue can never post for anything shipped through this
     warehouse — this step is not optional despite being listed near the end.
-12. **Roles** — assign the roles below to users; optionally add **User
+12. **WMS Resource** (`resource_type = Printer`) / **WMS Print Determination
+    Rule** — entirely optional: skip both and nothing prints, exactly like
+    skipping step 10. Add one Printer Resource per physical device, then a
+    rule per (warehouse, event) pointing at it, where you actually want `HU
+    Created` / `Putaway Confirmed` / `Goods Issue Posted` / `Shipment
+    Loaded` to queue something (see [Printing](#printing-spool)).
+13. **Roles** — assign the roles below to users; optionally add **User
     Permission** rows restricting a user to specific `WMS Warehouse` values
     (see [Roles & permissions](#roles--permissions)).
 

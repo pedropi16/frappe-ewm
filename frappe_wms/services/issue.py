@@ -3,6 +3,7 @@ from frappe import _
 from frappe.utils import flt
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.task import my_resource
+from frappe_wms.services.printing import create_print_spool
 from frappe_wms.utils import require_role, storage_bin_role
 
 READY_TO_SHIP_STATUSES = ("Picking", "Picked", "Packing", "Packed", "Staging", "Staged", "Loading", "Loaded")
@@ -28,6 +29,7 @@ def post_goods_issue(doc):
             frappe.db.set_value("Outbound Delivery Item", row.outbound_delivery_item, "issued_quantity", current + flt(row.quantity))
     doc.db_set("status","Posted")
     _update_delivery_issue_status(doc.outbound_delivery)
+    create_print_spool("Goods Issue", doc.name, "Goods Issue Posted", doc.warehouse)
 
 def reverse_goods_issue(doc):
     original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])

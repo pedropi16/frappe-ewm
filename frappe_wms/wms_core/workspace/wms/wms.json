@@ -337,6 +337,17 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Print Spool",
+   "link_count": 0,
+   "link_to": "WMS Print Spool",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Shipping",
@@ -422,6 +433,17 @@
    "label": "Process Determination Rule",
    "link_count": 0,
    "link_to": "Process Determination Rule",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WMS Print Determination Rule",
+   "link_count": 0,
+   "link_to": "WMS Print Determination Rule",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"

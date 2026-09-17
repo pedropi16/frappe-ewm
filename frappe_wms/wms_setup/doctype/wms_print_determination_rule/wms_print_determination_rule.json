@@ -1,0 +1,107 @@
+{
+  "name": "WMS Print Determination Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "event",
+    "column_break_1",
+    "output_device",
+    "print_format",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "event",
+      "label": "Event",
+      "fieldtype": "Select",
+      "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "output_device",
+      "label": "Output Device",
+      "fieldtype": "Link",
+      "options": "WMS Resource",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Must be a WMS Resource with Resource Type = Printer."
+    },
+    {
+      "fieldname": "print_format",
+      "label": "Print Format",
+      "fieldtype": "Link",
+      "options": "Print Format",
+      "description": "Optional. Left blank, the Print Station lets whoever marks it printed choose one at print time."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "PRDR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

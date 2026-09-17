@@ -4,6 +4,7 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin
 from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence
+from frappe_wms.services.printing import create_print_spool
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -206,6 +207,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     _update_request(task.warehouse_request)
     _update_allocations(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
+    if fully_confirmed and task.task_type == "Putaway":
+        create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
     return {"task": task.name, "status": status, "quantity": qty, "released_tasks": released_tasks}
