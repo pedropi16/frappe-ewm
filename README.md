@@ -26,6 +26,7 @@ top to bottom by someone configuring the app for the first time.
 - [RF / scanner app](#rf--scanner-app)
 - [Desk surfaces](#desk-surfaces)
 - [Install](#install)
+- [Internationalization](#internationalization)
 - [Production warning](#production-warning)
 
 ## Mental model
@@ -638,6 +639,32 @@ then seeds default Stock Types, Movement Types, Warehouse Process Types, and
 the roles listed above; everything else in
 [Configuration reference](#configuration-reference) is left for you to set up
 per site.
+
+## Internationalization
+
+Every user-facing string in this app - `frappe.throw`/`msgprint` messages,
+doctype field labels and Select options, the Monitor page, and the RF scanner
+app - is translatable, and Spanish (`es`) ships out of the box
+(`frappe_wms/locale/es.po`, 1000+ strings). Setting a user's or the site's
+language to Spanish is enough; nothing else to configure. To add another
+language: `bench create-po-file <locale> --app frappe_wms`, fill in the
+generated `frappe_wms/locale/<locale>.po`, then `bench compile-po-to-mo --app
+frappe_wms`. After adding new translatable strings anywhere in the app,
+`bench generate-pot-file --app frappe_wms` followed by `bench
+update-po-files --app frappe_wms --locale <locale>` merges the new (blank)
+entries into an existing `.po` without touching what's already translated.
+
+The RF scanner app (`www/wms/index.html`) is a fully custom page outside the
+desk's normal `__()`/`frappe.boot` translation machinery, so it has its own
+lightweight scheme: a small `_()` JS helper (same `"{0}"`/`"{1}"` placeholder
+convention as `_()`/`__()` elsewhere) looks up from a `MESSAGES` dict that
+`www/wms/index.py` injects per request via
+`frappe.translate.get_translations_from_apps(frappe.local.lang,
+["frappe_wms"])` - scoped to this app's own compiled catalog, so it covers
+every dynamic-value lookup (statuses, priorities, task/activity types) as
+well as every literal string in the page, always in sync with whatever's in
+`es.po` (or any other locale you add) without needing a second translation
+file to maintain.
 
 ## Production warning
 
