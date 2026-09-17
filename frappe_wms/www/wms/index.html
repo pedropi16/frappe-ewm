@@ -233,7 +233,6 @@ const SECTIONS = {
   outbound: {
     label: "Outbound", icon: "\u{1F4E4}",
     items: [
-      { icon: "\u{1F3AF}", label: "Release", action: loadReleaseDeliveries },
       { icon: "\u{1F3AF}", label: "Picking", action: openPickingEntry },
       { icon: "\u{1F4CB}", label: "Pick Tasks", taskGroup: "outbound", action: () => openTasksFiltered("outbound") },
       { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
@@ -251,8 +250,6 @@ const VIEW_PARENT = {
   "task-detail": () => "tasks",
   receive: () => "section",
   "receive-detail": () => "receive",
-  release: () => "section",
-  "release-detail": () => "release",
   ship: () => "section",
   "ship-detail": () => "ship",
   pack: () => "section",
@@ -278,7 +275,7 @@ const VIEW_PARENT = {
 
 // Reloads the list for a view when navigating back into it, so data is never stale.
 const VIEW_RELOAD = {
-  tasks: loadTasks, receive: loadInboundDeliveries, release: loadReleaseDeliveries, ship: loadShipDeliveries,
+  tasks: loadTasks, receive: loadInboundDeliveries, ship: loadShipDeliveries,
   pack: loadPackingOrders, count: loadCounts, quality: loadInspections, hu: loadHUHome,
   load: loadShipments, vas: loadVASOrders,
 };
@@ -332,11 +329,6 @@ const state = {
   currentInbound: null,
   receiveLines: [],
 
-  // Release
-  releaseDeliveries: [],
-  currentReleaseDelivery: null,
-  releaseStrategy: "Single Order",
-
   // Ship
   shipDeliveries: [],
   currentShipDelivery: null,
@@ -385,7 +377,7 @@ const state = {
 function setState(patch) { Object.assign(state, patch); render(); }
 
 function goHome() {
-  setState({ view: "menu", section: null, error: null, info: null, currentTask: null, currentInbound: null, currentReleaseDelivery: null, currentShipDelivery: null, currentCount: null, currentInspection: null, currentHU: null, taskTypeFilter: null });
+  setState({ view: "menu", section: null, error: null, info: null, currentTask: null, currentInbound: null, currentShipDelivery: null, currentCount: null, currentInspection: null, currentHU: null, taskTypeFilter: null });
   loadResource();
 }
 
@@ -1123,33 +1115,6 @@ function renderRepackDetail() {
 }
 
 // ---------- Ship ----------
-// ---------- Release (allocate + create pick tasks) ----------
-async function loadReleaseDeliveries() {
-  setState({ loading: true, error: null, view: "release", section: "outbound" });
-  try {
-    const rows = await api("frappe_wms.api.outbound.list_awaiting_release");
-    setState({ loading: false, releaseDeliveries: rows || [] });
-  } catch (e) {
-    setState({ loading: false, error: e.message });
-  }
-}
-
-function openReleaseDelivery(delivery) {
-  setState({ view: "release-detail", currentReleaseDelivery: delivery, releaseStrategy: "Single Order", error: null, info: null });
-}
-
-async function submitReleaseDelivery() {
-  const delivery = state.currentReleaseDelivery;
-  setState({ loading: true, error: null });
-  try {
-    const tasks = await api("frappe_wms.api.outbound.release_delivery_for_picking", { delivery_name: delivery.name, strategy: state.releaseStrategy });
-    setState({ loading: false, view: "release", currentReleaseDelivery: null, info: `${delivery.name} released - ${(tasks || []).length} pick task(s) created` });
-    loadReleaseDeliveries();
-  } catch (e) {
-    setState({ loading: false, error: e.message });
-  }
-}
-
 async function loadShipDeliveries() {
   setState({ loading: true, error: null, view: "ship", section: "outbound" });
   try {
@@ -1535,7 +1500,6 @@ function render() {
   const renderers = {
     menu: renderMenu, section: renderSection, tasks: renderTasks, "task-detail": renderTaskDetail, lookup: renderLookup,
     receive: renderReceiveList, "receive-detail": renderReceiveDetail,
-    release: renderReleaseList, "release-detail": renderReleaseDetail,
     ship: renderShipList, "ship-detail": renderShipDetail,
     pack: renderPackList, move: renderMove,
     count: renderCountList, "count-detail": renderCountDetail,
@@ -1571,7 +1535,7 @@ function primaryAction() {
   }
   const ACTIONS = {
     decon: scanDeconHU, "decon-detail": submitDeconsolidation,
-    "receive-detail": submitReceipt, "release-detail": submitReleaseDelivery, "ship-detail": submitGoodsIssue,
+    "receive-detail": submitReceipt, "ship-detail": submitGoodsIssue,
     "count-detail": submitCounts, "quality-detail": submitInspection, "hu-create": submitCreateHU, lookup: runLookup,
   };
   if (ACTIONS[view]) ACTIONS[view]();
@@ -1613,7 +1577,6 @@ function breadcrumb() {
   if (!section) return null;
   const VIEW_LABEL = {
     section: null, tasks: "Tasks", "task-detail": "Task", receive: "Receive", "receive-detail": "Receive",
-    release: "Release", "release-detail": "Release",
     ship: "Ship", "ship-detail": "Ship", pack: "Pack", move: "Move", count: "Count", "count-detail": "Count",
     quality: "Quality", "quality-detail": "Quality", hu: "Handling Units", "hu-create": "New Handling Unit", "hu-detail": "Handling Unit",
     load: "Load", "load-detail": "Load",
@@ -2086,60 +2049,6 @@ function renderReceiveDetail() {
   if (!state.receiveLines.length) wrap.appendChild(el(`<div class="empty">Nothing left to receive on this delivery.</div>`));
   const btn = el(`<button class="btn btn-primary">Submit Goods Receipt</button>`);
   btn.onclick = submitReceipt;
-  wrap.appendChild(btn);
-  return wrap;
-}
-
-// ----- Release -----
-function renderReleaseList() {
-  const wrap = el(`<div></div>`);
-  if (!state.releaseDeliveries.length && !state.loading) {
-    wrap.appendChild(el(`<div class="empty">Nothing waiting on allocation or pick tasks.</div>`));
-    return wrap;
-  }
-  state.releaseDeliveries.forEach((d) => {
-    const card = el(`
-      <div class="card">
-        <div class="row1"><div class="task-type">${escapeHtml(d.outbound_delivery_number)}</div>${statusBadgeHtml(d.allocation_status)}</div>
-        <div class="meta">${escapeHtml(d.customer || "")} &middot; ${d.line_count} line(s)${d.staging_bin ? " &middot; " + escapeHtml(d.staging_bin) : ""}</div>
-      </div>
-    `);
-    card.onclick = () => openReleaseDelivery(d);
-    wrap.appendChild(card);
-  });
-  return wrap;
-}
-
-function renderReleaseDetail() {
-  const wrap = el(`<div></div>`);
-  const delivery = state.currentReleaseDelivery;
-  wrap.appendChild(el(`
-    <div class="detail-section">
-      <div class="detail-grid">
-        <div><div class="label">Allocation</div><div>${escapeHtml(delivery.allocation_status)}</div></div>
-        <div><div class="label">Picking</div><div>${escapeHtml(delivery.picking_status)}</div></div>
-        <div><div class="label">Staging Bin</div><div>${escapeHtml(delivery.staging_bin || "-")}</div></div>
-        <div><div class="label">Lines</div><div>${delivery.line_count}</div></div>
-      </div>
-    </div>
-  `));
-  if (!delivery.staging_bin) {
-    wrap.appendChild(el(`<div class="banner error">This delivery has no staging bin set - pick tasks can't be created until it does (configure a Route, or set one directly on the Outbound Delivery).</div>`));
-  }
-  const strategyField = el(`
-    <div class="field">
-      <label>Picking strategy</label>
-      <select id="release-strategy">
-        <option value="Single Order" ${state.releaseStrategy === "Single Order" ? "selected" : ""}>Single Order</option>
-        <option value="Cluster" ${state.releaseStrategy === "Cluster" ? "selected" : ""}>Cluster</option>
-      </select>
-    </div>
-  `);
-  strategyField.querySelector("select").onchange = (e) => { state.releaseStrategy = e.target.value; };
-  wrap.appendChild(strategyField);
-  const btn = el(`<button class="btn btn-primary">Release for Picking</button>`);
-  btn.disabled = !delivery.staging_bin;
-  btn.onclick = submitReleaseDelivery;
   wrap.appendChild(btn);
   return wrap;
 }
