@@ -289,6 +289,8 @@ const state = {
   error: null,
   info: null,
   resource: null,
+  availableResources: [],
+  showResourcePicker: false,
   hu_types: [],
 
   // Tasks
@@ -403,7 +405,41 @@ async function loadResource() {
   try {
     const res = await api("frappe_wms.api.scanner.my_tasks");
     setState({ resource: res.resource || null, tasks: res.tasks || [], resourceLoaded: true });
+    if (!res.resource) openResourcePicker();
   } catch (e) { setState({ resourceLoaded: true }); }
+}
+
+// ---------- Resource logon (EWM RF-style: log on to a stable, pre-configured device) ----------
+async function openResourcePicker() {
+  setState({ loading: true, error: null });
+  try {
+    const resources = await api("frappe_wms.api.resource.list_available_resources", {});
+    setState({ loading: false, availableResources: resources || [], showResourcePicker: true });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function pickResource(resourceCode) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.resource.log_on", { resource_code: resourceCode });
+    setState({ loading: false, showResourcePicker: false, info: `Logged on to ${resourceCode}` });
+    loadResource();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function doLogOff() {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.resource.log_off", {});
+    setState({ loading: false, loggedOn: false, resource: null, resourceLoaded: false, view: "menu", section: null, info: "Logged off" });
+    loadResource();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
 }
 
 // ---------- Tasks ----------
@@ -1633,12 +1669,20 @@ function renderLogon() {
   }
   const card = el(`<div class="detail-section logon-card"></div>`);
   if (!state.resource) {
-    card.appendChild(el(`
-      <div class="banner error">\u{1F512} No WMS Resource is linked to your user. Ask your supervisor to
-      assign one under WMS Resource before you can log on to the RF environment.</div>
-    `));
-    const retry = el(`<button class="btn btn-secondary">Retry</button>`);
-    retry.onclick = loadResource;
+    card.appendChild(el(`<h3>Log On</h3><div class="hint">Pick the device you're using this shift.</div>`));
+    if (!state.availableResources.length) {
+      card.appendChild(el(`
+        <div class="banner error">\u{1F512} No free WMS Resource is available for you to log on to.
+        Ask your supervisor to configure one, or Kick whoever's still logged on to the one you need.</div>
+      `));
+    }
+    state.availableResources.forEach((r) => {
+      const b = el(`<button class="btn btn-secondary">\u{1F4E1} ${escapeHtml(r.resource_code)} (${escapeHtml(r.resource_type)}${r.warehouse ? " &middot; " + escapeHtml(r.warehouse) : ""})</button>`);
+      b.onclick = () => pickResource(r.name);
+      card.appendChild(b);
+    });
+    const retry = el(`<button class="btn btn-secondary">Refresh</button>`);
+    retry.onclick = openResourcePicker;
     card.appendChild(retry);
   } else {
     card.appendChild(el(`
@@ -1653,14 +1697,14 @@ function renderLogon() {
   wrap.appendChild(card);
   if (state.resource) {
     wrap.appendChild(renderQueueBar());
-    const btn = el(`<button class="btn btn-primary">Log On</button>`);
-    btn.onclick = logOn;
+    const btn = el(`<button class="btn btn-primary">Continue</button>`);
+    btn.onclick = enterMenu;
     wrap.appendChild(btn);
   }
   return wrap;
 }
 
-function logOn() {
+function enterMenu() {
   setState({ loggedOn: true, view: "menu", error: null, info: null });
 }
 
@@ -1735,6 +1779,12 @@ function renderQueueBar() {
   const resource = state.resource;
   const queue = resource && resource.current_queue;
   bar.appendChild(el(`<h3>Queue</h3>`));
+  const resourceRow = el(`<div class="row1"></div>`);
+  resourceRow.appendChild(el(`<div>\u{1F4E1} ${escapeHtml(resource ? resource.name : "")}</div>`));
+  const logOffBtn = el(`<button class="btn btn-secondary">Log Off</button>`);
+  logOffBtn.onclick = () => { if (confirm("Log off this device?")) doLogOff(); };
+  resourceRow.appendChild(logOffBtn);
+  bar.appendChild(resourceRow);
   const row = el(`<div class="row1"></div>`);
   row.appendChild(el(`<div>${queue ? "\u{1F4E1} " + escapeHtml(queue) : "Not joined to a queue"}</div>`));
   const actions = el(`<div></div>`);

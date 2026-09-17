@@ -14,6 +14,7 @@
     "resource_type",
     "device_id",
     "user",
+    "logged_in_at",
     "current_queue",
     "current_bin",
     "active"
@@ -62,7 +63,13 @@
       "label": "User",
       "fieldtype": "Link",
       "options": "User",
-      "description": "Whoever is currently signed in to/operating this device - a Resource models the device, not the person; the same device can be reassigned to a different user shift to shift."
+      "description": "Whoever is currently logged on to this device - normally set via Log On in the RF app (services/resource.log_on), not edited here directly, though a Supervisor can still fix it by hand if needed. A Resource models the device, not the person; only one user is logged on at a time, and a Supervisor can Kick whoever's on it."
+    },
+    {
+      "fieldname": "logged_in_at",
+      "label": "Logged In At",
+      "fieldtype": "Datetime",
+      "read_only": 1
     },
     {
       "fieldname": "current_queue",

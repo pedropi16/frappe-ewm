@@ -381,9 +381,20 @@ on-the-spot corrections where a plan isn't needed.
 EWM's separation of *who/what does the work* from *the pool it's drawn
 from*. A **WMS Resource** models one physical device (a Forklift, an RF
 Scanner, a Printer, ...) via its `resource_type` and free-text `device_id`;
-`user` is whoever is currently signed in to/operating it, not a permanent
-identity of the resource — the same scanner can be handed to a different
-operator from shift to shift. Resources are pooled into a **WMS Resource Group**
+`user` is whoever is currently logged on to it, not a permanent identity of
+the resource. Resources are stable (an admin configures them once, wired
+into their activity area via Resource Group/Queue below) — what's dynamic is
+who's logged on. **Logon is self-service** (`services/resource.py`, mirroring
+SAP EWM's RF logon): `log_on(resource_code)` claims a free Resource for the
+calling user, throwing if someone else is already on it; logging on to a
+*different* Resource transparently logs the same user off whichever one they
+were on before, so a forgotten logoff never locks them out elsewhere.
+`log_off()` releases it. A Supervisor can forcibly clear a stuck session with
+`kick(resource_code, reason=...)` regardless of who's on it — exposed as a
+"Kick" button on the WMS Resource form, and via `api/resource.py` for the RF
+app's own Log On screen (`www/wms`), which lists free Resources instead of
+requiring an admin to have pre-wired one to your user. Resources are pooled
+into a **WMS Resource Group**
 (per warehouse), and a **Warehouse Queue** points at a Resource Group via
 its `resource_group` field, rather than at individual resources — that's
 what makes the pool swappable without reconfiguring every queue. If a
@@ -414,8 +425,8 @@ behaves as before (assigned/worked directly).
 
 `services/*.py` holds the transactional logic each doctype's controller calls
 into (allocation, determination, receipt, issue, picking, packing,
-replenishment, quality, inventory_count, printing, procurement/sales — the
-PO/SO integration, erpnext_sync). `events/*.py` wires those services (and guard
+replenishment, quality, inventory_count, printing, resource (logon/logoff/
+kick), procurement/sales — the PO/SO integration, erpnext_sync). `events/*.py` wires those services (and guard
 logic) to `hooks.py`'s `doc_events`. `api/*.py` is the whitelisted surface the
 RF frontend and scanner hardware call.
 
@@ -547,8 +558,12 @@ by design, so they never silently correct the ledger.
 ## RF / scanner app
 
 `/wms` is a chrome-free, scanner-oriented page (not a desk form) — the RF
-frontend at `frappe_wms/www/wms/`, styled after SAP EWM's RF UI. A home menu
-leads to:
+frontend at `frappe_wms/www/wms/`, styled after SAP EWM's RF UI. Opening it
+first shows a **Log On** screen: if the signed-in user isn't currently logged
+on to any WMS Resource, it lists free ones to claim (`api/resource.log_on`)
+rather than blocking on an admin having pre-assigned one; once claimed, a Log
+Off button (next to the queue controls) releases it again. Only then does
+the home menu appear, leading to:
 
 | Action | What it does |
 |---|---|
