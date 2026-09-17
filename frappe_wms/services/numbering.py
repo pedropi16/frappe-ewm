@@ -24,6 +24,30 @@ def find_number_range(range_for, warehouse=None, hu_type=None):
     return None
 
 
+def _warehouse_of(doc):
+    warehouse = doc.get("warehouse")
+    if warehouse or doc.doctype != "Packing Order":
+        return warehouse
+    # Packing Order has no warehouse field of its own - derive it the same way the rest of the
+    # app does, from the delivery it's packing for or, failing that, its work center bin.
+    if doc.outbound_delivery:
+        return frappe.db.get_value("Outbound Delivery", doc.outbound_delivery, "warehouse")
+    if doc.work_center_bin:
+        return frappe.db.get_value("Storage Bin", doc.work_center_bin, "warehouse")
+    return None
+
+
+def autoname_from_range(doc, method=None):
+    # A single hook, wired in hooks.py's doc_events for every document type that should be
+    # numberable this way: if a WMS Number Range is configured for this doctype (optionally
+    # scoped to a warehouse), use it. Otherwise leave doc.name untouched so Frappe falls back to
+    # that doctype's ordinary naming-series autoname - configuring a range is opt-in per doctype,
+    # nothing breaks for one that was never given one.
+    warehouse = _warehouse_of(doc)
+    if find_number_range(doc.doctype, warehouse=warehouse):
+        doc.name = next_number(doc.doctype, warehouse=warehouse)
+
+
 def next_number(range_for, warehouse=None, hu_type=None):
     range_name = find_number_range(range_for, warehouse, hu_type)
     if not range_name:

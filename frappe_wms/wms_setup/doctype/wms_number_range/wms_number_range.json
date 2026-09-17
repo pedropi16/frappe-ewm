@@ -24,7 +24,7 @@
       "fieldname": "range_for",
       "label": "Range For",
       "fieldtype": "Select",
-      "options": "Handling Unit\nWMS Shipment",
+      "options": "Handling Unit\nWMS Shipment\nWarehouse Order\nWarehouse Task\nWarehouse Request\nOutbound Delivery\nInbound Delivery\nGoods Receipt\nGoods Issue\nPacking Order\nVAS Order\nWMS Wave\nWMS Physical Inventory Count\nWMS Quality Inspection",
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1

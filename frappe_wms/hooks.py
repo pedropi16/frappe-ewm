@@ -30,6 +30,8 @@ doctype_js = {
 
 after_install = "frappe_wms.install.after_install"
 
+_NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
+
 doc_events = {
     "Handling Unit": {
         "validate": "frappe_wms.events.handling_unit.validate_hu",
@@ -37,25 +39,39 @@ doc_events = {
     },
     "Storage Bin": {"validate": "frappe_wms.events.storage_bin.validate_storage_bin"},
     "WMS Product": {"validate": "frappe_wms.events.wms_product.validate_product"},
+    "Warehouse Order": {"autoname": _NUMBER_RANGE_AUTONAME},
     "Warehouse Task": {
+        "autoname": _NUMBER_RANGE_AUTONAME,
         "validate": "frappe_wms.events.warehouse_task.validate_task",
         "on_cancel": "frappe_wms.events.warehouse_task.prevent_direct_cancel_after_posting",
     },
-    "Inbound Delivery": {"validate": "frappe_wms.events.deliveries.validate_inbound_delivery"},
+    "Warehouse Request": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "Inbound Delivery": {
+        "autoname": _NUMBER_RANGE_AUTONAME,
+        "validate": "frappe_wms.events.deliveries.validate_inbound_delivery",
+    },
     "Outbound Delivery": {
+        "autoname": _NUMBER_RANGE_AUTONAME,
         "validate": "frappe_wms.events.deliveries.validate_outbound_delivery",
         "before_cancel": "frappe_wms.events.deliveries.before_cancel_outbound_delivery",
         "on_cancel": "frappe_wms.events.deliveries.on_cancel_outbound_delivery",
     },
     "WMS Shipment": {"validate": "frappe_wms.events.shipment.validate_shipment"},
     "Goods Receipt": {
+        "autoname": _NUMBER_RANGE_AUTONAME,
         "on_submit": "frappe_wms.events.goods_receipt.on_submit",
         "on_cancel": "frappe_wms.events.goods_receipt.on_cancel",
     },
     "Goods Issue": {
+        "autoname": _NUMBER_RANGE_AUTONAME,
         "on_submit": "frappe_wms.events.goods_issue.on_submit",
         "on_cancel": "frappe_wms.events.goods_issue.on_cancel",
     },
+    "Packing Order": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "VAS Order": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "WMS Wave": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "WMS Physical Inventory Count": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "WMS Quality Inspection": {"autoname": _NUMBER_RANGE_AUTONAME},
     "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Delivery Note": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Purchase Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
