@@ -184,10 +184,13 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             post_goods_issue_for_delivery(obd.name)
 
+        # Loading this last HU finishes the shipment, which auto-posts Goods Issue for the
+        # delivery on its own (see shipping.confirm_hu_loaded) - nothing left to post manually.
         self._load_hu(scenario, obd.name, hu_name)
-        self.assertEqual(frappe.db.get_value("Handling Unit", hu_name, "status"), "Loaded")
-        result = post_goods_issue_for_delivery(obd.name)
-        self.assertEqual(frappe.db.get_value("Goods Issue", result["goods_issue"], "status"), "Posted")
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu_name, "status"), "Shipped")
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "goods_issue_status"), "Posted")
+        gi_name = frappe.get_all("Goods Issue", filters={"outbound_delivery": obd.name}, pluck="name")[0]
+        self.assertEqual(frappe.db.get_value("Goods Issue", gi_name, "status"), "Posted")
 
     def test_route_default_door_must_be_a_door_bin(self):
         scenario = self._new_scenario()
@@ -232,11 +235,46 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         pick_tasks = create_pick_tasks(obd.name)
         confirm_task(pick_tasks[0], confirmed_quantity=8)
         hu_name = frappe.db.get_value("Warehouse Task", pick_tasks[0], "destination_hu")
+        # Loading finishes the shipment, which auto-posts Goods Issue on its own.
         self._load_hu(scenario, obd.name, hu_name)
-        result = post_goods_issue_for_delivery(obd.name)
+        gi_name = frappe.get_all("Goods Issue", filters={"outbound_delivery": obd.name}, pluck="name")[0]
 
         status = get_delivery_execution_status(obd.name)
         self.assertEqual(status["delivery"]["name"], obd.name)
         self.assertIn(pick_tasks[0], [t.name for t in status["tasks"]])
         self.assertTrue(status["warehouse_orders"] == [] or isinstance(status["warehouse_orders"], list))
-        self.assertIn(result["goods_issue"], [g.name for g in status["goods_issues"]])
+        self.assertIn(gi_name, [g.name for g in status["goods_issues"]])
+
+    def test_goods_issue_auto_posts_only_once_every_hu_on_the_shipment_is_loaded(self):
+        # A delivery with two lines, each fulfilled from its own HU (both staged onto the same
+        # Shipment), must not get its Goods Issue posted until the *last* HU is loaded - loading
+        # one of two is still a partial shipment.
+        scenario = self._new_scenario()
+        self._receive_and_putaway(scenario, 3)
+        self._receive_and_putaway(scenario, 3)
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": scenario.warehouse,
+            "customer": self.customer, "delivery_date": nowdate(), "staging_bin": scenario.stage_bin,
+            "items": [
+                {"line_number": 1, "item": self.item, "requested_quantity": 3, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"},
+                {"line_number": 2, "item": self.item, "requested_quantity": 3, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"},
+            ]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+        pick_tasks = create_pick_tasks(obd.name)
+        self.assertEqual(len(pick_tasks), 2)
+        for task in pick_tasks:
+            confirmed_quantity = frappe.db.get_value("Warehouse Task", task, "planned_quantity")
+            confirm_task(task, confirmed_quantity=confirmed_quantity)
+        hu_names = [frappe.db.get_value("Warehouse Task", t, "destination_hu") for t in pick_tasks]
+
+        shipment_name = create_shipment(scenario.warehouse, [obd.name])
+        confirm_hu_loaded(shipment_name, hu_names[0])
+        self.assertFalse(frappe.db.exists("Goods Issue", {"outbound_delivery": obd.name}))
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "goods_issue_status"), "Not Posted")
+
+        confirm_hu_loaded(shipment_name, hu_names[1])
+        gi_name = frappe.get_all("Goods Issue", filters={"outbound_delivery": obd.name}, pluck="name")
+        self.assertEqual(len(gi_name), 1)
+        self.assertEqual(frappe.db.get_value("Goods Issue", gi_name[0], "status"), "Posted")
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "goods_issue_status"), "Posted")

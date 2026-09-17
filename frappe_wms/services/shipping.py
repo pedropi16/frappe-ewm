@@ -5,6 +5,7 @@ from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.determination import determine_route
 from frappe_wms.services.numbering import next_number
 from frappe_wms.services.task import my_resource
+from frappe_wms.services.issue import post_goods_issue_for_delivery
 from frappe_wms.utils import require_role
 
 LOAD_ROLES = ("WMS Operator", "WMS Loader", "WMS Supervisor")
@@ -96,7 +97,28 @@ def confirm_hu_loaded(shipment_name, hu_name):
     if fully_loaded:
         delivery_names = frappe.get_all("Shipment Delivery", filters={"parent": shipment.name}, pluck="outbound_delivery")
         frappe.db.set_value("Outbound Delivery", {"name": ["in", delivery_names]}, {"status": "Loaded", "loading_status": "Loaded"})
+        for delivery_name in delivery_names:
+            _auto_post_goods_issue(delivery_name)
     return {"shipment": shipment.name, "handling_unit": hu_name, "shipment_status": "Loaded" if fully_loaded else "Loading"}
+
+def _auto_post_goods_issue(delivery_name):
+    # Mirrors SAP EWM: Goods Issue posts on its own the moment a delivery finishes loading,
+    # instead of waiting for someone to tap "Post Goods Issue" separately. Not every line is
+    # necessarily ready yet (e.g. a delivery split across two shipments, only one of which just
+    # finished loading) - that's the ordinary "nothing to issue yet" case, not a real failure, so
+    # it's swallowed here; the loader's HU is loaded either way and this simply gets retried the
+    # next time a HU for this delivery is loaded. A savepoint means a failed attempt (of any
+    # kind) rolls back cleanly instead of leaving a half-inserted Goods Issue behind - this must
+    # never block the loading confirmation that got us here.
+    savepoint = f"auto_goods_issue_{frappe.generate_hash(length=8)}"
+    frappe.db.savepoint(savepoint)
+    try:
+        post_goods_issue_for_delivery(delivery_name)
+    except frappe.ValidationError:
+        frappe.db.rollback(save_point=savepoint)
+    except Exception:
+        frappe.db.rollback(save_point=savepoint)
+        frappe.log_error(title=f"Auto Goods Issue failed for {delivery_name}")
 
 def _advance_hu_through_hops(hu_name, hops, reference_doctype, reference_name):
     # Walks the HU one route stop at a time instead of teleporting it straight to the door, so

@@ -3,7 +3,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
 
 from frappe_wms.api.inbound import list_open_inbound_deliveries, create_and_submit_goods_receipt
-from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_ready_to_ship, create_and_submit_goods_issue
+from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_ready_to_ship
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, list_open_packing_orders, complete_packing_order
 from frappe_wms.api.inventory import list_open_counts, list_open_inspections
 from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
@@ -135,17 +135,13 @@ class TestRfAppParity(IntegrationTestCase):
         # Staged only, not yet loaded onto a Shipment - nothing to suggest yet.
         self.assertIsNone(matching[0]["items"][0]["suggested_handling_unit"])
 
+        # Loading the last (only) HU finishes the shipment, which auto-posts Goods Issue for the
+        # delivery on its own - no separate create_and_submit_goods_issue call needed.
         shipment = create_shipment(self.warehouse, [obd.name])
         confirm_hu_loaded(shipment, picked_hu)
 
-        ready = list_ready_to_ship()
-        matching = [d for d in ready if d["name"] == obd.name]
-        self.assertEqual(matching[0]["items"][0]["suggested_handling_unit"], picked_hu)
-
-        result = create_and_submit_goods_issue(obd.name, [
-            {"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 7, "stock_uom": self.uom, "handling_unit": picked_hu, "stock_type": "AVAILABLE"},
-        ])
-        gi = frappe.get_doc("Goods Issue", result["goods_issue"])
+        gi_name = frappe.get_all("Goods Issue", filters={"outbound_delivery": obd.name}, pluck="name")[0]
+        gi = frappe.get_doc("Goods Issue", gi_name)
         self.assertEqual(gi.status, "Posted")
 
         obd.reload()
