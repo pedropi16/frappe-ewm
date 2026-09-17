@@ -144,7 +144,7 @@ def search_outbound_deliveries(warehouse, status=None, customer=None, limit=100)
 @frappe.whitelist()
 def resource_workload(warehouse):
     resources = frappe.get_list("WMS Resource", filters={"warehouse": warehouse, "active": 1}, fields=[
-        "name", "resource_code", "user", "resource_type", "current_queue", "current_bin",
+        "name", "resource_code", "user", "resource_type", "resource_group", "current_queue", "current_bin",
     ], order_by="resource_code asc", limit=200)
     rows = frappe.db.sql(
         "select assigned_resource, count(*) from `tabWarehouse Task` "
@@ -162,7 +162,7 @@ def search_queues(warehouse, activity=None, limit=100):
     filters = {"warehouse": warehouse}
     if activity: filters["activity"] = activity
     return frappe.get_list("Warehouse Queue", filters=filters, fields=[
-        "name", "queue_code", "queue_name", "activity", "storage_type", "required_resource_type", "active",
+        "name", "queue_code", "queue_name", "activity", "storage_type", "resource_group", "active",
     ], order_by="queue_code asc", limit=cint(limit) or 100)
 
 @frappe.whitelist()

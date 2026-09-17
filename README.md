@@ -342,16 +342,26 @@ physical relocation required.
 entirely and calls `services/task.create_and_confirm_move` directly — for
 on-the-spot corrections where a plan isn't needed.
 
-**Task queueing (Warehouse Order):** if a **Warehouse Queue** is configured
-for a warehouse/activity(/storage type), every `Warehouse Task` created for
-that activity is attached (`services/warehouse_order.attach_task`) to a
-**Warehouse Order** — a batch of tasks sharing the same `batch_key` (e.g. one
-putaway request, one pick-task group) — which is auto-assigned to whichever
-active `WMS Resource` on that queue currently has the fewest open Warehouse
-Orders. A resource without a standing assignment joins a queue
-(`join_queue`) and pulls the next one itself (`pull_next_warehouse_order`,
-oldest-priority-first). This is optional infrastructure: a task type with no
-matching Warehouse Queue is simply never routed through a Warehouse Order and
+**Resources, Resource Groups & queueing (Warehouse Order):** mirrors SAP
+EWM's separation of *who/what does the work* from *the pool it's drawn
+from*. A **WMS Resource** models one physical device (a Forklift, an RF
+Scanner, a Printer, ...) via its `resource_type` and free-text `device_id`;
+`user` is whoever is currently signed in to/operating it, not a permanent
+identity of the resource — the same scanner can be handed to a different
+operator from shift to shift. Resources are pooled into a **WMS Resource Group**
+(per warehouse), and a **Warehouse Queue** points at a Resource Group via
+its `resource_group` field, rather than at individual resources — that's
+what makes the pool swappable without reconfiguring every queue. If a
+Warehouse Queue is configured for a warehouse/activity(/storage type), every
+`Warehouse Task` created for that activity is attached
+(`services/warehouse_order.attach_task`) to a **Warehouse Order** — a batch
+of tasks sharing the same `batch_key` (e.g. one putaway request, one
+pick-task group) — which is auto-assigned to whichever active `WMS Resource`
+on that queue currently has the fewest open Warehouse Orders. A resource
+without a standing assignment joins a queue (`join_queue`) and pulls the
+next one itself (`pull_next_warehouse_order`, oldest-priority-first). This
+is optional infrastructure: a task type with no matching Warehouse Queue is
+simply never routed through a Warehouse Order and
 behaves as before (assigned/worked directly).
 
 ## Modules
@@ -364,7 +374,7 @@ behaves as before (assigned/worked directly).
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
 | `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
 | `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material |
-| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Exception Code |
+| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Exception Code |
 | `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
 `services/*.py` holds the transactional logic each doctype's controller calls

@@ -9,12 +9,13 @@
   "engine": "InnoDB",
   "field_order": [
     "resource_code",
-    "user",
     "warehouse",
+    "resource_group",
     "resource_type",
+    "device_id",
+    "user",
     "current_queue",
     "current_bin",
-    "device_id",
     "active"
   ],
   "fields": [
@@ -28,12 +29,6 @@
       "in_standard_filter": 1
     },
     {
-      "fieldname": "user",
-      "label": "User",
-      "fieldtype": "Link",
-      "options": "User"
-    },
-    {
       "fieldname": "warehouse",
       "label": "Warehouse",
       "fieldtype": "Link",
@@ -42,12 +37,32 @@
       "in_list_view": 1
     },
     {
+      "fieldname": "resource_group",
+      "label": "Resource Group",
+      "fieldtype": "Link",
+      "options": "WMS Resource Group",
+      "description": "The pool this physical device belongs to - a Warehouse Queue routes work to a Resource Group, not to one device directly."
+    },
+    {
       "fieldname": "resource_type",
       "label": "Resource Type",
       "fieldtype": "Select",
-      "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner",
+      "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner\nPrinter",
       "reqd": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "device_id",
+      "label": "Device ID",
+      "fieldtype": "Data",
+      "description": "Physical identifier of the device itself (serial number, MAC address, printer queue name, ...)."
+    },
+    {
+      "fieldname": "user",
+      "label": "User",
+      "fieldtype": "Link",
+      "options": "User",
+      "description": "Whoever is currently signed in to/operating this device - a Resource models the device, not the person; the same device can be reassigned to a different user shift to shift."
     },
     {
       "fieldname": "current_queue",
@@ -60,11 +75,6 @@
       "label": "Current Bin",
       "fieldtype": "Link",
       "options": "Storage Bin"
-    },
-    {
-      "fieldname": "device_id",
-      "label": "Device ID",
-      "fieldtype": "Data"
     },
     {
       "fieldname": "active",

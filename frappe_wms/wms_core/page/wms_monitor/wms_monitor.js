@@ -548,7 +548,7 @@ class WMSMonitor {
     const $table = this.body_for("resources").find(".wms-mon-resource-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No active resources")}</div>`); return; }
     $table.html(this.render_table(rows, [
-      ["resource_code", __("Resource")], ["user", __("User")], ["resource_type", __("Type")],
+      ["resource_code", __("Resource")], ["resource_type", __("Type")], ["resource_group", __("Resource Group")], ["user", __("User")],
       ["current_queue", __("Queue")], ["current_bin", __("Bin")], ["open_tasks", __("Open Tasks")],
     ], "WMS Resource"));
   }
@@ -560,7 +560,7 @@ class WMSMonitor {
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No queues configured")}</div>`); return; }
     $table.html(this.render_table(rows, [
       ["queue_code", __("Queue")], ["queue_name", __("Name")], ["activity", __("Activity")],
-      ["storage_type", __("Storage Type")], ["required_resource_type", __("Resource Type")], ["active", __("Active")],
+      ["storage_type", __("Storage Type")], ["resource_group", __("Resource Group")], ["active", __("Active")],
     ], "Warehouse Queue"));
   }
 

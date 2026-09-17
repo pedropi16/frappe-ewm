@@ -1,5 +1,5 @@
 {
-  "name": "Warehouse Queue",
+  "name": "WMS Resource Group",
   "module": "WMS Execution",
   "custom": 0,
   "is_submittable": 0,
@@ -8,19 +8,16 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "queue_code",
-    "queue_name",
+    "group_code",
+    "group_name",
     "warehouse",
-    "activity",
-    "storage_type",
-    "resource_group",
-    "sequence_rule",
+    "description",
     "active"
   ],
   "fields": [
     {
-      "fieldname": "queue_code",
-      "label": "Queue Code",
+      "fieldname": "group_code",
+      "label": "Resource Group Code",
       "fieldtype": "Data",
       "reqd": 1,
       "unique": 1,
@@ -28,8 +25,8 @@
       "in_standard_filter": 1
     },
     {
-      "fieldname": "queue_name",
-      "label": "Queue Name",
+      "fieldname": "group_name",
+      "label": "Resource Group Name",
       "fieldtype": "Data",
       "reqd": 1,
       "in_list_view": 1
@@ -43,32 +40,9 @@
       "in_list_view": 1
     },
     {
-      "fieldname": "activity",
-      "label": "Activity",
-      "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
-      "reqd": 1
-    },
-    {
-      "fieldname": "storage_type",
-      "label": "Storage Type",
-      "fieldtype": "Link",
-      "options": "Storage Type"
-    },
-    {
-      "fieldname": "resource_group",
-      "label": "Resource Group",
-      "fieldtype": "Link",
-      "options": "WMS Resource Group",
-      "description": "The pool of physical Resources (devices) eligible to work this queue - mirrors SAP EWM's Queue-to-Resource-Group link."
-    },
-    {
-      "fieldname": "sequence_rule",
-      "label": "Sequence Rule",
-      "fieldtype": "Select",
-      "options": "Priority Then FIFO\nFIFO\nBin Sequence\nDelivery Sequence\nOldest Stock First",
-      "reqd": 1,
-      "default": "Priority Then FIFO"
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Small Text"
     },
     {
       "fieldname": "active",
@@ -78,8 +52,8 @@
       "in_list_view": 1
     }
   ],
-  "autoname": "field:queue_code",
-  "title_field": "queue_name",
+  "autoname": "field:group_code",
+  "title_field": "group_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
