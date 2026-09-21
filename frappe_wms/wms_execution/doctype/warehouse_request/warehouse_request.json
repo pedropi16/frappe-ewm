@@ -13,6 +13,8 @@
     "product",
     "requested_quantity",
     "stock_uom",
+    "uom",
+    "conversion_factor",
     "source_area",
     "destination_area",
     "source_bin",
@@ -67,6 +69,20 @@
       "label": "Stock UOM",
       "fieldtype": "Link",
       "options": "UOM"
+    },
+    {
+      "fieldname": "uom",
+      "label": "UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "description": "Transactional unit for this request (e.g. the picking/issuing UOM). Defaults to Stock UOM when left blank."
+    },
+    {
+      "fieldname": "conversion_factor",
+      "label": "Conversion Factor",
+      "fieldtype": "Float",
+      "default": 1.0,
+      "description": "How many Stock UOM per UOM. requested_quantity/created_quantity/confirmed_quantity stay in Stock UOM; this is for labeling/future use (e.g. distinguishing pick reasons - order picking, internal consumption, 2-bin replenishment - that may transact in different units)."
     },
     {
       "fieldname": "source_area",
