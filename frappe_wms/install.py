@@ -49,3 +49,12 @@ def after_install():
             "link_type": "Workspace Sidebar", "link_to": "WMS",
             "icon_type": "Link", "icon": "warehouse", "bg_color": "blue", "hidden": 0,
         }).insert(ignore_permissions=True)
+
+    ensure_stock_type_inventory_dimension()
+
+def ensure_stock_type_inventory_dimension():
+    if frappe.db.exists("Inventory Dimension", {"reference_document": "WMS Stock Type"}): return
+    frappe.get_doc({
+        "doctype": "Inventory Dimension", "reference_document": "WMS Stock Type",
+        "dimension_name": "WMS Stock Type", "apply_to_all_doctypes": 1,
+    }).insert(ignore_permissions=True)

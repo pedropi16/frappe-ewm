@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import add_days, flt, getdate, nowdate
+from frappe_wms.services.stock import _lock_balance
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
 from frappe_wms.utils import require_role
@@ -17,7 +18,17 @@ def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
     if row.required_batch: filters["batch_no"]=row.required_batch
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
-    balances = frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc")
+    balances = frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc, name asc")
+    # FEFO first (soonest expiry, nulls last), FIFO among ties/unset expiries - a stable sort
+    # over the FIFO-ordered list above keeps first_receipt_date/name as the tiebreak. A product
+    # with no shelf_life_days configured always has a null expiry, so this reduces to the
+    # previous pure first_receipt_date ordering for it. get_all's order_by can't take a raw
+    # CASE expression, so this has to be a Python-side sort instead of a third order_by clause.
+    balances = sorted(balances, key=lambda b: (0, b.shelf_life_expiry_date) if b.shelf_life_expiry_date else (1, None))
+    min_remaining = frappe.db.get_value("WMS Product", row.item, "minimum_remaining_shelf_life")
+    if min_remaining:
+        cutoff = add_days(nowdate(), min_remaining)
+        balances = [b for b in balances if not b.shelf_life_expiry_date or getdate(b.shelf_life_expiry_date) >= getdate(cutoff)]
     bin_names = {b.storage_bin for b in balances if b.storage_bin}
     if not bin_names: return balances
     non_allocatable_bins = set(frappe.get_all("Storage Bin", filters={"name": ["in", list(bin_names)], "removal_blocked": 1}, pluck="name"))
@@ -35,10 +46,13 @@ def allocate_delivery(delivery_name):
         needed=flt(row.requested_quantity)-flt(row.allocated_quantity)
         for stock in _candidate_balances(row,doc.warehouse):
             if needed<=0: break
-            qty=min(needed,flt(stock.available_quantity))
+            _lock_balance(stock.name)
+            fresh = frappe.db.get_value("WMS Stock Balance", stock.name, ["available_quantity", "allocated_quantity"], as_dict=True)
+            if not fresh or flt(fresh.available_quantity) <= 0: continue
+            qty=min(needed,flt(fresh.available_quantity))
             allocation=frappe.get_doc({"doctype":"Stock Allocation","outbound_delivery":doc.name,"outbound_delivery_item":row.name,"product":row.item,"stock_balance":stock.name,"storage_bin":stock.storage_bin,"handling_unit":stock.handling_unit,"batch_no":stock.batch_no,"serial_no":stock.serial_no,"stock_type":stock.stock_type,"allocated_quantity":qty,"status":"Allocated"})
             allocation.insert(); created.append(allocation.name)
-            frappe.db.set_value("WMS Stock Balance",stock.name,{"allocated_quantity":flt(stock.allocated_quantity)+qty,"available_quantity":flt(stock.available_quantity)-qty})
+            frappe.db.set_value("WMS Stock Balance",stock.name,{"allocated_quantity":flt(fresh.allocated_quantity)+qty,"available_quantity":flt(fresh.available_quantity)-qty})
             needed-=qty
         row.db_set("allocated_quantity",flt(row.requested_quantity)-needed)
     doc.db_set("allocation_status","Fully Allocated" if all(flt(x.allocated_quantity)>=flt(x.requested_quantity) for x in doc.items) else "Partially Allocated")

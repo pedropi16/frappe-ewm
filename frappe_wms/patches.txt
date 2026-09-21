@@ -5,3 +5,4 @@ frappe_wms.patches.v0_1.add_wms_indexes
 frappe_wms.patches.v0_1.backfill_erpnext_warehouse_links
 frappe_wms.patches.v0_1.backfill_replenish_process_type
 frappe_wms.patches.v0_1.backfill_decon_process_type
+frappe_wms.patches.v0_1.create_stock_type_inventory_dimension

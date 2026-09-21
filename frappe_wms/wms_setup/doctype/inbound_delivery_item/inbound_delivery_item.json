@@ -14,6 +14,8 @@
     "received_quantity",
     "putaway_quantity",
     "stock_uom",
+    "uom",
+    "conversion_factor",
     "batch_required",
     "serial_required",
     "expected_stock_type",
@@ -68,6 +70,20 @@
       "fieldtype": "Link",
       "options": "UOM",
       "reqd": 1
+    },
+    {
+      "fieldname": "uom",
+      "label": "UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "description": "Transactional unit (e.g. the purchasing UOM). Defaults to Stock UOM when left blank."
+    },
+    {
+      "fieldname": "conversion_factor",
+      "label": "Conversion Factor",
+      "fieldtype": "Float",
+      "default": 1.0,
+      "description": "How many Stock UOM per UOM. WMS ledger/balance quantities always stay in Stock UOM; this only affects how quantity is labeled on the mirrored ERPNext document."
     },
     {
       "fieldname": "batch_required",

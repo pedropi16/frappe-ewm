@@ -18,7 +18,9 @@
     "counted_by",
     "counted_at",
     "posted_by",
-    "posted_at"
+    "posted_at",
+    "erpnext_gain_stock_entry",
+    "erpnext_loss_stock_entry"
   ],
   "fields": [
     {
@@ -100,6 +102,22 @@
       "label": "Posted At",
       "fieldtype": "Datetime",
       "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_gain_stock_entry",
+      "label": "ERPNext Gain Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1,
+      "description": "Material Receipt posted for the positive-variance lines in this count, if any."
+    },
+    {
+      "fieldname": "erpnext_loss_stock_entry",
+      "label": "ERPNext Loss Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1,
+      "description": "Material Issue posted for the negative-variance lines in this count, if any."
     }
   ],
   "autoname": "PIC-.########",

@@ -10,7 +10,10 @@ def create_outbound_delivery_from_sales_order(sales_order_name, warehouse):
 
     items = []
     for row in so.items:
-        outstanding = flt(row.qty) - flt(row.delivered_qty)
+        # delivered_qty accumulates in the SO row's own transactional UOM (same as qty), but
+        # the WMS side always tracks stock_uom - convert before handing it to the Outbound
+        # Delivery, or a non-1 conversion_factor would silently under/over-state what's left.
+        outstanding = (flt(row.qty) - flt(row.delivered_qty)) * flt(row.conversion_factor or 1)
         if outstanding <= 0: continue
         items.append({
             "line_number": len(items) + 1, "item": row.item_code, "requested_quantity": outstanding,

@@ -32,7 +32,9 @@ def close_movement(hu_name, device=None):
     destination_bin = determine_destination_bin({
         "warehouse": hu.warehouse, "activity": "Internal Move", "item": first.product,
         "stock_type": first.stock_type, "hu_type": hu.hu_type, "source_storage_type": source_storage_type,
-        "incoming_weight": incoming_weight,
+        "incoming_weight": incoming_weight, "incoming_hu_count": 1,
+        # The HU itself is what's making this hop - it is its own destination HU.
+        "destination_hu": hu_name,
     })
     process_type = frappe.get_cached_doc("Warehouse Process Type", "INTERNAL_MOVE")
 

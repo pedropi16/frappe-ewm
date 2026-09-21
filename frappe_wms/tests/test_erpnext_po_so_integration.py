@@ -74,6 +74,7 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         pr = frappe.get_doc("Purchase Receipt", gr.erpnext_purchase_receipt)
         self.assertEqual(pr.docstatus, 1)
         self.assertEqual(pr.items[0].qty, 10)
+        self.assertEqual(pr.items[0].wms_stock_type, "AVAILABLE")
 
         po.reload()
         self.assertEqual(po.per_received, 100)
@@ -83,6 +84,30 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         po.reload()
         self.assertEqual(pr.docstatus, 2)
         self.assertEqual(po.per_received, 0)
+
+    def test_purchase_receipt_conversion_factor_not_double_applied(self):
+        if not frappe.db.exists("UOM", "Box of 5"):
+            frappe.get_doc({"doctype": "UOM", "uom_name": "Box of 5"}).insert(ignore_permissions=True)
+        po = frappe.get_doc({"doctype": "Purchase Order", "supplier": self.supplier, "company": self.company, "transaction_date": nowdate(), "schedule_date": nowdate(),
+            "items": [{"item_code": self.item, "qty": 2, "uom": "Box of 5", "conversion_factor": 5, "rate": 50, "schedule_date": nowdate()}]})
+        po.insert(ignore_permissions=True)
+        po.submit()
+        self.assertEqual(po.items[0].stock_qty, 10, "PO setup sanity check: 2 boxes of 5 = 10 stock units")
+
+        ind_name = create_inbound_delivery_from_purchase_order(po.name, self.warehouse)
+        ind = frappe.get_doc("Inbound Delivery", ind_name)
+        self.assertEqual(ind.items[0].expected_quantity, 10, "WMS side always tracks stock_uom regardless of the PO's transactional UOM")
+
+        hu = self._make_hu(self.recv_bin)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 10, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.submit()
+
+        pr = frappe.get_doc("Purchase Receipt", gr.erpnext_purchase_receipt)
+        self.assertEqual(pr.items[0].conversion_factor, 5)
+        self.assertEqual(pr.items[0].qty, 2, "qty must be back-converted into the PO's transactional UOM")
+        self.assertEqual(pr.items[0].stock_qty, 10, "stock_qty (the real stock movement) must not double-apply the conversion factor")
 
     def test_mixed_po_and_standalone_lines_are_rejected(self):
         po = frappe.get_doc({"doctype": "Purchase Order", "supplier": self.supplier, "company": self.company, "transaction_date": nowdate(), "schedule_date": nowdate(),
@@ -149,6 +174,7 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         dn = frappe.get_doc("Delivery Note", gi.erpnext_delivery_note)
         self.assertEqual(dn.docstatus, 1)
         self.assertEqual(dn.items[0].qty, 4)
+        self.assertEqual(dn.items[0].wms_stock_type, "AVAILABLE")
 
         so.reload()
         self.assertEqual(so.per_delivered, 100)

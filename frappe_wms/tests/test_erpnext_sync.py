@@ -1,6 +1,6 @@
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import nowdate
+from frappe.utils import nowdate, flt
 
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
@@ -74,6 +74,7 @@ class TestErpnextSync(IntegrationTestCase):
         self.assertEqual(se.stock_entry_type, "Material Receipt")
         self.assertEqual(se.docstatus, 1)
         self.assertEqual(self._erpnext_qty(), qty_before + 7)
+        self.assertEqual(se.items[0].to_wms_stock_type, "AVAILABLE")
 
         putaway = create_putaway(gr.name)
         confirm_task(putaway["warehouse_tasks"][0], confirmed_quantity=7)
@@ -103,6 +104,7 @@ class TestErpnextSync(IntegrationTestCase):
         se2 = frappe.get_doc("Stock Entry", gi.erpnext_stock_entry)
         self.assertEqual(se2.stock_entry_type, "Material Issue")
         self.assertEqual(self._erpnext_qty(), qty_before + 4)
+        self.assertEqual(se2.items[0].wms_stock_type, "AVAILABLE")
 
         gi.cancel()
         se2.reload()
@@ -115,3 +117,113 @@ class TestErpnextSync(IntegrationTestCase):
 
         # Reconciliation should find no drift after a clean sequence of postings.
         verify_erpnext_stock_reconciliation()
+
+    def _make_item(self, item_code, valuation_rate=0, last_purchase_rate=0):
+        if frappe.db.exists("Item", item_code):
+            frappe.db.set_value("Item", item_code, {"valuation_rate": valuation_rate, "last_purchase_rate": last_purchase_rate})
+            return item_code
+        item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+        frappe.get_doc({"doctype": "Item", "item_code": item_code, "item_name": item_code, "item_group": item_group,
+            "stock_uom": self.uom, "is_stock_item": 1, "valuation_rate": valuation_rate, "last_purchase_rate": last_purchase_rate}).insert(ignore_permissions=True)
+        return item_code
+
+    def _standalone_receipt(self, item_code, qty=1, uom=None, conversion_factor=None):
+        if not frappe.db.exists("WMS Product", {"item": item_code}):
+            frappe.get_doc({"doctype": "WMS Product", "item": item_code, "stock_uom": self.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "ERPSYNC-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
+        hu.insert(ignore_permissions=True)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": item_code, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE", "uom": uom, "conversion_factor": conversion_factor}]})
+        ind.insert(ignore_permissions=True)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": item_code, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.submit()
+        return frappe.get_doc("Stock Entry", gr.erpnext_stock_entry)
+
+    def test_standalone_receipt_uses_item_valuation_rate(self):
+        item_code = self._make_item("TEST-ERPSYNC-RATE-1", valuation_rate=42)
+        se = self._standalone_receipt(item_code)
+        self.assertEqual(se.items[0].basic_rate, 42)
+        self.assertFalse(se.items[0].allow_zero_valuation_rate)
+
+    def test_standalone_receipt_falls_back_to_last_purchase_rate(self):
+        item_code = self._make_item("TEST-ERPSYNC-RATE-2", valuation_rate=0, last_purchase_rate=17)
+        se = self._standalone_receipt(item_code)
+        self.assertEqual(se.items[0].basic_rate, 17)
+        self.assertFalse(se.items[0].allow_zero_valuation_rate)
+
+    def test_standalone_receipt_zero_valuation_only_as_last_resort(self):
+        item_code = self._make_item("TEST-ERPSYNC-RATE-3", valuation_rate=0, last_purchase_rate=0)
+        se = self._standalone_receipt(item_code)
+        self.assertFalse(se.items[0].basic_rate)
+        self.assertEqual(se.items[0].allow_zero_valuation_rate, 1)
+
+    def test_standalone_issue_never_sets_allow_zero_valuation_rate(self):
+        item_code = self._make_item("TEST-ERPSYNC-RATE-4", valuation_rate=0, last_purchase_rate=0)
+        self._standalone_receipt(item_code, qty=5)
+        balance = frappe.get_all("WMS Stock Balance", filters={"product": item_code, "quantity": [">", 0]}, fields=["storage_bin", "handling_unit"], limit=1)[0]
+
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": balance.storage_bin,
+            "items": [{"line_number": 1, "item": item_code, "requested_quantity": 5, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+
+        # Goods Issue requires the HU to be Loaded and sitting in a Door bin - this test is
+        # about the ERPNext sync valuation wiring, not the loading flow itself.
+        frappe.db.set_value("Storage Bin", balance.storage_bin, "storage_type", f"{self.warehouse}-DOOR")
+        frappe.db.set_value("Handling Unit", balance.handling_unit, "status", "Loaded")
+
+        gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": balance.storage_bin,
+            "items": [{"outbound_delivery_item": obd.items[0].name, "item": item_code, "quantity": 5, "stock_uom": self.uom, "handling_unit": balance.handling_unit, "stock_type": "AVAILABLE"}]})
+        gi.insert(ignore_permissions=True)
+        gi.submit()
+        se = frappe.get_doc("Stock Entry", gi.erpnext_stock_entry)
+        self.assertFalse(se.items[0].allow_zero_valuation_rate)
+
+    def _ensure_uom(self, uom_name):
+        if not frappe.db.exists("UOM", uom_name):
+            frappe.get_doc({"doctype": "UOM", "uom_name": uom_name}).insert(ignore_permissions=True)
+        return uom_name
+
+    def test_stock_entry_receipt_row_uses_inbound_delivery_transactional_uom(self):
+        item_code = self._make_item("TEST-ERPSYNC-UOM-1")
+        box = self._ensure_uom("Box of 5")
+        # 2 boxes of 5 = 10 units in stock_uom.
+        se = self._standalone_receipt(item_code, qty=10, uom=box, conversion_factor=5)
+        self.assertEqual(se.items[0].uom, box)
+        self.assertEqual(flt(se.items[0].conversion_factor), 5)
+        self.assertEqual(flt(se.items[0].qty), 2)
+        self.assertEqual(flt(se.items[0].transfer_qty), 10)
+
+    def test_stock_entry_row_defaults_to_stock_uom_when_no_alternate_uom_set(self):
+        item_code = self._make_item("TEST-ERPSYNC-UOM-2")
+        se = self._standalone_receipt(item_code, qty=7)
+        self.assertEqual(se.items[0].uom, self.uom)
+        self.assertEqual(flt(se.items[0].conversion_factor), 1)
+        self.assertEqual(flt(se.items[0].qty), 7)
+        self.assertEqual(flt(se.items[0].transfer_qty), 7)
+
+    def test_stock_entry_issue_row_uses_outbound_delivery_transactional_uom(self):
+        item_code = self._make_item("TEST-ERPSYNC-UOM-3")
+        self._standalone_receipt(item_code, qty=10)
+        balance = frappe.get_all("WMS Stock Balance", filters={"product": item_code, "quantity": [">", 0]}, fields=["storage_bin", "handling_unit"], limit=1)[0]
+        box = self._ensure_uom("Box of 2")
+
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": balance.storage_bin,
+            "items": [{"line_number": 1, "item": item_code, "requested_quantity": 10, "stock_uom": self.uom, "required_stock_type": "AVAILABLE", "uom": box, "conversion_factor": 2}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+
+        frappe.db.set_value("Storage Bin", balance.storage_bin, "storage_type", f"{self.warehouse}-DOOR")
+        frappe.db.set_value("Handling Unit", balance.handling_unit, "status", "Loaded")
+
+        gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": balance.storage_bin,
+            "items": [{"outbound_delivery_item": obd.items[0].name, "item": item_code, "quantity": 10, "stock_uom": self.uom, "handling_unit": balance.handling_unit, "stock_type": "AVAILABLE"}]})
+        gi.insert(ignore_permissions=True)
+        gi.submit()
+        se = frappe.get_doc("Stock Entry", gi.erpnext_stock_entry)
+        self.assertEqual(se.items[0].uom, box)
+        self.assertEqual(flt(se.items[0].conversion_factor), 2)
+        self.assertEqual(flt(se.items[0].qty), 5)
+        self.assertEqual(flt(se.items[0].transfer_qty), 10)

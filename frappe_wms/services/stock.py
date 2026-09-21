@@ -23,6 +23,7 @@ def _upsert_balance(values, delta):
         doc.quantity = 0
         doc.allocated_quantity = 0
         doc.first_receipt_date = now_datetime() if delta > 0 else None
+        doc.shelf_life_expiry_date = values.get("shelf_life_expiry_date")
     new_qty = flt(doc.quantity) + flt(delta)
     warehouse = frappe.get_cached_doc("WMS Warehouse", values["warehouse"])
     if new_qty < 0 and not warehouse.allow_negative_stock:

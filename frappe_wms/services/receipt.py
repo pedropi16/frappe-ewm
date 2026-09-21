@@ -1,7 +1,7 @@
 import uuid
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import add_days, getdate, now_datetime
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
@@ -14,7 +14,16 @@ def post_goods_receipt(doc):
     entries=[]
     for row in doc.items:
         if not row.handling_unit: frappe.throw(_("Row {0}: Handling Unit is required").format(row.idx))
-        entries.append({"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.receiving_bin,"stock_type":row.stock_type,"quantity":row.quantity,"stock_uom":row.stock_uom,"movement_type":"101","reference_line":row.name})
+        product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
+        if product and product.warehouse_managed:
+            if product.serial_control in ("Required at Receipt", "Always") and not row.serial_no:
+                frappe.throw(_("Row {0}: {1} requires a serial number at receipt").format(row.idx, row.item))
+            if product.batch_control and not row.batch_no:
+                frappe.throw(_("Row {0}: {1} requires a batch number at receipt").format(row.idx, row.item))
+        entry = {"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.receiving_bin,"stock_type":row.stock_type,"quantity":row.quantity,"stock_uom":row.stock_uom,"movement_type":"101","reference_line":row.name}
+        if product and product.shelf_life_days:
+            entry["shelf_life_expiry_date"] = add_days(getdate(doc.posting_datetime), product.shelf_life_days)
+        entries.append(entry)
     # A receipt is an external increase, so post each row independently.
     for i, entry in enumerate(entries,1): post_entries([entry],doc.doctype,doc.name,f"GR:{doc.name}:{i}")
     doc.db_set("status","Posted")

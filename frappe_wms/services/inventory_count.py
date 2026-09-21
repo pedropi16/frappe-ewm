@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
+from frappe_wms.services.erpnext_sync import sync_physical_inventory_count
 from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
 
@@ -73,6 +74,9 @@ def post_count(count_name):
             }
             post_entries([entry], doc.doctype, doc.name, f"PIC:{doc.name}:{i}")
         row.status = "Posted"
+    gain_entry, loss_entry = sync_physical_inventory_count(doc)
+    if gain_entry: doc.erpnext_gain_stock_entry = gain_entry
+    if loss_entry: doc.erpnext_loss_stock_entry = loss_entry
     doc.status = "Posted"
     doc.posted_by = frappe.session.user
     doc.posted_at = now_datetime()

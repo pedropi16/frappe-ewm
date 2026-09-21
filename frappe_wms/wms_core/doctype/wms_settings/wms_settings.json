@@ -7,6 +7,7 @@
  "field_order": [
   "enforcement_section",
   "enforce_wms_only_stock_movements",
+  "enforce_storage_type_rules",
   "column_break_enforcement",
   "defaults_section",
   "default_handling_unit_type"
@@ -23,6 +24,13 @@
    "fieldname": "enforce_wms_only_stock_movements",
    "fieldtype": "Check",
    "label": "Enforce WMS-Only Stock Movements"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, a Storage Type's Allow Mixed Products / Stock Types / Batches flags are enforced when choosing a destination bin: a bin already holding a different product/stock type/batch is excluded unless the storage type explicitly allows mixing. Off by default because most existing warehouses have never had these flags reviewed - turn on only after confirming each Storage Type's mixing flags reflect how it is actually used.",
+   "fieldname": "enforce_storage_type_rules",
+   "fieldtype": "Check",
+   "label": "Enforce Storage Type Mixing Rules"
   },
   {
    "fieldname": "column_break_enforcement",

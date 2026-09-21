@@ -20,6 +20,7 @@
     "available_quantity",
     "stock_uom",
     "first_receipt_date",
+    "shelf_life_expiry_date",
     "last_movement_date",
     "version"
   ],
@@ -116,6 +117,12 @@
       "fieldname": "first_receipt_date",
       "label": "First Receipt Date",
       "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "shelf_life_expiry_date",
+      "label": "Shelf Life Expiry Date",
+      "fieldtype": "Date",
       "read_only": 1
     },
     {

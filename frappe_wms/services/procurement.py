@@ -11,7 +11,10 @@ def create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse):
 
     items = []
     for row in po.items:
-        outstanding = flt(row.qty) - flt(row.received_qty)
+        # received_qty accumulates in the PO row's own transactional UOM (same as qty), but
+        # the WMS side always tracks stock_uom - convert before handing it to the Inbound
+        # Delivery, or a non-1 conversion_factor would silently under/over-state what's left.
+        outstanding = (flt(row.qty) - flt(row.received_qty)) * flt(row.conversion_factor or 1)
         if outstanding <= 0: continue
         items.append({
             "line_number": len(items) + 1, "item": row.item_code, "expected_quantity": outstanding,
