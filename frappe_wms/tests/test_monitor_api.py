@@ -45,6 +45,17 @@ class TestMonitorApi(IntegrationTestCase):
         if not frappe.db.exists("Handling Unit Type", "MONITOR-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "MONITOR-PALLET", "hu_type_name": "Monitor Pallet"}).insert(ignore_permissions=True)
 
+    def tearDown(self):
+        # Close out any Outbound Delivery demand this test created so a later test method's
+        # Goods Receipt in this same shared warehouse isn't opportunistically cross-docked
+        # into it (P4) - these deliveries were never meant to represent real open demand.
+        frappe.db.sql("""
+            update `tabOutbound Delivery Item` di
+            join `tabOutbound Delivery` d on d.name = di.parent
+            set di.allocated_quantity = di.requested_quantity
+            where d.warehouse = %s
+        """, self.warehouse)
+
     def _receive(self, qty):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "MONITOR-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
         hu.insert(ignore_permissions=True)

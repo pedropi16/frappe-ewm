@@ -46,6 +46,17 @@ class TestTaskReversalAndPacking(IntegrationTestCase):
         if not frappe.db.exists("Handling Unit Type", "REVPACK-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "REVPACK-PALLET", "hu_type_name": "Revpack Pallet"}).insert(ignore_permissions=True)
 
+    def tearDown(self):
+        # Close out any Outbound Delivery demand this test created so a later test method's
+        # Goods Receipt in this same shared warehouse isn't opportunistically cross-docked
+        # into it (P4) - these deliveries were never meant to represent real open demand.
+        frappe.db.sql("""
+            update `tabOutbound Delivery Item` di
+            join `tabOutbound Delivery` d on d.name = di.parent
+            set di.allocated_quantity = di.requested_quantity
+            where d.warehouse = %s
+        """, self.warehouse)
+
     def _make_hu(self, bin_name):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "REVPACK-PALLET", "warehouse": self.warehouse, "current_bin": bin_name, "status": "Open"})
         hu.insert(ignore_permissions=True)

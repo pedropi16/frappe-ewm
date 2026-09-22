@@ -1,10 +1,11 @@
 import uuid
 import frappe
 from frappe import _
-from frappe.utils import add_days, getdate, now_datetime
+from frappe.utils import add_days, getdate, now_datetime, flt
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.determination import determine_process_type, determine_storage_process, matches_inspection_rule
 from frappe_wms.services.storage_process import first_step
+from frappe_wms.services.cross_dock import find_cross_dock_demand
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
 from frappe_wms.utils import require_role
@@ -59,6 +60,25 @@ def create_putaway_requests(receipt_name):
     names=[]
     source_storage_type = frappe.db.get_value("Storage Bin", receipt.receiving_bin, "storage_type")
     for row in receipt.items:
+        # Opportunistic cross-docking: any portion of this row that matches open outbound
+        # demand skips putaway entirely and routes straight to the matched delivery's
+        # staging bin instead - a "Cross Dock" request/task, not a Putaway one. Reuses the
+        # "Internal Move" process-type determination since physically it's the same kind of
+        # bin-to-bin transfer; only the request/task type label is distinct, for traceability.
+        remaining_qty = flt(row.quantity)
+        cross_dock_matches = find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty)
+        if cross_dock_matches:
+            cross_dock_process_type = determine_process_type(receipt.warehouse, "Internal Move", item=row.item, stock_type=row.stock_type, default="INTERNAL_MOVE")
+            for match in cross_dock_matches:
+                cd_req = frappe.get_doc({"doctype":"Warehouse Request","request_type":"Cross Dock","warehouse":receipt.warehouse,"product":row.item,
+                    "requested_quantity":match["quantity"],"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,
+                    "destination_bin":match["staging_bin"],"stock_type":row.stock_type,
+                    "reference_doctype":"Outbound Delivery","reference_name":match["delivery"],"reference_line":match["delivery_item"],
+                    "process_type":cross_dock_process_type,"priority":"High","status":"Open"})
+                cd_req.insert(ignore_permissions=True); names.append(cd_req.name)
+                remaining_qty -= match["quantity"]
+        if remaining_qty <= 0: continue  # fully cross-docked - no Putaway request for this row
+
         process_type = determine_process_type(receipt.warehouse, "Putaway", item=row.item, stock_type=row.stock_type, default="GR_PUTAWAY")
         # Opt-in: only receipts whose warehouse has a matching Process Determination Rule get
         # routed through a multi-step Storage Process. No rule configured (the common case
@@ -77,7 +97,7 @@ def create_putaway_requests(receipt_name):
             if step:
                 process_type = step.process_type
                 process_step = step.step_code
-        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":row.quantity,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 

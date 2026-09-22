@@ -91,6 +91,8 @@ scheduler_events = {
     "hourly": [
         "frappe_wms.tasks.recalculate_stale_bin_capacity",
         "frappe_wms.tasks.run_replenishment_check",
+        "frappe_wms.tasks.generate_scheduled_waves",
+        "frappe_wms.tasks.release_due_waves",
     ],
     "daily": [
         "frappe_wms.tasks.verify_stock_balance_integrity",

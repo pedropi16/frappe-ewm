@@ -22,6 +22,7 @@ const VIEWS = [
   { key: "resources", label: __("Resources & Queues") },
   { key: "differences", label: __("Difference Analyzer") },
   { key: "kpis", label: __("KPIs") },
+  { key: "slotting", label: __("Slotting") },
   { key: "alerts", label: __("Alerts") },
 ];
 
@@ -112,6 +113,7 @@ class WMSMonitor {
       resources: () => this.load_resources(),
       differences: () => this.load_differences(),
       kpis: () => this.load_kpis(),
+      slotting: () => this.load_slotting(),
       alerts: () => this.load_alerts(),
     };
     (loaders[view] || (() => {}))();
@@ -610,10 +612,19 @@ class WMSMonitor {
   async load_kpis() {
     if (!this.warehouse) return;
     const $wrap = this.body_for("kpis");
-    const kpis = await frappe.call("frappe_wms.api.monitor.warehouse_kpis", { warehouse: this.warehouse }).then((r) => r.message || {});
-    $wrap.html(`<div class="wms-mon-kpi-cards"></div>`);
     const pct = (v) => (v === null || v === undefined ? "-" : `${v}%`);
     const hrs = (v) => (v === null || v === undefined ? "-" : `${v}h`);
+    const [kpis, resources] = await Promise.all([
+      frappe.call("frappe_wms.api.monitor.warehouse_kpis", { warehouse: this.warehouse }).then((r) => r.message || {}),
+      frappe.call("frappe_wms.api.monitor.resource_performance", { warehouse: this.warehouse }).then((r) => r.message || []),
+    ]);
+    $wrap.html(`
+      <div class="wms-mon-kpi-cards"></div>
+      <div style="margin-top:24px;">
+        <h6>${__("Labor Performance")}</h6>
+        <div class="wms-mon-kpi-resources"></div>
+      </div>
+    `);
     this.render_cards($wrap.find(".wms-mon-kpi-cards"), [
       { label: __("Task Throughput (total)"), value: kpis.task_throughput_total },
       { label: __("Task Throughput (per day)"), value: kpis.task_throughput_per_day ?? "-" },
@@ -622,6 +633,84 @@ class WMSMonitor {
       { label: __("Exception Rate"), value: pct(kpis.exception_rate_percent) },
       { label: __("Count Accuracy"), value: pct(kpis.count_accuracy_percent) },
     ]);
+    const $resources = $wrap.find(".wms-mon-kpi-resources");
+    if (!resources.length) { $resources.html(`<div class="text-muted">${__("No confirmed tasks in this period")}</div>`); return; }
+    const rows = resources.map((r) => ({
+      assigned_resource: r.assigned_resource, task_count: r.task_count,
+      avg_task_cycle_time_hours: hrs(r.avg_task_cycle_time_hours), efficiency_percent: pct(r.efficiency_percent),
+    }));
+    $resources.html(this.render_table(rows, [
+      ["assigned_resource", __("Resource")], ["task_count", __("Tasks")],
+      ["avg_task_cycle_time_hours", __("Avg Cycle Time")], ["efficiency_percent", __("Efficiency")],
+    ], "WMS Resource"));
+  }
+
+  // ---------- Slotting ----------
+  async load_slotting() {
+    const $wrap = this.body_for("slotting");
+    if (!$wrap.find(".wms-mon-slot-filters").length) {
+      $wrap.html(`
+        <div class="wms-mon-slot-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <input type="date" class="form-control input-sm wms-mon-slot-from" style="width:150px;">
+          <input type="date" class="form-control input-sm wms-mon-slot-to" style="width:150px;">
+          <input type="number" min="1" class="form-control input-sm wms-mon-slot-min-picks" placeholder="${__("Min Picks")}" style="width:110px;" value="5">
+          <button class="btn btn-primary btn-sm wms-mon-slot-search">${__("Search")}</button>
+        </div>
+        <div class="wms-mon-slot-table"></div>
+      `);
+      $wrap.find(".wms-mon-slot-search").on("click", () => this.search_slotting());
+    }
+    this.search_slotting();
+  }
+
+  async search_slotting() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("slotting");
+    const args = {
+      warehouse: this.warehouse,
+      from_date: $wrap.find(".wms-mon-slot-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-slot-to").val() || undefined,
+      min_picks: $wrap.find(".wms-mon-slot-min-picks").val() || 5,
+    };
+    const recommendations = await frappe.call("frappe_wms.api.slotting.analyze_slotting", args).then((r) => r.message || []);
+    this._slotting_recommendations = recommendations;
+    const $table = $wrap.find(".wms-mon-slot-table");
+    if (!recommendations.length) { $table.html(`<div class="text-muted">${__("No rearrangement recommendations")}</div>`); return; }
+    const body = recommendations.map((rec, idx) => `
+      <tr>
+        <td><input type="checkbox" class="wms-mon-slot-check" value="${idx}"></td>
+        <td>${frappe.utils.escape_html(rec.product || "")}</td>
+        <td>${frappe.utils.escape_html(rec.current_bin || "")}</td>
+        <td>${frappe.utils.escape_html(rec.current_storage_type || "")}</td>
+        <td>${frappe.utils.escape_html(rec.preferred_storage_type || "")}</td>
+        <td>${rec.quantity}</td>
+        <td>${rec.recent_picks}</td>
+      </tr>
+    `).join("");
+    $table.html(`
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead><tr><th></th><th>${__("Product")}</th><th>${__("Current Bin")}</th><th>${__("Current Storage Type")}</th>
+            <th>${__("Preferred Storage Type")}</th><th>${__("Quantity")}</th><th>${__("Recent Picks")}</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-primary btn-sm wms-mon-slot-generate">${__("Generate Rearrangement Tasks")}</button>
+    `);
+    // One mass action for this tab, matching the Alerts tab's "Approve Selected" pattern:
+    // the whitelisted call takes the actual recommendation objects (not doctype names -
+    // a recommendation isn't a saved record), sliced from the last search's own results.
+    $table.find(".wms-mon-slot-generate").on("click", () => {
+      const idxs = $table.find(".wms-mon-slot-check:checked").map((_, el) => Number(el.value)).get();
+      if (!idxs.length) { frappe.show_alert({ message: __("Select at least one recommendation"), indicator: "orange" }); return; }
+      const selected = idxs.map((i) => this._slotting_recommendations[i]);
+      frappe.confirm(__("Generate {0} rearrangement task(s)?", [selected.length]), async () => {
+        const created = await frappe.call("frappe_wms.api.slotting.generate_rearrangement_tasks",
+          { warehouse: this.warehouse, recommendations: JSON.stringify(selected) }).then((r) => r.message || []);
+        frappe.show_alert({ message: __("Created {0} task(s)", [created.length]), indicator: "green" });
+        this.search_slotting();
+      });
+    });
   }
 
   // ---------- Alerts ----------

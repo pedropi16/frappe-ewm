@@ -16,7 +16,10 @@
     "completed",
     "completed_by",
     "completed_at",
-    "remarks"
+    "remarks",
+    "started_at",
+    "duration_seconds",
+    "packaging_spec_level"
   ],
   "fields": [
     {
@@ -74,6 +77,25 @@
       "fieldname": "remarks",
       "label": "Remarks",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "started_at",
+      "label": "Started At",
+      "fieldtype": "Datetime",
+      "read_only": 1,
+      "description": "Set when the parent VAS Order is created - an approximation, not the moment an operator actually began this step."
+    },
+    {
+      "fieldname": "duration_seconds",
+      "label": "Duration (Seconds)",
+      "fieldtype": "Float",
+      "read_only": 1
+    },
+    {
+      "fieldname": "packaging_spec_level",
+      "label": "Packaging Spec Level",
+      "fieldtype": "Data",
+      "description": "Optional - names the Packaging Spec Level this Kit/Wrap step targets."
     }
   ],
   "sort_field": "modified",

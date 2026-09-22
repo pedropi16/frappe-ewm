@@ -2,12 +2,19 @@ import frappe
 from frappe.utils import flt
 from frappe_wms.services.replenishment import check_replenishment_needs
 from frappe_wms.services.cycle_count import generate_scheduled_counts as _generate_scheduled_counts
+from frappe_wms.services.wave import generate_waves_from_templates as _generate_waves_from_templates, auto_release_due_waves as _auto_release_due_waves
 
 def run_replenishment_check():
     check_replenishment_needs()
 
 def generate_scheduled_counts():
     _generate_scheduled_counts()
+
+def generate_scheduled_waves():
+    _generate_waves_from_templates()
+
+def release_due_waves():
+    _auto_release_due_waves()
 
 def recalculate_stale_bin_capacity():
     bins=frappe.get_all("Storage Bin",filters={"active":1},pluck="name")

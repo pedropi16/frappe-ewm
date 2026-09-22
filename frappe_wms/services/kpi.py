@@ -1,6 +1,14 @@
 import frappe
 from frappe.utils import flt
 
+def _matching_labor_standard(standards, warehouse, task_type, item_group):
+    for s in standards:
+        if s.warehouse and s.warehouse != warehouse: continue
+        if s.task_type != task_type: continue
+        if s.item_group and s.item_group != item_group: continue
+        return s
+    return None
+
 def warehouse_kpis(warehouse, from_date=None, to_date=None):
     task_row = frappe.db.sql("""
         select count(*), avg(timestampdiff(second, started_at, confirmed_at))
@@ -63,3 +71,39 @@ def warehouse_kpis(warehouse, from_date=None, to_date=None):
         "exception_rate_percent": round(flt(exceptions) / exception_denominator * 100, 2) if exception_denominator else None,
         "count_accuracy_percent": round(flt(within_tolerance_lines) / variance_lines * 100, 2) if variance_lines else None,
     }
+
+def resource_performance(warehouse, from_date=None, to_date=None):
+    # started_at is task-creation time, not "operator picked up the task" (same approximation
+    # and caveat as warehouse_kpis' avg_task_cycle_time_hours) - efficiency here measures
+    # against that same clock, not true hands-on-task time.
+    filters = {"warehouse": warehouse, "status": "Confirmed", "assigned_resource": ["is", "set"]}
+    if from_date and to_date: filters["confirmed_at"] = ["between", [from_date, f"{to_date} 23:59:59"]]
+    elif from_date: filters["confirmed_at"] = [">=", from_date]
+    elif to_date: filters["confirmed_at"] = ["<=", f"{to_date} 23:59:59"]
+    tasks = frappe.get_all("Warehouse Task", filters=filters,
+        fields=["assigned_resource", "task_type", "product", "planned_quantity", "started_at", "confirmed_at"])
+    if not tasks: return []
+
+    products = {t.product for t in tasks if t.product}
+    item_groups = {row.name: row.item_group for row in frappe.get_all("Item", filters={"name": ["in", list(products)]}, fields=["name", "item_group"])} if products else {}
+    standards = frappe.get_all("Labor Standard", filters={"active": 1},
+        fields=["warehouse", "task_type", "item_group", "standard_seconds_per_unit"], order_by="priority asc")
+
+    by_resource = {}
+    for t in tasks:
+        bucket = by_resource.setdefault(t.assigned_resource, {"task_count": 0, "total_actual_seconds": 0.0, "planned_seconds": 0.0, "matched_actual_seconds": 0.0})
+        bucket["task_count"] += 1
+        actual_seconds = (t.confirmed_at - t.started_at).total_seconds() if t.started_at and t.confirmed_at else None
+        if actual_seconds is not None: bucket["total_actual_seconds"] += actual_seconds
+        standard = _matching_labor_standard(standards, warehouse, t.task_type, item_groups.get(t.product))
+        if standard and actual_seconds is not None:
+            bucket["planned_seconds"] += flt(standard.standard_seconds_per_unit) * flt(t.planned_quantity)
+            bucket["matched_actual_seconds"] += actual_seconds
+
+    return [{
+        "assigned_resource": resource,
+        "task_count": bucket["task_count"],
+        "avg_task_cycle_time_hours": round(bucket["total_actual_seconds"] / bucket["task_count"] / 3600, 2) if bucket["task_count"] else None,
+        # over 100% means faster than standard, under 100% slower - None when no task matched a configured standard.
+        "efficiency_percent": round(bucket["planned_seconds"] / bucket["matched_actual_seconds"] * 100, 2) if bucket["matched_actual_seconds"] else None,
+    } for resource, bucket in by_resource.items()]

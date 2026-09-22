@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
-from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis
+from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis, resource_performance as _resource_performance
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 ALERT_AGE_HOURS = 4
@@ -171,6 +171,11 @@ def search_queues(warehouse, activity=None, limit=100):
 def warehouse_kpis(warehouse, from_date=None, to_date=None):
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     return _warehouse_kpis(warehouse, from_date, to_date)
+
+@frappe.whitelist()
+def resource_performance(warehouse, from_date=None, to_date=None):
+    frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
+    return _resource_performance(warehouse, from_date, to_date)
 
 @frappe.whitelist()
 def get_alerts(warehouse):

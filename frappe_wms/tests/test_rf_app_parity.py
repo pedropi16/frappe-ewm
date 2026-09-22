@@ -52,6 +52,17 @@ class TestRfAppParity(IntegrationTestCase):
             frappe.get_doc({"doctype": "WMS Route", "route_code": f"{cls.warehouse}-ROUTE", "route_name": f"{cls.warehouse}-ROUTE",
                 "origin_warehouse": cls.warehouse, "default_staging_bin": cls.stage_bin, "default_door": cls.door_bin, "active": 1}).insert(ignore_permissions=True)
 
+    def tearDown(self):
+        # Close out any Outbound Delivery demand this test created so a later test method's
+        # Goods Receipt in this same shared warehouse isn't opportunistically cross-docked
+        # into it (P4) - these deliveries were never meant to represent real open demand.
+        frappe.db.sql("""
+            update `tabOutbound Delivery Item` di
+            join `tabOutbound Delivery` d on d.name = di.parent
+            set di.allocated_quantity = di.requested_quantity
+            where d.warehouse = %s
+        """, self.warehouse)
+
     def _receive_and_putaway(self, qty, hu_number=None):
         hu_number = hu_number or frappe.generate_hash(length=10)
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,

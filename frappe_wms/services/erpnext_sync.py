@@ -329,3 +329,41 @@ def sync_physical_inventory_count(doc):
         loss_entry = se.name
 
     return gain_entry, loss_entry
+
+# --- Kitting Order -> Stock Entry ("Repack") ---
+#
+# "Manufacture" was ruled out for the same reason P2's Work Order FG receipt avoided it:
+# ERPNext's validate_raw_materials_exists() hard-requires it to run against a Work Order with
+# real backflush rows, which a kitting order (no Work Order at all) never has. "Repack" is
+# ERPNext's own purpose for an N:M item-composition change without a Work Order - the correct
+# fit, not a workaround.
+
+def sync_kitting_order(order):
+    erpnext_warehouse = _erpnext_warehouse(order.warehouse)
+    if not erpnext_warehouse: return None
+    company = frappe.db.get_value("WMS Warehouse", order.warehouse, "company")
+    kit_uom = frappe.db.get_value("WMS Product", {"item": order.kit_item}, "stock_uom") or frappe.db.get_value("Item", order.kit_item, "stock_uom")
+    kit_row = frappe._dict(item=order.kit_item, quantity=order.quantity, stock_uom=kit_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
+    se = _make_stock_entry(stock_entry_type="Repack", company=company, remarks=f"frappe_wms Kitting Order {order.name}")
+    if order.direction == "Assemble":
+        for c in order.components:
+            comp_row = frappe._dict(item=c.item, quantity=c.required_qty, stock_uom=c.stock_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
+            _append_row(se, comp_row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
+        _append_row(se, kit_row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
+    else:
+        _append_row(se, kit_row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
+        for c in order.components:
+            comp_row = frappe._dict(item=c.item, quantity=c.required_qty, stock_uom=c.stock_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
+            _append_row(se, comp_row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
+    # A Repack entry's incoming (t_warehouse) row(s) need their rate set manually - confirmed
+    # live on both counts: ERPNext hard-requires it whenever there's more than one such row
+    # (Disassemble's multi-component output), and even for a single row (Assemble's one kit
+    # item) ERPNext tries to derive a rate from the consumed inputs rather than honoring
+    # _append_row's own allow_zero_valuation_rate fallback, which fails the same way when the
+    # inputs are themselves zero-valued. Always flip the flag rather than only when multiple.
+    for row in se.items:
+        if row.t_warehouse: row.set_basic_rate_manually = 1
+    se.flags.wms_managed_posting = True
+    se.insert(ignore_permissions=True)
+    se.submit()
+    return se.name

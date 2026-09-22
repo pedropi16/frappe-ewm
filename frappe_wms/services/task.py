@@ -14,6 +14,7 @@ TASK_TYPE_BY_REQUEST = {
     "Unload": "Unload", "Putaway": "Putaway", "Pick": "Pick", "Replenish": "Putaway",
     "Internal Move": "Internal Move", "Stage": "Stage", "Load": "Load",
     "Unload Vehicle": "Unload", "Posting Change": "Posting Change", "Inventory Count": "Inventory Count",
+    "Cross Dock": "Cross Dock",
 }
 
 def create_tasks_for_request(request_name, batch_key=None):
@@ -254,10 +255,27 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
     if fully_confirmed and task.task_type == "Putaway":
         create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)
+    if fully_confirmed and task.task_type == "Cross Dock":
+        _apply_cross_dock_fulfillment(task)
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
     if fully_confirmed: released_tasks += _release_predecessor_gated_tasks(task.name)
     return {"task": task.name, "status": status, "quantity": qty, "released_tasks": released_tasks}
+
+def _apply_cross_dock_fulfillment(task):
+    # Cross-docked stock is staged directly and never sits in an allocatable bin (Staging is
+    # a NON_ALLOCATABLE_STORAGE_ROLE), so it deliberately bypasses Stock Allocation/
+    # allocate_delivery/the normal pick pipeline entirely - normal allocation could never have
+    # found it there anyway. This directly satisfies the matched delivery line instead.
+    if not task.warehouse_request: return
+    request = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
+    if not request or request.reference_doctype != "Outbound Delivery" or not request.reference_line: return
+    current = flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "picked_quantity"))
+    frappe.db.set_value("Outbound Delivery Item", request.reference_line, {
+        "allocated_quantity": flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "allocated_quantity")) + flt(task.confirmed_quantity),
+        "picked_quantity": current + flt(task.confirmed_quantity),
+    })
+    _update_delivery_picking_status(request.reference_name)
 
 def _release_predecessor_gated_tasks(task_name):
     # A second, independent hold: unlike release_next_in_sequence (same Warehouse Order only),
