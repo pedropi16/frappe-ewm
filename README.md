@@ -11,13 +11,50 @@ doctype actually controls, and where to go to change behavior. For the full
 feature list see the bottom of this file; this document is written to be read
 top to bottom by someone configuring the app for the first time.
 
+## Status
+
+SAP EWM Basic parity (P0–P3) plus 7 of 8 Advanced-tier areas (P4) are
+**complete** — see [`app_gap.md`](app_gap.md) for the full gap analysis,
+capability map, and a phase-by-phase log of every design call made along the
+way. In short:
+
+- **P0 — Harden**: closed 8 defects that let WMS and ERPNext drift apart or
+  left configured rules unenforced (PI-to-ERPNext posting, receipt valuation,
+  allocation locking, storage/bin rule enforcement, batch/serial/SLED
+  controls, alternative UoMs, ERPNext stock-guard coverage, the `WMS Stock
+  Type` Inventory Dimension).
+- **P1 — Strategy engine**: putaway and stock removal are now decided by
+  configurable rules (search sequences, Bulk/Pallet/Near-Fixed-Bin/General
+  Storage putaway strategies, a full FIFO/LIFO/FEFO/Stringent
+  FIFO/Partial-Qty-First/By-Quantity/Fixed-Bin removal engine, per-warehouse
+  process type determination) instead of hardcoded literals.
+- **P2 — Process control**: multi-step inbound/outbound actually executes
+  (Storage Process chaining), pick denial, order-related and direct
+  replenishment, quality inspection auto-creation, `WO Creation Rule`
+  task-count capping, and production supply (Work Order staging/FG receipt).
+- **P3 — Inventory & control**: tolerance-gated count posting with
+  recount/supervisor-approval, scheduled cycle counting (ABC/low-stock/putaway
+  PI/bin check/annual), a Difference Analyzer, server-enforced RF scan
+  verification, and a KPI/Alerts dashboard on the WMS Monitor.
+- **P4 — Advanced EWM** (7 of 8 areas — yard/transport
+  units/dock-appointment-scheduling deliberately out of scope for this pass):
+  wave templates with cut-off/auto-release, opportunistic cross-docking,
+  BOM-driven kitting (Assemble/Disassemble), slotting & rearrangement, labor
+  standards/performance, VAS depth (Packaging-Spec-driven step generation,
+  duration capture), and task/activity-based 3PL billing.
+
+This is a complete, tested MVP (243 automated tests), not a certified SAP EWM
+replacement — see [Production warning](#production-warning).
+
 ## Contents
+- [Status](#status)
 - [Mental model](#mental-model)
 - [Data model](#data-model)
 - [The rule engine (how config drives behavior)](#the-rule-engine-how-config-drives-behavior)
 - [Numbering (WMS Number Range)](#numbering-wms-number-range)
 - [Printing (spool)](#printing-spool)
 - [Core flows](#core-flows)
+- [Advanced EWM (P4)](#advanced-ewm-p4)
 - [Modules](#modules)
 - [Configuration reference](#configuration-reference)
 - [Roles & permissions](#roles--permissions)
@@ -26,6 +63,7 @@ top to bottom by someone configuring the app for the first time.
 - [RF / scanner app](#rf--scanner-app)
 - [Desk surfaces](#desk-surfaces)
 - [Install](#install)
+- [Uninstall](#uninstall)
 - [Internationalization](#internationalization)
 - [Production warning](#production-warning)
 
@@ -88,7 +126,7 @@ Company
   and `volume_per_unit`, used to keep an HU's `gross_weight`/`net_weight`/
   `volume` live as stock moves in and out of it - which in turn feeds bin
   capacity checks during putaway (see
-  [Bin Determination Rule](#2-bin-determination-rule--which-bin-a-movement-lands-in)).
+  [Bin Determination Rule](#3-bin-determination-rule--which-bin-a-movement-lands-in)).
 - **WMS Stock Type** is *not* a physical location — it's a status dimension
   layered on top of the physical location (e.g. `AVAILABLE`, `QUALITY`,
   `DAMAGED`, `SCRAP`, `WAREHOUSE_BLOCKED`). Each stock type independently
@@ -116,10 +154,15 @@ Company
 ## The rule engine (how config drives behavior)
 
 This is the part that makes the app "configurable" rather than hard-coded, and
-the part worth understanding before touching anything else. Two independent
-rule tables, both evaluated by `services/determination.py`, both matched by
+the part worth understanding before touching anything else. Every rule table
+below is evaluated in `services/determination.py` (or its own dedicated
+service for Removal Rule / WO Creation Rule), all matched the same way —
 **priority ascending, first full match wins**, where an empty field on a rule
-means "matches anything":
+means "matches anything" — so narrower, higher-priority rules sit above
+broader fallback rules, and a warehouse with zero configured rules for a
+given table just falls back to whatever hardcoded default that call site
+always used (nothing breaks by not configuring one, same as the numbering
+and printing config below).
 
 ### 1. Process Determination Rule → *which process runs*
 Given a warehouse + document type (Goods Receipt / Goods Issue / etc.) + item
@@ -127,25 +170,50 @@ context, picks a **Storage Process** (an ordered list of **Storage Process
 Step**s, each pointing at a **Warehouse Process Type**) or a **Route**.
 This is how "receiving product X always gets quality-inspected first" or
 "receiving into warehouse B always requests before putaway" gets expressed
-without touching code.
+without touching code. **A matched Storage Process actually executes, step by
+step**: `create_task_automatically`/`next_step_on_confirmation`
+(`services/storage_process.py`) advances to the next configured step the
+moment the current one's task confirms, gated by a `predecessor_task` hold on
+the successor task (a second, WO-independent gate — the ordinary intra-WO
+sequence gate only spans one Warehouse Order/queue, which a chain spanning
+several steps naturally leaves) so an RF operator can never work a later step
+before its predecessor is actually done. Layout-oriented forced waypoints
+(e.g. an I-point or lift a HU must physically pass through) are modeled as
+ordinary extra Storage Process Steps rather than a second parallel mechanism.
 
-### 2. Bin Determination Rule → *which bin a movement lands in*
-Given a warehouse + activity (Putaway/Pick/Stage/...) + item/stock-type/HU
-context, either returns a `fixed_destination_bin`, requires manual selection,
-or applies a **strategy** over the bins of a `destination_storage_type`:
+### 2. Warehouse Process Type Determination Rule → *which process type a movement uses*
+Given a warehouse + activity (Putaway/Pick/Internal Move/Replenish/
+Deconsolidation) + item/item-group/stock-type/priority-level/the product's
+own `process_type_determination_indicator`, picks which **Warehouse Process
+Type** a movement actually uses instead of every call site hardcoding one
+literal. Unconfigured means "keep using the literal that call site always
+used" — this table is a layer *on top of* the seeded Warehouse Process Types
+from step 5 below, not a replacement for seeding them.
+
+### 3. Bin Determination Rule → *which bin a movement lands in*
+Given a warehouse + activity (Putaway/Pick/Internal Move/...) +
+item/item-group/stock-type/HU-type/source-storage-type context, either
+returns a `fixed_destination_bin`, requires manual selection, or applies a
+**strategy** over the bins of a `destination_storage_type` — or, when a rule
+leaves `destination_storage_type` blank, over a **Storage Type Search
+Sequence** (an ordered list of storage types to try in turn, moving to the
+next only once the current one has zero usable bins) if `search_sequence` is
+set, falling back further to the product's own `WMS Product`/`WMS Product
+Warehouse` `preferred_storage_type` if neither is set:
 
 | Strategy | Behavior |
 |---|---|
 | Least Utilized Bin | Lowest `current_hu_count` first |
-| Bin Sequence | Lowest `sequence` first (fixed pick-path order) |
-| First Empty Bin | Prefers bins with zero HUs, falls back to sequence |
+| Bin Sequence / General Storage | Lowest `sequence` first (fixed pick-path order) |
+| First Empty Bin / Pallet | Prefers bins with zero HUs, falls back to sequence (Pallet bins are one-HU-per-bin by convention) |
 | Addition to Existing Stock | Prefers a bin that already holds this product |
+| Bulk | Prefers a bin already holding this product, then ranks by *most* remaining HU-count capacity (best fit for a large incoming quantity) |
+| Near Fixed Bin | Ranks bins near the product's `WMS Product Warehouse.fixed_bin` |
 | Manual Selection | Forces the operator to pick (no auto-determination) |
 
-Both rule tables are scoped to a warehouse and can be filtered on any
-combination of item / item group / stock type / HU type / source or
-destination storage type — narrower, higher-priority rules should sit above
-broader fallback rules.
+Rule tables are scoped to a warehouse and can be filtered on any combination
+of their supported match fields — narrower, higher-priority rules should sit
+above broader fallback rules.
 
 Before any strategy runs, candidate bins are filtered to ones with room:
 a bin at its `maximum_hus` is dropped, and one whose `current_weight` plus
@@ -160,6 +228,21 @@ is also why `Handling Unit.gross_weight`/`net_weight`/`volume` are kept live
 job both depend on it, and it's what makes a Packaging Material's
 weight/dimensions actually feed back into putaway decisions.
 
+### 4. Removal Rule → *which quant a pick/removal takes first*
+Given a warehouse + product/item-group/stock-type, picks a **strategy** —
+FIFO, LIFO, FEFO (soonest shelf-life-expiry-date first, ignoring receipt
+date), Stringent FIFO (same as FIFO, but rejects a custom sort-field
+override — sort-only today, not yet a hard cross-allocation block), Partial
+Quantity First (smallest quantity first), By Quantity (largest quantity
+first), or Fixed Bin (restricts removal to one configured bin) — or a custom
+list of sort fields overriding the named strategy's own default ordering. No
+matching rule falls back to FEFO-then-FIFO. Strategies are registered Python
+functions, not hardcoded `if` branches: `hooks.py`'s `wms_removal_strategies`
+dict maps a strategy name to a `services/removal_rules.py` function, and
+**other installed apps can add their own entries to this same hook** —
+`frappe.get_hooks()` merges every app's dict together, so a custom strategy
+never requires forking this app.
+
 ### Supporting config that feeds the rules
 - **Warehouse Process Type** — defines what a step of activity actually
   requires (source/destination/HU/stock required?), its `confirmation_mode`,
@@ -171,13 +254,30 @@ weight/dimensions actually feed back into putaway decisions.
 - **Replenishment Rule** — per (warehouse, product, pick bin), a
   minimum/target quantity sourced from a bulk storage type; the hourly job
   raises a Warehouse Request when the pick bin falls to or below minimum.
+  Two other flows raise a Replenishment Request too, sharing the same
+  `_create_replenishment_request` helper: **order-related** (a Pick task's
+  exception follow-up action can raise one for the exact shortfall) and
+  **direct** (an operator-triggered top-up with no threshold check).
 - **Allowed Task Type** — restricts which task types a given context may
   generate.
+- **WO Creation Rule** — per (warehouse, activity, item group, stock type),
+  caps how many tasks one Warehouse Order can hold; once the cap is hit,
+  further tasks in the same batch spill into a new Warehouse Order under a
+  derived batch key instead of growing the first one indefinitely. No
+  matching rule means a batch's tasks all share one Warehouse Order, as
+  before.
+- **Inspection Rule** — per (warehouse, item, item group), auto-routes a
+  matching Goods Receipt row into the `QUALITY` stock type and creates a
+  `WMS Quality Inspection` automatically at receipt, instead of requiring a
+  manual trigger. Completing it also creates a linked ERPNext Quality
+  Inspection.
 
 `after_install` seeds a sensible starting set of Stock Types, Movement Types,
-and Warehouse Process Types (see `install.py`) so a fresh site isn't empty,
-but Process/Bin Determination Rules and Replenishment Rules are
-warehouse-specific and must be configured per site.
+Warehouse Process Types, Exception Codes, Number Ranges, and roles (see
+`install.py`) so a fresh site isn't empty, but every rule table above
+(Process/Bin/Warehouse-Process-Type-Determination, Removal, WO Creation,
+Inspection) and Replenishment Rules are warehouse-specific and must be
+configured per site.
 
 ## Numbering (WMS Number Range)
 
@@ -367,7 +467,21 @@ no-op by the time it runs).
 **Physical count:** `WMS Physical Inventory Count` snapshots `WMS Stock
 Balance` for a warehouse (optionally scoped to bin/storage type/product) →
 operator records counted quantities in RF → posting the count writes the
-variance as an Inventory Gain/Loss movement against the ledger.
+variance as an Inventory Gain/Loss movement against the ledger — **unless** a
+matching **Count Tolerance Group** (per warehouse/item group, an absolute
+and/or percentage threshold) says the variance is out of tolerance, in which
+case the affected rows hold at `Pending Recount` instead of posting.
+`request_recount` resets held rows back to `Open` for re-recording; a
+still-out-of-tolerance recount escalates straight to `Pending Approval`
+rather than looping forever. `approve_variance` (gated by `WMS Supervisor`)
+posts held rows and closes the count. Counts can also be generated on a
+schedule instead of created by hand: **Cycle Count Rule** covers six
+procedure types (ABC — by `WMS Product.abc_indicator` — Low Stock, reusing
+each pick bin's own `Replenishment Rule.minimum_quantity` as the threshold
+rather than a second config knob; Zero Stock, Putaway PI, Bin Check, Annual)
+and runs daily. A **Difference Analyzer** (WMS Monitor) aggregates posted
+variance by product — total gain/loss/net-variance/over-tolerance-event
+counts — across a date range.
 
 **Quality inspection:** `WMS Quality Inspection` splits a quantity out of an
 inspection stock type into a passed-to / failed-to stock type, reusing the
@@ -411,17 +525,92 @@ is optional infrastructure: a task type with no matching Warehouse Queue is
 simply never routed through a Warehouse Order and
 behaves as before (assigned/worked directly).
 
+## Advanced EWM (P4)
+
+Seven of SAP EWM's eight Advanced-tier capability areas, each independent and
+each opt-in the same way as everything above — configure it and it engages,
+leave it unconfigured and the rest of the app behaves exactly as before.
+Yard management / transport units / dock appointment scheduling is the one
+area **not** built in this pass (`WMS Route Stop.stop_type = "Yard"` stays a
+purely descriptive label with no behavior behind it).
+
+- **Wave templates + auto-release**: a **Wave Template** (warehouse, optional
+  route filter, priority, picking strategy, daily `cutoff_time`,
+  `auto_release`) drives `generate_waves_from_templates` (hourly): sweeps
+  matching submitted Outbound Deliveries not yet on any wave into a new Draft
+  `WMS Wave`. `auto_release_due_waves` (hourly) then releases any
+  template-generated Draft wave whose cut-off has passed, calling the same
+  `release_wave` a manual Monitor click would.
+- **Opportunistic cross-docking**: `find_cross_dock_demand` matches an
+  incoming Goods Receipt row against open, not-yet-fully-allocated Outbound
+  Delivery demand for the same product/stock-type in the warehouse.
+  `create_putaway_requests` splits the row between a `Cross Dock` request
+  (straight to the matched delivery's staging bin) and a normal Putaway
+  request for any unmatched remainder. Confirming a Cross Dock task fulfills
+  the delivery directly (bumps `allocated_quantity`/`picked_quantity`) —
+  staged stock was never in the allocatable pool anyway (see [Core
+  flows](#core-flows)'s Outbound allocation note), so it bypasses Stock
+  Allocation entirely rather than routing through it. In the RF app, Cross
+  Dock tasks appear alongside Putaway on the **Putaway Tasks** screen — they
+  originate from the same receipt and are worked by the same operator.
+- **Kitting**: a **Kitting Order** (kit item, a submitted **BOM**, warehouse,
+  work center bin, quantity, direction) explodes the BOM's components scaled
+  to the order quantity. Completing it (Assemble: consume components →
+  produce the kit item; Disassemble: the reverse) posts against the real
+  `handling_unit` actually holding each component's stock — not loose — since
+  `WMS Stock Balance` is HU-dimensioned, and mirrors to ERPNext as a
+  **Repack**-purpose Stock Entry (not "Manufacture", which hard-requires
+  backflush rows this flow doesn't produce). Created from the WMS Monitor's
+  **Kitting** tab; completed from either that same tab or the RF app's
+  **Kitting** action (under Internal), which lists open orders scoped to the
+  logged-on operator's own warehouse.
+- **Slotting & rearrangement**: `analyze_slotting` flags a product with
+  genuine recent pick activity (`min_picks` threshold against Pick-movement
+  ledger entries) sitting in a `WMS Stock Balance` row whose bin's storage
+  type doesn't match the product's own configured `preferred_storage_type` —
+  deliberately reusing existing P1 configuration as the target rather than a
+  new scoring model. `generate_rearrangement_tasks` builds a real Internal
+  Move `Warehouse Task` per flagged row via the same `determine_destination_bin`
+  every other putaway decision uses (a warehouse just needs one generic
+  "Internal Move" Bin Determination Rule with no fixed destination storage
+  type for the fallback-to-`preferred_storage_type` behavior to kick in — see
+  [the rule engine](#3-bin-determination-rule--which-bin-a-movement-lands-in)).
+  Both surfaced on the WMS Monitor's **Slotting** tab, with a bulk "Generate
+  Rearrangement Tasks" action.
+- **Labor management**: a **Labor Standard** (priority, optional warehouse,
+  task type, optional item group, standard seconds per unit) feeds
+  `resource_performance` — per-resource task count, average cycle time, and
+  an efficiency percentage (planned vs. actual seconds against matching
+  confirmed tasks) — shown on the WMS Monitor's **KPIs** tab below the
+  warehouse-level cards.
+- **VAS depth**: `VAS Order Activity` now records `started_at`/
+  `duration_seconds` per step. `create_vas_order_from_packaging_spec`
+  (RF app, VAS screen → "+ Generate from Packaging Spec") builds one VAS
+  activity per level of a scanned HU's item's Packaging Spec automatically,
+  instead of requiring every step to be typed in by hand.
+- **3PL billing** (task/activity charges only — storage/per-diem billing is
+  out of scope, since it needs a per-customer owner dimension on `WMS Stock
+  Balance` that doesn't exist): a **Billing Rate** (priority, optional
+  warehouse/customer, activity, `Per Task`/`Per Unit` basis, rate, billing
+  item) drives `generate_billing_for_period`, which attributes confirmed
+  tasks to a customer through their Stock Allocation's or Cross Dock
+  request's Outbound Delivery — tasks with no traceable delivery are
+  excluded rather than guessed at. `create_billing_sales_invoice` builds one
+  Draft (never auto-submitted — a human reviews and submits it) ERPNext
+  Sales Invoice per matched rate. Both reachable from the WMS Monitor's
+  **Billing** tab (preview, then create).
+
 ## Modules
 
 | Module | Contains |
 |---|---|
-| `wms_core` | Warehouse/Storage Type/Storage Bin structure, WMS Settings, the WMS Monitor page, the WMS workspace |
-| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): determination rules (including WMS Print Determination Rule), process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
+| `wms_core` | Warehouse/Storage Type/Storage Bin structure (Storage Section, Bin Type), WMS Settings, the WMS Monitor page, the WMS workspace |
+| `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): Process/Bin/Warehouse-Process-Type-Determination Rule, Removal Rule, Storage Type Search Sequence, WO Creation Rule, Inspection Rule, process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, WMS Print Determination Rule, plus [P4](#advanced-ewm-p4)'s Wave Template, Labor Standard, and Billing Rate, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
-| `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave |
-| `wms_inventory` | WMS Product, WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count, Quality Inspection |
-| `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material |
-| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Print Spool, WMS Exception Code |
+| `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave, VAS Order (+ VAS Order Activity) |
+| `wms_inventory` | WMS Product (+ per-warehouse `WMS Product Warehouse` overrides), WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count (+ Count Tolerance Group, Cycle Count Rule), Quality Inspection |
+| `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material, Packaging Spec (+ Packaging Spec Level) |
+| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Print Spool, WMS Exception Code, [P4](#advanced-ewm-p4)'s Kitting Order (+ Kitting Order Component) |
 | `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
 `services/*.py` holds the transactional logic each doctype's controller calls
@@ -464,15 +653,37 @@ on a new site:
    document type) pointing at a Storage Process (or Route).
 8. **Storage Process** / **Storage Process Step** — only needed where a
    document type must run more than one step (e.g. unload, then putaway).
-9. **Replenishment Rule** — one per (warehouse, product, pick bin) you want
-   auto-replenished; the hourly job does the rest.
-10. **WMS Number Range** — the seeded global fallback (`HU-########`,
+9. **Removal Rule** — optional; no matching rule falls back to
+   FEFO-then-FIFO. Add one per (warehouse, product/item group, stock type)
+   where you need a different strategy (LIFO, Fixed Bin, ...).
+10. **Warehouse Process Type Determination Rule** — optional; no matching
+    rule keeps the hardcoded literal each call site (Putaway/Pick/Internal
+    Move/Replenish/Deconsolidation) always used. Only needed where different
+    items/priorities/warehouses must route through a different Warehouse
+    Process Type for the same activity.
+11. **WO Creation Rule** — optional; caps tasks per Warehouse Order by
+    (warehouse, activity, item group, stock type). Skip it and a batch's
+    tasks all share one Warehouse Order, as before.
+12. **Inspection Rule** — optional; per (warehouse, item, item group), a
+    matching Goods Receipt row auto-routes to `QUALITY` and gets a `WMS
+    Quality Inspection` created automatically. Skip it and quality
+    inspection stays fully manual.
+13. **Replenishment Rule** — one per (warehouse, product, pick bin) you want
+    auto-replenished; the hourly job does the rest.
+14. **Count Tolerance Group** / **Cycle Count Rule** — both optional. A
+    Tolerance Group (per warehouse/item group, absolute/percentage
+    thresholds) gates whether a count variance posts immediately or holds
+    for recount/approval; skip it and every variance posts immediately, as
+    before. A Cycle Count Rule schedules count generation (ABC/Low Stock/
+    Zero Stock/Putaway PI/Bin Check/Annual) — skip it and counts stay fully
+    manual.
+15. **WMS Number Range** — the seeded global fallback (`HU-########`,
     `SHIP-########`) works out of the box; every other doctype it now covers
     (Warehouse Order/Task, deliveries, receipts/issues, packing, waves,
     counts, inspections) is untouched until you add one — configure a
     narrower range per warehouse, HU Type, or doctype only where you need a
     different prefix/window (see [Numbering](#numbering-wms-number-range)).
-11. **WMS Route** / **Route Stop** — at least one active Route per warehouse
+16. **WMS Route** / **Route Stop** — at least one active Route per warehouse
     (with a `default_staging_bin` and a `default_door` **that must be a
     Door-role bin from step 3** — Route save is rejected otherwise) so
     `create_shipment` can determine one; add ordered **Stops** only where
@@ -481,13 +692,21 @@ on a new site:
     to determine, which means HUs can never reach `Loaded` status, which
     means Goods Issue can never post for anything shipped through this
     warehouse — this step is not optional despite being listed near the end.
-12. **WMS Resource** (`resource_type = Printer`) / **WMS Print Determination
+17. **WMS Resource** (`resource_type = Printer`) / **WMS Print Determination
     Rule** — entirely optional: skip both and nothing prints, exactly like
-    skipping step 10. Add one Printer Resource per physical device, then a
+    skipping step 15. Add one Printer Resource per physical device, then a
     rule per (warehouse, event) pointing at it, where you actually want `HU
     Created` / `Putaway Confirmed` / `Goods Issue Posted` / `Shipment
     Loaded` to queue something (see [Printing](#printing-spool)).
-13. **Roles** — assign the roles below to users; optionally add **User
+18. **[P4](#advanced-ewm-p4) config, all optional**: **Wave Template**
+    (warehouse/route, cut-off time, auto-release) for scheduled wave
+    generation; **Labor Standard** (warehouse/task type/item group, standard
+    seconds per unit) for the KPI dashboard's efficiency numbers; **Billing
+    Rate** (warehouse/customer, activity, rate, billing item) before using
+    the Monitor's Billing tab. Skip any of these and that specific P4 feature
+    simply has nothing to compute from — nothing else in the app depends on
+    them.
+19. **Roles** — assign the roles below to users; optionally add **User
     Permission** rows restricting a user to specific `WMS Warehouse` values
     (see [Roles & permissions](#roles--permissions)).
 
@@ -549,12 +768,15 @@ Registered in `hooks.py` under `scheduler_events`:
 |---|---|---|
 | Hourly | `recalculate_stale_bin_capacity` | Recomputes `current_hu_count`/`current_weight` per active bin from live HU data |
 | Hourly | `run_replenishment_check` | Evaluates every active Replenishment Rule, raises a Warehouse Request+Task for pick bins at/below minimum (skips if one's already pending) |
+| Hourly | `generate_scheduled_waves` | [P4] Sweeps matching submitted Outbound Deliveries into a new Draft `WMS Wave` per active Wave Template |
+| Hourly | `release_due_waves` | [P4] Releases any template-generated Draft wave whose cut-off time has passed |
 | Daily | `verify_stock_balance_integrity` | Logs any negative `WMS Stock Balance` rows as an error for review |
 | Daily | `verify_erpnext_stock_reconciliation` | Logs WMS vs ERPNext quantity drift per warehouse/product |
+| Daily | `generate_scheduled_counts` | [P3] Generates `WMS Physical Inventory Count` documents per active Cycle Count Rule (ABC/Low Stock/Zero Stock/Putaway PI/Bin Check/Annual) |
 
-None of these post anything automatically except replenishment task creation
-— the integrity/reconciliation checks are report-only (`frappe.log_error`),
-by design, so they never silently correct the ledger.
+None of these post anything automatically except replenishment/wave/count
+generation — the integrity/reconciliation checks are report-only
+(`frappe.log_error`), by design, so they never silently correct the ledger.
 
 ## RF / scanner app
 
@@ -566,18 +788,26 @@ rather than blocking on an admin having pre-assigned one; once claimed, a Log
 Off button (next to the queue controls) releases it again. Only then does
 the home menu appear, leading to:
 
-| Action | What it does |
-|---|---|
-| Tasks | Confirm any planned putaway/pick/move/stage/load task, or report an exception |
-| Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises putaway tasks |
-| Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
-| Pack | Complete an open Packing Order in one tap |
-| Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
-| Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
-| Move | Ad-hoc bin-to-bin/HU-to-HU transfer with no planning step |
-| Count | Record physical inventory quantities, auto-posts once every line is counted |
-| Quality | Complete an inspection's pass/fail split |
-| Lookup | HU/bin contents by barcode |
+| Section | Action | What it does |
+|---|---|---|
+| Inbound | Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises Putaway (and, where matched, [P4] Cross Dock) tasks |
+| Inbound | Putaway Tasks | Confirm any open Putaway, Unload, Deconsolidation, or [P4] Cross Dock task, or report an exception — every task type shares the same generic confirm wizard (source scan → quantity → destination scan → HU), so nothing here is task-type-specific |
+| Inbound | Deconsolidate | Split a received HU's contents across multiple destination bins in one flow |
+| Inbound | Quality | Complete an inspection's pass/fail split |
+| Internal | Move | Ad-hoc bin-to-bin/HU-to-HU transfer with no planning step |
+| Internal | Internal Tasks | Confirm any open Internal Move (including [P4] slotting rearrangement tasks), Posting Change, or Inventory Count task |
+| Internal | Close Movement | Advance an HU one hop along its Route's multi-stop journey |
+| Internal | Repack | Move whole HUs and/or partial item quantities into a destination HU |
+| Internal | Count | Record physical inventory quantities; auto-posts once every line is counted (or holds for recount/approval — see [Core flows](#core-flows)) |
+| Internal | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
+| Internal | Kitting [P4] | List open Kitting Orders for the logged-on operator's warehouse; tap one to complete it (Assemble/Disassemble) |
+| Outbound | Picking | Enter a delivery/wave reference to jump straight into picking its tasks |
+| Outbound | Pick Tasks | Confirm any open Pick, Stage, or Load task |
+| Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
+| Outbound | Pack | Complete an open Packing Order in one tap |
+| Outbound | VAS | Complete open VAS activity steps, or tap "+ Generate from Packaging Spec" [P4] to build a new VAS Order's steps from a scanned HU's item's Packaging Spec instead of typing them in by hand |
+| Outbound | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
+| — | Lookup | HU/bin contents by barcode |
 
 `api/scanner.py` and the other `api/*.py` modules are the whitelisted
 endpoints this frontend (and real barcode hardware) call.
@@ -595,7 +825,10 @@ endpoints this frontend (and real barcode hardware) call.
   relevant doctype's form instead of a bare API endpoint you'd have to know
   to call: **Handling Unit** gets "Recycle" (once Empty) and "HU Overview";
   **WMS Shipment** gets "Depart" (once Loaded) and "Complete" (once
-  Departed).
+  Departed); ERPNext's own **Purchase Order** / **Sales Order** get "Create
+  Inbound/Outbound Delivery"; ERPNext's **Work Order** gets "FG Receipt
+  (WMS)" [P2] — posts a Goods Receipt sourced from the Work Order and drives
+  the normal putaway flow from it (`create_fg_receipt_from_work_order`).
 - **WMS Monitor** (`/app/wms-monitor`) — pick a warehouse, then a node from
   the left-hand list, SAP EWM Warehouse Management Monitor-style, instead of
   one long scrolling page:
@@ -619,26 +852,73 @@ endpoints this frontend (and real barcode hardware) call.
   - **Warehouse Tasks**, **Handling Units** — searchable, each its own node.
   - **Stock Movements** — searchable `WMS Stock Ledger Entry` history.
   - **Resources & Queues** — resource workload and warehouse queues.
+  - **Difference Analyzer** [P3] — posted count variance aggregated by
+    product (total gain/loss/net-variance/over-tolerance-event counts) over a
+    date range.
+  - **KPIs** [P3/P4] — warehouse-level cards (task throughput, average task
+    and Warehouse Order cycle time, exception rate, count accuracy) plus a
+    per-resource labor performance table (task count, average cycle time,
+    efficiency % against a matching Labor Standard).
+  - **Slotting** [P4] — misplaced-and-active-product recommendations, with a
+    bulk "Generate Rearrangement Tasks" action.
+  - **Kitting** [P4] — create a Kitting Order (kit item, BOM, work center
+    bin, quantity, direction) and complete open ones.
+  - **Billing** [P4] — preview `generate_billing_for_period` for a
+    warehouse/customer/date range, then create the Draft Sales Invoice.
+  - **Alerts** — counts awaiting supervisor approval (with a bulk "Approve
+    Selected" action), aged exceptions, and stalled Warehouse Orders.
 
   Roles: WMS Supervisor / Administrator / Inventory Controller / Auditor,
   System Manager.
 
 ## Install
 
+Requires Frappe v16 and ERPNext v16 (ERPNext must already be installed on the
+site — this app depends on ERPNext master doctypes: `Item`, `UOM`, `Batch`,
+`Serial No`, `Company`, `Supplier`, `Customer`).
+
 ```bash
 cd frappe-bench
-bench get-app /path/to/frappe_wms_full_app
+bench get-app https://github.com/pedropi16/frappe-ewm.git --branch main
 bench --site your-site install-app frappe_wms
-bench --site your-site migrate
 bench build --app frappe_wms
 ```
 
-Requires ERPNext master doctypes (`Item`, `UOM`, `Batch`, `Serial No`,
-`Company`, `Supplier`, `Customer`) — install ERPNext first. `after_install`
-then seeds default Stock Types, Movement Types, Warehouse Process Types, and
-the roles listed above; everything else in
-[Configuration reference](#configuration-reference) is left for you to set up
-per site.
+`bench get-app` clones the repo into `apps/frappe_wms`; `install-app` runs
+the full DocType sync, `after_install` (seeds Stock Types, Movement Types,
+Warehouse Process Types, Exception Codes, Number Ranges, the WMS Stock Type
+Inventory Dimension, and the roles listed below), and the workspace/desktop
+icon setup, then `bench build` links/compiles the RF app and Monitor page's
+static assets. No separate `migrate` step is needed on a fresh install —
+`install-app` already runs it; run `bench --site your-site migrate` only
+after later pulling app updates.
+
+Everything above (Stock/Movement/Process Types, Exception Codes, roles) is a
+sensible starting set so the site isn't empty; everything else in
+[Configuration reference](#configuration-reference) — warehouses, storage
+structure, and every rule table — is warehouse-specific and left for you to
+configure per site.
+
+This exact path was verified by uninstalling `frappe_wms` entirely and
+reinstalling it from a freshly-cloned copy of this repo, not just written
+down and assumed to work — see [Status](#status).
+
+## Uninstall
+
+```bash
+bench --site your-site uninstall-app frappe_wms
+```
+
+Backs up the site by default before dropping every `frappe_wms` table and
+DocType (pass `--no-backup` to skip, `--dry-run` to preview what would be
+removed, `-y`/`--yes` to bypass the confirmation prompt). This only touches
+`frappe_wms`'s own doctypes and modules — ERPNext and Frappe core, and any
+ERPNext documents already mirrored (Stock Entries, Delivery Notes, Purchase
+Receipts, Sales Invoices from [3PL billing](#advanced-ewm-p4)), are
+untouched and stay exactly as they are.
+
+To remove the app from the bench entirely after uninstalling it from every
+site: `bench remove-app frappe_wms`.
 
 ## Internationalization
 
@@ -668,6 +948,8 @@ file to maintain.
 
 ## Production warning
 
-This is a complete MVP scaffold, not a certified SAP EWM replacement.
-Validate accounting integration, concurrency, permissions, barcode hardware,
-reversal rules, and migration data in a non-production site before go-live.
+This is a complete, tested MVP (243 automated tests covering P0–P4, fresh
+install verified end to end — see [Status](#status)), not a certified SAP EWM
+replacement. Validate accounting integration, concurrency, permissions,
+barcode hardware, reversal rules, and migration data in a non-production site
+before go-live.
