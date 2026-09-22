@@ -29,7 +29,7 @@ def after_install():
     # was actually found, and triggers order-related replenishment for the shortfall.
     quantity_change_flags = {"OOS": (1, "Create Follow-up Task")}
     for code,name,category,requires_supervisor,requires_comment,task_types in exceptions:
-        allows_quantity_change, follow_up_action = quantity_change_flags.get(code, (0, ""))
+        allows_quantity_change, follow_up_action = quantity_change_flags.get(code, (0, "None"))
         _insert("WMS Exception Code",{
             "exception_code":code,"exception_name":name,"category":category,
             "requires_supervisor":requires_supervisor,"requires_comment":requires_comment,"active":1,
