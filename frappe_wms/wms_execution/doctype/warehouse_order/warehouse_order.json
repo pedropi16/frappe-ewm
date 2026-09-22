@@ -16,6 +16,7 @@
     "assigned_resource",
     "priority",
     "status",
+    "blocking_reason",
     "task_count",
     "confirmed_count",
     "reference_doctype",
@@ -83,12 +84,19 @@
       "fieldname": "status",
       "label": "Status",
       "fieldtype": "Select",
-      "options": "Open\nAssigned\nIn Process\nCompleted\nCancelled",
+      "options": "Open\nAssigned\nIn Process\nBlocked\nOn Hold\nCompleted\nCancelled",
       "reqd": 1,
       "default": "Open",
       "read_only": 1,
       "in_list_view": 1,
-      "in_standard_filter": 1
+      "in_standard_filter": 1,
+      "description": "Blocked is set automatically when the current task is in Exception; On Hold is a deliberate Supervisor pause (never overwritten by the automatic recompute)."
+    },
+    {
+      "fieldname": "blocking_reason",
+      "label": "Blocking Reason",
+      "fieldtype": "Data",
+      "read_only": 1
     },
     {
       "fieldname": "task_count",

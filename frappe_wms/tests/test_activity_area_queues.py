@@ -3,6 +3,7 @@ from frappe.tests import IntegrationTestCase
 
 from frappe_wms.services.warehouse_order import attach_task, join_queue, leave_queue, list_queues, pull_next_warehouse_order
 from frappe_wms.services.bin_assignment import search_bins_for_assignment, mass_assign_activity_area
+from frappe_wms.services.task import list_my_tasks
 
 
 class TestActivityAreaQueues(IntegrationTestCase):
@@ -83,12 +84,21 @@ class TestActivityAreaQueues(IntegrationTestCase):
         queue_name = f"AAQ-Q-RG-{suffix}"
         frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": queue_name, "queue_name": queue_name,
             "warehouse": self.warehouse, "activity": "Internal Move", "resource_group": group, "active": 1}).insert(ignore_permissions=True)
+        email = f"aaq-rg-{suffix}@example.com"
+        if not frappe.db.exists("User", email):
+            frappe.get_doc({"doctype": "User", "email": email, "first_name": "AAQ RG Test", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", email).add_roles("WMS Picker")
         resource_code = f"AAQ-RES-{suffix}"
         frappe.get_doc({"doctype": "WMS Resource", "resource_code": resource_code, "warehouse": self.warehouse,
-            "resource_type": "Operator", "resource_group": group, "active": 1}).insert(ignore_permissions=True)
+            "resource_type": "Operator", "user": email, "resource_group": group, "active": 1}).insert(ignore_permissions=True)
 
         task = self._make_task(source_bin, batch_key=frappe.generate_hash(length=10))
-        self.assertEqual(task.assigned_resource, resource_code)
+        # The task is never auto-assigned to a resource - it stays open and unassigned,
+        # discoverable by anyone whose Resource Group covers the queue it landed in, without
+        # ever having manually joined that queue (current_queue left blank on the resource).
+        self.assertIn(task.assigned_resource, ("", None))
+        result = list_my_tasks(user=email)
+        self.assertIn(task.name, [t["name"] for t in result["tasks"]])
 
     def test_pull_and_list_queues_scoped_to_resource_group(self):
         group_a = f"AAQ-RGA-{frappe.generate_hash(length=6)}"

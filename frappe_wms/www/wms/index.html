@@ -267,7 +267,7 @@ const SECTIONS = {
   outbound: {
     label: "Outbound", icon: "\u{1F4E4}",
     items: [
-      { icon: "\u{1F3AF}", label: "Picking", action: openPickingEntry },
+      { icon: "\u{1F3AF}", label: "Picking", action: openPickingMenu },
       { icon: "\u{1F4CB}", label: "Pick Tasks", taskGroup: "outbound", action: () => openTasksFiltered("outbound") },
       { icon: "\u{1F4E4}", label: "Ship", action: loadShipDeliveries },
       { icon: "\u{1F4E6}", label: "Pack", action: loadPackingOrders },
@@ -301,7 +301,9 @@ const VIEW_PARENT = {
   vas: () => "section",
   "vas-detail": () => "vas",
   "vas-new": () => "vas",
-  "picking-entry": () => "section",
+  "picking-menu": () => "section",
+  "picking-manual-menu": () => "picking-menu",
+  "picking-entry": () => "picking-manual-menu",
   "close-movement": () => "section",
   repack: () => "section",
   "repack-detail": () => "repack",
@@ -417,6 +419,8 @@ const state = {
 
   // Picking entry
   pickingReference: "",
+  pickingReferenceLabel: "",
+  pickingReferencePlaceholder: "",
   pickingSearchType: "document",
 
   // Close Movement
@@ -545,8 +549,15 @@ async function pullWork() {
   setState({ loading: true, error: null });
   try {
     const wo = await api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {});
-    setState({ loading: false, info: wo ? _("Assigned {0}", [wo]) : _("No work waiting in this queue") });
-    loadTasks();
+    if (!wo) { setState({ loading: false, info: _("No work waiting right now") }); return; }
+    const res = await api("frappe_wms.api.scanner.my_tasks");
+    const tasks = res.tasks || [];
+    setState({ tasks, resource: res.resource || null });
+    // Jumps straight into the task instead of just reporting "assigned" and leaving the
+    // operator to go find it themselves - matches Picking's Auto entry point exactly.
+    const task = tasks.find((t) => t.warehouse_order === wo);
+    if (task) { setState({ loading: false }); openTask(task); }
+    else { setState({ loading: false, view: "tasks", info: _("Assigned {0}", [wo]) }); }
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -1325,14 +1336,65 @@ function renderConsolidationDetail() {
   return wrap;
 }
 
+// ---------- Generic submenu (reusable - the same Auto/Manual shape gets reused for other
+// activities later, not just Picking) ----------
+function renderSubmenu(items) {
+  const wrap = el(`<div></div>`);
+  const grid = el(`<div class="menu-grid"></div>`);
+  items.forEach((item) => {
+    const btn = el(`
+      <div class="menu-btn">
+        <span class="icon">${item.icon}</span>${escapeHtml(_(item.label))}
+      </div>
+    `);
+    btn.onclick = item.action;
+    grid.appendChild(btn);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
 // ---------- Picking entry points ----------
-function openPickingEntry() {
-  setState({ view: "picking-entry", section: "outbound", error: null, info: null, pickingReference: "" });
+function openPickingMenu() {
+  setState({ view: "picking-menu", section: "outbound", error: null, info: null });
+}
+
+function renderPickingMenu() {
+  return renderSubmenu([
+    { icon: "\u{26A1}", label: "Auto - Get Next Task", action: pullWork },
+    { icon: "\u{1F50D}", label: "Manual - Search", action: openPickingManualMenu },
+  ]);
+}
+
+function openPickingManualMenu() {
+  setState({ view: "picking-manual-menu", error: null, info: null });
+}
+
+function renderPickingManualMenu() {
+  return renderSubmenu([
+    { icon: "\u{1F3F7}\u{FE0F}", label: "By Handling Unit", action: () => openPickingEntry(_("Handling Unit"), _("Scan an HU barcode")) },
+    { icon: "\u{1F4CB}", label: "By Warehouse Task", action: () => openPickingEntry(_("Warehouse Task"), _("Scan or type a Warehouse Task")) },
+    { icon: "\u{1F4E6}", label: "By Warehouse Order", action: () => openPickingEntry(_("Warehouse Order"), _("Scan or type a Warehouse Order")) },
+    { icon: "\u{1F4C4}", label: "By Warehouse Request", action: () => openPickingEntry(_("Warehouse Request"), _("Scan or type a Warehouse Request")) },
+    { icon: "\u{1F4E1}", label: "By Queue", action: () => openPickingEntry(_("Queue"), _("Scan or type a Queue")) },
+    { icon: "\u{1F69A}", label: "By Outbound Delivery", action: () => openPickingEntry(_("Outbound Delivery"), _("Scan or type an Outbound Delivery")) },
+  ]);
+}
+
+function openPickingEntry(label, placeholder) {
+  // All six quick-picks call the same find_pick_tasks lookup, which already auto-detects the
+  // reference type server-side - the label/placeholder here is purely a UX hint for which kind
+  // of barcode to scan, not a separate code path per type.
+  setState({
+    view: "picking-entry", section: "outbound", error: null, info: null, pickingReference: "",
+    pickingReferenceLabel: label || _("Warehouse Order / Outbound Delivery / Handling Unit / Warehouse Task / Warehouse Request / Queue"),
+    pickingReferencePlaceholder: placeholder || _("Scan or type a barcode"),
+  });
 }
 
 async function submitPickingEntry() {
   const reference = state.pickingReference.trim();
-  if (!reference) { setState({ error: _("Scan or enter a Warehouse Order, Outbound Delivery, or Handling Unit.") }); return; }
+  if (!reference) { setState({ error: _("Scan or enter a reference to advance.") }); return; }
   setState({ loading: true, error: null });
   try {
     const tasks = await api("frappe_wms.api.outbound.find_pick_tasks", { reference });
@@ -1353,14 +1415,14 @@ function renderPickingEntry() {
   wrap.appendChild(el(`
     <div class="detail-section">
       <h3>${_("Enter picking")}</h3>
-      <div class="hint">${_("Scan a Warehouse Order, an Outbound Delivery, or a Handling Unit involved in the pick - whichever's on hand - to jump straight into that pick task.")}</div>
+      <div class="hint">${_("Scan whatever's on hand to jump straight into that pick task.")}</div>
     </div>
   `));
   const form = el(`<div class="detail-section"></div>`);
   form.appendChild(el(`
     <div class="field">
-      <label>${_("Warehouse Order / Outbound Delivery / Handling Unit")}</label>
-      <input type="text" id="picking-reference" placeholder="${_("Scan or type a barcode")}" value="${escapeHtml(state.pickingReference)}" autofocus>
+      <label>${escapeHtml(state.pickingReferenceLabel || "")}</label>
+      <input type="text" id="picking-reference" placeholder="${escapeHtml(state.pickingReferencePlaceholder || _("Scan or type a barcode"))}" value="${escapeHtml(state.pickingReference)}" autofocus>
     </div>
   `));
   form.querySelector("input").oninput = (e) => { state.pickingReference = e.target.value; };
@@ -1975,6 +2037,7 @@ function render() {
     hu: renderHUList, "hu-create": renderHUCreate, "hu-detail": renderHUDetail,
     load: renderLoadList, "load-detail": renderLoadDetail,
     decon: renderDeconScan, "decon-detail": renderDeconDetail,
+    "picking-menu": renderPickingMenu, "picking-manual-menu": renderPickingManualMenu,
     "picking-entry": renderPickingEntry, "close-movement": renderCloseMovement, repack: renderRepack, "repack-detail": renderRepackDetail,
     vas: renderVASList, "vas-detail": renderVASDetail, "vas-new": renderVASNew,
     kitting: renderKittingList,

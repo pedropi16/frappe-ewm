@@ -23,28 +23,6 @@ def determine_queue(warehouse, activity, storage_type=None, activity_area=None):
         if queue: return queue
     return frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": ["in", ["", None]], "storage_type": ["in", ["", None]]}, "name")
 
-def _resource_for_queue(queue):
-    # Least-loaded active resource currently logged onto this queue (round-robins naturally
-    # as each new Warehouse Order goes to whoever has fewest open ones). Falls back to any
-    # active resource in the queue's own Resource Group that hasn't explicitly focused on a
-    # *different* queue - current_queue stays available as an optional narrowing, but Resource
-    # Group membership is the real source of eligibility (mirrors SAP EWM's Queue-to-
-    # Resource-Group link, which this schema already had a field for but never matched on).
-    resources = frappe.get_all("WMS Resource", filters={"current_queue": queue, "active": 1}, pluck="name")
-    if not resources:
-        resource_group = frappe.db.get_value("Warehouse Queue", queue, "resource_group")
-        if resource_group:
-            resources = frappe.get_all("WMS Resource", filters={
-                "resource_group": resource_group, "active": 1, "current_queue": ["in", ["", None]],
-            }, pluck="name")
-    if not resources: return None
-    counts = dict(frappe.db.sql(
-        "select assigned_resource, count(*) from `tabWarehouse Order` "
-        "where queue=%s and status in %s and assigned_resource is not null group by assigned_resource",
-        (queue, OPEN_WO_STATUSES),
-    ))
-    return min(resources, key=lambda r: counts.get(r, 0))
-
 def _matching_wo_creation_rule(warehouse, activity, item_group=None, stock_type=None):
     for rule in frappe.get_all("WO Creation Rule", filters={"warehouse": warehouse, "activity": activity, "active": 1},
             fields=["name", "item_group", "stock_type", "maximum_tasks"], order_by="priority asc"):
@@ -66,16 +44,18 @@ def _batch_key_with_room(queue, batch_key, maximum_tasks):
         suffix += 1
 
 def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priority="Normal", wave=None, reference_doctype=None, reference_name=None, item_group=None, stock_type=None):
+    # Never auto-assigns a resource at creation - a Warehouse Order sits Open, scoped only to
+    # its queue, until a resource explicitly claims it (pulling the next one, or confirming a
+    # task on it manually). Resources only execute things; assignment is never the default.
     rule = _matching_wo_creation_rule(warehouse, activity, item_group, stock_type)
     if rule and rule.maximum_tasks:
         batch_key = _batch_key_with_room(queue, batch_key, rule.maximum_tasks)
     existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": batch_key, "status": ["in", OPEN_WO_STATUSES]}, "name")
     if existing: return existing
-    resource = _resource_for_queue(queue) if queue else None
     wo = frappe.get_doc({
         "doctype": "Warehouse Order", "warehouse": warehouse, "activity": activity, "queue": queue,
         "batch_key": batch_key, "wave": wave, "priority": priority,
-        "assigned_resource": resource, "status": "Assigned" if resource else "Open",
+        "assigned_resource": None, "status": "Open",
         "reference_doctype": reference_doctype, "reference_name": reference_name,
     })
     wo.insert(ignore_permissions=True)
@@ -156,24 +136,52 @@ def release_next_in_sequence(wo_name):
 
 def sync_warehouse_order(wo_name):
     if not wo_name: return
-    tasks = frappe.get_all("Warehouse Task", filters={"warehouse_order": wo_name}, fields=["status"])
+    tasks = frappe.get_all("Warehouse Task", filters={"warehouse_order": wo_name}, fields=["status", "sequence", "blocking_reason"])
     if not tasks: return
+    wo = frappe.get_doc("Warehouse Order", wo_name)
+    if wo.status == "On Hold": return  # a deliberate Supervisor pause always wins over the automatic recompute
     confirmed = sum(1 for t in tasks if t.status in ("Confirmed", "Cancelled"))
     in_process = any(t.status in ("In Process", "Partially Confirmed", "Confirmed") for t in tasks)
-    wo = frappe.get_doc("Warehouse Order", wo_name)
     updates = {"confirmed_count": confirmed}
     if confirmed >= len(tasks):
         updates["status"] = "Completed"
+        updates["blocking_reason"] = None
         updates["completed_at"] = now_datetime()
         # A WO whose only sync call already finds every task Confirmed (e.g. a single-task
         # WO, or several tasks confirmed together) never passes through the elif below, so
         # started_at would otherwise be left permanently null - record it as equal to
         # completed_at rather than never set at all.
         if not wo.started_at: updates["started_at"] = updates["completed_at"]
-    elif in_process and wo.status in ("Open", "Assigned"):
-        updates["status"] = "In Process"
-        updates["started_at"] = now_datetime()
+    else:
+        non_terminal = sorted((t for t in tasks if t.status in NON_TERMINAL_STATUSES), key=lambda t: t.sequence or 0)
+        lead = non_terminal[0] if non_terminal else None
+        if lead and lead.status == "Exception":
+            updates["status"] = "Blocked"
+            updates["blocking_reason"] = lead.blocking_reason or _("The current task hit an exception")
+        elif in_process:
+            updates["status"] = "In Process"
+            updates["blocking_reason"] = None
+            if wo.status in ("Open", "Assigned"): updates["started_at"] = now_datetime()
+        elif wo.status == "Blocked":
+            # The lead task's exception resolved (or a new, non-exception task became the
+            # lead) - fall back to whatever status the WO would otherwise be in.
+            updates["status"] = "In Process" if wo.started_at else "Open"
+            updates["blocking_reason"] = None
     wo.db_set(updates, update_modified=True)
+
+def block_warehouse_order(wo_name, reason=None):
+    # A deliberate Supervisor pause - distinct from the automatic "Blocked" the recompute above
+    # sets on an Exception, and never overwritten by it (sync_warehouse_order returns early on
+    # a WO that's already On Hold).
+    require_role("WMS Supervisor")
+    frappe.db.set_value("Warehouse Order", wo_name, {"status": "On Hold", "blocking_reason": reason or _("On hold")})
+    return {"warehouse_order": wo_name, "status": "On Hold"}
+
+def resume_warehouse_order(wo_name):
+    require_role("WMS Supervisor")
+    frappe.db.set_value("Warehouse Order", wo_name, {"status": "Open", "blocking_reason": None})
+    sync_warehouse_order(wo_name)
+    return {"warehouse_order": wo_name, "status": frappe.db.get_value("Warehouse Order", wo_name, "status")}
 
 def join_queue(queue_name, user=None):
     require_role(*RESOURCE_ROLES)

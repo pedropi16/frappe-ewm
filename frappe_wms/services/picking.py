@@ -14,18 +14,27 @@ PICK_TASK_FIELDS = ["name", "task_type", "warehouse", "product", "planned_quanti
 
 def find_pick_tasks(reference):
     # SAP EWM-style picking entry points: jump straight into the pick-task wizard by scanning
-    # the Warehouse Order or Outbound Delivery it belongs to, or a Handling Unit involved in it -
-    # rather than only browsing the full "Pick Tasks" list.
+    # the Warehouse Order, Warehouse Request, Warehouse Task, Queue, or Outbound Delivery it
+    # belongs to, or a Handling Unit involved in it - rather than only browsing the full "Pick
+    # Tasks" list. Auto-detects which one it is by existence, same idiom throughout this app
+    # (e.g. Consolidation's find_joinable_references) - a labeled "search by" picker in the RF
+    # app is just a UI hint over this same single lookup, not a separate mechanism per type.
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
     reference = (reference or "").strip()
     if not reference:
-        frappe.throw(_("Scan or enter a Warehouse Order, Outbound Delivery, or Handling Unit"))
+        frappe.throw(_("Scan or enter a Warehouse Order, Warehouse Request, Warehouse Task, Queue, Outbound Delivery, or Handling Unit"))
     resource = my_resource()
     base_filters = {"task_type": "Pick", "status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
     if resource: base_filters["warehouse"] = resource.warehouse
 
-    if frappe.db.exists("Warehouse Order", reference):
+    if frappe.db.exists("Warehouse Task", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": reference}, fields=PICK_TASK_FIELDS)
+    elif frappe.db.exists("Warehouse Order", reference):
         tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=PICK_TASK_FIELDS)
+    elif frappe.db.exists("Warehouse Request", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_request": reference}, fields=PICK_TASK_FIELDS)
+    elif frappe.db.exists("Warehouse Queue", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "queue": reference}, fields=PICK_TASK_FIELDS)
     elif frappe.db.exists("Outbound Delivery", reference):
         allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": reference}, pluck="name")
         task_names = list(task_names_for_allocations(allocation_names))

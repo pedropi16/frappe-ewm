@@ -4,7 +4,7 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
 from frappe_wms.services.bin_rules import validate_destination_bin
-from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks
+from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues
 from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
 from frappe_wms.services import erpnext_sync
@@ -157,7 +157,7 @@ def task_names_for_allocations(allocation_names):
 
 def my_resource(user=None):
     user = user or frappe.session.user
-    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "current_work_center"], as_dict=True)
+    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group", "current_work_center"], as_dict=True)
     if resource and resource.current_work_center:
         # Resolved here rather than making the RF app do a second round trip - actions that
         # want to default to "my work center's bin" (VAS generation today) just read this.
@@ -179,9 +179,12 @@ def list_my_tasks(user=None):
         limit=200,
     )
     if resource:
-        # Visible if it's mine, unrouted (no queue configured), or sitting unclaimed in my current queue.
+        # Visible if it's mine, unrouted (no queue configured), or sitting unclaimed in any
+        # queue my Resource Group covers - not just one I manually joined (current_queue is
+        # still an optional narrowing eligible_queues respects when set).
+        eligible = _eligible_queues(resource)
         tasks = [t for t in tasks if t.assigned_resource == resource.name
-            or (not t.assigned_resource and (not t.queue or t.queue == resource.current_queue))][:100]
+            or (not t.assigned_resource and (not t.queue or t.queue in eligible))][:100]
     return {"resource": resource, "tasks": tasks}
 
 def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
@@ -221,6 +224,21 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
         create_order_related_replenishment(task)
     return result
 
+def _claim_warehouse_order_if_unassigned(task, user=None):
+    # A Warehouse Order never auto-assigns at creation (see get_or_create_warehouse_order) -
+    # it's claimed the moment someone actually starts confirming work on it, whether that task
+    # was found via Auto-pull (which already claims it) or Manual search (which doesn't touch
+    # assignment at all until this point). One shared claim point either way.
+    if not task.warehouse_order: return
+    resource = my_resource(user)
+    if not resource: return
+    wo = frappe.db.get_value("Warehouse Order", task.warehouse_order, ["assigned_resource", "status"], as_dict=True)
+    if wo and not wo.assigned_resource:
+        updates = {"assigned_resource": resource.name}
+        if wo.status == "Open": updates["status"] = "Assigned"
+        frappe.db.set_value("Warehouse Order", task.warehouse_order, updates)
+        frappe.db.set_value("Warehouse Task", {"warehouse_order": task.warehouse_order, "assigned_resource": ["in", ["", None]]}, "assigned_resource", resource.name)
+
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
     require_role("WMS Operator", "WMS Supervisor")
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
@@ -228,6 +246,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if task.status == "Confirmed": return {"task": task.name, "status": task.status, "already_confirmed": True}
     if task.docstatus == 2 or task.status in {"Cancelled", "Exception"}: frappe.throw(_("Task is not confirmable"))
     if task.status == "On Hold": frappe.throw(task.blocking_reason or _("Task is on hold behind an earlier task in its Warehouse Order"))
+    _claim_warehouse_order_if_unassigned(task)
     if frappe.db.get_single_value("WMS Settings", "require_scan_verification"):
         # Today scanned_source/scanned_destination are only checked when the caller bothers
         # to pass them - a caller (or a bypassed/scripted client) that omits them skips

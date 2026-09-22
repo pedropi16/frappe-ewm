@@ -29,7 +29,7 @@ class TestLaborManagement(IntegrationTestCase):
             frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": "LABOR-TEST-QUEUE", "queue_name": "Labor Test Queue", "warehouse": cls.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("WMS Resource", "LABOR-TEST-RESOURCE"):
             frappe.get_doc({"doctype": "WMS Resource", "resource_code": "LABOR-TEST-RESOURCE", "warehouse": cls.warehouse,
-                "resource_type": "Operator", "current_queue": "LABOR-TEST-QUEUE", "active": 1}).insert(ignore_permissions=True)
+                "resource_type": "Operator", "user": "Administrator", "current_queue": "LABOR-TEST-QUEUE", "active": 1}).insert(ignore_permissions=True)
 
     def tearDown(self):
         for existing in frappe.get_all("Labor Standard", filters={"warehouse": self.warehouse}, pluck="name"):
@@ -45,8 +45,10 @@ class TestLaborManagement(IntegrationTestCase):
         })
         attach_task(task, frappe.generate_hash(length=10))
         task.insert(ignore_permissions=True)
-        self.assertEqual(task.assigned_resource, "LABOR-TEST-RESOURCE", "queue-logged-on resource must be auto-assigned")
+        self.assertIn(task.assigned_resource, ("", None), "a Warehouse Order must not auto-assign a resource at creation")
         confirm_task(task.name, confirmed_quantity=planned_quantity)
+        task.reload()
+        self.assertEqual(task.assigned_resource, "LABOR-TEST-RESOURCE", "confirming task claims it for the acting resource")
         return task
 
     def test_resource_with_matching_standard_gets_efficiency(self):

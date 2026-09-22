@@ -523,19 +523,38 @@ If a Warehouse Queue is configured for a warehouse/activity(/storage type/
 **Activity Area** — see below), every `Warehouse Task` created for that
 activity is attached (`services/warehouse_order.attach_task`) to a
 **Warehouse Order** — a batch of tasks sharing the same `batch_key` (e.g. one
-putaway request, one pick-task group) — which is auto-assigned to whichever
-eligible `WMS Resource` currently has the fewest open Warehouse Orders
-(first checking resources explicitly joined to that exact queue, falling
-back to any unfocused resource in its Resource Group). A resource with
-neither a joined queue nor a Resource Group with any queues configured
-simply can't pull work yet (`pull_next_warehouse_order` says so clearly);
-one with no standing assignment otherwise pulls the next one itself
-(`pull_next_warehouse_order`, oldest-priority-first, across every eligible
-queue). This is optional infrastructure end to end: a task type with no
-matching Warehouse Queue is simply never routed through a Warehouse Order
-and behaves as before (assigned/worked directly); a Resource or Queue with
-no Resource Group set keeps behaving exactly as it did before Resource
-Groups were wired up.
+putaway request, one pick-task group). **A Warehouse Order never
+auto-assigns a resource at creation** — matching SAP EWM (and a deliberate
+correction of an earlier design here), resources only *execute* things;
+assignment is never the default. It sits `Open`, scoped only to its queue,
+until a resource explicitly claims it, either by pulling the next one
+(`pull_next_warehouse_order`, oldest-priority-first, across every queue the
+calling resource is eligible for — its joined `current_queue` if it has one,
+else every active queue in its own Resource Group) or by simply confirming
+the first task on it manually (`confirm_task` claims an unassigned Warehouse
+Order for whoever confirms first — covers a task found via a manual search
+rather than a pull). A resource with neither a joined queue nor a Resource
+Group with any queues configured simply can't pull work yet
+(`pull_next_warehouse_order` says so clearly); it can still *see* and
+manually claim unassigned work in any queue its Resource Group covers
+(`list_my_tasks`/`list_my_warehouse_orders`, both Resource-Group-aware, not
+just keyed off a manual queue join). This is optional infrastructure end to
+end: a task type with no matching Warehouse Queue is simply never routed
+through a Warehouse Order and behaves as before (assigned/worked directly);
+a Resource or Queue with no Resource Group set keeps behaving exactly as it
+did before Resource Groups were wired up.
+
+**Warehouse Order status** mirrors SAP EWM's own split of automatic vs.
+deliberate blocking: `Open → Assigned → In Process → Blocked / On Hold →
+Completed / Cancelled`. **Blocked** is automatic — `sync_warehouse_order`
+sets it whenever the WO's lead (lowest-sequence, non-terminal) task is in
+`Exception`, copying its `blocking_reason`, and clears it back to `In
+Process`/`Open` once that's resolved. **On Hold** is a deliberate Supervisor
+pause (`block_warehouse_order`/`resume_warehouse_order`, `require_role("WMS
+Supervisor")`, exposed as Put On Hold/Resume buttons on the Warehouse Order
+desk form) — `sync_warehouse_order` returns early on a WO that's already `On
+Hold`, so the automatic recompute can never silently clear a deliberate
+pause.
 
 **Activity Area** (`wms_core`, mirrors Storage Type/Storage Section/Bin Type
 exactly — a simple `warehouse`+`area_code`+`area_name` master record, no
@@ -872,7 +891,7 @@ proceed. Only then does the home menu appear, leading to:
 | Internal | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
 | Internal | Kitting [P4] | List open Kitting Orders for the logged-on operator's warehouse; tap one to complete it (Assemble/Disassemble) |
 | Internal | Consolidation | Scan an Outbound Delivery/Work Order/Stock Allocation/Warehouse Request barcode to find and add joinable lines to a [Consolidation Group](#consolidation-group), set a target HU, Gather, then Split to Destinations |
-| Outbound | Picking | Enter a delivery/wave reference to jump straight into picking its tasks |
+| Outbound | Picking | Auto/Manual submenu (`renderSubmenu`, a deliberately reusable tile-list pattern meant for other RF menus too): **Auto** pulls the next task off the operator's eligible queues (same as the Queue bar's Get Work); **Manual** offers six labeled quick-picks — HU, Warehouse Task, Warehouse Order, Warehouse Request, Queue, Outbound Delivery — all funnelling into the same auto-detect-by-existence `find_pick_tasks` lookup |
 | Outbound | Pick Tasks | Confirm any open Pick, Stage, or Load task |
 | Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
 | Outbound | Pack | Complete an open Packing Order in one tap |

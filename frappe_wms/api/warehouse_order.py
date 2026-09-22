@@ -6,6 +6,8 @@ from frappe_wms.services.warehouse_order import (
     list_my_warehouse_orders as _list_my_warehouse_orders,
     pull_next_warehouse_order as _pull_next_warehouse_order,
     warehouse_order_detail as _warehouse_order_detail,
+    block_warehouse_order as _block_warehouse_order,
+    resume_warehouse_order as _resume_warehouse_order,
 )
 
 @frappe.whitelist()
@@ -31,3 +33,11 @@ def pull_next_warehouse_order():
 @frappe.whitelist()
 def warehouse_order_detail(wo_name):
     return _warehouse_order_detail(wo_name)
+
+@frappe.whitelist()
+def block_warehouse_order(wo_name, reason=None):
+    return _block_warehouse_order(wo_name, reason)
+
+@frappe.whitelist()
+def resume_warehouse_order(wo_name):
+    return _resume_warehouse_order(wo_name)
