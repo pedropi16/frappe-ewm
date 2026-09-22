@@ -16,6 +16,7 @@
     "user",
     "logged_in_at",
     "current_queue",
+    "current_work_center",
     "current_bin",
     "active"
   ],
@@ -76,6 +77,13 @@
       "label": "Current Queue",
       "fieldtype": "Link",
       "options": "Warehouse Queue"
+    },
+    {
+      "fieldname": "current_work_center",
+      "label": "Current Work Center",
+      "fieldtype": "Link",
+      "options": "Work Center",
+      "description": "Optional - an operator logs on to a Work Center only when the actions they're about to do need one (VAS generation, Packing, Kitting), so its bin can be defaulted instead of scanned every time."
     },
     {
       "fieldname": "current_bin",

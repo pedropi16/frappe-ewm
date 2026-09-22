@@ -550,6 +550,16 @@ transactions do this as a guided filter-then-apply flow, not one bin at a
 time) is the WMS Monitor's **Bin Assignment** tab — see [Desk
 surfaces](#desk-surfaces).
 
+**Work Center** (`wms_core`, same simple shape again —
+`warehouse`+`work_center_code`+`bin`) is a *second*, entirely optional RF
+logon step, after Resource logon: `services/resource.py::log_on_work_center`/
+`log_off_work_center` set/clear `WMS Resource.current_work_center`, mirroring
+`current_queue`'s own "focus" pattern exactly. Nothing is gated by it — it
+exists purely so an action that already carries a `work_center_bin` (VAS
+generation today) can default to the logged-on Work Center's bin instead of
+requiring a scan every time; an operator who never logs on to one keeps
+scanning as before.
+
 ## Advanced EWM (P4)
 
 Seven of SAP EWM's eight Advanced-tier capability areas, each independent and
@@ -659,7 +669,7 @@ itself (choosing the warehouse and staging bin) is a desk/API action, not RF
 
 | Module | Contains |
 |---|---|
-| `wms_core` | Warehouse/Storage Type/Storage Bin structure (Storage Section, Bin Type, Activity Area — see [Core flows](#core-flows)), WMS Settings, the WMS Monitor page, the WMS workspace |
+| `wms_core` | Warehouse/Storage Type/Storage Bin structure (Storage Section, Bin Type, Activity Area, Work Center — see [Core flows](#core-flows)), WMS Settings, the WMS Monitor page, the WMS workspace |
 | `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): Process/Bin/Warehouse-Process-Type-Determination Rule, Removal Rule, Storage Type Search Sequence, WO Creation Rule, Inspection Rule, process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, WMS Print Determination Rule, plus [P4](#advanced-ewm-p4)'s Wave Template, Labor Standard, and Billing Rate, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave, VAS Order (+ VAS Order Activity) |
@@ -843,8 +853,10 @@ frontend at `frappe_wms/www/wms/`, styled after SAP EWM's RF UI. Opening it
 first shows a **Log On** screen: if the signed-in user isn't currently logged
 on to any WMS Resource, it lists free ones to claim (`api/resource.log_on`)
 rather than blocking on an admin having pre-assigned one; once claimed, a Log
-Off button (next to the queue controls) releases it again. Only then does
-the home menu appear, leading to:
+Off button (next to the queue controls) releases it again. From here an
+operator can also, entirely optionally, join a Queue and/or log on to a
+**Work Center** (see [Core flows](#core-flows)) — neither is required to
+proceed. Only then does the home menu appear, leading to:
 
 | Section | Action | What it does |
 |---|---|---|

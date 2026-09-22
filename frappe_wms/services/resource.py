@@ -52,3 +52,32 @@ def kick(resource_code, reason=None):
     kicked_user = resource.user
     resource.db_set({"user": None, "logged_in_at": None}, update_modified=True)
     return {"resource": resource.name, "kicked_user": kicked_user}
+
+def list_available_work_centers(warehouse=None):
+    # Entirely optional, unlike Resource logon itself - an operator only logs on to a Work
+    # Center when the action they're about to do actually needs one (VAS generation, Packing,
+    # Kitting), so this is just a picker list, not a gate on anything else in the RF app.
+    require_role(*RESOURCE_ROLES)
+    filters = {"active": 1}
+    if warehouse: filters["warehouse"] = warehouse
+    return frappe.get_list("Work Center", filters=filters,
+        fields=["name", "work_center_code", "work_center_name", "warehouse", "bin"],
+        order_by="work_center_code asc", limit=200)
+
+def log_on_work_center(work_center_code, user=None):
+    require_role(*RESOURCE_ROLES)
+    user = user or frappe.session.user
+    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, "name")
+    if not resource: frappe.throw(_("No active WMS Resource is linked to your user"))
+    work_center = frappe.get_doc("Work Center", work_center_code)
+    resource_doc = frappe.get_doc("WMS Resource", resource)
+    if work_center.warehouse != resource_doc.warehouse: frappe.throw(_("That Work Center belongs to a different warehouse"))
+    resource_doc.db_set("current_work_center", work_center_code, update_modified=True)
+    return {"resource": resource, "work_center": work_center_code, "bin": work_center.bin}
+
+def log_off_work_center(user=None):
+    require_role(*RESOURCE_ROLES)
+    user = user or frappe.session.user
+    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, "name")
+    if resource: frappe.db.set_value("WMS Resource", resource, "current_work_center", None)
+    return {"resource": resource, "work_center": None}

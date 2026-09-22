@@ -336,6 +336,8 @@ const state = {
   taskTypeFilter: null,
   availableQueues: [],
   showQueuePicker: false,
+  availableWorkCenters: [],
+  showWorkCenterPicker: false,
   currentTask: null,
   taskSteps: [],
   taskStep: 0,
@@ -544,6 +546,43 @@ async function pullWork() {
   try {
     const wo = await api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {});
     setState({ loading: false, info: wo ? _("Assigned {0}", [wo]) : _("No work waiting in this queue") });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Work Centers ----------
+// Entirely optional, unlike Resource logon or joining a queue: an operator only logs on to
+// one when the action they're about to do actually needs a work center bin (VAS generation,
+// Packing, Kitting) - nothing else in the RF app is gated by this.
+async function openWorkCenterPicker() {
+  setState({ loading: true, error: null });
+  try {
+    const warehouse = state.resource ? state.resource.warehouse : undefined;
+    const centers = await api("frappe_wms.api.resource.list_available_work_centers", { warehouse });
+    setState({ loading: false, availableWorkCenters: centers || [], showWorkCenterPicker: true });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function pickWorkCenter(workCenterCode) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.resource.log_on_work_center", { work_center_code: workCenterCode });
+    setState({ loading: false, showWorkCenterPicker: false, info: _("Logged on to {0}", [workCenterCode]) });
+    loadTasks();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function leaveCurrentWorkCenter() {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.resource.log_off_work_center", {});
+    setState({ loading: false, info: _("Logged off Work Center") });
     loadTasks();
   } catch (e) {
     setState({ loading: false, error: e.message });
@@ -898,7 +937,10 @@ async function loadVASOrders() {
 }
 
 function openVASNew() {
-  setState({ view: "vas-new", error: null, info: null, vasNewHu: "", vasNewBin: "" });
+  // Defaults to the logged-on Work Center's own bin when there is one - still a plain,
+  // editable/scannable field either way, since logging on to a Work Center is optional.
+  const defaultBin = (state.resource && state.resource.current_work_center_bin) || "";
+  setState({ view: "vas-new", error: null, info: null, vasNewHu: "", vasNewBin: defaultBin });
 }
 
 async function submitVASNew() {
@@ -2107,6 +2149,7 @@ function renderLogon() {
   wrap.appendChild(card);
   if (state.resource) {
     wrap.appendChild(renderQueueBar());
+    wrap.appendChild(renderWorkCenterBar());
     const btn = el(`<button class="btn btn-primary">${_("Continue")}</button>`);
     btn.onclick = enterMenu;
     wrap.appendChild(btn);
@@ -2229,9 +2272,48 @@ function renderQueueBar() {
   return bar;
 }
 
+// Fully optional - most actions never touch this. Only VAS/Packing/Kitting screens (the ones
+// that already carry a work_center_bin) read it, to default that field instead of requiring
+// a scan every time; an operator who never logs on to one just keeps scanning as before.
+function renderWorkCenterBar() {
+  const bar = el(`<div class="detail-section"></div>`);
+  const resource = state.resource;
+  const workCenter = resource && resource.current_work_center;
+  bar.appendChild(el(`<h3>${_("Work Center")}</h3>`));
+  const row = el(`<div class="row1"></div>`);
+  row.appendChild(el(`<div>${workCenter ? "\u{1F3ED} " + escapeHtml(workCenter) : _("Not logged on to a Work Center (optional)")}</div>`));
+  const actions = el(`<div></div>`);
+  if (workCenter) {
+    const leaveBtn = el(`<button class="btn btn-secondary">${_("Leave")}</button>`);
+    leaveBtn.onclick = leaveCurrentWorkCenter;
+    actions.appendChild(leaveBtn);
+  } else {
+    const joinBtn = el(`<button class="btn btn-secondary">${_("Log On to Work Center")}</button>`);
+    joinBtn.onclick = openWorkCenterPicker;
+    actions.appendChild(joinBtn);
+  }
+  row.appendChild(actions);
+  bar.appendChild(row);
+
+  if (state.showWorkCenterPicker) {
+    if (!state.availableWorkCenters.length) {
+      bar.appendChild(el(`<div class="hint">${_("No Work Centers configured for your warehouse.")}</div>`));
+    }
+    state.availableWorkCenters.forEach((wc) => {
+      const b = el(`<button class="btn btn-secondary">${escapeHtml(wc.work_center_name || wc.work_center_code)} (${escapeHtml(wc.bin)})</button>`);
+      b.onclick = () => pickWorkCenter(wc.name);
+      bar.appendChild(b);
+    });
+    const cancel = el(`<button class="btn btn-secondary">${_("Cancel")}</button>`);
+    cancel.onclick = () => setState({ showWorkCenterPicker: false });
+    bar.appendChild(cancel);
+  }
+  return bar;
+}
+
 function renderTasks() {
   const wrap = el(`<div></div>`);
-  if (state.resource) wrap.appendChild(renderQueueBar());
+  if (state.resource) { wrap.appendChild(renderQueueBar()); wrap.appendChild(renderWorkCenterBar()); }
   if (!state.tasks.length && !state.loading) {
     wrap.appendChild(el(`<div class="empty">${_("No open tasks right now.")}</div>`));
     return wrap;

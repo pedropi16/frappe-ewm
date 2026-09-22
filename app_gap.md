@@ -115,7 +115,7 @@ SAP EWM covers about 30 capability areas; roughly two thirds are "Basic" and the
 
 | Area | What SAP EWM does | Tier | Today in frappe\_wms | Next step |
 | --- | --- | --- | --- | --- |
-| Warehouse structure | Warehouse number, storage types, sections, bins, bin types, activity areas, doors, staging areas, work centers | Basic | Done ✅: types, bins, door/staging roles, Storage Section, Bin Type, and now **Activity Area** (bin-level, feeds queue determination — see the Activity Area + Resource Group note below); no Work Center as its own doctype (`work_center_bin` is still ad-hoc, scattered across VAS/Packing/Kitting) | A real Work Center doctype tied into RF logon |
+| Warehouse structure | Warehouse number, storage types, sections, bins, bin types, activity areas, doors, staging areas, work centers | Basic | Done ✅: types, bins, door/staging roles, Storage Section, Bin Type, Activity Area (bin-level, feeds queue determination), and now **Work Center** (`warehouse`+`bin`, optional RF logon step — see below) | — |
 | Quants & stock types | Stock by bin/HU with stock type, batch, owner, GR/SLED dates | Basic | Done: WMS Stock Balance + ledger, now with `shelf_life_expiry_date`; no owner dimension | Add owner dimension |
 | Handling units | Nested HUs, packaging materials, HU types, HU WTs, history, SSCC labels | Basic | Done | SSCC (GS1) number range option |
 | Packaging specification | Levels each/case/pallet, work steps | Basic | Done ✅ P2: `Packaging Spec` + `Packaging Spec Level`, `full_hu_quantity(item, level_name)` helper falls back to `WMS Product.full_hu_quantity` when no spec exists; work steps deliberately not modeled (see P2 sprint status note) | Wire into Bulk-strategy rounding / "is this HU full" decisions |
@@ -408,7 +408,17 @@ New **Activity Area** doctype (`wms_core` module, mirrors Storage Type/Section/B
 
 Verified with a new `test_activity_area_queues.py` (4 tests) plus the full suite — 250 tests passing, up from 246, zero regressions. One test-isolation lesson repeated from earlier phases: a test asserting the *blank-fallback* tier of `determine_queue` needs its own dedicated Storage Type/bin, not a shared one, since a sibling test's queue can otherwise win the narrower tier first (IntegrationTestCase methods don't roll back between each other, confirmed the same way in every prior phase).
 
-Out of scope, called out rather than silently unhandled: **Work Center as a real doctype** (SAP EWM lets an operator pick one after Resource logon; this app still only has `work_center_bin` as an ad-hoc Storage Bin reference scattered across VAS/Packing/Kitting, with no logon-time selection or activity association) — a genuine follow-up, deliberately deferred rather than bundled into this pass.
+### Work Center (optional RF logon step) — complete
+
+A direct follow-up to the note above: the user clarified what they actually wanted was smaller and more precise than "a Work Center doctype tied into RF logon" — *after* Resource logon, an operator can optionally also log on to a Work Center, purely so actions that already carry a `work_center_bin` (VAS generation today) can default to it instead of requiring a scan every time.
+
+New **Work Center** doctype (`wms_core`, mirrors Storage Type/Section/Bin Type/Activity Area exactly): `warehouse`, `work_center_code`, `work_center_name`, `bin` (the physical station bin it resolves to). `WMS Resource` gained `current_work_center` (optional, mirrors `current_queue`'s "focus" pattern exactly — `log_on_work_center`/`log_off_work_center` in `services/resource.py`, same shape as `join_queue`/`leave_queue`). `services/task.py::my_resource` (what the RF app's `my_tasks` call returns) resolves the Work Center's own bin alongside it as `current_work_center_bin`, so the RF client never needs a second round trip.
+
+RF app gained a **Work Center bar** (mirrors the existing Queue bar exactly — same log-on-screen and Tasks-screen placement) and the VAS "+ Generate from Packaging Spec" screen now defaults its work-center-bin field from `current_work_center_bin` when set — still a plain, editable/scannable field either way, so an operator who never bothers logging on to a Work Center loses nothing.
+
+Deliberately **not** gating anything: no RF action requires a Work Center to be logged on, matching the user's own framing ("if they want... when the required actions need one"). Packing and Kitting also carry a `work_center_bin` today but have no RF-side manual-entry point to default (Packing/Kitting Order creation is desk/Monitor-side, not RF) — nothing to wire there yet.
+
+Verified with 4 new tests in `test_resource_logon.py` (log on/off is fully optional and doesn't block anything; rejects a Work Center in a different warehouse; `list_available_work_centers` scoped to warehouse) plus the full suite — 253 tests passing, up from 250, zero regressions.
 
 ## Risks and open decisions
 

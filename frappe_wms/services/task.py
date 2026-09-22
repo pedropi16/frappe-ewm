@@ -157,7 +157,12 @@ def task_names_for_allocations(allocation_names):
 
 def my_resource(user=None):
     user = user or frappe.session.user
-    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue"], as_dict=True)
+    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "current_work_center"], as_dict=True)
+    if resource and resource.current_work_center:
+        # Resolved here rather than making the RF app do a second round trip - actions that
+        # want to default to "my work center's bin" (VAS generation today) just read this.
+        resource["current_work_center_bin"] = frappe.db.get_value("Work Center", resource.current_work_center, "bin")
+    return resource
 
 def list_my_tasks(user=None):
     resource = my_resource(user)

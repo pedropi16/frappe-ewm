@@ -1,7 +1,8 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.api.resource import list_available_resources, log_on, log_off, kick
+from frappe_wms.api.resource import list_available_resources, log_on, log_off, kick, list_available_work_centers, log_on_work_center, log_off_work_center
+from frappe_wms.services.task import my_resource
 
 
 class TestResourceLogon(IntegrationTestCase):
@@ -21,11 +22,27 @@ class TestResourceLogon(IntegrationTestCase):
                 frappe.get_doc({"doctype": "User", "email": email, "first_name": email.split("@")[0], "send_welcome_email": 0}).insert(ignore_permissions=True)
                 frappe.get_doc("User", email).add_roles(*roles)
 
+        cls.other_warehouse = f"WMS-TEST-LOGON-OTHER-{frappe.generate_hash(length=6).upper()}"
+        frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": cls.other_warehouse, "warehouse_name": cls.other_warehouse,
+            "company": cls.company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
+        for wh in (cls.warehouse, cls.other_warehouse):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": wh, "storage_type_code": "WC", "storage_type_name": "Work Center",
+                "storage_role": "Packing", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{wh}-WCBIN", "warehouse": wh, "storage_type": f"{wh}-WC",
+                "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+
     def _new_resource(self, resource_type="Scanner"):
         resource = frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8),
             "warehouse": self.warehouse, "resource_type": resource_type, "active": 1})
         resource.insert(ignore_permissions=True)
         return resource.name
+
+    def _new_work_center(self, warehouse=None):
+        warehouse = warehouse or self.warehouse
+        work_center = frappe.get_doc({"doctype": "Work Center", "warehouse": warehouse, "work_center_code": frappe.generate_hash(length=8),
+            "work_center_name": "Test Work Center", "bin": f"{warehouse}-WCBIN", "active": 1})
+        work_center.insert(ignore_permissions=True)
+        return work_center.name
 
     def test_log_on_claims_a_free_resource_and_appears_in_available_list_only_before(self):
         resource = self._new_resource()
@@ -107,3 +124,42 @@ class TestResourceLogon(IntegrationTestCase):
         finally:
             frappe.set_user("Administrator")
         self.assertIsNone(frappe.db.get_value("WMS Resource", resource, "user"))
+
+    def test_log_on_and_off_work_center_is_entirely_optional(self):
+        resource = self._new_resource()
+        work_center = self._new_work_center()
+        frappe.set_user(self.picker_email)
+        try:
+            log_on(resource)
+            # Never logging on to a Work Center at all must not block anything - my_resource
+            # just reports it as unset.
+            self.assertIsNone(my_resource().current_work_center)
+
+            result = log_on_work_center(work_center)
+            self.assertEqual(result["work_center"], work_center)
+            self.assertEqual(result["bin"], f"{self.warehouse}-WCBIN")
+            self.assertEqual(my_resource().current_work_center, work_center)
+            self.assertEqual(my_resource().current_work_center_bin, f"{self.warehouse}-WCBIN")
+
+            log_off_work_center()
+            self.assertIsNone(my_resource().current_work_center)
+        finally:
+            frappe.set_user("Administrator")
+
+    def test_log_on_work_center_rejects_different_warehouse(self):
+        resource = self._new_resource()
+        other_work_center = self._new_work_center(warehouse=self.other_warehouse)
+        frappe.set_user(self.picker_email)
+        try:
+            log_on(resource)
+            with self.assertRaises(frappe.ValidationError):
+                log_on_work_center(other_work_center)
+        finally:
+            frappe.set_user("Administrator")
+
+    def test_list_available_work_centers_scoped_to_warehouse(self):
+        work_center = self._new_work_center()
+        other_work_center = self._new_work_center(warehouse=self.other_warehouse)
+        names = {wc["name"] for wc in list_available_work_centers(self.warehouse)}
+        self.assertIn(work_center, names)
+        self.assertNotIn(other_work_center, names)
