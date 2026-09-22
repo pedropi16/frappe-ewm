@@ -2,7 +2,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
-from frappe_wms.services.kitting import create_kitting_order, complete_kitting_order
+from frappe_wms.services.kitting import create_kitting_order, complete_kitting_order, list_open_kitting_orders
 
 
 class TestKitting(IntegrationTestCase):
@@ -114,3 +114,15 @@ class TestKitting(IntegrationTestCase):
         order = frappe.get_doc("Kitting Order", name)
         self.assertEqual(order.status, "Open")
         self.assertEqual(self._balance(rm1), rm1_before, "rm1's own consumption must not stick when a later component fails")
+
+    def test_list_open_kitting_orders_excludes_completed(self):
+        rm1, rm2, fg, bom_name = self._make_bom_set("E")
+        self._seed(rm1, 20)
+        self._seed(rm2, 20)
+        open_name = create_kitting_order(fg, bom_name, self.warehouse, self.work_center_bin, 2, "Assemble")
+        completed_name = create_kitting_order(fg, bom_name, self.warehouse, self.work_center_bin, 3, "Assemble")
+        complete_kitting_order(completed_name)
+
+        names = {row.name for row in list_open_kitting_orders()}
+        self.assertIn(open_name, names)
+        self.assertNotIn(completed_name, names)

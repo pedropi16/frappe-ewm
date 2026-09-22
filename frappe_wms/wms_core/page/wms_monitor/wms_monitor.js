@@ -23,6 +23,8 @@ const VIEWS = [
   { key: "differences", label: __("Difference Analyzer") },
   { key: "kpis", label: __("KPIs") },
   { key: "slotting", label: __("Slotting") },
+  { key: "kitting", label: __("Kitting") },
+  { key: "billing", label: __("Billing") },
   { key: "alerts", label: __("Alerts") },
 ];
 
@@ -114,6 +116,8 @@ class WMSMonitor {
       differences: () => this.load_differences(),
       kpis: () => this.load_kpis(),
       slotting: () => this.load_slotting(),
+      kitting: () => this.load_kitting(),
+      billing: () => this.load_billing(),
       alerts: () => this.load_alerts(),
     };
     (loaders[view] || (() => {}))();
@@ -710,6 +714,151 @@ class WMSMonitor {
         frappe.show_alert({ message: __("Created {0} task(s)", [created.length]), indicator: "green" });
         this.search_slotting();
       });
+    });
+  }
+
+  // ---------- Kitting ----------
+  async load_kitting() {
+    const $wrap = this.body_for("kitting");
+    if (!$wrap.find(".wms-mon-kit-form").length) {
+      $wrap.html(`
+        <div class="detail-section wms-mon-kit-form">
+          <h6>${__("New Kitting Order")}</h6>
+          <div class="form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <input class="form-control input-sm wms-mon-kit-item" placeholder="${__("Kit Item")}" style="width:150px;">
+            <input class="form-control input-sm wms-mon-kit-bom" placeholder="${__("BOM")}" style="width:150px;">
+            <input class="form-control input-sm wms-mon-kit-bin" placeholder="${__("Work Center Bin")}" style="width:150px;">
+            <input type="number" min="0" step="any" class="form-control input-sm wms-mon-kit-qty" placeholder="${__("Quantity")}" style="width:110px;">
+            <select class="form-control input-sm wms-mon-kit-direction" style="width:130px;">
+              <option value="Assemble">${__("Assemble")}</option>
+              <option value="Disassemble">${__("Disassemble")}</option>
+            </select>
+            <button class="btn btn-primary btn-sm wms-mon-kit-create">${__("Create")}</button>
+          </div>
+        </div>
+        <div class="wms-mon-kit-table"></div>
+      `);
+      $wrap.find(".wms-mon-kit-create").on("click", () => this.create_kitting_order());
+    }
+    this.search_kitting();
+  }
+
+  async create_kitting_order() {
+    if (!this.warehouse) { frappe.show_alert({ message: __("Select a warehouse first"), indicator: "orange" }); return; }
+    const $wrap = this.body_for("kitting");
+    const args = {
+      warehouse: this.warehouse,
+      kit_item: $wrap.find(".wms-mon-kit-item").val(),
+      bom: $wrap.find(".wms-mon-kit-bom").val(),
+      work_center_bin: $wrap.find(".wms-mon-kit-bin").val(),
+      quantity: $wrap.find(".wms-mon-kit-qty").val(),
+      direction: $wrap.find(".wms-mon-kit-direction").val(),
+    };
+    if (!args.kit_item || !args.bom || !args.work_center_bin || !flt(args.quantity)) {
+      frappe.show_alert({ message: __("Fill in kit item, BOM, work center bin and quantity"), indicator: "orange" });
+      return;
+    }
+    try {
+      const name = await frappe.call("frappe_wms.api.kitting.create_kitting_order", args).then((r) => r.message);
+      frappe.show_alert({ message: __("Created {0}", [name]), indicator: "green" });
+      $wrap.find(".wms-mon-kit-item, .wms-mon-kit-bom, .wms-mon-kit-bin, .wms-mon-kit-qty").val("");
+      this.search_kitting();
+    } catch (e) {
+      frappe.show_alert({ message: e.message || __("Failed to create Kitting Order"), indicator: "red" });
+    }
+  }
+
+  async search_kitting() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("kitting");
+    const rows = await frappe.call("frappe_wms.api.kitting.list_open_kitting_orders").then((r) => r.message || []);
+    const filtered = rows.filter((r) => r.warehouse === this.warehouse);
+    const $table = $wrap.find(".wms-mon-kit-table");
+    if (!filtered.length) { $table.html(`<div class="text-muted">${__("No open Kitting Orders")}</div>`); return; }
+    const head = [__("Order"), __("Kit Item"), __("Direction"), __("Quantity"), __("Work Center Bin"), __("Status"), __("")].map((l) => `<th>${l}</th>`).join("");
+    const body = filtered.map((row) => `
+      <tr>
+        <td><a href="/app/kitting-order/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a></td>
+        <td>${frappe.utils.escape_html(row.kit_item || "")}</td>
+        <td>${frappe.utils.escape_html(row.direction || "")}</td>
+        <td>${row.quantity}</td>
+        <td>${frappe.utils.escape_html(row.work_center_bin || "")}</td>
+        <td>${frappe.utils.escape_html(row.status || "")}</td>
+        <td><button class="btn btn-xs btn-primary wms-mon-kit-complete" data-order="${frappe.utils.escape_html(row.name)}">${__("Complete")}</button></td>
+      </tr>
+    `).join("");
+    $table.html(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
+    $table.find(".wms-mon-kit-complete").on("click", (e) => {
+      const order = e.currentTarget.dataset.order;
+      frappe.confirm(__("Complete Kitting Order {0}? This consumes/produces stock immediately.", [order]), () => {
+        frappe.call("frappe_wms.api.kitting.complete_kitting_order", { kitting_order_name: order }).then(() => {
+          frappe.show_alert({ message: __("Kitting Order completed"), indicator: "green" });
+          this.search_kitting();
+        }).catch((e) => frappe.show_alert({ message: e.message || __("Failed to complete"), indicator: "red" }));
+      });
+    });
+  }
+
+  // ---------- Billing ----------
+  async load_billing() {
+    const $wrap = this.body_for("billing");
+    if (!$wrap.find(".wms-mon-bill-filters").length) {
+      $wrap.html(`
+        <div class="wms-mon-bill-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <input class="form-control input-sm wms-mon-bill-customer" placeholder="${__("Customer")}" style="width:160px;">
+          <input type="date" class="form-control input-sm wms-mon-bill-from" style="width:150px;">
+          <input type="date" class="form-control input-sm wms-mon-bill-to" style="width:150px;">
+          <button class="btn btn-primary btn-sm wms-mon-bill-preview">${__("Preview")}</button>
+          <button class="btn btn-secondary btn-sm wms-mon-bill-invoice">${__("Create Sales Invoice")}</button>
+        </div>
+        <div class="wms-mon-bill-table"></div>
+      `);
+      $wrap.find(".wms-mon-bill-preview").on("click", () => this.preview_billing());
+      $wrap.find(".wms-mon-bill-invoice").on("click", () => this.create_billing_invoice());
+    }
+  }
+
+  _billing_args() {
+    const $wrap = this.body_for("billing");
+    return {
+      warehouse: this.warehouse,
+      customer: $wrap.find(".wms-mon-bill-customer").val(),
+      from_date: $wrap.find(".wms-mon-bill-from").val(),
+      to_date: $wrap.find(".wms-mon-bill-to").val(),
+    };
+  }
+
+  async preview_billing() {
+    if (!this.warehouse) { frappe.show_alert({ message: __("Select a warehouse first"), indicator: "orange" }); return; }
+    const args = this._billing_args();
+    if (!args.customer || !args.from_date || !args.to_date) {
+      frappe.show_alert({ message: __("Fill in customer, from date and to date"), indicator: "orange" });
+      return;
+    }
+    const $table = this.body_for("billing").find(".wms-mon-bill-table");
+    const lines = await frappe.call("frappe_wms.api.billing.generate_billing_for_period", args).then((r) => r.message || []);
+    if (!lines.length) { $table.html(`<div class="text-muted">${__("No billable activity found for this period")}</div>`); return; }
+    $table.html(this.render_table(lines, [
+      ["activity", __("Activity")], ["task_count", __("Tasks")], ["quantity", __("Quantity")],
+      ["uom_basis", __("Basis")], ["rate", __("Rate")], ["billed_quantity", __("Billed Qty")], ["charge", __("Charge")],
+    ], "Warehouse Task"));
+  }
+
+  async create_billing_invoice() {
+    if (!this.warehouse) { frappe.show_alert({ message: __("Select a warehouse first"), indicator: "orange" }); return; }
+    const args = this._billing_args();
+    if (!args.customer || !args.from_date || !args.to_date) {
+      frappe.show_alert({ message: __("Fill in customer, from date and to date"), indicator: "orange" });
+      return;
+    }
+    frappe.confirm(__("Create a Draft Sales Invoice for {0} covering {1} to {2}?", [args.customer, args.from_date, args.to_date]), async () => {
+      try {
+        const name = await frappe.call("frappe_wms.api.billing.create_billing_sales_invoice", args).then((r) => r.message);
+        frappe.show_alert({ message: __("Created Draft Sales Invoice {0}", [name]), indicator: "green" });
+        frappe.set_route("Form", "Sales Invoice", name);
+      } catch (e) {
+        frappe.show_alert({ message: e.message || __("Failed to create Sales Invoice"), indicator: "red" });
+      }
     });
   }
 

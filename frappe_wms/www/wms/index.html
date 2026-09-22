@@ -215,7 +215,12 @@ function statusBadgeHtml(status) {
 }
 
 const TASK_TYPE_GROUPS = {
-  inbound: ["Unload", "Putaway", "Deconsolidation"],
+  // Cross Dock tasks are created at the same point as Putaway (create_putaway_requests
+  // splits a receipt row between the two) and are worked by the same receiving operator
+  // immediately after - grouped with inbound rather than internal for that reason, even
+  // though "Putaway Tasks" is a slight misnomer for it (Unload/Deconsolidation share that
+  // same looseness already).
+  inbound: ["Unload", "Putaway", "Deconsolidation", "Cross Dock"],
   internal: ["Internal Move", "Posting Change", "Inventory Count"],
   outbound: ["Pick", "Stage", "Load"],
 };
@@ -239,6 +244,7 @@ const SECTIONS = {
       { icon: "\u{1F501}", label: "Repack", action: openRepack },
       { icon: "\u{1F522}", label: "Count", action: loadCounts },
       { icon: "\u{1F3F7}\u{FE0F}", label: "Handling Units", action: loadHUHome },
+      { icon: "\u{1F9E9}", label: "Kitting", action: loadKittingOrders },
     ],
   },
   outbound: {
@@ -277,10 +283,12 @@ const VIEW_PARENT = {
   "decon-detail": () => "decon",
   vas: () => "section",
   "vas-detail": () => "vas",
+  "vas-new": () => "vas",
   "picking-entry": () => "section",
   "close-movement": () => "section",
   repack: () => "section",
   "repack-detail": () => "repack",
+  kitting: () => "section",
   lookup: () => "menu",
 };
 
@@ -288,7 +296,7 @@ const VIEW_PARENT = {
 const VIEW_RELOAD = {
   tasks: loadTasks, receive: loadInboundDeliveries, ship: loadShipDeliveries,
   pack: loadPackingOrders, count: loadCounts, quality: loadInspections, hu: loadHUHome,
-  load: loadShipments, vas: loadVASOrders,
+  load: loadShipments, vas: loadVASOrders, kitting: loadKittingOrders,
 };
 
 const state = {
@@ -371,6 +379,11 @@ const state = {
   // VAS
   vasOrders: [],
   currentVAS: null,
+  vasNewHu: "",
+  vasNewBin: "",
+
+  // Kitting
+  kittingOrders: [],
 
   // Picking entry
   pickingReference: "",
@@ -820,8 +833,59 @@ async function loadVASOrders() {
   }
 }
 
+function openVASNew() {
+  setState({ view: "vas-new", error: null, info: null, vasNewHu: "", vasNewBin: "" });
+}
+
+async function submitVASNew() {
+  const hu = state.vasNewHu.trim();
+  const bin = state.vasNewBin.trim();
+  if (!hu) { setState({ error: _("Scan the Handling Unit to advance.") }); return; }
+  if (!bin) { setState({ error: _("Scan the work center bin to advance.") }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const name = await api("frappe_wms.api.vas.create_vas_order_from_packaging_spec", { handling_unit: hu, work_center_bin: bin });
+    openVASOrder(name);
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderVASNew() {
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${_("Generate VAS from Packaging Spec")}</h3>
+      <div class="hint">${_("Scan the Handling Unit and the work center bin. A VAS Order is built with one step per level of the item's Packaging Spec.")}</div>
+    </div>
+  `));
+  const form = el(`<div class="detail-section"></div>`);
+  form.appendChild(el(`
+    <div class="field">
+      <label>${_("Handling Unit")}</label>
+      <input type="text" id="vas-new-hu" placeholder="${_("Scan HU barcode")}" value="${escapeHtml(state.vasNewHu)}" autofocus>
+    </div>
+  `));
+  form.querySelector("#vas-new-hu").oninput = (e) => { state.vasNewHu = e.target.value; };
+  form.appendChild(el(`
+    <div class="field">
+      <label>${_("Work Center Bin")}</label>
+      <input type="text" id="vas-new-bin" placeholder="${_("Scan bin barcode")}" value="${escapeHtml(state.vasNewBin)}">
+    </div>
+  `));
+  form.querySelector("#vas-new-bin").oninput = (e) => { state.vasNewBin = e.target.value; };
+  wrap.appendChild(form);
+  const btn = el(`<button class="btn btn-primary">${_("Generate")}</button>`);
+  btn.onclick = submitVASNew;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function renderVASList() {
   const wrap = el(`<div></div>`);
+  const newBtn = el(`<button class="btn btn-secondary" style="margin-bottom:10px;">${_("+ Generate from Packaging Spec")}</button>`);
+  newBtn.onclick = openVASNew;
+  wrap.appendChild(newBtn);
   if (!state.vasOrders.length && !state.loading) {
     wrap.appendChild(el(`<div class="empty">${_("No open VAS orders.")}</div>`));
     return wrap;
@@ -897,6 +961,48 @@ async function completeVASActivity(vasOrderName, activityRowName) {
       const order = await api("frappe_wms.api.vas.get_vas_order", { vas_order_name: vasOrderName });
       setState({ loading: false, currentVAS: order });
     }
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+// ---------- Kitting ----------
+async function loadKittingOrders() {
+  setState({ loading: true, error: null, view: "kitting", section: "internal" });
+  try {
+    const rows = await api("frappe_wms.api.kitting.list_open_kitting_orders");
+    setState({ loading: false, kittingOrders: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderKittingList() {
+  const wrap = el(`<div></div>`);
+  if (!state.kittingOrders.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">${_("No open Kitting Orders.")}</div>`));
+    return wrap;
+  }
+  state.kittingOrders.forEach((order) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(order.kit_item)}</div>${statusBadgeHtml(order.status)}</div>
+        <div class="meta">${escapeHtml(_(order.direction))} · ${escapeHtml(order.work_center_bin || "")}</div>
+        <div class="qty">${order.quantity}</div>
+      </div>
+    `);
+    card.onclick = () => completeKittingOrder(order.name);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+async function completeKittingOrder(name) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.kitting.complete_kitting_order", { kitting_order_name: name });
+    setState({ loading: false, view: "kitting", info: _("{0} completed", [name]) });
+    loadKittingOrders();
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
@@ -1550,7 +1656,8 @@ function render() {
     load: renderLoadList, "load-detail": renderLoadDetail,
     decon: renderDeconScan, "decon-detail": renderDeconDetail,
     "picking-entry": renderPickingEntry, "close-movement": renderCloseMovement, repack: renderRepack, "repack-detail": renderRepackDetail,
-    vas: renderVASList, "vas-detail": renderVASDetail,
+    vas: renderVASList, "vas-detail": renderVASDetail, "vas-new": renderVASNew,
+    kitting: renderKittingList,
   };
   main.appendChild((renderers[state.view] || renderMenu)());
   main.appendChild(renderFnKeyBar());

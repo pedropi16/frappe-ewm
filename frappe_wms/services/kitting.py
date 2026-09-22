@@ -3,7 +3,19 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.erpnext_sync import sync_kitting_order
+from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
+
+def list_open_kitting_orders(user=None):
+    # Mirrors list_open_vas_orders: an RF operator only sees orders in their own resource's
+    # warehouse, matching the RF app's own scoping convention for floor work lists.
+    require_role("WMS Operator", "WMS Supervisor")
+    resource = my_resource(user)
+    filters = {"status": ["in", ("Draft", "Open")]}
+    if resource: filters["warehouse"] = resource.warehouse
+    return frappe.get_list("Kitting Order", filters=filters,
+        fields=["name", "kit_item", "bom", "warehouse", "work_center_bin", "quantity", "direction", "status", "creation"],
+        order_by="creation asc", limit=50)
 
 def create_kitting_order(kit_item, bom, warehouse, work_center_bin, quantity, direction):
     require_role("WMS Operator", "WMS Supervisor")

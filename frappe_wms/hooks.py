@@ -26,6 +26,7 @@ app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
 doctype_js = {
     "Purchase Order": "public/js/purchase_order.js",
     "Sales Order": "public/js/sales_order.js",
+    "Work Order": "public/js/work_order.js",
 }
 
 after_install = "frappe_wms.install.after_install"
