@@ -13,6 +13,7 @@
     "warehouse",
     "activity",
     "storage_type",
+    "activity_area",
     "resource_group",
     "sequence_rule",
     "active"
@@ -54,6 +55,13 @@
       "label": "Storage Type",
       "fieldtype": "Link",
       "options": "Storage Type"
+    },
+    {
+      "fieldname": "activity_area",
+      "label": "Activity Area",
+      "fieldtype": "Link",
+      "options": "Activity Area",
+      "description": "Narrower than Storage Type - a queue matching a task's bin's own Activity Area wins over one matching only its Storage Type."
     },
     {
       "fieldname": "resource_group",

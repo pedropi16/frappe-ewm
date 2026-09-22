@@ -14,6 +14,7 @@
     "storage_type",
     "storage_section",
     "bin_type",
+    "activity_area",
     "parent_bin",
     "bin_role",
     "aisle",
@@ -81,6 +82,14 @@
       "fieldtype": "Link",
       "options": "Bin Type",
       "description": "Physical capacity class (max weight/volume/dimensions). Advisory only - actual capacity checks read this bin's own Maximum HUs/Weight/Volume fields."
+    },
+    {
+      "fieldname": "activity_area",
+      "label": "Activity Area",
+      "fieldtype": "Link",
+      "options": "Activity Area",
+      "in_standard_filter": 1,
+      "description": "Optional, narrower-than-Storage-Type grouping of bins for queue determination and walking sequence. One Activity Area per bin."
     },
     {
       "fieldname": "parent_bin",

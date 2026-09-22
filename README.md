@@ -510,21 +510,45 @@ were on before, so a forgotten logoff never locks them out elsewhere.
 "Kick" button on the WMS Resource form, and via `api/resource.py` for the RF
 app's own Log On screen (`www/wms`), which lists free Resources instead of
 requiring an admin to have pre-wired one to your user. Resources are pooled
-into a **WMS Resource Group**
-(per warehouse), and a **Warehouse Queue** points at a Resource Group via
-its `resource_group` field, rather than at individual resources — that's
-what makes the pool swappable without reconfiguring every queue. If a
-Warehouse Queue is configured for a warehouse/activity(/storage type), every
-`Warehouse Task` created for that activity is attached
-(`services/warehouse_order.attach_task`) to a **Warehouse Order** — a batch
-of tasks sharing the same `batch_key` (e.g. one putaway request, one
-pick-task group) — which is auto-assigned to whichever active `WMS Resource`
-on that queue currently has the fewest open Warehouse Orders. A resource
-without a standing assignment joins a queue (`join_queue`) and pulls the
-next one itself (`pull_next_warehouse_order`, oldest-priority-first). This
-is optional infrastructure: a task type with no matching Warehouse Queue is
-simply never routed through a Warehouse Order and
-behaves as before (assigned/worked directly).
+into a **WMS Resource Group** (per warehouse), and a **Warehouse Queue**
+points at a Resource Group via its `resource_group` field, rather than at
+individual resources — **the actual source of eligibility**, not just
+informational: reassigning who works a queue is a one-place edit on the
+queue (or the resource's own group), never touching individual resources.
+`current_queue` on a Resource stays available as an optional "focus on one
+queue right now" narrowing on top of that — an operator explicitly
+`join_queue`s one specific queue when they want to; without that, they're
+automatically eligible for *every* active queue in their own Resource Group.
+If a Warehouse Queue is configured for a warehouse/activity(/storage type/
+**Activity Area** — see below), every `Warehouse Task` created for that
+activity is attached (`services/warehouse_order.attach_task`) to a
+**Warehouse Order** — a batch of tasks sharing the same `batch_key` (e.g. one
+putaway request, one pick-task group) — which is auto-assigned to whichever
+eligible `WMS Resource` currently has the fewest open Warehouse Orders
+(first checking resources explicitly joined to that exact queue, falling
+back to any unfocused resource in its Resource Group). A resource with
+neither a joined queue nor a Resource Group with any queues configured
+simply can't pull work yet (`pull_next_warehouse_order` says so clearly);
+one with no standing assignment otherwise pulls the next one itself
+(`pull_next_warehouse_order`, oldest-priority-first, across every eligible
+queue). This is optional infrastructure end to end: a task type with no
+matching Warehouse Queue is simply never routed through a Warehouse Order
+and behaves as before (assigned/worked directly); a Resource or Queue with
+no Resource Group set keeps behaving exactly as it did before Resource
+Groups were wired up.
+
+**Activity Area** (`wms_core`, mirrors Storage Type/Storage Section/Bin Type
+exactly — a simple `warehouse`+`area_code`+`area_name` master record, no
+child tables) is an optional, narrower-than-Storage-Type grouping of bins:
+set `Storage Bin.activity_area` on the bins that need it (one per bin), then
+point a `Warehouse Queue.activity_area` at the same value — `determine_queue`
+matches it ahead of Storage Type, which it still falls back to, which itself
+falls back to a blank-everything catch-all queue, exactly the
+narrowest-match-wins idiom every other rule table in this app uses. Assigning
+many bins to an Activity Area at once (SAP EWM's own mass-maintenance
+transactions do this as a guided filter-then-apply flow, not one bin at a
+time) is the WMS Monitor's **Bin Assignment** tab — see [Desk
+surfaces](#desk-surfaces).
 
 ## Advanced EWM (P4)
 
@@ -635,7 +659,7 @@ itself (choosing the warehouse and staging bin) is a desk/API action, not RF
 
 | Module | Contains |
 |---|---|
-| `wms_core` | Warehouse/Storage Type/Storage Bin structure (Storage Section, Bin Type), WMS Settings, the WMS Monitor page, the WMS workspace |
+| `wms_core` | Warehouse/Storage Type/Storage Bin structure (Storage Section, Bin Type, Activity Area — see [Core flows](#core-flows)), WMS Settings, the WMS Monitor page, the WMS workspace |
 | `wms_setup` | Everything in [the rule engine](#the-rule-engine-how-config-drives-behavior): Process/Bin/Warehouse-Process-Type-Determination Rule, Removal Rule, Storage Type Search Sequence, WO Creation Rule, Inspection Rule, process types, movement types, replenishment rules, WMS Number Range, WMS HU Number Pool, WMS Print Determination Rule, plus [P4](#advanced-ewm-p4)'s Wave Template, Labor Standard, and Billing Rate, plus child tables (delivery line items, HU/stock-type bin whitelists, packing source/destination HUs, shipment lines) |
 | `wms_inbound` | Inbound Delivery, Goods Receipt |
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave, VAS Order (+ VAS Order Activity) |
@@ -672,7 +696,10 @@ on a new site:
    configure a Route's door without a Door-role bin to point it at, and
    Goods Issue can't post without one either.
 4. **Storage Bin** per storage type — physical layout, capacity limits,
-   optional stock-type/HU-type whitelists.
+   optional stock-type/HU-type whitelists, and an optional **Activity Area**
+   (assign many at once via the WMS Monitor's **Bin Assignment** tab rather
+   than one bin at a time) — only needed where queue routing has to be
+   narrower than whole Storage Types.
 5. **Warehouse Process Type** — the seeded set (`GR_UNLOAD`, `GR_PUTAWAY`,
    `OB_PICK`, `OB_STAGE`, `OB_LOAD`, `INTERNAL_MOVE`, `PACK_REPACK`,
    `STOCK_TYPE_CHANGE`, `REPLENISH`) usually covers an MVP; add more only if
@@ -893,6 +920,10 @@ endpoints this frontend (and real barcode hardware) call.
     efficiency % against a matching Labor Standard).
   - **Slotting** [P4] — misplaced-and-active-product recommendations, with a
     bulk "Generate Rearrangement Tasks" action.
+  - **Bin Assignment** — filter Storage Bins (storage type/section/aisle/
+    rack), select, bulk-assign one Activity Area to all of them in one call —
+    the SAP-EWM-style mass-maintenance transaction for bin structure, instead
+    of one desk edit per bin.
   - **Kitting** [P4] — create a Kitting Order (kit item, BOM, work center
     bin, quantity, direction) and complete open ones.
   - **Billing** [P4] — preview `generate_billing_for_period` for a

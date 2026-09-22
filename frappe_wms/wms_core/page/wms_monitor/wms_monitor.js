@@ -23,6 +23,7 @@ const VIEWS = [
   { key: "differences", label: __("Difference Analyzer") },
   { key: "kpis", label: __("KPIs") },
   { key: "slotting", label: __("Slotting") },
+  { key: "bin_assignment", label: __("Bin Assignment") },
   { key: "kitting", label: __("Kitting") },
   { key: "billing", label: __("Billing") },
   { key: "alerts", label: __("Alerts") },
@@ -116,6 +117,7 @@ class WMSMonitor {
       differences: () => this.load_differences(),
       kpis: () => this.load_kpis(),
       slotting: () => this.load_slotting(),
+      bin_assignment: () => this.load_bin_assignment(),
       kitting: () => this.load_kitting(),
       billing: () => this.load_billing(),
       alerts: () => this.load_alerts(),
@@ -713,6 +715,76 @@ class WMSMonitor {
           { warehouse: this.warehouse, recommendations: JSON.stringify(selected) }).then((r) => r.message || []);
         frappe.show_alert({ message: __("Created {0} task(s)", [created.length]), indicator: "green" });
         this.search_slotting();
+      });
+    });
+  }
+
+  // ---------- Bin Assignment ----------
+  // A mass-maintenance screen (SAP EWM's own transactions for this are filter-then-apply,
+  // not one-bin-at-a-time desk edits): filter bins down, select, assign one Activity Area to
+  // all of them in a single call. The same filter/select/bulk-action shape as Slotting's
+  // rearrangement-task generation and Alerts' bulk-approve.
+  async load_bin_assignment() {
+    const $wrap = this.body_for("bin_assignment");
+    if (!$wrap.find(".wms-mon-bin-filters").length) {
+      $wrap.html(`
+        <div class="wms-mon-bin-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <input class="form-control input-sm wms-mon-bin-storage-type" placeholder="${__("Storage Type")}" style="width:150px;">
+          <input class="form-control input-sm wms-mon-bin-storage-section" placeholder="${__("Storage Section")}" style="width:150px;">
+          <input class="form-control input-sm wms-mon-bin-aisle" placeholder="${__("Aisle")}" style="width:110px;">
+          <input class="form-control input-sm wms-mon-bin-rack" placeholder="${__("Rack")}" style="width:110px;">
+          <button class="btn btn-primary btn-sm wms-mon-bin-search">${__("Search")}</button>
+        </div>
+        <div class="wms-mon-bin-table"></div>
+      `);
+      $wrap.find(".wms-mon-bin-search").on("click", () => this.search_bin_assignment());
+    }
+    this.search_bin_assignment();
+  }
+
+  async search_bin_assignment() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("bin_assignment");
+    const args = {
+      warehouse: this.warehouse,
+      storage_type: $wrap.find(".wms-mon-bin-storage-type").val() || undefined,
+      storage_section: $wrap.find(".wms-mon-bin-storage-section").val() || undefined,
+      aisle: $wrap.find(".wms-mon-bin-aisle").val() || undefined,
+      rack: $wrap.find(".wms-mon-bin-rack").val() || undefined,
+    };
+    const rows = await frappe.call("frappe_wms.api.bin_assignment.search_bins_for_assignment", args).then((r) => r.message || []);
+    const $table = $wrap.find(".wms-mon-bin-table");
+    if (!rows.length) { $table.html(`<div class="text-muted">${__("No bins match these filters")}</div>`); return; }
+    const head = [__(""), __("Bin"), __("Storage Type"), __("Section"), __("Activity Area"), __("Aisle"), __("Rack")].map((l) => `<th>${l}</th>`).join("");
+    const body = rows.map((row) => `
+      <tr>
+        <td><input type="checkbox" class="wms-mon-bin-check" value="${frappe.utils.escape_html(row.name)}"></td>
+        <td><a href="/app/storage-bin/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.bin_code)}</a></td>
+        <td>${frappe.utils.escape_html(row.storage_type || "")}</td>
+        <td>${frappe.utils.escape_html(row.storage_section || "")}</td>
+        <td>${frappe.utils.escape_html(row.activity_area || "")}</td>
+        <td>${frappe.utils.escape_html(row.aisle || "")}</td>
+        <td>${frappe.utils.escape_html(row.rack || "")}</td>
+      </tr>
+    `).join("");
+    $table.html(`
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+      </div>
+      <div class="form-inline" style="display:flex;gap:8px;align-items:center;">
+        <input class="form-control input-sm wms-mon-bin-assign-value" placeholder="${__("Activity Area (blank to clear)")}" style="width:220px;">
+        <button class="btn btn-primary btn-sm wms-mon-bin-assign">${__("Assign Activity Area to Selected")}</button>
+      </div>
+    `);
+    $table.find(".wms-mon-bin-assign").on("click", () => {
+      const names = $table.find(".wms-mon-bin-check:checked").map((_, el) => el.value).get();
+      if (!names.length) { frappe.show_alert({ message: __("Select at least one bin"), indicator: "orange" }); return; }
+      const activityArea = $table.find(".wms-mon-bin-assign-value").val().trim();
+      frappe.confirm(__("Assign {0} to {1} selected bin(s)?", [activityArea || __("(blank)"), names.length]), async () => {
+        const result = await frappe.call("frappe_wms.api.bin_assignment.mass_assign_activity_area",
+          { bin_names: JSON.stringify(names), activity_area: activityArea || undefined }).then((r) => r.message);
+        frappe.show_alert({ message: __("Updated {0} bin(s)", [result.updated]), indicator: "green" });
+        this.search_bin_assignment();
       });
     });
   }

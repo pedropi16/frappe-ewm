@@ -10,17 +10,33 @@ PRIORITY_RANK = {"Urgent": 0, "High": 1, "Normal": 2, "Low": 3}
 def _by_priority_then_age(rows):
     return sorted(rows, key=lambda r: (PRIORITY_RANK.get(r.priority, 2), r.creation))
 
-def determine_queue(warehouse, activity, storage_type=None):
+def determine_queue(warehouse, activity, storage_type=None, activity_area=None):
+    # Narrowest match wins, same idiom as every other rule table in this app: a queue scoped
+    # to this exact Activity Area beats one scoped only to the broader Storage Type, which
+    # beats a blank-everything fallback queue.
     filters = {"warehouse": warehouse, "activity": activity, "active": 1}
-    if storage_type:
-        queue = frappe.db.get_value("Warehouse Queue", {**filters, "storage_type": storage_type}, "name")
+    if activity_area:
+        queue = frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": activity_area}, "name")
         if queue: return queue
-    return frappe.db.get_value("Warehouse Queue", {**filters, "storage_type": ["in", ["", None]]}, "name")
+    if storage_type:
+        queue = frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": ["in", ["", None]], "storage_type": storage_type}, "name")
+        if queue: return queue
+    return frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": ["in", ["", None]], "storage_type": ["in", ["", None]]}, "name")
 
 def _resource_for_queue(queue):
     # Least-loaded active resource currently logged onto this queue (round-robins naturally
-    # as each new Warehouse Order goes to whoever has fewest open ones).
+    # as each new Warehouse Order goes to whoever has fewest open ones). Falls back to any
+    # active resource in the queue's own Resource Group that hasn't explicitly focused on a
+    # *different* queue - current_queue stays available as an optional narrowing, but Resource
+    # Group membership is the real source of eligibility (mirrors SAP EWM's Queue-to-
+    # Resource-Group link, which this schema already had a field for but never matched on).
     resources = frappe.get_all("WMS Resource", filters={"current_queue": queue, "active": 1}, pluck="name")
+    if not resources:
+        resource_group = frappe.db.get_value("Warehouse Queue", queue, "resource_group")
+        if resource_group:
+            resources = frappe.get_all("WMS Resource", filters={
+                "resource_group": resource_group, "active": 1, "current_queue": ["in", ["", None]],
+            }, pluck="name")
     if not resources: return None
     counts = dict(frappe.db.sql(
         "select assigned_resource, count(*) from `tabWarehouse Order` "
@@ -68,13 +84,13 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
 def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None):
     # Called on an unsaved Warehouse Task before insert; sets warehouse_order/queue/assigned_resource
     # in place. No-op (task stays unqueued, back-compat) if no queue is configured for this activity.
-    storage_type = None
+    storage_type, activity_area = None, None
     for bin_field in ("source_bin", "destination_bin"):
         bin_name = task_doc.get(bin_field)
         if bin_name:
-            storage_type = frappe.db.get_value("Storage Bin", bin_name, "storage_type")
+            storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])
             if storage_type: break
-    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type)
+    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area)
     if not queue: return
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     wo_name = get_or_create_warehouse_order(
@@ -167,6 +183,10 @@ def join_queue(queue_name, user=None):
     queue = frappe.get_doc("Warehouse Queue", queue_name)
     resource_doc = frappe.get_doc("WMS Resource", resource)
     if queue.warehouse != resource_doc.warehouse: frappe.throw(_("That queue belongs to a different warehouse"))
+    # Skipped when either side has no group set, so an ungrouped resource/queue (not yet
+    # configured, or deliberately warehouse-wide) keeps working exactly as before.
+    if resource_doc.resource_group and queue.resource_group and resource_doc.resource_group != queue.resource_group:
+        frappe.throw(_("That queue belongs to a different Resource Group than yours"))
     resource_doc.db_set("current_queue", queue_name, update_modified=True)
     return {"resource": resource, "queue": queue_name}
 
@@ -177,16 +197,32 @@ def leave_queue(user=None):
     if resource: frappe.db.set_value("WMS Resource", resource, "current_queue", None)
     return {"resource": resource, "queue": None}
 
-def list_queues(warehouse=None, activity=None):
+def list_queues(warehouse=None, activity=None, user=None):
     require_role(*RESOURCE_ROLES)
     filters = {"active": 1}
     if warehouse: filters["warehouse"] = warehouse
     if activity: filters["activity"] = activity
+    # Scoped to the calling resource's own Resource Group when it has one - an ungrouped
+    # resource (or one with no matching group queues) still sees every active queue in the
+    # warehouse, same as before, so nothing breaks for a site that hasn't configured groups.
+    resource_group = frappe.db.get_value("WMS Resource", {"user": user or frappe.session.user, "active": 1}, "resource_group")
+    if resource_group and frappe.db.exists("Warehouse Queue", {**filters, "resource_group": resource_group}):
+        filters["resource_group"] = resource_group
     return frappe.get_all("Warehouse Queue", filters=filters, fields=["name", "queue_code", "queue_name", "activity", "warehouse"])
 
 def _my_resource(user=None):
     user = user or frappe.session.user
-    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue"], as_dict=True)
+    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group"], as_dict=True)
+
+def _eligible_queues(resource):
+    # current_queue is an optional focus on one specific queue; without it, every active queue
+    # in the resource's own Resource Group is fair game (see _resource_for_queue's identical
+    # fallback). An ungrouped resource with no current_queue is eligible for nothing - same as
+    # today's "join a queue first" requirement, just no longer the *only* path to eligibility.
+    if resource.current_queue: return [resource.current_queue]
+    if resource.resource_group:
+        return frappe.get_all("Warehouse Queue", filters={"resource_group": resource.resource_group, "warehouse": resource.warehouse, "active": 1}, pluck="name")
+    return []
 
 WO_LIST_FIELDS = ["name", "activity", "queue", "priority", "status", "task_count", "confirmed_count", "wave", "creation"]
 
@@ -198,9 +234,10 @@ def list_my_warehouse_orders(user=None):
         filters={"status": ["in", OPEN_WO_STATUSES], "assigned_resource": resource.name},
         fields=WO_LIST_FIELDS, order_by="creation asc", limit=50)
     wos = list(mine)
-    if resource.current_queue:
+    queues = _eligible_queues(resource)
+    if queues:
         unassigned = frappe.get_all("Warehouse Order",
-            filters={"status": "Open", "warehouse": resource.warehouse, "queue": resource.current_queue, "assigned_resource": ["in", ["", None]]},
+            filters={"status": "Open", "warehouse": resource.warehouse, "queue": ["in", queues], "assigned_resource": ["in", ["", None]]},
             fields=WO_LIST_FIELDS, order_by="creation asc", limit=50)
         seen = {w.name for w in wos}
         wos += [w for w in unassigned if w.name not in seen]
@@ -210,9 +247,10 @@ def pull_next_warehouse_order(user=None):
     require_role(*RESOURCE_ROLES)
     resource = _my_resource(user)
     if not resource: frappe.throw(_("No active WMS Resource is linked to your user"))
-    if not resource.current_queue: frappe.throw(_("Join a queue before pulling work"))
+    queues = _eligible_queues(resource)
+    if not queues: frappe.throw(_("Join a queue, or ask a supervisor to add your Resource Group to one, before pulling work"))
     candidates = frappe.get_all("Warehouse Order",
-        filters={"status": "Open", "warehouse": resource.warehouse, "queue": resource.current_queue, "assigned_resource": ["in", ["", None]]},
+        filters={"status": "Open", "warehouse": resource.warehouse, "queue": ["in", queues], "assigned_resource": ["in", ["", None]]},
         fields=["name", "priority", "creation"], order_by="creation asc")
     if not candidates: return None
     wo_name = _by_priority_then_age(candidates)[0].name
