@@ -39,6 +39,10 @@ class TestTaskConfirmation(IntegrationTestCase):
         task.insert(ignore_permissions=True)
         return task
 
+    def test_started_at_is_set_at_creation(self):
+        task = self._make_task()
+        self.assertTrue(task.started_at)
+
     def test_partial_confirmation_keeps_task_open_for_remainder(self):
         task = self._make_task()
 

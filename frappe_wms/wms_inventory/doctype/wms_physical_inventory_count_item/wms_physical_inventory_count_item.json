@@ -18,7 +18,9 @@
     "book_quantity",
     "counted_quantity",
     "variance",
-    "status"
+    "status",
+    "recount_count",
+    "tolerance_group"
   ],
   "fields": [
     {
@@ -94,10 +96,24 @@
       "fieldname": "status",
       "label": "Status",
       "fieldtype": "Select",
-      "options": "Open\nCounted\nPosted",
+      "options": "Open\nCounted\nPending Recount\nPending Approval\nPosted",
       "default": "Open",
       "read_only": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "recount_count",
+      "label": "Recount Count",
+      "fieldtype": "Int",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "tolerance_group",
+      "label": "Tolerance Group",
+      "fieldtype": "Link",
+      "options": "Count Tolerance Group",
+      "read_only": 1
     }
   ],
   "sort_field": "modified",

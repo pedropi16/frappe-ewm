@@ -1,5 +1,6 @@
 from frappe.model.document import Document
 from frappe import _
+from frappe.utils import now_datetime
 import frappe
 
 class WarehouseTask(Document):
@@ -13,3 +14,6 @@ class WarehouseTask(Document):
             if frappe.db.get_value("Warehouse Task", self.predecessor_task, "status") != "Confirmed":
                 self.status = "On Hold"
                 self.blocking_reason = _("Waiting on predecessor task {0}").format(self.predecessor_task)
+        # Declared but never set anywhere before P3 - an approximation ("task creation time",
+        # not "operator actually began working it") good enough for a first cycle-time KPI cut.
+        self.started_at = self.started_at or now_datetime()

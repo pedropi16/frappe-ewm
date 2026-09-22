@@ -149,9 +149,14 @@ def sync_warehouse_order(wo_name):
     if confirmed >= len(tasks):
         updates["status"] = "Completed"
         updates["completed_at"] = now_datetime()
+        # A WO whose only sync call already finds every task Confirmed (e.g. a single-task
+        # WO, or several tasks confirmed together) never passes through the elif below, so
+        # started_at would otherwise be left permanently null - record it as equal to
+        # completed_at rather than never set at all.
+        if not wo.started_at: updates["started_at"] = updates["completed_at"]
     elif in_process and wo.status in ("Open", "Assigned"):
         updates["status"] = "In Process"
-        updates["started_at"] = updates.get("started_at") or now_datetime()
+        updates["started_at"] = now_datetime()
     wo.db_set(updates, update_modified=True)
 
 def join_queue(queue_name, user=None):

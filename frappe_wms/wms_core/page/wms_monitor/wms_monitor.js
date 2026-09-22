@@ -20,6 +20,9 @@ const VIEWS = [
   { key: "hu", label: __("Handling Units") },
   { key: "movements", label: __("Stock Movements") },
   { key: "resources", label: __("Resources & Queues") },
+  { key: "differences", label: __("Difference Analyzer") },
+  { key: "kpis", label: __("KPIs") },
+  { key: "alerts", label: __("Alerts") },
 ];
 
 class WMSMonitor {
@@ -107,6 +110,9 @@ class WMSMonitor {
       hu: () => this.load_handling_units(),
       movements: () => this.load_movements(),
       resources: () => this.load_resources(),
+      differences: () => this.load_differences(),
+      kpis: () => this.load_kpis(),
+      alerts: () => this.load_alerts(),
     };
     (loaders[view] || (() => {}))();
   }
@@ -562,6 +568,137 @@ class WMSMonitor {
       ["queue_code", __("Queue")], ["queue_name", __("Name")], ["activity", __("Activity")],
       ["storage_type", __("Storage Type")], ["resource_group", __("Resource Group")], ["active", __("Active")],
     ], "Warehouse Queue"));
+  }
+
+  // ---------- Difference Analyzer ----------
+  async load_differences() {
+    const $wrap = this.body_for("differences");
+    if (!$wrap.find(".wms-mon-diff-filters").length) {
+      $wrap.html(`
+        <div class="wms-mon-diff-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <input class="form-control input-sm wms-mon-diff-product" placeholder="${__("Product")}" style="width:140px;">
+          <input type="date" class="form-control input-sm wms-mon-diff-from" style="width:150px;">
+          <input type="date" class="form-control input-sm wms-mon-diff-to" style="width:150px;">
+          <button class="btn btn-primary btn-sm wms-mon-diff-search">${__("Search")}</button>
+        </div>
+        <div class="wms-mon-diff-table"></div>
+      `);
+      $wrap.find(".wms-mon-diff-search").on("click", () => this.search_differences());
+    }
+    this.search_differences();
+  }
+
+  async search_differences() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("differences");
+    const args = {
+      warehouse: this.warehouse,
+      product: $wrap.find(".wms-mon-diff-product").val() || undefined,
+      from_date: $wrap.find(".wms-mon-diff-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-diff-to").val() || undefined,
+    };
+    const rows = await frappe.call("frappe_wms.api.inventory.analyze_differences", args).then((r) => r.message || []);
+    const $table = $wrap.find(".wms-mon-diff-table");
+    if (!rows.length) { $table.html(`<div class="text-muted">${__("No posted count variances found")}</div>`); return; }
+    $table.html(this.render_table(rows, [
+      ["product", __("Product")], ["total_gain", __("Total Gain")], ["total_loss", __("Total Loss")],
+      ["net_variance", __("Net Variance")], ["over_tolerance_events", __("Over-Tolerance Events")], ["line_count", __("Lines")],
+    ], "WMS Physical Inventory Count"));
+  }
+
+  // ---------- KPIs ----------
+  async load_kpis() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("kpis");
+    const kpis = await frappe.call("frappe_wms.api.monitor.warehouse_kpis", { warehouse: this.warehouse }).then((r) => r.message || {});
+    $wrap.html(`<div class="wms-mon-kpi-cards"></div>`);
+    const pct = (v) => (v === null || v === undefined ? "-" : `${v}%`);
+    const hrs = (v) => (v === null || v === undefined ? "-" : `${v}h`);
+    this.render_cards($wrap.find(".wms-mon-kpi-cards"), [
+      { label: __("Task Throughput (total)"), value: kpis.task_throughput_total },
+      { label: __("Task Throughput (per day)"), value: kpis.task_throughput_per_day ?? "-" },
+      { label: __("Avg Task Cycle Time"), value: hrs(kpis.avg_task_cycle_time_hours) },
+      { label: __("Avg Warehouse Order Cycle Time"), value: hrs(kpis.avg_wo_cycle_time_hours) },
+      { label: __("Exception Rate"), value: pct(kpis.exception_rate_percent) },
+      { label: __("Count Accuracy"), value: pct(kpis.count_accuracy_percent) },
+    ]);
+  }
+
+  // ---------- Alerts ----------
+  async load_alerts() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("alerts");
+    const alerts = await frappe.call("frappe_wms.api.monitor.get_alerts", { warehouse: this.warehouse }).then((r) => r.message || {});
+    $wrap.html(`
+      <div style="margin-bottom:24px;">
+        <h6>${__("Counts Awaiting Approval")}</h6>
+        <div class="wms-mon-alert-approval"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h6>${__("Aged Exceptions")}</h6>
+        <div class="wms-mon-alert-exceptions"></div>
+      </div>
+      <div>
+        <h6>${__("Stalled Warehouse Orders")}</h6>
+        <div class="wms-mon-alert-wos"></div>
+      </div>
+    `);
+    this.render_pending_approval_alerts(alerts.pending_approval_counts || []);
+    this.render_alert_table($wrap.find(".wms-mon-alert-exceptions"), alerts.aged_exceptions || [],
+      [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["exception_code", __("Exception")], ["blocking_reason", __("Reason")], ["modified", __("Since")]],
+      "Warehouse Task", __("No aged exceptions"));
+    this.render_alert_table($wrap.find(".wms-mon-alert-wos"), alerts.stalled_warehouse_orders || [],
+      [["name", __("Warehouse Order")], ["activity", __("Activity")], ["queue", __("Queue")], ["priority", __("Priority")], ["task_count", __("Tasks")], ["creation", __("Created")]],
+      "Warehouse Order", __("No stalled Warehouse Orders"));
+  }
+
+  render_alert_table($container, rows, columns, doctype, empty_message) {
+    if (!rows.length) { $container.html(`<div class="text-muted">${empty_message}</div>`); return; }
+    $container.html(this.render_table(rows, columns, doctype));
+  }
+
+  // A supervisor's one bulk action in this page: select several Under Review counts and
+  // approve them all in one click, instead of opening each one individually.
+  render_pending_approval_alerts(rows) {
+    const $container = this.body_for("alerts").find(".wms-mon-alert-approval");
+    if (!rows.length) { $container.html(`<div class="text-muted">${__("No counts awaiting approval")}</div>`); return; }
+    const body = rows.map((row) => `
+      <tr>
+        <td><input type="checkbox" class="wms-mon-approve-check" value="${frappe.utils.escape_html(row.name)}"></td>
+        <td><a href="/app/wms-physical-inventory-count/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a></td>
+        <td>${frappe.utils.escape_html(row.product || "")}</td>
+        <td>${frappe.utils.escape_html(row.storage_bin || row.storage_type || "")}</td>
+        <td>${frappe.utils.escape_html(row.count_date || "")}</td>
+      </tr>
+    `).join("");
+    $container.html(`
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead><tr><th></th><th>${__("Count")}</th><th>${__("Product")}</th><th>${__("Scope")}</th><th>${__("Count Date")}</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-primary btn-sm wms-mon-approve-selected">${__("Approve Selected")}</button>
+    `);
+    // Sequential per-count approval (not Promise.all) so one failure doesn't silently
+    // swallow the rest, and the final summary reflects exactly how many actually succeeded.
+    $container.find(".wms-mon-approve-selected").on("click", () => {
+      const names = $container.find(".wms-mon-approve-check:checked").map((_, el) => el.value).get();
+      if (!names.length) { frappe.show_alert({ message: __("Select at least one count"), indicator: "orange" }); return; }
+      frappe.confirm(__("Approve {0} selected count(s)? Their held variances will post to the stock ledger.", [names.length]), async () => {
+        let succeeded = 0;
+        for (const name of names) {
+          try {
+            await frappe.call("frappe_wms.api.inventory.approve_variance", { count_name: name });
+            succeeded += 1;
+          } catch (e) {
+            frappe.show_alert({ message: __("Failed to approve {0}", [name]), indicator: "red" });
+          }
+        }
+        frappe.show_alert({ message: __("Approved {0} of {1} count(s)", [succeeded, names.length]), indicator: succeeded === names.length ? "green" : "orange" });
+        this.load_alerts();
+      });
+    });
   }
 
   render_table(rows, columns, doctype) {

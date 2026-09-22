@@ -215,15 +215,25 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
         create_order_related_replenishment(task)
     return result
 
-def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
+def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
     require_role("WMS Operator", "WMS Supervisor")
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
     task = frappe.get_doc("Warehouse Task", task_name)
     if task.status == "Confirmed": return {"task": task.name, "status": task.status, "already_confirmed": True}
     if task.docstatus == 2 or task.status in {"Cancelled", "Exception"}: frappe.throw(_("Task is not confirmable"))
     if task.status == "On Hold": frappe.throw(task.blocking_reason or _("Task is on hold behind an earlier task in its Warehouse Order"))
+    if frappe.db.get_single_value("WMS Settings", "require_scan_verification"):
+        # Today scanned_source/scanned_destination are only checked when the caller bothers
+        # to pass them - a caller (or a bypassed/scripted client) that omits them skips
+        # verification entirely. This makes a scan mandatory for every field the task
+        # actually has something to verify against, so the match checks below are
+        # guaranteed to run rather than being skippable by omission.
+        if (task.source_bin or task.source_hu) and not scanned_source: frappe.throw(_("Scan the source bin/HU before confirming"))
+        if (task.destination_bin or task.destination_hu) and not scanned_destination: frappe.throw(_("Scan the destination bin/HU before confirming"))
+        if task.product and not scanned_product: frappe.throw(_("Scan the product before confirming"))
     if scanned_source and scanned_source not in {task.source_bin, task.source_hu}: frappe.throw(_("Scanned source does not match the task"))
     if scanned_destination and scanned_destination not in {task.destination_bin, task.destination_hu}: frappe.throw(_("Scanned destination does not match the task"))
+    if scanned_product and scanned_product != task.product: frappe.throw(_("Scanned product does not match the task"))
     already_confirmed = flt(task.confirmed_quantity)
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed
     new_confirmed = already_confirmed + qty

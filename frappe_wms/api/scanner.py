@@ -14,8 +14,8 @@ def my_tasks():
     return _list_my_tasks()
 
 @frappe.whitelist()
-def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
-    return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key)
+def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
+    return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key,scanned_product)
 
 @frappe.whitelist()
 def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):

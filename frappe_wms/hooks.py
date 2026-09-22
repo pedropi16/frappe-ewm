@@ -95,6 +95,7 @@ scheduler_events = {
     "daily": [
         "frappe_wms.tasks.verify_stock_balance_integrity",
         "frappe_wms.tasks.verify_erpnext_stock_reconciliation",
+        "frappe_wms.tasks.generate_scheduled_counts",
     ],
 }
 

@@ -9,6 +9,8 @@
   "enforce_wms_only_stock_movements",
   "enforce_storage_type_rules",
   "column_break_enforcement",
+  "verification_section",
+  "require_scan_verification",
   "defaults_section",
   "default_handling_unit_type"
  ],
@@ -35,6 +37,18 @@
   {
    "fieldname": "column_break_enforcement",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verification_section",
+   "fieldtype": "Section Break",
+   "label": "Verification"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk.",
+   "fieldname": "require_scan_verification",
+   "fieldtype": "Check",
+   "label": "Require Scan Verification"
   },
   {
    "fieldname": "defaults_section",

@@ -1,0 +1,115 @@
+{
+  "name": "Count Tolerance Group",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "item_group",
+    "tolerance_percentage",
+    "tolerance_quantity",
+    "requires_recount",
+    "requires_approval",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "in_list_view": 1,
+      "description": "Optional - leave blank for a default group that applies to every warehouse."
+    },
+    {
+      "fieldname": "item_group",
+      "label": "Item Group",
+      "fieldtype": "Link",
+      "options": "Item Group",
+      "description": "Optional - leave blank to match every item group."
+    },
+    {
+      "fieldname": "tolerance_percentage",
+      "label": "Tolerance Percentage",
+      "fieldtype": "Percent",
+      "reqd": 1,
+      "default": 0,
+      "in_list_view": 1,
+      "description": "A variance within this percentage of the book quantity posts automatically. A variance against a zero book quantity never counts as within tolerance."
+    },
+    {
+      "fieldname": "tolerance_quantity",
+      "label": "Tolerance Quantity",
+      "fieldtype": "Float",
+      "description": "Optional absolute-quantity tolerance - a variance within this quantity also posts automatically, even if it exceeds the percentage tolerance."
+    },
+    {
+      "fieldname": "requires_recount",
+      "label": "Requires Recount",
+      "fieldtype": "Check",
+      "default": 1,
+      "description": "An out-of-tolerance variance is held for a recount before it can be posted or escalated for approval."
+    },
+    {
+      "fieldname": "requires_approval",
+      "label": "Requires Supervisor Approval",
+      "fieldtype": "Check",
+      "default": 1,
+      "description": "An out-of-tolerance variance (after a recount, if required) is held for supervisor approval before posting."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "CTG-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

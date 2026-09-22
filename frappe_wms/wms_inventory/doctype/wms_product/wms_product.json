@@ -20,6 +20,7 @@
     "full_hu_quantity",
     "gross_weight_per_unit",
     "volume_per_unit",
+    "abc_indicator",
     "active"
   ],
   "fields": [
@@ -96,6 +97,14 @@
       "fieldname": "volume_per_unit",
       "label": "Volume per Unit",
       "fieldtype": "Float"
+    },
+    {
+      "fieldname": "abc_indicator",
+      "label": "ABC Indicator",
+      "fieldtype": "Select",
+      "options": "\nA\nB\nC",
+      "in_standard_filter": 1,
+      "description": "Optional ABC classification, used by ABC Cycle Count Rules to select which products get counted on a schedule."
     },
     {
       "fieldname": "active",

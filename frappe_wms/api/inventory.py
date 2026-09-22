@@ -1,5 +1,5 @@
 import frappe
-from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts
+from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts, request_recount as _request_recount, approve_variance as _approve_variance, analyze_differences as _analyze_differences
 from frappe_wms.services.quality import complete_inspection as _complete_inspection, list_open_inspections as _list_open_inspections
 from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs, request_direct_replenishment as _request_direct_replenishment
 from frappe_wms.utils import parse_json
@@ -23,6 +23,18 @@ def record_counts(count_name, counted_quantities):
 @frappe.whitelist()
 def post_count(count_name):
     return _post_count(count_name)
+
+@frappe.whitelist()
+def request_recount(count_name):
+    return _request_recount(count_name)
+
+@frappe.whitelist()
+def approve_variance(count_name, remarks=None):
+    return _approve_variance(count_name, remarks)
+
+@frappe.whitelist()
+def analyze_differences(warehouse, from_date=None, to_date=None, product=None):
+    return _analyze_differences(warehouse, from_date, to_date, product)
 
 @frappe.whitelist()
 def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None):

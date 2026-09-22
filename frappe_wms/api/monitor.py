@@ -1,8 +1,10 @@
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
+from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
+ALERT_AGE_HOURS = 4
 
 @frappe.whitelist()
 def get_delivery_execution_status(delivery_name):
@@ -164,6 +166,30 @@ def search_queues(warehouse, activity=None, limit=100):
     return frappe.get_list("Warehouse Queue", filters=filters, fields=[
         "name", "queue_code", "queue_name", "activity", "storage_type", "resource_group", "active",
     ], order_by="queue_code asc", limit=cint(limit) or 100)
+
+@frappe.whitelist()
+def warehouse_kpis(warehouse, from_date=None, to_date=None):
+    frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
+    return _warehouse_kpis(warehouse, from_date, to_date)
+
+@frappe.whitelist()
+def get_alerts(warehouse):
+    frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
+    cutoff = add_to_date(now_datetime(), hours=-ALERT_AGE_HOURS)
+    return {
+        "pending_approval_counts": frappe.get_list("WMS Physical Inventory Count",
+            filters={"warehouse": warehouse, "status": "Under Review"},
+            fields=["name", "storage_bin", "storage_type", "product", "count_date", "modified"],
+            order_by="modified asc", limit=50),
+        "aged_exceptions": frappe.get_list("Warehouse Task",
+            filters={"warehouse": warehouse, "status": "Exception", "modified": ["<", cutoff]},
+            fields=["name", "task_type", "product", "exception_code", "blocking_reason", "modified"],
+            order_by="modified asc", limit=50),
+        "stalled_warehouse_orders": frappe.get_list("Warehouse Order",
+            filters={"warehouse": warehouse, "status": "Open", "assigned_resource": ["in", ["", None]], "creation": ["<", cutoff]},
+            fields=["name", "activity", "queue", "priority", "task_count", "creation"],
+            order_by="creation asc", limit=50),
+    }
 
 @frappe.whitelist()
 def search_waves(warehouse, status=None, limit=100):
