@@ -55,6 +55,7 @@ replacement — see [Production warning](#production-warning).
 - [Printing (spool)](#printing-spool)
 - [Core flows](#core-flows)
 - [Advanced EWM (P4)](#advanced-ewm-p4)
+- [Consolidation Group](#consolidation-group)
 - [Modules](#modules)
 - [Configuration reference](#configuration-reference)
 - [Roles & permissions](#roles--permissions)
@@ -600,6 +601,36 @@ purely descriptive label with no behavior behind it).
   Sales Invoice per matched rate. Both reachable from the WMS Monitor's
   **Billing** tab (preview, then create).
 
+## Consolidation Group
+
+Not part of P4 above — a later addition, the mirror of Deconsolidation:
+combining demand from several Outbound Deliveries *and* Work Orders onto one
+physical Handling Unit at a shared staging point (a Production Supply Area
+bin, or a distinct rack), then splitting it apart later once everything's
+gathered.
+
+**Gather, then split** — deliberately not "redirect a Pick or PSA-
+replenishment task's destination at creation time." Picking and Work Order
+material staging run to completion exactly as everywhere else in this app,
+each landing wherever it always has; a **Consolidation Group** (`warehouse`,
+`staging_bin`, `target_hu`, `lines`) then tracks a plan of which already-
+confirmed demand (a `Stock Allocation` for a delivery, a `Warehouse Request`
+for a Work Order's production supply) to move onto one shared target HU. A
+**Consolidation** task (`services/consolidation.py::create_consolidation_tasks`
+— structurally `create_deconsolidation_tasks` run in reverse: several varying
+sources onto one fixed destination instead of one fixed source onto several)
+does the actual gathering; once every line is on the target HU, the existing,
+unmodified `create_deconsolidation_tasks` splits it back out to each line's
+own real destination. Both legs confirm through the RF app's ordinary Task
+wizard — nothing new needed there.
+
+Reachable from the RF app's **Consolidation** action (under Internal): scan
+an Outbound Delivery, Work Order, Stock Allocation, or Warehouse Request
+barcode to find joinable lines, add them, set a target HU, Gather, then Split
+to Destinations once fully gathered. Creating a new Consolidation Group
+itself (choosing the warehouse and staging bin) is a desk/API action, not RF
+— the same "supervisor plans, operator executes" split as Kitting Order.
+
 ## Modules
 
 | Module | Contains |
@@ -610,7 +641,7 @@ purely descriptive label with no behavior behind it).
 | `wms_outbound` | Outbound Delivery, Goods Issue, Stock Allocation, Packing Order, WMS Wave, VAS Order (+ VAS Order Activity) |
 | `wms_inventory` | WMS Product (+ per-warehouse `WMS Product Warehouse` overrides), WMS Stock Type, WMS Stock Balance, WMS Stock Ledger Entry, Physical Inventory Count (+ Count Tolerance Group, Cycle Count Rule), Quality Inspection |
 | `wms_handling_units` | Handling Unit, HU Type, HU Event (audit trail - its `handling_unit`/bin/parent-HU fields are plain Data, not Links, so it never blocks deleting/recycling the HU or bin it once pointed at), Packaging Material, Packaging Spec (+ Packaging Spec Level) |
-| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Print Spool, WMS Exception Code, [P4](#advanced-ewm-p4)'s Kitting Order (+ Kitting Order Component) |
+| `wms_execution` | Warehouse Request, Warehouse Task, Task Allocation, Warehouse Order (queue-assigned batch of tasks), Warehouse Queue, WMS Resource, WMS Resource Group, WMS Print Spool, WMS Exception Code, [P4](#advanced-ewm-p4)'s Kitting Order (+ Kitting Order Component), [Consolidation Group](#consolidation-group) (+ Consolidation Group Line) |
 | `wms_shipping` | WMS Route (with ordered Route Stops for multi-hop staging), WMS Shipment |
 
 `services/*.py` holds the transactional logic each doctype's controller calls
@@ -801,6 +832,7 @@ the home menu appear, leading to:
 | Internal | Count | Record physical inventory quantities; auto-posts once every line is counted (or holds for recount/approval — see [Core flows](#core-flows)) |
 | Internal | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
 | Internal | Kitting [P4] | List open Kitting Orders for the logged-on operator's warehouse; tap one to complete it (Assemble/Disassemble) |
+| Internal | Consolidation | Scan an Outbound Delivery/Work Order/Stock Allocation/Warehouse Request barcode to find and add joinable lines to a [Consolidation Group](#consolidation-group), set a target HU, Gather, then Split to Destinations |
 | Outbound | Picking | Enter a delivery/wave reference to jump straight into picking its tasks |
 | Outbound | Pick Tasks | Confirm any open Pick, Stage, or Load task |
 | Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |

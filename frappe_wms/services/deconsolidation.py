@@ -57,6 +57,7 @@ def create_deconsolidation_tasks(source_hu, lines):
             "destination_bin": line.get("destination_bin"), "destination_hu": line.get("destination_hu"),
             "stock_type_from": line["stock_type"], "stock_type_to": line["stock_type"],
             "movement_type": process_type.movement_type, "priority": "Normal", "status": "Open",
+            "consolidation_group_line": line.get("consolidation_group_line"),
         })
         attach_task(task, batch_key)
         task.insert(ignore_permissions=True)

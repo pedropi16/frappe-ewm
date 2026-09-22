@@ -252,6 +252,9 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if fully_confirmed: advance_to_next_step(task)
     _update_request(task.warehouse_request)
     _update_allocations(task, qty)
+    if task.consolidation_group_line:
+        from frappe_wms.services.consolidation import update_consolidation_progress
+        update_consolidation_progress(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
     if fully_confirmed and task.task_type == "Putaway":
         create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)

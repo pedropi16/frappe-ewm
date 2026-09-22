@@ -183,11 +183,27 @@ function _(text, args) {
 }
 
 async function api(method, args) {
-  const res = await fetch(`/api/method/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": CSRF_TOKEN },
-    body: JSON.stringify(args || {}),
-  });
+  let res;
+  try {
+    res = await fetch(`/api/method/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": CSRF_TOKEN },
+      body: JSON.stringify(args || {}),
+    });
+  } catch (e) {
+    // A dead WiFi zone on the floor is common and looks nothing like a server error - a raw
+    // fetch() failure never reaches res.ok below, so it needs its own clear message. Every
+    // caller already leaves its form state intact on a thrown error (never resets on catch),
+    // so re-tapping the same submit button is already a full retry - no separate UI needed.
+    throw new Error(_("Network error - check your connection and try again."));
+  }
+  if (res.status === 401) {
+    // The underlying Frappe session (not the WMS Resource logon above it) expired mid-shift -
+    // same redirect index.py's own get_context already sends a Guest through, so the operator
+    // re-authenticates through the normal login page instead of seeing a bare error banner.
+    window.location.href = "/login?redirect-to=/wms";
+    throw new Error(_("Your session expired - redirecting to log in."));
+  }
   let data = {};
   try { data = await res.json(); } catch (e) { /* no body */ }
   if (!res.ok) {
@@ -221,7 +237,7 @@ const TASK_TYPE_GROUPS = {
   // though "Putaway Tasks" is a slight misnomer for it (Unload/Deconsolidation share that
   // same looseness already).
   inbound: ["Unload", "Putaway", "Deconsolidation", "Cross Dock"],
-  internal: ["Internal Move", "Posting Change", "Inventory Count"],
+  internal: ["Internal Move", "Posting Change", "Inventory Count", "Consolidation"],
   outbound: ["Pick", "Stage", "Load"],
 };
 
@@ -245,6 +261,7 @@ const SECTIONS = {
       { icon: "\u{1F522}", label: "Count", action: loadCounts },
       { icon: "\u{1F3F7}\u{FE0F}", label: "Handling Units", action: loadHUHome },
       { icon: "\u{1F9E9}", label: "Kitting", action: loadKittingOrders },
+      { icon: "\u{1F9FA}", label: "Consolidation", action: loadConsolidationGroups },
     ],
   },
   outbound: {
@@ -289,6 +306,8 @@ const VIEW_PARENT = {
   repack: () => "section",
   "repack-detail": () => "repack",
   kitting: () => "section",
+  consolidation: () => "section",
+  "consolidation-detail": () => "consolidation",
   lookup: () => "menu",
 };
 
@@ -296,7 +315,7 @@ const VIEW_PARENT = {
 const VIEW_RELOAD = {
   tasks: loadTasks, receive: loadInboundDeliveries, ship: loadShipDeliveries,
   pack: loadPackingOrders, count: loadCounts, quality: loadInspections, hu: loadHUHome,
-  load: loadShipments, vas: loadVASOrders, kitting: loadKittingOrders,
+  load: loadShipments, vas: loadVASOrders, kitting: loadKittingOrders, consolidation: loadConsolidationGroups,
 };
 
 const state = {
@@ -328,6 +347,8 @@ const state = {
   exceptionCodes: [],
   exceptionCodesLoaded: false,
   exceptionRemarks: "",
+  exceptionSelectedCode: null,
+  exceptionRevisedQty: "",
 
   // Handling Units
   huList: [],
@@ -384,6 +405,13 @@ const state = {
 
   // Kitting
   kittingOrders: [],
+
+  // Consolidation
+  consolidationGroups: [],
+  currentConsolidation: null,
+  consolidationNewHu: "",
+  consolidationScan: "",
+  consolidationCandidates: [],
 
   // Picking entry
   pickingReference: "",
@@ -542,7 +570,21 @@ function openTask(task) {
     scanSource: "", scanDestination: "", destinationHu: task.destination_hu || "",
     confirmQty: String(flt(task.planned_quantity) - flt(task.confirmed_quantity)),
     error: null, info: null, exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "",
+    exceptionSelectedCode: null, exceptionRevisedQty: "",
   });
+  loadClusterBreakdown(task.name);
+}
+
+async function loadClusterBreakdown(taskName) {
+  // Best-effort, non-blocking: a cluster pick task's own list-row fields only carry the
+  // aggregate planned_quantity, not the per-order split - fetch the full doc only when it
+  // might matter, and never let a failure here affect the task the operator is confirming.
+  try {
+    const full = await api("frappe_wms.api.scanner.get_task", { task_name: taskName });
+    if (state.currentTask && state.currentTask.name === taskName && (full.stock_allocations || []).length > 1) {
+      setState({ currentTask: { ...state.currentTask, stock_allocations: full.stock_allocations } });
+    }
+  } catch (e) { /* silently skip - the task still confirms fine without the breakdown */ }
 }
 
 // Validates the current wizard step client-side, mirroring what confirm_task checks
@@ -619,7 +661,19 @@ async function openExceptionPicker() {
   }
 }
 
-async function submitException(code) {
+function selectExceptionCode(code) {
+  // Pick denial (P2): a code with allows_quantity_change (e.g. OOS) closes the task at
+  // whatever quantity was actually found instead of the full planned amount - needs one more
+  // tap to enter that quantity before submitting, rather than reporting immediately.
+  const found = state.exceptionCodes.find((c) => c.name === code);
+  if (found && found.allows_quantity_change) {
+    setState({ exceptionSelectedCode: code, exceptionRevisedQty: String(flt(state.currentTask.planned_quantity) - flt(state.currentTask.confirmed_quantity)) });
+    return;
+  }
+  submitException(code);
+}
+
+async function submitException(code, revisedQuantity) {
   const task = state.currentTask;
   const requiresComment = state.exceptionCodes.find((c) => c.name === code)?.requires_comment;
   const remarks = state.exceptionRemarks.trim();
@@ -627,10 +681,20 @@ async function submitException(code) {
     setState({ error: _("This exception requires a comment before it can be reported.") });
     return;
   }
+  if (revisedQuantity !== undefined && flt(revisedQuantity) < 0) {
+    setState({ error: _("Revised quantity cannot be negative.") });
+    return;
+  }
   setState({ loading: true, error: null });
   try {
-    await api("frappe_wms.api.scanner.raise_exception", { task_name: task.name, exception_code: code, remarks: remarks || undefined });
-    setState({ loading: false, view: "tasks", info: _("{0} flagged as exception", [_(task.task_type)]), currentTask: null, exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "" });
+    await api("frappe_wms.api.scanner.raise_exception", {
+      task_name: task.name, exception_code: code, remarks: remarks || undefined,
+      revised_quantity: revisedQuantity !== undefined ? revisedQuantity : undefined,
+    });
+    setState({
+      loading: false, view: "tasks", info: _("{0} flagged as exception", [_(task.task_type)]), currentTask: null,
+      exceptionCodes: [], exceptionCodesLoaded: false, exceptionRemarks: "", exceptionSelectedCode: null, exceptionRevisedQty: "",
+    });
     loadTasks();
   } catch (e) {
     setState({ loading: false, error: e.message });
@@ -772,7 +836,7 @@ function renderDeconDetail() {
       <div class="detail-section line-row">
         <div class="line-head">${escapeHtml(line.product)}</div>
         <div class="line-sub">${escapeHtml(line.batch_no || "")} ${escapeHtml(_(line.stock_type))} · ${_("available on HU: {0} {1}", [line.available, escapeHtml(line.stock_uom || "")])}</div>
-        <div class="field"><label>${_("Quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
+        <div class="field"><label>${_("Quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}" ${i === 0 ? "autofocus" : ""}></div>
         <div class="field"><label>${_("Destination Bin")}</label><input type="text" data-i="${i}" data-f="destination_bin" placeholder="${_("Scan bin barcode")}" value="${escapeHtml(line.destination_bin)}"></div>
         <div class="field"><label>${_("Destination HU (optional)")}</label><input type="text" data-i="${i}" data-f="destination_hu" placeholder="${_("Scan HU barcode")}" value="${escapeHtml(line.destination_hu)}"></div>
       </div>
@@ -1006,6 +1070,217 @@ async function completeKittingOrder(name) {
   } catch (e) {
     setState({ loading: false, error: e.message });
   }
+}
+
+// ---------- Consolidation ----------
+async function loadConsolidationGroups() {
+  setState({ loading: true, error: null, view: "consolidation", section: "internal" });
+  try {
+    const rows = await api("frappe_wms.api.consolidation.list_open_consolidation_groups");
+    setState({ loading: false, consolidationGroups: rows || [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderConsolidationList() {
+  const wrap = el(`<div></div>`);
+  if (!state.consolidationGroups.length && !state.loading) {
+    wrap.appendChild(el(`<div class="empty">${_("No open Consolidation Groups.")}</div>`));
+    return wrap;
+  }
+  state.consolidationGroups.forEach((group) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(group.name)}</div>${statusBadgeHtml(group.gather_status)}</div>
+        <div class="meta">${escapeHtml(group.staging_bin)}${group.target_hu ? " / " + escapeHtml(group.target_hu) : ""}</div>
+        <div class="qty">${_("{0} / {1} lines done", [group.done_count, group.line_count])}</div>
+      </div>
+    `);
+    card.onclick = () => openConsolidationGroup(group.name);
+    wrap.appendChild(card);
+  });
+  return wrap;
+}
+
+async function openConsolidationGroup(name) {
+  setState({ loading: true, error: null });
+  try {
+    const group = await api("frappe_wms.api.consolidation.get_consolidation_group", { group_name: name });
+    setState({ loading: false, view: "consolidation-detail", currentConsolidation: group, consolidationNewHu: "", consolidationScan: "", consolidationCandidates: [] });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function refreshCurrentConsolidation() {
+  const group = await api("frappe_wms.api.consolidation.get_consolidation_group", { group_name: state.currentConsolidation.name });
+  setState({ currentConsolidation: group });
+}
+
+async function setConsolidationTargetHu() {
+  const hu = state.consolidationNewHu.trim();
+  if (!hu) { setState({ error: _("Scan the target Handling Unit to advance.") }); return; }
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.consolidation.set_consolidation_target_hu", { group_name: state.currentConsolidation.name, target_hu: hu });
+    setState({ loading: false, consolidationNewHu: "" });
+    refreshCurrentConsolidation();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function searchConsolidationCandidates() {
+  const barcode = state.consolidationScan.trim();
+  if (!barcode) { setState({ error: _("Scan an Outbound Delivery, Work Order, Stock Allocation, or Warehouse Request barcode.") }); return; }
+  setState({ loading: true, error: null });
+  try {
+    const candidates = await api("frappe_wms.api.consolidation.find_joinable_references", { barcode });
+    if (!candidates.length) { setState({ loading: false, error: _("Nothing joinable found for {0} - it may already be on a group, or not fully picked/staged yet.", [barcode]) }); return; }
+    setState({ loading: false, consolidationCandidates: candidates });
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function addConsolidationLine(candidate) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.consolidation.add_consolidation_line", {
+      group_name: state.currentConsolidation.name, reference_doctype: candidate.reference_doctype, reference_name: candidate.reference_name,
+    });
+    setState({ loading: false, consolidationScan: "", consolidationCandidates: [] });
+    refreshCurrentConsolidation();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function removeConsolidationLine(lineName) {
+  setState({ loading: true, error: null });
+  try {
+    await api("frappe_wms.api.consolidation.remove_consolidation_line", { group_name: state.currentConsolidation.name, line_name: lineName });
+    setState({ loading: false });
+    refreshCurrentConsolidation();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function gatherConsolidationGroup() {
+  setState({ loading: true, error: null });
+  try {
+    const created = await api("frappe_wms.api.consolidation.gather_consolidation_group", { group_name: state.currentConsolidation.name });
+    setState({ loading: false, info: _("{0} gather task(s) created - confirm them from Internal Tasks", [created.length]) });
+    refreshCurrentConsolidation();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+async function completeConsolidationGroup() {
+  setState({ loading: true, error: null });
+  try {
+    const created = await api("frappe_wms.api.consolidation.complete_consolidation_group", { group_name: state.currentConsolidation.name });
+    setState({ loading: false, info: _("{0} split to destination task(s) created - confirm them from Putaway Tasks", [created.length]) });
+    refreshCurrentConsolidation();
+  } catch (e) {
+    setState({ loading: false, error: e.message });
+  }
+}
+
+function renderConsolidationDetail() {
+  const group = state.currentConsolidation;
+  const wrap = el(`<div></div>`);
+  wrap.appendChild(el(`
+    <div class="detail-section">
+      <h3>${escapeHtml(group.name)} ${statusBadgeHtml(group.gather_status)}</h3>
+      <div class="detail-grid">
+        <div><div class="label">${_("Staging Bin")}</div><div>${escapeHtml(group.staging_bin)}</div></div>
+        <div><div class="label">${_("Target HU")}</div><div>${escapeHtml(group.target_hu || "-")}</div></div>
+      </div>
+    </div>
+  `));
+
+  if (!group.target_hu) {
+    const huForm = el(`<div class="detail-section"></div>`);
+    huForm.appendChild(el(`
+      <div class="field">
+        <label>${_("Set target Handling Unit")}</label>
+        <input type="text" placeholder="${_("Scan HU barcode")}" value="${escapeHtml(state.consolidationNewHu)}" autofocus>
+      </div>
+    `));
+    huForm.querySelector("input").oninput = (e) => { state.consolidationNewHu = e.target.value; };
+    const setBtn = el(`<button class="btn btn-secondary">${_("Set Target HU")}</button>`);
+    setBtn.onclick = setConsolidationTargetHu;
+    huForm.appendChild(setBtn);
+    wrap.appendChild(huForm);
+  }
+
+  const linesSection = el(`<div class="detail-section"><h3>${_("Lines")}</h3></div>`);
+  if (!(group.lines || []).length) {
+    linesSection.appendChild(el(`<div class="hint">${_("No lines yet - add one below.")}</div>`));
+  }
+  (group.lines || []).forEach((line) => {
+    const progress = line.status === "Deconsolidated" ? line.fulfilled_quantity : line.gathered_quantity;
+    const row = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(line.product)}</div>${statusBadgeHtml(line.status)}</div>
+        <div class="meta">${escapeHtml(line.reference_doctype)} ${escapeHtml(line.reference_name)} &rarr; ${escapeHtml(line.final_destination_bin)}</div>
+        <div class="qty">${progress} / ${line.quantity} ${escapeHtml(line.stock_uom || "")}</div>
+      </div>
+    `);
+    if (line.status === "Ready" || line.status === "Pending") {
+      const removeBtn = el(`<button class="btn btn-danger" style="margin-top:6px;">${_("Remove")}</button>`);
+      removeBtn.onclick = () => removeConsolidationLine(line.name);
+      row.appendChild(removeBtn);
+    }
+    linesSection.appendChild(row);
+  });
+  wrap.appendChild(linesSection);
+
+  const addSection = el(`<div class="detail-section"><h3>${_("+ Add Line")}</h3></div>`);
+  addSection.appendChild(el(`
+    <div class="field">
+      <label>${_("Scan Outbound Delivery, Work Order, Stock Allocation, or Warehouse Request")}</label>
+      <input type="text" placeholder="${_("Scan barcode")}" value="${escapeHtml(state.consolidationScan)}">
+    </div>
+  `));
+  addSection.querySelector("input").oninput = (e) => { state.consolidationScan = e.target.value; };
+  const findBtn = el(`<button class="btn btn-secondary">${_("Find")}</button>`);
+  findBtn.onclick = searchConsolidationCandidates;
+  addSection.appendChild(findBtn);
+  state.consolidationCandidates.forEach((candidate) => {
+    const card = el(`
+      <div class="card">
+        <div class="row1"><div class="task-type">${escapeHtml(candidate.product)}</div></div>
+        <div class="meta">${escapeHtml(candidate.reference_doctype)} ${escapeHtml(candidate.reference_name)}${candidate.source_label ? " &middot; " + escapeHtml(candidate.source_label) : ""}</div>
+        <div class="qty">${candidate.quantity}</div>
+      </div>
+    `);
+    card.onclick = () => addConsolidationLine(candidate);
+    addSection.appendChild(card);
+  });
+  wrap.appendChild(addSection);
+
+  const actions = el(`<div style="display:flex; gap:10px;"></div>`);
+  if ((group.lines || []).some((l) => l.status === "Ready") && group.target_hu) {
+    const gatherBtn = el(`<button class="btn btn-primary" style="flex:1;">${_("Gather")}</button>`);
+    gatherBtn.onclick = gatherConsolidationGroup;
+    actions.appendChild(gatherBtn);
+  }
+  if (group.gather_status === "Fully Gathered") {
+    const splitBtn = el(`<button class="btn btn-primary" style="flex:1;">${_("Split to Destinations")}</button>`);
+    splitBtn.onclick = completeConsolidationGroup;
+    actions.appendChild(splitBtn);
+  }
+  if (actions.children.length) wrap.appendChild(actions);
+
+  const backBtn = el(`<button class="btn btn-secondary">${_("Back to Consolidation Groups")}</button>`);
+  backBtn.onclick = loadConsolidationGroups;
+  wrap.appendChild(backBtn);
+  return wrap;
 }
 
 // ---------- Picking entry points ----------
@@ -1422,8 +1697,11 @@ async function submitCounts() {
     const result = await api("frappe_wms.api.inventory.record_counts", { count_name: count.name, counted_quantities: JSON.stringify(counted) });
     if (result.status === "Counted") {
       try {
-        await api("frappe_wms.api.inventory.post_count", { count_name: count.name });
-        setState({ loading: false, view: "section", section: "internal", info: _("Count {0} fully counted and posted", [count.name]) });
+        const posted = await api("frappe_wms.api.inventory.post_count", { count_name: count.name });
+        const info = posted.status === "Posted"
+          ? _("Count {0} fully counted and posted", [count.name])
+          : _("Count {0} fully counted; a variance is out of tolerance and is held for recount/supervisor approval", [count.name]);
+        setState({ loading: false, view: "section", section: "internal", info });
         return;
       } catch (e) {
         setState({ loading: false, view: "section", section: "internal", info: _("Count {0} fully counted; ask a supervisor to post it", [count.name]) });
@@ -1658,6 +1936,7 @@ function render() {
     "picking-entry": renderPickingEntry, "close-movement": renderCloseMovement, repack: renderRepack, "repack-detail": renderRepackDetail,
     vas: renderVASList, "vas-detail": renderVASDetail, "vas-new": renderVASNew,
     kitting: renderKittingList,
+    consolidation: renderConsolidationList, "consolidation-detail": renderConsolidationDetail,
   };
   main.appendChild((renderers[state.view] || renderMenu)());
   main.appendChild(renderFnKeyBar());
@@ -1708,9 +1987,28 @@ function renderFnKeyBar() {
   return bar;
 }
 
+// A scanner gun sends its terminating keystroke as Enter, same as a human hitting the Enter
+// key - so on any screen with more than one input visible at once (a line-item list: Receive/
+// Deconsolidate/Ship/Count Detail, all built from repeated ".line-row" blocks), Enter must
+// commit the scanned field and move to the next one, not fire the screen's primary action
+// with every other line still empty. Only F8 (a dedicated physical key on real RF hardware,
+// distinct from Enter) always means "submit this screen".
+function focusNextLineInput(current) {
+  const inputs = Array.from(document.querySelectorAll(".line-row input, .line-row select"));
+  const idx = inputs.indexOf(current);
+  if (idx === -1 || idx === inputs.length - 1) { current.blur(); return; }
+  inputs[idx + 1].focus();
+  if (inputs[idx + 1].tagName === "INPUT") inputs[idx + 1].select();
+}
+
 document.addEventListener("keydown", (e) => {
   if (!state.loggedOn) return;
   if (e.target && e.target.tagName === "TEXTAREA") return;
+  if (e.key === "Enter" && e.target && e.target.closest && e.target.closest(".line-row")) {
+    e.preventDefault();
+    focusNextLineInput(e.target);
+    return;
+  }
   const FN_MAP = {
     F3: goBack,
     F5: () => { const reload = VIEW_RELOAD[state.view]; if (reload) reload(); },
@@ -1985,6 +2283,16 @@ function renderTaskDetail() {
     </div>
   `));
 
+  if ((task.stock_allocations || []).length > 1) {
+    const breakdown = el(`<div class="detail-section"><h3>${_("Cluster pick - sort into {0} orders", [task.stock_allocations.length])}</h3></div>`);
+    task.stock_allocations.forEach((row) => {
+      breakdown.appendChild(el(`
+        <div class="line-sub">${escapeHtml(row.outbound_delivery_number || row.outbound_delivery || row.stock_allocation)} &middot; ${row.allocated_quantity} ${escapeHtml(task.stock_uom || "")}</div>
+      `));
+    });
+    wrap.appendChild(breakdown);
+  }
+
   if (task.status === "On Hold") {
     wrap.appendChild(el(`
       <div class="detail-section">
@@ -1996,6 +2304,36 @@ function renderTaskDetail() {
     return wrap;
   }
 
+  if (state.exceptionCodesLoaded && state.exceptionSelectedCode) {
+    const code = state.exceptionCodes.find((c) => c.name === state.exceptionSelectedCode);
+    const qtySection = el(`
+      <div class="detail-section">
+        <h3>${escapeHtml(code.exception_name)}</h3>
+        <div class="hint">${_("Enter the quantity actually found. The task closes at this amount and the shortfall raises a replenishment request.")}</div>
+        <div class="field"><label>${_("Quantity found")}</label><input type="number" inputmode="decimal" value="${escapeHtml(state.exceptionRevisedQty)}" autofocus></div>
+      </div>
+    `);
+    qtySection.querySelector("input").oninput = (e) => { state.exceptionRevisedQty = e.target.value; };
+    if (code.requires_comment) {
+      const field = el(`
+        <div class="field">
+          <label>${_("Comment (required for this exception)")}</label>
+          <input type="text" placeholder="${_("What happened?")}" value="${escapeHtml(state.exceptionRemarks)}">
+        </div>
+      `);
+      field.querySelector("input").oninput = (e) => { state.exceptionRemarks = e.target.value; };
+      qtySection.appendChild(field);
+    }
+    const submitBtn = el(`<button class="btn btn-danger">${_("Report exception")}</button>`);
+    submitBtn.onclick = () => submitException(code.name, state.exceptionRevisedQty);
+    qtySection.appendChild(submitBtn);
+    const back = el(`<button class="btn btn-secondary">${_("Back")}</button>`);
+    back.onclick = () => setState({ exceptionSelectedCode: null, exceptionRevisedQty: "" });
+    qtySection.appendChild(back);
+    wrap.appendChild(qtySection);
+    return wrap;
+  }
+
   if (state.exceptionCodesLoaded) {
     const excSection = el(`<div class="detail-section"><h3>${_("Select exception")}</h3></div>`);
     if (!state.exceptionCodes.length) {
@@ -2003,10 +2341,10 @@ function renderTaskDetail() {
     }
     state.exceptionCodes.forEach((code) => {
       const b = el(`<button class="btn btn-danger">${escapeHtml(code.exception_name)}${code.requires_supervisor ? " \u{1F512}" : ""}</button>`);
-      b.onclick = () => submitException(code.name);
+      b.onclick = () => selectExceptionCode(code.name);
       excSection.appendChild(b);
     });
-    if (state.exceptionCodes.some((c) => c.requires_comment)) {
+    if (state.exceptionCodes.some((c) => c.requires_comment && !c.allows_quantity_change)) {
       const field = el(`
         <div class="field">
           <label>${_("Comment (required for some exceptions)")}</label>
@@ -2198,7 +2536,7 @@ function renderReceiveDetail() {
       <div class="detail-section line-row">
         <div class="line-head">${escapeHtml(line.item)}</div>
         <div class="line-sub">${_("Remaining: {0} {1}", [line.remaining, escapeHtml(line.stock_uom)])} &middot; ${escapeHtml(_(line.stock_type))}</div>
-        <div class="field"><label>${_("Handling Unit")}</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="${_("Scan HU barcode")}"></div>
+        <div class="field"><label>${_("Handling Unit")}</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="${_("Scan HU barcode")}" ${i === 0 ? "autofocus" : ""}></div>
         <div class="field"><label>${_("If new HU, type")}</label><select data-i="${i}" data-f="hu_type"><option value="">&mdash;</option>${huTypeOptions}</select></div>
         <div class="field"><label>${_("Quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
       </div>
@@ -2253,7 +2591,7 @@ function renderShipDetail() {
       <div class="detail-section line-row">
         <div class="line-head">${escapeHtml(line.item)}</div>
         <div class="line-sub">${_("Remaining: {0} {1}", [line.remaining, escapeHtml(line.stock_uom)])} &middot; ${escapeHtml(_(line.stock_type))}</div>
-        <div class="field"><label>${_("Handling Unit")}</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="${_("Scan staged HU")}"></div>
+        <div class="field"><label>${_("Handling Unit")}</label><input type="text" data-i="${i}" data-f="handling_unit" value="${escapeHtml(line.handling_unit)}" placeholder="${_("Scan staged HU")}" ${i === 0 ? "autofocus" : ""}></div>
         <div class="field"><label>${_("Quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" data-f="quantity" value="${escapeHtml(line.quantity)}"></div>
       </div>
     `);
@@ -2390,7 +2728,7 @@ function renderCountDetail() {
       <div class="detail-section line-row">
         <div class="line-head">${escapeHtml(row.product)}</div>
         <div class="line-sub">${escapeHtml(row.storage_bin)}${row.handling_unit ? " / " + escapeHtml(row.handling_unit) : ""} &middot; ${_("book {0} {1}", [row.book_quantity, escapeHtml(row.stock_uom)])}</div>
-        <div class="field"><label>${_("Counted quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" value="${escapeHtml(row.counted_quantity)}"></div>
+        <div class="field"><label>${_("Counted quantity")}</label><input type="number" inputmode="decimal" data-i="${i}" value="${escapeHtml(row.counted_quantity)}" ${i === 0 ? "autofocus" : ""}></div>
       </div>
     `);
     line.querySelector("input").oninput = (e) => updateCountLine(i, e.target.value);

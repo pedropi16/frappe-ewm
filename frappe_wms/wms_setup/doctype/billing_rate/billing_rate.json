@@ -45,7 +45,7 @@
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
       "reqd": 1,
       "in_list_view": 1
     },

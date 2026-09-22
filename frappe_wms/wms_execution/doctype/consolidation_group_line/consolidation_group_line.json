@@ -1,0 +1,141 @@
+{
+  "name": "Consolidation Group Line",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "reference_doctype",
+    "reference_name",
+    "product",
+    "batch_no",
+    "serial_no",
+    "stock_type",
+    "stock_uom",
+    "quantity",
+    "final_destination_bin",
+    "final_destination_hu",
+    "gathered_quantity",
+    "fulfilled_quantity",
+    "status",
+    "gather_task",
+    "deconsolidation_task"
+  ],
+  "fields": [
+    {
+      "fieldname": "reference_doctype",
+      "label": "Reference DocType",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "reqd": 1,
+      "description": "\"Stock Allocation\" for an Outbound Delivery's demand, \"Warehouse Request\" for a Work Order's staging demand."
+    },
+    {
+      "fieldname": "reference_name",
+      "label": "Reference Name",
+      "fieldtype": "Dynamic Link",
+      "options": "reference_doctype",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch No",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial No",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Re-resolved against the reference's live picked/confirmed quantity at gather time."
+    },
+    {
+      "fieldname": "final_destination_bin",
+      "label": "Final Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "final_destination_hu",
+      "label": "Final Destination HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "gathered_quantity",
+      "label": "Gathered Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "fulfilled_quantity",
+      "label": "Fulfilled Quantity",
+      "fieldtype": "Float",
+      "default": 0,
+      "read_only": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Pending\nReady\nGathered\nDeconsolidated\nCancelled",
+      "reqd": 1,
+      "default": "Pending",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "gather_task",
+      "label": "Gather Task",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "read_only": 1
+    },
+    {
+      "fieldname": "deconsolidation_task",
+      "label": "Deconsolidation Task",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "read_only": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

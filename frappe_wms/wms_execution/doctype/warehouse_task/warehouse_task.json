@@ -11,6 +11,7 @@
     "warehouse_request",
     "stock_allocation",
     "stock_allocations",
+    "consolidation_group_line",
     "wave",
     "task_type",
     "warehouse",
@@ -69,6 +70,15 @@
       "options": "Warehouse Task Allocation"
     },
     {
+      "fieldname": "consolidation_group_line",
+      "label": "Consolidation Group Line",
+      "fieldtype": "Link",
+      "options": "Consolidation Group Line",
+      "read_only": 1,
+      "in_standard_filter": 1,
+      "description": "Set on a Consolidation or Deconsolidation task that's part of a Consolidation Group's gather/split plan, so its progress can be tracked back to that plan."
+    },
+    {
       "fieldname": "wave",
       "label": "Wave",
       "fieldtype": "Link",
@@ -79,7 +89,7 @@
       "fieldname": "task_type",
       "label": "Task Type",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1

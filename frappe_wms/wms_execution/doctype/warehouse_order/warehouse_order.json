@@ -37,7 +37,7 @@
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1

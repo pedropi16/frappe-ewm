@@ -90,3 +90,5 @@ def cancel_allocations_for_delivery(delivery_name):
             balance.flags.ignore_permissions = True
             balance.save()
         frappe.db.set_value("Stock Allocation", allocation.name, "status", "Cancelled")
+    from frappe_wms.services.consolidation import cancel_consolidation_lines_for_allocations
+    cancel_consolidation_lines_for_allocations([a.name for a in allocations])

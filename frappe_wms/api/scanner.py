@@ -7,7 +7,19 @@ from frappe_wms.utils import parse_json
 @frappe.whitelist()
 def get_task(task_name):
     doc=frappe.get_doc("Warehouse Task",task_name); doc.check_permission("read")
-    return doc.as_dict()
+    result = doc.as_dict()
+    if len(doc.stock_allocations or []) > 1:
+        # A cluster pick task's own fields only show the aggregate - the RF app needs the
+        # per-order breakdown (which delivery gets how much) so an operator sorting the pick
+        # into multiple totes/orders knows the split, not just the combined total.
+        deliveries = frappe.get_all("Stock Allocation", filters={"name": ["in", [r.stock_allocation for r in doc.stock_allocations]]}, fields=["name", "outbound_delivery"])
+        delivery_by_allocation = {r.name: r.outbound_delivery for r in deliveries}
+        numbers = {r.name: r.outbound_delivery_number for r in frappe.get_all("Outbound Delivery", filters={"name": ["in", list(delivery_by_allocation.values())]}, fields=["name", "outbound_delivery_number"])}
+        for row in result["stock_allocations"]:
+            delivery = delivery_by_allocation.get(row["stock_allocation"])
+            row["outbound_delivery"] = delivery
+            row["outbound_delivery_number"] = numbers.get(delivery)
+    return result
 
 @frappe.whitelist()
 def my_tasks():
@@ -32,7 +44,7 @@ def list_exception_codes(task_type=None):
         codes = frappe.get_all("Allowed Task Type", filters={"task_type": task_type}, pluck="parent")
         if not codes: return []
         filters["name"] = ["in", codes]
-    return frappe.get_all("WMS Exception Code", filters=filters, fields=["name", "exception_name", "category", "requires_supervisor", "requires_comment"])
+    return frappe.get_all("WMS Exception Code", filters=filters, fields=["name", "exception_name", "category", "requires_supervisor", "requires_comment", "allows_quantity_change"])
 
 @frappe.whitelist()
 def hu_overview(hu_number):
