@@ -18,8 +18,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key)
 
 @frappe.whitelist()
-def raise_exception(task_name, exception_code, remarks=None):
-    return _raise_exception(task_name, exception_code, remarks)
+def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
+    return _raise_exception(task_name, exception_code, remarks, revised_quantity)
 
 @frappe.whitelist()
 def reverse_task(task_name, reason=None):

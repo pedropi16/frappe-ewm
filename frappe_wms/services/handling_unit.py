@@ -110,6 +110,23 @@ def recompute_measurements(hu_name):
         {"net_weight": net_weight, "gross_weight": gross_weight, "volume": volume, "stock_status": stock_status},
         update_modified=False)
 
+def full_hu_quantity(item, level_name=None):
+    # How much of an item makes one "full" Handling Unit at a given packaging level (e.g. one
+    # Case, one Pallet). Prefers the multi-level Packaging Spec; falls back to WMS Product's
+    # simple global full_hu_quantity field when no spec is configured for the item.
+    levels = frappe.get_all("Packaging Spec Level", filters={"parent": item, "parenttype": "Packaging Spec"},
+        fields=["level_name", "quantity_per_level"], order_by="idx asc") if frappe.db.exists("Packaging Spec", {"item": item, "active": 1}) else []
+    if levels:
+        cumulative = 1
+        by_level = {}
+        for row in levels:
+            cumulative *= flt(row.quantity_per_level)
+            by_level[row.level_name] = cumulative
+        if level_name:
+            return by_level.get(level_name)
+        return cumulative
+    return flt(frappe.db.get_value("WMS Product", {"item": item}, "full_hu_quantity")) or None
+
 def nest_handling_unit(hu_name, parent_hu):
     require_role(*HU_ROLES)
     if hu_name == parent_hu: frappe.throw(_("A Handling Unit cannot nest inside itself"))

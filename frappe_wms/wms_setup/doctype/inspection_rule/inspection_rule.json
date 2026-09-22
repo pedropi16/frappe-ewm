@@ -1,0 +1,97 @@
+{
+  "name": "Inspection Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "item",
+    "item_group",
+    "sampling_percentage",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "in_list_view": 1,
+      "description": "Optional - leave blank for a default rule that applies to every warehouse."
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "item_group",
+      "label": "Item Group",
+      "fieldtype": "Link",
+      "options": "Item Group"
+    },
+    {
+      "fieldname": "sampling_percentage",
+      "label": "Sampling Percentage",
+      "fieldtype": "Float",
+      "default": 100,
+      "description": "Reserved for future partial-sampling support - the full received quantity is always inspected today."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "INSR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

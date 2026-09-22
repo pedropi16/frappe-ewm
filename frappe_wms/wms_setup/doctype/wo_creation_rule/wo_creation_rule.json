@@ -1,0 +1,107 @@
+{
+  "name": "WO Creation Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "activity",
+    "item_group",
+    "stock_type",
+    "maximum_tasks",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "item_group",
+      "label": "Item Group",
+      "fieldtype": "Link",
+      "options": "Item Group",
+      "description": "Optional - leave blank to match every item group."
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "description": "Optional - leave blank to match every stock type."
+    },
+    {
+      "fieldname": "maximum_tasks",
+      "label": "Maximum Tasks per Warehouse Order",
+      "fieldtype": "Int",
+      "description": "Once an open Warehouse Order matching this rule reaches this many tasks, further tasks spill into a new Warehouse Order instead of joining it. Leave blank for no limit.",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "WOCR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

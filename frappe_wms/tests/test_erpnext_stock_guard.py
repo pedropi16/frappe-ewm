@@ -83,10 +83,9 @@ class TestErpnextStockGuard(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             guard_validate(doc)
 
-    def test_blocks_work_order_doc_level_warehouse(self):
-        # Defense-in-depth: Work Order doesn't post stock directly (the Stock Entries it
-        # spawns are already caught by the Stock Entry entry above), but the doc-level
-        # warehouse fields are guarded too in case something posts against them directly.
+    def test_allows_work_order_doc_level_warehouse(self):
+        # Work Order itself is deliberately not guarded (P2 production supply legitimately
+        # plans a WMS-managed warehouse as a Work Order's source/wip/fg warehouse) - only the
+        # Stock Entries it spawns are guarded, via the Stock Entry entry above.
         doc = self._fake_doc("Work Order", fg_warehouse=self.wh.erpnext_warehouse, wip_warehouse=None, source_warehouse=None, items=[])
-        with self.assertRaises(frappe.ValidationError):
-            guard_validate(doc)
+        guard_validate(doc)  # should not raise

@@ -4,8 +4,10 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
 from frappe_wms.services.bin_rules import validate_destination_bin
-from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence
+from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks
+from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
+from frappe_wms.services import erpnext_sync
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -176,7 +178,7 @@ def list_my_tasks(user=None):
             or (not t.assigned_resource and (not t.queue or t.queue == resource.current_queue))][:100]
     return {"resource": resource, "tasks": tasks}
 
-def raise_exception(task_name, exception_code, remarks=None):
+def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
     require_role("WMS Operator", "WMS Supervisor")
     code = frappe.get_cached_doc("WMS Exception Code", exception_code)
     if not code.active: frappe.throw(_("Exception code {0} is not active").format(exception_code))
@@ -185,9 +187,33 @@ def raise_exception(task_name, exception_code, remarks=None):
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
     task = frappe.get_doc("Warehouse Task", task_name)
     if task.docstatus == 1: frappe.throw(_("Task is already confirmed"))
-    task.db_set({"status": "Exception", "exception_code": exception_code, "blocking_reason": remarks}, update_modified=True)
-    sync_warehouse_order(task.warehouse_order)
-    return {"task": task.name, "status": "Exception"}
+    result = None
+    if code.allows_quantity_change and revised_quantity is not None:
+        # Pick denial: less stock was found at the bin than planned. Whatever was already
+        # confirmed was already transferred, so closing the task out at the revised (lower)
+        # planned_quantity finishes it instead of leaving it stuck waiting on stock that
+        # isn't there.
+        revised_quantity = flt(revised_quantity)
+        already_confirmed = flt(task.confirmed_quantity)
+        if revised_quantity < already_confirmed: frappe.throw(_("Revised quantity cannot be less than what is already confirmed"))
+        if revised_quantity > flt(task.planned_quantity): frappe.throw(_("Revised quantity cannot exceed the planned quantity"))
+        task.db_set("planned_quantity", revised_quantity, update_modified=True)
+        if round(already_confirmed, 6) >= round(revised_quantity, 6):
+            task.db_set({"status": "Confirmed", "docstatus": 1}, update_modified=True)
+            advance_to_next_step(task)
+            _update_request(task.warehouse_request)
+            _move_hu_if_complete(task)
+            sync_warehouse_order(task.warehouse_order)
+            released_tasks = release_next_in_sequence(task.warehouse_order) + _release_predecessor_gated_tasks(task.name)
+            result = {"task": task.name, "status": "Confirmed", "released_tasks": released_tasks}
+    if result is None:
+        task.db_set({"status": "Exception", "exception_code": exception_code, "blocking_reason": remarks}, update_modified=True)
+        sync_warehouse_order(task.warehouse_order)
+        result = {"task": task.name, "status": task.status}
+    if code.follow_up_action == "Create Follow-up Task" and task.task_type == "Pick":
+        from frappe_wms.services.replenishment import create_order_related_replenishment
+        create_order_related_replenishment(task)
+    return result
 
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None):
     require_role("WMS Operator", "WMS Supervisor")
@@ -212,6 +238,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     updates = {"confirmed_quantity": new_confirmed, "status": status, "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "confirmation_device": device, "idempotency_key": key, "destination_hu": resolved_destination_hu}
     if fully_confirmed: updates["docstatus"] = 1
     task.db_set(updates, update_modified=True)
+    if fully_confirmed: advance_to_next_step(task)
     _update_request(task.warehouse_request)
     _update_allocations(task, qty)
     if fully_confirmed: _move_hu_if_complete(task, destination_hu)
@@ -219,7 +246,24 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
+    if fully_confirmed: released_tasks += _release_predecessor_gated_tasks(task.name)
     return {"task": task.name, "status": status, "quantity": qty, "released_tasks": released_tasks}
+
+def _release_predecessor_gated_tasks(task_name):
+    # A second, independent hold: unlike release_next_in_sequence (same Warehouse Order only),
+    # this can release a task sitting in a completely different Warehouse Order/queue - the
+    # normal case for a chained Storage Process step, whose next step is usually a different
+    # activity and therefore a different queue entirely.
+    blocked = frappe.get_all("Warehouse Task", filters={"predecessor_task": task_name, "status": "On Hold", "docstatus": ["<", 2]},
+        fields=["name", "warehouse_order", "sequence"])
+    released = []
+    for row in blocked:
+        if _sequence_gate_blocks(row): continue
+        resource = frappe.db.get_value("Warehouse Order", row.warehouse_order, "assigned_resource") if row.warehouse_order else None
+        new_status = "Assigned" if resource else "Open"
+        frappe.db.set_value("Warehouse Task", row.name, {"status": new_status, "blocking_reason": None}, update_modified=True)
+        released.append(row.name)
+    return released
 
 def _update_allocations(task, qty):
     rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation, allocated_quantity=qty)] if task.stock_allocation else [])
@@ -259,6 +303,10 @@ def _update_request(name):
     totals = frappe.db.sql("select coalesce(sum(planned_quantity),0), coalesce(sum(confirmed_quantity),0), count(*), sum(status='Confirmed') from `tabWarehouse Task` where warehouse_request=%s and docstatus<2", name)[0]
     status = "Completed" if totals[2] and totals[2] == totals[3] else "In Process"
     frappe.db.set_value("Warehouse Request", name, {"created_quantity": totals[0], "confirmed_quantity": totals[1], "status": status})
+    if status == "Completed":
+        request = frappe.get_doc("Warehouse Request", name)
+        if request.reference_doctype == "Work Order":
+            erpnext_sync.sync_work_order_material_transfer(request)
 
 def _move_hu_if_complete(task, destination_hu=None):
     hu = destination_hu or task.destination_hu or task.source_hu

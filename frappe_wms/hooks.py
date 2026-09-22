@@ -80,7 +80,10 @@ doc_events = {
     "Purchase Invoice": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Subcontracting Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Subcontracting Order": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
-    "Work Order": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Work Order": {
+        "validate": "frappe_wms.events.erpnext_stock_guard.validate",
+        "on_submit": "frappe_wms.events.work_order.on_submit",
+    },
     "Job Card": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
 }
 

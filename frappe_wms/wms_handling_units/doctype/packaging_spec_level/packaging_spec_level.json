@@ -1,0 +1,52 @@
+{
+  "name": "Packaging Spec Level",
+  "module": "WMS Handling Units",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "level_name",
+    "quantity_per_level",
+    "hu_type",
+    "packaging_material"
+  ],
+  "fields": [
+    {
+      "fieldname": "level_name",
+      "label": "Level Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "e.g. Each, Case, Pallet - ordered from the smallest unit up."
+    },
+    {
+      "fieldname": "quantity_per_level",
+      "label": "Quantity of Prior Level",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "How many of the previous (smaller) level make one of this level."
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "Handling Unit Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "packaging_material",
+      "label": "Packaging Material",
+      "fieldtype": "Link",
+      "options": "Packaging Material",
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

@@ -25,12 +25,19 @@ def after_install():
         ("ROUTE_ISSUE","Route Not Deliverable","Route",1,1,["Load","Stage"]),
         ("SYSTEM_ERROR","System or Scanner Error","System",1,1,all_task_types),
     ]
+    # Pick denial: OOS lets the confirming operator close a Pick task at whatever quantity
+    # was actually found, and triggers order-related replenishment for the shortfall.
+    quantity_change_flags = {"OOS": (1, "Create Follow-up Task")}
     for code,name,category,requires_supervisor,requires_comment,task_types in exceptions:
+        allows_quantity_change, follow_up_action = quantity_change_flags.get(code, (0, ""))
         _insert("WMS Exception Code",{
             "exception_code":code,"exception_name":name,"category":category,
             "requires_supervisor":requires_supervisor,"requires_comment":requires_comment,"active":1,
+            "allows_quantity_change":allows_quantity_change,"follow_up_action":follow_up_action,
             "allowed_task_types":[{"task_type":t} for t in task_types],
         })
+    if frappe.db.exists("WMS Exception Code", "OOS"):
+        frappe.db.set_value("WMS Exception Code", "OOS", {"allows_quantity_change": 1, "follow_up_action": "Create Follow-up Task"})
 
     for range_for, prefix in [("Handling Unit", "HU-"), ("WMS Shipment", "SHIP-")]:
         if frappe.db.exists("WMS Number Range", {"range_for": range_for, "warehouse": ["in", ["", None]], "hu_type": ["in", ["", None]]}):

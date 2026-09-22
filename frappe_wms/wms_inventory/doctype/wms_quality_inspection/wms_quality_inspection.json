@@ -25,7 +25,9 @@
     "remarks",
     "inspector",
     "inspection_date",
-    "completed_at"
+    "completed_at",
+    "goods_receipt",
+    "erpnext_quality_inspection"
   ],
   "fields": [
     {
@@ -152,6 +154,21 @@
       "fieldname": "completed_at",
       "label": "Completed At",
       "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "goods_receipt",
+      "label": "Goods Receipt",
+      "fieldtype": "Link",
+      "options": "Goods Receipt",
+      "read_only": 1,
+      "description": "Set when this inspection was auto-created from an Inspection Rule matching a Goods Receipt row."
+    },
+    {
+      "fieldname": "erpnext_quality_inspection",
+      "label": "ERPNext Quality Inspection",
+      "fieldtype": "Link",
+      "options": "Quality Inspection",
       "read_only": 1
     }
   ],

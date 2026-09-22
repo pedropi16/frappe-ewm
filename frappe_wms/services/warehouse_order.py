@@ -29,7 +29,30 @@ def _resource_for_queue(queue):
     ))
     return min(resources, key=lambda r: counts.get(r, 0))
 
-def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priority="Normal", wave=None, reference_doctype=None, reference_name=None):
+def _matching_wo_creation_rule(warehouse, activity, item_group=None, stock_type=None):
+    for rule in frappe.get_all("WO Creation Rule", filters={"warehouse": warehouse, "activity": activity, "active": 1},
+            fields=["name", "item_group", "stock_type", "maximum_tasks"], order_by="priority asc"):
+        if rule.item_group and rule.item_group != item_group: continue
+        if rule.stock_type and rule.stock_type != stock_type: continue
+        return rule
+    return None
+
+def _batch_key_with_room(queue, batch_key, maximum_tasks):
+    # A WO Creation Rule caps how many tasks one Warehouse Order can hold. batch_key alone
+    # normally guarantees reuse of the same WO; once a rule caps it, later tasks spill into
+    # a fresh WO under a derived batch_key instead of piling onto a full one.
+    suffix = 0
+    while True:
+        candidate = batch_key if suffix == 0 else f"{batch_key}#{suffix}"
+        existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": candidate, "status": ["in", OPEN_WO_STATUSES]}, ["task_count"], as_dict=True)
+        if not existing or (existing.task_count or 0) < maximum_tasks:
+            return candidate
+        suffix += 1
+
+def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priority="Normal", wave=None, reference_doctype=None, reference_name=None, item_group=None, stock_type=None):
+    rule = _matching_wo_creation_rule(warehouse, activity, item_group, stock_type)
+    if rule and rule.maximum_tasks:
+        batch_key = _batch_key_with_room(queue, batch_key, rule.maximum_tasks)
     existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": batch_key, "status": ["in", OPEN_WO_STATUSES]}, "name")
     if existing: return existing
     resource = _resource_for_queue(queue) if queue else None
@@ -53,10 +76,12 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
             if storage_type: break
     queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type)
     if not queue: return
+    item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     wo_name = get_or_create_warehouse_order(
         task_doc.warehouse, task_doc.task_type, queue, batch_key,
         priority=task_doc.priority or "Normal", wave=task_doc.get("wave"),
         reference_doctype=reference_doctype, reference_name=reference_name,
+        item_group=item_group, stock_type=task_doc.get("stock_type_from"),
     )
     wo = frappe.get_cached_doc("Warehouse Order", wo_name)
     task_doc.warehouse_order = wo_name
@@ -82,6 +107,18 @@ def _gate_on_sequence(task_doc, wo_name, arrival_index):
     if blocker:
         task_doc.status = "On Hold"
         task_doc.blocking_reason = _("Waiting on {0} ({1}) in this Warehouse Order").format(blocker.name, blocker.task_type)
+
+def _sequence_gate_blocks(task_row):
+    # Same check _gate_on_sequence applies at creation time: is there still an earlier,
+    # unconfirmed sibling in this task's own Warehouse Order? Used before releasing a
+    # predecessor-gated task so it doesn't jump its own Warehouse Order's queue.
+    if not task_row.get("warehouse_order"): return False
+    siblings = frappe.get_all("Warehouse Task", filters={
+        "warehouse_order": task_row["warehouse_order"], "docstatus": ["<", 2],
+        "status": ["in", NON_TERMINAL_STATUSES], "name": ["!=", task_row["name"]],
+    }, fields=["sequence"])
+    seq = task_row.get("sequence") or 0
+    return any((s.sequence or 0) < seq for s in siblings)
 
 def release_next_in_sequence(wo_name):
     if not wo_name: return []

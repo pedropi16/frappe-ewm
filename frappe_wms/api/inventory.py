@@ -1,7 +1,7 @@
 import frappe
 from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts
 from frappe_wms.services.quality import complete_inspection as _complete_inspection, list_open_inspections as _list_open_inspections
-from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs
+from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs, request_direct_replenishment as _request_direct_replenishment
 from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
@@ -31,3 +31,7 @@ def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=N
 @frappe.whitelist()
 def check_replenishment_needs():
     return _check_replenishment_needs()
+
+@frappe.whitelist()
+def request_direct_replenishment(warehouse, product, storage_bin, stock_type, quantity, source_storage_type):
+    return _request_direct_replenishment(warehouse, product, storage_bin, stock_type, quantity, source_storage_type)

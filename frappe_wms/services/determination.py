@@ -10,6 +10,15 @@ def determine_storage_process(context):
         if all(not rule.get(key) or rule.get(key)==context.get(key) for key in checks): return rule.storage_process
     frappe.throw(_("No storage process determination rule matched"))
 
+def matches_inspection_rule(warehouse, item, item_group=None):
+    rules = frappe.get_all("Inspection Rule", filters={"active": 1}, fields=["name", "warehouse", "item", "item_group"], order_by="priority asc")
+    for rule in rules:
+        if rule.warehouse and rule.warehouse != warehouse: continue
+        if rule.item and rule.item != item: continue
+        if rule.item_group and rule.item_group != item_group: continue
+        return rule.name
+    return None
+
 def determine_process_type(warehouse, activity, *, item=None, item_group=None, stock_type=None, priority_level=None, default=None):
     # Every real call site today hardcodes a Warehouse Process Type literal - unlike
     # determine_storage_process (P2, opt-in, throws when nothing matches), this must never

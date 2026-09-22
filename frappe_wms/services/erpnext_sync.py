@@ -65,6 +65,11 @@ def _po_link_for_gr_row(row):
     if not row.inbound_delivery_item: return None, None
     return frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["purchase_order", "purchase_order_item"]) or (None, None)
 
+def _work_order_link_for_gr_row(row):
+    if not row.inbound_delivery_item: return None
+    source_type, source_number = frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["source_document_type", "source_document_number"]) or (None, None)
+    return source_number if source_type == "Work Order" else None
+
 def sync_goods_receipt(doc):
     if doc.get("erpnext_stock_entry") or doc.get("erpnext_purchase_receipt"): return
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
@@ -75,8 +80,41 @@ def sync_goods_receipt(doc):
         frappe.throw(_("Goods Receipt {0} mixes Purchase-Order-linked and standalone lines; post them as separate receipts").format(doc.name))
     if linked:
         _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links)
+        return
+    # Production supply, FG receipt: a receipt whose Inbound Delivery Item rows were all
+    # created from create_fg_receipt_from_work_order (source_document_type "Work Order")
+    # mirrors to a Stock Entry carrying that Work Order's link, instead of an unlinked
+    # standalone receipt (see _sync_goods_receipt_to_manufacture_stock_entry for why it's
+    # still a Material Receipt rather than a "Manufacture" purpose entry).
+    work_orders = [_work_order_link_for_gr_row(row) for row in doc.items]
+    linked_wo = [w for w in work_orders if w]
+    if linked_wo and len(linked_wo) != len(doc.items):
+        frappe.throw(_("Goods Receipt {0} mixes Work-Order-sourced and standalone lines; post them as separate receipts").format(doc.name))
+    if linked_wo:
+        if len(set(linked_wo)) != 1:
+            frappe.throw(_("Goods Receipt {0} references more than one Work Order; post them separately").format(doc.name))
+        _sync_goods_receipt_to_manufacture_stock_entry(doc, erpnext_warehouse, linked_wo[0])
     else:
         _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse)
+
+def _sync_goods_receipt_to_manufacture_stock_entry(doc, erpnext_warehouse, work_order_name):
+    # ERPNext's "Manufacture" purpose is backflush-oriented - it hard-requires at least one
+    # raw-material consumption row alongside the FG row (validate_raw_materials_exists()),
+    # which this receipt-only flow doesn't have (backflushing is explicitly out of scope here,
+    # see frappe_wms.events.work_order). "Material Receipt" is used instead, keeping the
+    # work_order link for traceability without claiming a backflush that didn't happen.
+    # ERPNext clears/ignores the work_order field on a non-manufacturing purpose (confirmed
+    # empirically: it's silently dropped on save for "Material Receipt"), so the Work Order
+    # reference lives in remarks here instead - the WMS-side link (Goods Receipt.
+    # erpnext_stock_entry, Inbound Delivery Item.source_document_number) is authoritative.
+    company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
+    se = _make_stock_entry(stock_entry_type="Material Receipt", company=company, remarks=f"frappe_wms Goods Receipt {doc.name} (Work Order {work_order_name})")
+    for row in doc.items:
+        _append_row(se, row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
+    se.flags.wms_managed_posting = True
+    se.insert(ignore_permissions=True)
+    se.submit()
+    doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
 def _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse):
     company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
@@ -125,6 +163,35 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
     pr.insert(ignore_permissions=True)
     pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
+
+# --- Warehouse Request (Work Order material staging) -> Stock Entry ---
+
+def sync_work_order_material_transfer(request):
+    # Fires once a Work-Order-referencing staging Warehouse Request (frappe_wms.events.
+    # work_order.on_submit) reaches Completed - mirrors the physical staging move as an
+    # ERPNext Material Transfer for Manufacture against the same Work Order, the same way
+    # every other WMS transaction mirrors to its ERPNext equivalent.
+    if request.get("reference_doctype") != "Work Order" or request.get("erpnext_stock_entry"): return None
+    erpnext_warehouse = _erpnext_warehouse(request.warehouse)
+    if not erpnext_warehouse: return None
+    wo = frappe.db.get_value("Work Order", request.reference_name, ["wip_warehouse", "company"], as_dict=True)
+    if not wo or not wo.wip_warehouse: return None
+    se = _make_stock_entry(stock_entry_type="Material Transfer for Manufacture", company=wo.company, remarks=f"frappe_wms Warehouse Request {request.name}")
+    se.work_order = request.reference_name
+    # Both legs (s_warehouse and t_warehouse) sit on this one row - unlike a Goods
+    # Receipt/Issue's separate incoming/outgoing rows, ERPNext derives this transfer's
+    # valuation from the source warehouse's existing stock automatically, so no manual
+    # basic_rate/allow_zero_valuation_rate override is needed here.
+    se.append("items", {
+        "item_code": request.product, "qty": flt(request.confirmed_quantity), "uom": request.stock_uom, "stock_uom": request.stock_uom,
+        "conversion_factor": 1, "s_warehouse": erpnext_warehouse, "t_warehouse": wo.wip_warehouse,
+        "wms_stock_type": request.stock_type, "to_wms_stock_type": request.stock_type, "use_serial_batch_fields": 1,
+    })
+    se.flags.wms_managed_posting = True
+    se.insert(ignore_permissions=True)
+    se.submit()
+    frappe.db.set_value("Warehouse Request", request.name, "erpnext_stock_entry", se.name)
+    return se.name
 
 def reverse_goods_receipt(doc):
     if doc.get("erpnext_purchase_receipt"):

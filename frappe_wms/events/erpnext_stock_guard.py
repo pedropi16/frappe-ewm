@@ -14,10 +14,12 @@ _WAREHOUSE_FIELDS = {
     "Purchase Invoice": {"fields": ("warehouse", "rejected_warehouse"), "level": "item", "condition_field": "update_stock", "alt": "a Goods Receipt in the WMS app"},
     "Subcontracting Receipt": {"fields": ("warehouse",), "level": "item", "alt": "a Goods Receipt in the WMS app"},
     "Subcontracting Order": {"fields": ("warehouse",), "level": "item", "alt": "a Goods Receipt in the WMS app"},
-    # Work Order/Job Card don't post stock directly - the Stock Entries they spawn are
-    # already caught above via s_warehouse/t_warehouse. These are defense-in-depth only.
-    "Work Order": {"fields": ("source_warehouse", "wip_warehouse", "fg_warehouse"), "level": "doc", "alt": "a Goods Receipt / Goods Issue in the WMS app"},
-    "Job Card": {"fields": ("wip_warehouse",), "level": "doc", "alt": "a Goods Receipt / Goods Issue in the WMS app"},
+    # Work Order/Job Card themselves are deliberately NOT guarded (P2: production supply
+    # legitimately plans a WMS-managed warehouse as a Work Order's source/wip/fg warehouse -
+    # that's the whole point of frappe_wms.events.work_order.on_submit staging material for
+    # it). Neither doctype posts stock directly anyway - the Stock Entries they spawn
+    # (Material Transfer for Manufacture, Manufacture) are still fully guarded above via
+    # s_warehouse/t_warehouse, same as every other stock posting.
 }
 
 

@@ -41,7 +41,8 @@
     "exception_code",
     "idempotency_key",
     "blocking_reason",
-    "reversal_of"
+    "reversal_of",
+    "predecessor_task"
   ],
   "fields": [
     {
@@ -273,6 +274,15 @@
       "read_only": 1,
       "unique": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "predecessor_task",
+      "label": "Predecessor Task",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "read_only": 1,
+      "in_standard_filter": 1,
+      "description": "Set for a chained Storage Process step - this task starts On Hold until the predecessor is fully confirmed, independent of any Warehouse Order sequencing."
     }
   ],
   "autoname": "WT-.##########",

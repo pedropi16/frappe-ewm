@@ -3,7 +3,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, getdate, now_datetime
 from frappe_wms.services.stock import post_entries
-from frappe_wms.services.determination import determine_process_type
+from frappe_wms.services.determination import determine_process_type, determine_storage_process, matches_inspection_rule
+from frappe_wms.services.storage_process import first_step
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
 from frappe_wms.utils import require_role
@@ -13,6 +14,7 @@ OPEN_INBOUND_STATUSES = ("Draft", "Expected", "Arrived", "Receiving", "Partially
 def post_goods_receipt(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype": doc.doctype, "reference_name": doc.name}): return
     entries=[]
+    inspection_rows=[]
     for row in doc.items:
         if not row.handling_unit: frappe.throw(_("Row {0}: Handling Unit is required").format(row.idx))
         product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
@@ -21,12 +23,25 @@ def post_goods_receipt(doc):
                 frappe.throw(_("Row {0}: {1} requires a serial number at receipt").format(row.idx, row.item))
             if product.batch_control and not row.batch_no:
                 frappe.throw(_("Row {0}: {1} requires a batch number at receipt").format(row.idx, row.item))
+        # A matching Inspection Rule routes the receipt into QUALITY instead of its normal
+        # stock type - persisted onto the row itself (not just this posting's ledger entry) so
+        # every downstream reader (putaway, ERPNext dimension mirroring) sees the same thing.
+        if matches_inspection_rule(doc.warehouse, row.item, frappe.db.get_value("Item", row.item, "item_group")):
+            row.db_set("stock_type", "QUALITY", update_modified=False)
+            inspection_rows.append(row)
         entry = {"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.receiving_bin,"stock_type":row.stock_type,"quantity":row.quantity,"stock_uom":row.stock_uom,"movement_type":"101","reference_line":row.name}
         if product and product.shelf_life_days:
             entry["shelf_life_expiry_date"] = add_days(getdate(doc.posting_datetime), product.shelf_life_days)
         entries.append(entry)
     # A receipt is an external increase, so post each row independently.
     for i, entry in enumerate(entries,1): post_entries([entry],doc.doctype,doc.name,f"GR:{doc.name}:{i}")
+    for row in inspection_rows:
+        frappe.get_doc({
+            "doctype": "WMS Quality Inspection", "warehouse": doc.warehouse, "product": row.item,
+            "batch_no": row.batch_no, "serial_no": row.serial_no, "handling_unit": row.handling_unit,
+            "storage_bin": doc.receiving_bin, "from_stock_type": "QUALITY", "quantity": row.quantity,
+            "stock_uom": row.stock_uom, "goods_receipt": doc.name,
+        }).insert(ignore_permissions=True)
     doc.db_set("status","Posted")
 
 def reverse_goods_receipt(doc):
@@ -42,9 +57,27 @@ def create_putaway_requests(receipt_name):
     receipt=frappe.get_doc("Goods Receipt",receipt_name)
     if receipt.docstatus != 1: frappe.throw(_("Goods Receipt must be submitted"))
     names=[]
+    source_storage_type = frappe.db.get_value("Storage Bin", receipt.receiving_bin, "storage_type")
     for row in receipt.items:
         process_type = determine_process_type(receipt.warehouse, "Putaway", item=row.item, stock_type=row.stock_type, default="GR_PUTAWAY")
-        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":row.quantity,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"priority":"Normal","status":"Open"})
+        # Opt-in: only receipts whose warehouse has a matching Process Determination Rule get
+        # routed through a multi-step Storage Process. No rule configured (the common case
+        # today) falls straight back to the flat single-request Putaway this always did.
+        storage_process, process_step = None, None
+        try:
+            storage_process = determine_storage_process({
+                "warehouse": receipt.warehouse, "document_type": "Inbound Delivery", "item": row.item,
+                "item_group": frappe.db.get_value("Item", row.item, "item_group"), "stock_type": row.stock_type,
+                "source_storage_type": source_storage_type,
+            })
+        except frappe.ValidationError:
+            storage_process = None
+        if storage_process:
+            step = first_step(storage_process)
+            if step:
+                process_type = step.process_type
+                process_step = step.step_code
+        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":row.quantity,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 
@@ -71,6 +104,52 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr = frappe.get_doc({
         "doctype": "Goods Receipt", "inbound_delivery": delivery.name, "warehouse": delivery.warehouse,
         "receiving_bin": delivery.receiving_bin, "items": items,
+    })
+    gr.insert(ignore_permissions=True)
+    gr.flags.ignore_permissions = True
+    gr.submit()
+    request_names = create_putaway_requests(gr.name)
+    batch_key = frappe.generate_hash(length=10)
+    task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
+    return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names}
+
+def _production_supplier():
+    # Inbound Delivery's supplier field is mandatory (it's normally an external-receiving
+    # document), but an FG receipt from a Work Order has no real supplier - use a fixed
+    # placeholder Supplier record for this internal case rather than weakening the field for
+    # every genuine external receipt.
+    name = "WMS Production (Internal)"
+    if not frappe.db.exists("Supplier", name):
+        frappe.get_doc({"doctype": "Supplier", "supplier_name": name, "supplier_type": "Company"}).insert(ignore_permissions=True)
+    return name
+
+def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, handling_unit, hu_type=None,
+        batch_no=None, serial_no=None, stock_type="AVAILABLE"):
+    # Production supply, FG receipt (production -> warehouse): a normal Goods Receipt/putaway
+    # flow, just sourced from a Work Order rather than a Purchase Order - reuses the same
+    # generic source_document_type/source_document_number fields Inbound Delivery Item
+    # already carries for exactly this, instead of a parallel doctype.
+    require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
+    wo = frappe.get_doc("Work Order", work_order_name)
+    receiving_bin = frappe.db.get_value("WMS Warehouse", warehouse, "default_receiving_bin")
+    if not receiving_bin: frappe.throw(_("Warehouse {0} has no default receiving bin configured").format(warehouse))
+    stock_uom = frappe.db.get_value("WMS Product", {"item": wo.production_item}, "stock_uom") or frappe.db.get_value("Item", wo.production_item, "stock_uom")
+    handling_unit = get_or_create_handling_unit(handling_unit, hu_type, receiving_bin, warehouse)
+    ind = frappe.get_doc({
+        "doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": warehouse,
+        "company": wo.company, "supplier": _production_supplier(),
+        "receiving_bin": receiving_bin, "items": [{
+            "line_number": 1, "item": wo.production_item, "expected_quantity": quantity, "stock_uom": stock_uom,
+            "expected_stock_type": stock_type, "source_document_type": "Work Order", "source_document_number": work_order_name,
+        }],
+    })
+    ind.insert(ignore_permissions=True)
+    gr = frappe.get_doc({
+        "doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": warehouse, "receiving_bin": receiving_bin,
+        "items": [{
+            "inbound_delivery_item": ind.items[0].name, "item": wo.production_item, "quantity": quantity, "stock_uom": stock_uom,
+            "handling_unit": handling_unit, "stock_type": stock_type, "batch_no": batch_no, "serial_no": serial_no,
+        }],
     })
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True

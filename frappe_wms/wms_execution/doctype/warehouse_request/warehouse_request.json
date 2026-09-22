@@ -32,7 +32,8 @@
     "requested_date",
     "status",
     "created_quantity",
-    "confirmed_quantity"
+    "confirmed_quantity",
+    "erpnext_stock_entry"
   ],
   "fields": [
     {
@@ -204,6 +205,14 @@
       "reqd": 1,
       "default": 0,
       "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_stock_entry",
+      "label": "ERPNext Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1,
+      "description": "Set once this request (e.g. Work Order material staging) has mirrored to an ERPNext Stock Entry - guards against posting it twice."
     }
   ],
   "autoname": "WR-.########",
