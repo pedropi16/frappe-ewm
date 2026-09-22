@@ -4,7 +4,9 @@
 
 frappe\_wms already has SAP EWM's backbone (ledger, bins, handling units, warehouse tasks and orders, RF app, monitor), so reaching EWM Basic parity is about 14–18 developer-weeks of hardening and rule engines rather than a rewrite. The first priority is eight defects that let WMS and ERPNext drift apart or leave configured rules unenforced; advanced features (waves, cross-docking, yard, labor, slotting, MFS) follow as optional phases.
 
-**P0 status: complete** (2026-09-22, commits `b39b73f`, `6332aeb`). All 8 defects below are fixed and verified end to end on a live Frappe v16 / ERPNext v16 bench (132 tests passing) — the "Status" line under [First sprint](#first-sprint-2-weeks-p0) previously claimed this same milestone against a commit and test file that never existed in this repo; that claim is superseded by this update. P1 (strategy engine) work starts next.
+**P0 status: complete** (2026-09-22, commits `b39b73f`, `6332aeb`). All 8 defects below are fixed and verified end to end on a live Frappe v16 / ERPNext v16 bench (132 tests passing) — the "Status" line under [First sprint](#first-sprint-2-weeks-p0) previously claimed this same milestone against a commit and test file that never existed in this repo; that claim is superseded by this update.
+
+**P1 status: complete, not yet committed** (2026-09-22). All 6 sub-items shipped and verified on the same live bench (159 tests passing, up from 132). Two design calls made along the way, detailed inline where relevant: `WMS Product` stays global-per-item with a new sibling `WMS Product Warehouse` doctype for per-warehouse overrides (matching SAP's own Product/Warehouse-Product split), and the Removal Rule "strategy class" requirement shipped as a small Python registry resolved through a new `hooks.py` extension point (`wms_removal_strategies`) rather than an OOP class hierarchy, matching this codebase's existing rule-engine style. P2 (process control) is next.
 
 ## Current state of frappe-ewm
 
@@ -103,18 +105,18 @@ The warehouse process type is chosen from a determination table keyed on documen
 
 ## SAP EWM capability map
 
-SAP EWM covers about 30 capability areas; roughly two thirds are "Basic" and the rest are licensed as "Advanced" ([LeverX](https://leverx.com/newsroom/sap-ewm-basic-vs-advanced)). The table groups them by domain; "Today" rates the current frappe\_wms code as of the P0 hardening sprint (2026-09-22): 9 areas are done, 12 partial or minimal and 9 missing.
+SAP EWM covers about 30 capability areas; roughly two thirds are "Basic" and the rest are licensed as "Advanced" ([LeverX](https://leverx.com/newsroom/sap-ewm-basic-vs-advanced)). The table groups them by domain; "Today" rates the current frappe\_wms code as of the P1 strategy-engine sprint (2026-09-22): 11 areas are done, 10 partial or minimal and 9 missing.
 
 | Area | What SAP EWM does | Tier | Today in frappe\_wms | Next step |
 | --- | --- | --- | --- | --- |
-| Warehouse structure | Warehouse number, storage types, sections, bins, bin types, activity areas, doors, staging areas, work centers | Basic | Partial: types, bins, door/staging roles; no sections, bin types, activity areas | Add Storage Section, Bin Type, Activity Area; bulk bin generator |
+| Warehouse structure | Warehouse number, storage types, sections, bins, bin types, activity areas, doors, staging areas, work centers | Basic | Partial: types, bins, door/staging roles, now with Storage Section and Bin Type; no Activity Area | Add Activity Area; bulk bin generator |
 | Quants & stock types | Stock by bin/HU with stock type, batch, owner, GR/SLED dates | Basic | Done: WMS Stock Balance + ledger, now with `shelf_life_expiry_date`; no owner dimension | Add owner dimension |
 | Handling units | Nested HUs, packaging materials, HU types, HU WTs, history, SSCC labels | Basic | Done | SSCC (GS1) number range option |
 | Packaging specification | Levels each/case/pallet, work steps | Basic | Missing (only `full_hu_quantity`) | Packaging Spec with levels; drive GR and packing |
-| Warehouse process types | Control per movement: category, source/dest, activity, storage process | Basic | Partial: exists, but determination hard-coded | Process type determination table, used by every request |
+| Warehouse process types | Control per movement: category, source/dest, activity, storage process | Basic | Done: a `Warehouse Process Type Determination Rule` engine now drives all 6 real hardcoded call sites (Putaway/Pick/Internal Move/Replenish/Deconsolidation), falling back to each site's original literal when unconfigured | Extend determination to the still-hardcoded Stage/Load choice in shipping.py |
 | Warehouse tasks & orders | Atomic moves bundled by WO creation rules (filters, limits, sort, packing profile, queue) | Basic | Partial: tasks and orders solid; WO grouping by batch key only | WO Creation Rule with limits and sort |
-| Putaway strategies | Fixed bin, empty bin, add to stock, bulk, pallet, near fixed bin, general storage; search sequence; capacity check | Basic | Partial: same 6 strategies, now enforced against whitelists/capacity/`hu_managed` (always-on) and mixing (behind a setting); still no search sequence, bulk/pallet | Storage type search sequence; bulk/pallet strategies |
-| Stock removal strategies | FIFO, stringent FIFO, LIFO, FEFO, partial qty first, by quantity, fixed bin | Basic | Partial: FIFO + FEFO, locked; still inline Python, not a configurable `Removal Rule` | Removal Rule engine with sort fields as pluggable strategy classes |
+| Putaway strategies | Fixed bin, empty bin, add to stock, bulk, pallet, near fixed bin, general storage; search sequence; capacity check | Basic | Done: 10 strategies (the original 6 plus Bulk, Pallet, Near Fixed Bin, General Storage), enforced against whitelists/capacity/`hu_managed` (always-on) and mixing (behind a setting), plus a Storage Type Search Sequence to try several storage types in order | Weight/volume-aware bulk ranking beyond HU count |
+| Stock removal strategies | FIFO, stringent FIFO, LIFO, FEFO, partial qty first, by quantity, fixed bin | Basic | Done: a `Removal Rule` engine with all 7 named strategies plus a custom sort-fields override, resolved through a `hooks.py` extension point (`wms_removal_strategies`) other apps can add to; "stringent" enforcement is sort-only, not yet a hard cross-allocation block | True stringent-FIFO validation across concurrent allocations |
 | Inbound processing | Delivery, unload, count, deconsol, QI, VAS, putaway, GR posting | Basic | Done for GR + putaway, now with real valuation and serial/batch/SLED checks; multi-step missing | Execute storage processes |
 | Outbound processing | ODO, route, pick, pack, stage, load, GI, pick denial | Basic | Done | Pick denial and short-pick follow-up |
 | Internal movements | Ad hoc moves, replenishment types, posting changes, rearrangement | Basic | Partial: ad hoc, min/target replenishment | Order-related and direct replenishment |
@@ -142,17 +144,19 @@ SAP EWM covers about 30 capability areas; roughly two thirds are "Basic" and the
 
 Keep the repo's existing names; 13 of the 17 P1 DocTypes below already exist, some under different names, so the target model mostly adds rule tables and enforcement rather than new core objects. The tables that follow use the generic `EWM` names; this mapping shows which ones are already built.
 
+**P1 update (2026-09-22):** `EWM Warehouse Item`'s "per warehouse" split shipped as a new sibling doctype (`WMS Product Warehouse`, item+warehouse, fixed bin/preferred storage type/process-indicator overrides) rather than mutating `WMS Product` itself — its fields are genuinely item-global (shelf life, batch/serial control), matching SAP's own Product-vs-Warehouse-Product split; see the P1 sprint status note below the checklist for why. `EWM Process Type Determination` shipped as a distinct new doctype (`Warehouse Process Type Determination Rule`) rather than reusing `Process Determination Rule`, which continues to serve only Storage Process determination (P2, still unwired) — the two concepts (which *Warehouse Process Type* handles a movement vs. which *Storage Process* executes it) turned out to need separate rule tables with different match keys (delivery priority, product indicator) once implemented.
+
 | Target name | Existing in frappe\_wms | Action |
 | --- | --- | --- |
-| EWM Warehouse / Storage Type / Storage Bin | WMS Warehouse / Storage Type / Storage Bin | Extend (sections, bin types, search sequence) |
-| EWM Quant | WMS Stock Balance | Extend (expiry date, owner) |
+| EWM Warehouse / Storage Type / Storage Bin | WMS Warehouse / Storage Type / Storage Bin | Extended (Storage Section, Bin Type, Storage Type Search Sequence) ✅ P1 |
+| EWM Quant | WMS Stock Balance | Extend (expiry date done ✅ P0; owner still open) |
 | EWM Stock Movement Log | WMS Stock Ledger Entry | Keep |
 | EWM Handling Unit / HU Type / Packaging Material | Handling Unit / Handling Unit Type / Packaging Material | Keep |
-| EWM Warehouse Item | WMS Product | Make its fields drive logic; make it per warehouse |
+| EWM Warehouse Item | WMS Product + new `WMS Product Warehouse` | Done ✅ P1 (see note above) |
 | EWM Warehouse Process Type | Warehouse Process Type | Keep |
-| EWM Process Type Determination | Process Determination Rule (picks a Storage Process) | Wire into every request |
-| Putaway rules | Bin Determination Rule | Add search sequence, bulk/pallet, enforcement |
-| EWM Removal Rule | none (FIFO in code) | New |
+| EWM Process Type Determination | New `Warehouse Process Type Determination Rule` (see note above) | Done ✅ P1 - wired into all 6 real hardcoded call sites |
+| Putaway rules | Bin Determination Rule | Done ✅ P1 (search sequence, Bulk/Pallet/Near Fixed Bin/General Storage, enforcement via P0's `bin_rules.py`) |
+| EWM Removal Rule | New `Removal Rule` doctype + `services/removal_rules.py` | Done ✅ P1 |
 | EWM Warehouse Request / Task / Order | Warehouse Request / Warehouse Task / Warehouse Order | Keep; add WO Creation Rule |
 | EWM Storage Process | Storage Process + Storage Process Step | Execute it |
 | EWM Wave | WMS Wave | Add templates |
@@ -263,7 +267,7 @@ Because the core engine already exists, the roadmap starts with hardening and th
 | Phase | Goal | Scope | Effort (dev-weeks) | Done when |
 | --- | --- | --- | --- | --- |
 | P0 — Harden ✅ | Stock and money always agree with ERPNext | Fix the 8 defects: PI posting to ERPNext, receipt valuation, allocation locking, enforce storage type/bin rules, batch/serial/SLED controls, alternative UoMs, guard coverage, stock-type Inventory Dimension; drift check as a report with a fix action | 2–3 | **Complete 2026-09-22** (commits `b39b73f`, `6332aeb`): drift-check tests pass, concurrency re-fetch-under-lock tests pass, 132 tests green on a live bench |
-| P1 — Strategy engine | Putaway and removal decided by configurable rules, as in SAP | Storage sections, bin types, storage type search sequence; putaway rules bulk, pallet, near fixed bin, general storage; Removal Rule engine (FIFO, LIFO, FEFO, stringent FIFO, partial qty first, by quantity, fixed bin); WMS Product per warehouse with fixed bins; process type determination on every request | 4–5 | Same receipt lands in different bins by changing only rules; FEFO pick passes SLED check |
+| P1 — Strategy engine ✅ | Putaway and removal decided by configurable rules, as in SAP | Storage sections, bin types, storage type search sequence; putaway rules bulk, pallet, near fixed bin, general storage; Removal Rule engine (FIFO, LIFO, FEFO, stringent FIFO, partial qty first, by quantity, fixed bin); WMS Product per warehouse with fixed bins; process type determination on every request | 4–5 | **Complete 2026-09-22, not yet committed to git**: same receipt lands in different bins by changing only rules (`test_bin_determination_strategies.py`); FEFO pick passes SLED check and a configured Removal Rule changes ordering (`test_removal_rules.py`); 159 tests green on a live bench |
 | P2 — Process control | Multi-step inbound and outbound | Execute Storage Processes (unload → count → QI → deconsol → VAS → putaway; pick → pack → stage → load); layout-oriented I-points; QI auto-created from inspection rules and linked to ERPNext Quality Inspection; Packaging Spec; WO Creation Rules (filters, limits, sort); pick denial; order-related and direct replenishment; production supply for Work Orders | 5–6 | A pallet goes GR → QI → deconsol → putaway as chained tasks; a Work Order is staged and receipted through WMS |
 | P3 — Inventory & control | Audit-ready counting and supervision | PI procedures (annual, ad hoc, cycle counting by ABC, low/zero stock, putaway PI, bin check), tolerance groups, recount, difference analyzer, approval; monitor alerts and mass actions; RF bin/product verification; KPI dashboard | 3–4 | Cycle counts run on schedule; differences above tolerance need approval |
 | P4 — Advanced EWM | Advanced-license features, each optional | Wave templates with cut-offs and auto release; opportunistic cross-docking; kitting; slotting and rearrangement; labor management; transport units, yard moves, dock appointments; VAS depth; 3PL billing | 12–16 | Feature-by-feature, each behind a setting |

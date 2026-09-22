@@ -3,6 +3,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, getdate, now_datetime
 from frappe_wms.services.stock import post_entries
+from frappe_wms.services.determination import determine_process_type
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
 from frappe_wms.utils import require_role
@@ -42,7 +43,8 @@ def create_putaway_requests(receipt_name):
     if receipt.docstatus != 1: frappe.throw(_("Goods Receipt must be submitted"))
     names=[]
     for row in receipt.items:
-        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":row.quantity,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":"GR_PUTAWAY","priority":"Normal","status":"Open"})
+        process_type = determine_process_type(receipt.warehouse, "Putaway", item=row.item, stock_type=row.stock_type, default="GR_PUTAWAY")
+        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":row.quantity,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 

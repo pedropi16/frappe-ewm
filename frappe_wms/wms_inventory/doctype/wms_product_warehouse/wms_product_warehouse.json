@@ -1,0 +1,100 @@
+{
+  "name": "WMS Product Warehouse",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "item",
+    "warehouse",
+    "fixed_bin",
+    "preferred_storage_type",
+    "process_type_determination_indicator",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "fixed_bin",
+      "label": "Fixed Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "This product's home bin in this warehouse - used by the Near Fixed Bin putaway strategy."
+    },
+    {
+      "fieldname": "preferred_storage_type",
+      "label": "Preferred Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "description": "Overrides WMS Product's global Preferred Storage Type for this warehouse only. Leave blank to use the global value."
+    },
+    {
+      "fieldname": "process_type_determination_indicator",
+      "label": "Process Type Determination Indicator",
+      "fieldtype": "Data",
+      "description": "Optional free-text key a Warehouse Process Type Determination Rule can match on for this product in this warehouse."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "format:{warehouse}-{item}",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

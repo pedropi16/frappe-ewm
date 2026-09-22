@@ -1,0 +1,104 @@
+{
+  "name": "Bin Type",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "bin_type_code",
+    "bin_type_name",
+    "maximum_weight",
+    "maximum_volume",
+    "length",
+    "width",
+    "height",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "bin_type_code",
+      "label": "Bin Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "bin_type_name",
+      "label": "Bin Type Name",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "maximum_weight",
+      "label": "Maximum Weight",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "maximum_volume",
+      "label": "Maximum Volume",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "length",
+      "label": "Length",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "width",
+      "label": "Width",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "height",
+      "label": "Height",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "field:bin_type_code",
+  "title_field": "bin_type_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

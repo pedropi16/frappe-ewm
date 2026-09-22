@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate, nowdate
 from frappe_wms.services.stock import _lock_balance
+from frappe_wms.services.removal_rules import apply_strategy, match_removal_rule, strategy_fefo
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
 from frappe_wms.utils import require_role
@@ -19,12 +20,17 @@ def _candidate_balances(row, warehouse):
     if row.required_batch: filters["batch_no"]=row.required_batch
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
     balances = frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc, name asc")
-    # FEFO first (soonest expiry, nulls last), FIFO among ties/unset expiries - a stable sort
-    # over the FIFO-ordered list above keeps first_receipt_date/name as the tiebreak. A product
-    # with no shelf_life_days configured always has a null expiry, so this reduces to the
-    # previous pure first_receipt_date ordering for it. get_all's order_by can't take a raw
-    # CASE expression, so this has to be a Python-side sort instead of a third order_by clause.
-    balances = sorted(balances, key=lambda b: (0, b.shelf_life_expiry_date) if b.shelf_life_expiry_date else (1, None))
+
+    item_group = frappe.db.get_value("Item", row.item, "item_group")
+    rule = match_removal_rule(warehouse, item=row.item, item_group=item_group, stock_type=row.required_stock_type)
+    if rule:
+        balances = apply_strategy(rule.strategy, balances, sort_fields=rule.sort_fields, fixed_bin=rule.fixed_bin)
+    else:
+        # No configured Removal Rule for this warehouse/item - preserve the exact FEFO-then-FIFO
+        # default every warehouse had before Removal Rules existed (soonest expiry first, nulls
+        # last, FIFO among ties/unset expiries).
+        balances = strategy_fefo(balances, {})
+
     min_remaining = frappe.db.get_value("WMS Product", row.item, "minimum_remaining_shelf_life")
     if min_remaining:
         cutoff = add_days(nowdate(), min_remaining)

@@ -95,6 +95,18 @@ scheduler_events = {
     ],
 }
 
+# Removal Rule strategy registry - other apps can add their own entries to this same hook
+# name in their own hooks.py; frappe.get_hooks() merges every installed app's dict together.
+wms_removal_strategies = {
+    "FIFO": "frappe_wms.services.removal_rules.strategy_fifo",
+    "LIFO": "frappe_wms.services.removal_rules.strategy_lifo",
+    "FEFO": "frappe_wms.services.removal_rules.strategy_fefo",
+    "Stringent FIFO": "frappe_wms.services.removal_rules.strategy_stringent_fifo",
+    "Partial Quantity First": "frappe_wms.services.removal_rules.strategy_partial_quantity_first",
+    "By Quantity": "frappe_wms.services.removal_rules.strategy_by_quantity",
+    "Fixed Bin": "frappe_wms.services.removal_rules.strategy_fixed_bin",
+}
+
 permission_query_conditions = {
     "WMS Stock Ledger Entry": "frappe_wms.permissions.ledger_query",
     "Warehouse Task": "frappe_wms.permissions.task_query",

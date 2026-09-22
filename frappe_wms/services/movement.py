@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt
-from frappe_wms.services.determination import determine_destination_bin
+from frappe_wms.services.determination import determine_destination_bin, determine_process_type
 from frappe_wms.services.warehouse_order import attach_task
 from frappe_wms.utils import require_role
 
@@ -36,7 +36,8 @@ def close_movement(hu_name, device=None):
         # The HU itself is what's making this hop - it is its own destination HU.
         "destination_hu": hu_name,
     })
-    process_type = frappe.get_cached_doc("Warehouse Process Type", "INTERNAL_MOVE")
+    process_type_name = determine_process_type(hu.warehouse, "Internal Move", item=first.product, stock_type=first.stock_type, default="INTERNAL_MOVE")
+    process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
 
     batch_key = frappe.generate_hash(length=10)
     created = []

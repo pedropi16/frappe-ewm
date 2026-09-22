@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt
+from frappe_wms.services.determination import determine_process_type
 from frappe_wms.services.warehouse_order import attach_task
 from frappe_wms.utils import require_role
 
@@ -17,7 +18,8 @@ def create_deconsolidation_tasks(source_hu, lines):
     hu = frappe.get_doc("Handling Unit", source_hu)
     if not hu.current_bin:
         frappe.throw(_("Handling Unit {0} has no current bin").format(source_hu))
-    process_type = frappe.get_cached_doc("Warehouse Process Type", "DECON")
+    process_type_name = determine_process_type(hu.warehouse, "Deconsolidation", item=lines[0].get("product"), stock_type=lines[0].get("stock_type"), default="DECON")
+    process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
 
     available = {}
     for row in frappe.get_all(

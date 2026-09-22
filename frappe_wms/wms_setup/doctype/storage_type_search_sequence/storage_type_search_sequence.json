@@ -1,0 +1,92 @@
+{
+  "name": "Storage Type Search Sequence",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "direction",
+    "stock_type",
+    "storage_types",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "direction",
+      "label": "Direction",
+      "fieldtype": "Select",
+      "options": "Putaway\nRemoval",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "description": "Optional - only apply this sequence for this stock type. Leave blank to match any."
+    },
+    {
+      "fieldname": "storage_types",
+      "label": "Storage Types",
+      "fieldtype": "Table",
+      "options": "Storage Type Search Sequence Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "STSS-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}

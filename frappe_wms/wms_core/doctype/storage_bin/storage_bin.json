@@ -12,6 +12,8 @@
     "bin_name",
     "warehouse",
     "storage_type",
+    "storage_section",
+    "bin_type",
     "parent_bin",
     "bin_role",
     "aisle",
@@ -65,6 +67,20 @@
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "storage_section",
+      "label": "Storage Section",
+      "fieldtype": "Link",
+      "options": "Storage Section",
+      "description": "Sub-zone of this bin's Storage Type (e.g. fast/slow movers). Optional."
+    },
+    {
+      "fieldname": "bin_type",
+      "label": "Bin Type",
+      "fieldtype": "Link",
+      "options": "Bin Type",
+      "description": "Physical capacity class (max weight/volume/dimensions). Advisory only - actual capacity checks read this bin's own Maximum HUs/Weight/Volume fields."
     },
     {
       "fieldname": "parent_bin",

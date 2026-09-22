@@ -1,5 +1,5 @@
 {
-  "name": "Bin Determination Rule",
+  "name": "Warehouse Process Type Determination Rule",
   "module": "WMS Setup",
   "custom": 0,
   "is_submittable": 0,
@@ -14,13 +14,9 @@
     "item",
     "item_group",
     "stock_type",
-    "hu_type",
-    "source_storage_type",
-    "destination_storage_type",
-    "search_sequence",
-    "destination_section",
-    "fixed_destination_bin",
-    "strategy",
+    "priority_level",
+    "process_type_determination_indicator",
+    "process_type",
     "active"
   ],
   "fields": [
@@ -36,15 +32,16 @@
       "label": "Warehouse",
       "fieldtype": "Link",
       "options": "WMS Warehouse",
-      "reqd": 1,
-      "in_list_view": 1
+      "in_list_view": 1,
+      "description": "Optional - leave blank for a default rule that applies to every warehouse."
     },
     {
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Putaway\nPick\nInternal Move\nStage\nLoad",
-      "reqd": 1
+      "options": "Putaway\nPick\nInternal Move\nStage\nLoad\nDeconsolidation\nReplenish",
+      "reqd": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "item",
@@ -65,49 +62,24 @@
       "options": "WMS Stock Type"
     },
     {
-      "fieldname": "hu_type",
-      "label": "HU Type",
-      "fieldtype": "Link",
-      "options": "Handling Unit Type"
-    },
-    {
-      "fieldname": "source_storage_type",
-      "label": "Source Storage Type",
-      "fieldtype": "Link",
-      "options": "Storage Type"
-    },
-    {
-      "fieldname": "destination_storage_type",
-      "label": "Destination Storage Type",
-      "fieldtype": "Link",
-      "options": "Storage Type"
-    },
-    {
-      "fieldname": "search_sequence",
-      "label": "Storage Type Search Sequence",
-      "fieldtype": "Link",
-      "options": "Storage Type Search Sequence",
-      "description": "Try several storage types in order instead of one fixed destination. Ignored when Destination Storage Type is also set."
-    },
-    {
-      "fieldname": "destination_section",
-      "label": "Destination Section",
-      "fieldtype": "Link",
-      "options": "Storage Section",
-      "description": "Optional - restricts candidate bins to this Storage Section within the destination storage type."
-    },
-    {
-      "fieldname": "fixed_destination_bin",
-      "label": "Fixed Destination Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
-    },
-    {
-      "fieldname": "strategy",
-      "label": "Strategy",
+      "fieldname": "priority_level",
+      "label": "Delivery Priority",
       "fieldtype": "Select",
-      "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
-      "reqd": 1
+      "options": "\nLow\nNormal\nHigh\nUrgent"
+    },
+    {
+      "fieldname": "process_type_determination_indicator",
+      "label": "Process Type Determination Indicator",
+      "fieldtype": "Data",
+      "description": "Optional - matches WMS Product Warehouse's Process Type Determination Indicator for the product/warehouse in context."
+    },
+    {
+      "fieldname": "process_type",
+      "label": "Process Type",
+      "fieldtype": "Link",
+      "options": "Warehouse Process Type",
+      "reqd": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "active",
@@ -117,7 +89,7 @@
       "in_list_view": 1
     }
   ],
-  "autoname": "BDR-.#####",
+  "autoname": "WPTDR-.#####",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",

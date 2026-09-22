@@ -1,5 +1,6 @@
 import frappe
 from frappe.utils import flt
+from frappe_wms.services.determination import determine_process_type
 from frappe_wms.services.task import create_tasks_for_request
 
 def _pending_request_exists(rule_name):
@@ -34,11 +35,12 @@ def check_replenishment_needs():
         qty = min(needed, available)
         if qty <= 0: continue
         stock_uom = frappe.db.get_value("WMS Product", {"item": rule.product}, "stock_uom") or frappe.db.get_value("Item", rule.product, "stock_uom")
+        process_type = determine_process_type(rule.warehouse, "Replenish", item=rule.product, stock_type=rule.stock_type, default="REPLENISH")
         request = frappe.get_doc({
             "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": rule.warehouse, "product": rule.product,
             "requested_quantity": qty, "stock_uom": stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
             "destination_bin": rule.storage_bin, "stock_type": rule.stock_type, "reference_doctype": "Replenishment Rule",
-            "reference_name": rule.name, "process_type": "REPLENISH", "priority": rule.priority or "Normal", "status": "Open",
+            "reference_name": rule.name, "process_type": process_type, "priority": rule.priority or "Normal", "status": "Open",
         })
         request.insert(ignore_permissions=True)
         task = create_tasks_for_request(request.name)

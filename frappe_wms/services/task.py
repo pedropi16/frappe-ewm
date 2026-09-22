@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
-from frappe_wms.services.determination import determine_destination_bin
+from frappe_wms.services.determination import determine_destination_bin, determine_process_type
 from frappe_wms.services.bin_rules import validate_destination_bin
 from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence
 from frappe_wms.services.printing import create_print_spool
@@ -49,7 +49,8 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
     incoming_weight = flt(gross_weight_per_unit) * flt(quantity) if gross_weight_per_unit else None
     validate_destination_bin(destination_bin, item=product, stock_type=stock_type, hu_type=hu_type,
         batch_no=batch_no, destination_hu=destination_hu or source_hu, incoming_weight=incoming_weight)
-    process_type = frappe.get_cached_doc("Warehouse Process Type", "INTERNAL_MOVE")
+    process_type_name = determine_process_type(warehouse, "Internal Move", item=product, stock_type=stock_type, default="INTERNAL_MOVE")
+    process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
     task = frappe.get_doc({
         "doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": warehouse, "product": product,
         "planned_quantity": quantity, "stock_uom": stock_uom, "batch_no": batch_no, "serial_no": serial_no,
@@ -86,7 +87,6 @@ def create_pick_tasks_for_wave(delivery_names, strategy="Single Order", wave=Non
     return created
 
 def _create_pick_tasks_from_allocations(allocations, strategy, wave=None):
-    process_type = frappe.get_cached_doc("Warehouse Process Type", "OB_PICK")
     deliveries = {}
     for allocation in allocations:
         if allocation.outbound_delivery not in deliveries:
@@ -111,13 +111,15 @@ def _create_pick_tasks_from_allocations(allocations, strategy, wave=None):
     batch_key = frappe.generate_hash(length=10)
     created = []
     for group in groups:
-        created.append(_create_pick_task_for_group(group, process_type, wave, batch_key))
+        created.append(_create_pick_task_for_group(group, wave, batch_key))
     for allocation in allocations:
         frappe.db.set_value("Stock Allocation", allocation.name, "status", "Released")
     return created
 
-def _create_pick_task_for_group(allocations, process_type, wave, batch_key):
+def _create_pick_task_for_group(allocations, wave, batch_key):
     first = allocations[0]
+    process_type_name = determine_process_type(first._warehouse, "Pick", item=first.product, stock_type=first.stock_type, priority_level=first._priority, default="OB_PICK")
+    process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
     stock_uom = frappe.db.get_value("WMS Stock Balance", first.stock_balance, "stock_uom")
     total_qty = sum(flt(a.allocated_quantity) for a in allocations)
     sequence = frappe.db.get_value("Storage Bin", first.storage_bin, "sequence") or 0

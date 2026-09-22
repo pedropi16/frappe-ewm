@@ -1,0 +1,120 @@
+{
+  "name": "Removal Rule",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "priority",
+    "warehouse",
+    "item",
+    "item_group",
+    "stock_type",
+    "strategy",
+    "sort_fields",
+    "fixed_bin",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "item_group",
+      "label": "Item Group",
+      "fieldtype": "Link",
+      "options": "Item Group"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "strategy",
+      "label": "Strategy",
+      "fieldtype": "Select",
+      "options": "FIFO\nLIFO\nFEFO\nStringent FIFO\nPartial Quantity First\nBy Quantity\nFixed Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sort_fields",
+      "label": "Sort Fields",
+      "fieldtype": "Table",
+      "options": "Removal Rule Sort Field",
+      "description": "Optional - when set, overrides Strategy's default sort with a custom combination of fields (e.g. stock_type then first_receipt_date). Ignored for the Fixed Bin strategy."
+    },
+    {
+      "fieldname": "fixed_bin",
+      "label": "Fixed Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Only used when Strategy is 'Fixed Bin' - removal is restricted to this bin's stock."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "RR-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0
+    }
+  ]
+}
