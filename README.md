@@ -11,6 +11,12 @@ doctype actually controls, and where to go to change behavior. For the full
 feature list see the bottom of this file; this document is written to be read
 top to bottom by someone configuring the app for the first time.
 
+**Setting this up for the first time?** Start with
+[`SETUP.md`](SETUP.md) instead — a checklist that walks install → core
+warehouse structure → RF logon/queueing → verification, in the order you
+actually need to do it, linking back into the relevant section here for
+detail on each step.
+
 ## Status
 
 SAP EWM Basic parity (P0–P3) plus 7 of 8 Advanced-tier areas (P4) are
@@ -150,7 +156,7 @@ Company
   value came from the Route's default or was set directly), and **Goods
   Issue refuses to post unless the Handling Unit's current bin is one**
   (`services/issue.post_goods_issue`) — see
-  [Shipping/loading](#core-flows) and configuration step 11 below.
+  [Shipping/loading](#core-flows) and configuration step 16 below.
 
 ## The rule engine (how config drives behavior)
 
@@ -721,7 +727,7 @@ on a new site:
    type once bins exist below.
 3. **Storage Type** per warehouse (e.g. RECEIVING, BULK, PICK, STAGING, SHIP,
    QUALITY, DAMAGE) — decide mixing rules and whether it's HU-managed.
-   **Include at least one with `storage_role = Door`** — step 11 below can't
+   **Include at least one with `storage_role = Door`** — step 16 below can't
    configure a Route's door without a Door-role bin to point it at, and
    Goods Issue can't post without one either.
 4. **Storage Bin** per storage type — physical layout, capacity limits,
@@ -779,13 +785,26 @@ on a new site:
     to determine, which means HUs can never reach `Loaded` status, which
     means Goods Issue can never post for anything shipped through this
     warehouse — this step is not optional despite being listed near the end.
-17. **WMS Resource** (`resource_type = Printer`) / **WMS Print Determination
+17. **WMS Resource / WMS Resource Group / Warehouse Queue / Work Center** —
+    optional, but this is what makes Warehouse Orders and the RF app's
+    Auto-pull ("Get Work") actually work: without at least one active
+    **Warehouse Queue** per (warehouse, activity), tasks for that activity
+    are simply never routed through a Warehouse Order at all and stay
+    assigned/worked directly, one at a time — no Blocked/On Hold lifecycle,
+    no Auto-pull. Create one **WMS Resource** per physical device/operator
+    login slot, optionally pool them into a **WMS Resource Group** (per
+    warehouse) so a **Warehouse Queue** can point at the group rather than
+    individual resources — the group is the actual source of eligibility, so
+    reassigning who works a queue later is a one-place edit. **Work Center**
+    is a further-optional second RF logon step, only useful if you want VAS
+    actions to default a bin from it (see [Core flows](#core-flows)).
+18. **WMS Resource** (`resource_type = Printer`) / **WMS Print Determination
     Rule** — entirely optional: skip both and nothing prints, exactly like
     skipping step 15. Add one Printer Resource per physical device, then a
     rule per (warehouse, event) pointing at it, where you actually want `HU
     Created` / `Putaway Confirmed` / `Goods Issue Posted` / `Shipment
     Loaded` to queue something (see [Printing](#printing-spool)).
-18. **[P4](#advanced-ewm-p4) config, all optional**: **Wave Template**
+19. **[P4](#advanced-ewm-p4) config, all optional**: **Wave Template**
     (warehouse/route, cut-off time, auto-release) for scheduled wave
     generation; **Labor Standard** (warehouse/task type/item group, standard
     seconds per unit) for the KPI dashboard's efficiency numbers; **Billing
@@ -793,7 +812,7 @@ on a new site:
     the Monitor's Billing tab. Skip any of these and that specific P4 feature
     simply has nothing to compute from — nothing else in the app depends on
     them.
-19. **Roles** — assign the roles below to users; optionally add **User
+20. **Roles** — assign the roles below to users; optionally add **User
     Permission** rows restricting a user to specific `WMS Warehouse` values
     (see [Roles & permissions](#roles--permissions)).
 
