@@ -1,5 +1,5 @@
 app_name = "frappe_wms"
-app_title = "Frappe WMS"
+app_title = "WMS"
 app_publisher = "Pedro Pino Otero"
 app_description = "Warehouse Management and Execution System"
 app_email = ""

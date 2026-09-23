@@ -50,12 +50,16 @@ def after_install():
     from frappe_wms.setup.roles import ensure_roles
     ensure_roles()
 
-    if not frappe.db.exists("Desktop Icon", "WMS"):
-        frappe.get_doc({
-            "doctype": "Desktop Icon", "label": "WMS", "app": "frappe_wms",
-            "link_type": "Workspace Sidebar", "link_to": "WMS",
-            "icon_type": "Link", "icon": "warehouse", "bg_color": "blue", "hidden": 0,
-        }).insert(ignore_permissions=True)
+    # Deliberately not creating our own Desktop Icon here. frappe.hooks.after_app_install ->
+    # auto_generate_icons_and_sidebar() -> create_desktop_icons() always runs right after this
+    # function returns (core Frappe behavior on every app install), and it already does the
+    # right thing on its own: create_desktop_icons_from_installed_apps() makes one "App"-type
+    # icon from add_to_apps_screen (app_title, our real logo via app_logo_url), then
+    # create_desktop_icons_from_workspace() sees a Desktop Icon already named "WMS" (our
+    # Workspace's own name, matching app_title exactly) and skips creating a second one instead
+    # of colliding - so this now produces exactly one icon, not two, as long as the Workspace's
+    # name and app_title stay in sync. A second, manually-created icon here used to race this
+    # and left two "WMS" / "Frappe WMS" tiles on the desk with mismatched icons.
 
     ensure_stock_type_inventory_dimension()
 
