@@ -31,8 +31,7 @@
       "fieldtype": "Link",
       "options": "WMS Warehouse",
       "reqd": 1,
-      "in_standard_filter": 1,
-      "depends_on": 1
+      "in_standard_filter": 1
     },
     {
       "fieldname": "product",
@@ -40,8 +39,7 @@
       "fieldtype": "Link",
       "options": "Item",
       "reqd": 1,
-      "in_standard_filter": 1,
-      "depends_on": 1
+      "in_standard_filter": 1
     },
     {
       "fieldname": "batch_no",
@@ -60,8 +58,7 @@
       "label": "Handling Unit",
       "fieldtype": "Link",
       "options": "Handling Unit",
-      "in_standard_filter": 1,
-      "depends_on": 1
+      "in_standard_filter": 1
     },
     {
       "fieldname": "storage_bin",
@@ -69,8 +66,7 @@
       "fieldtype": "Link",
       "options": "Storage Bin",
       "reqd": 1,
-      "in_standard_filter": 1,
-      "depends_on": 1
+      "in_standard_filter": 1
     },
     {
       "fieldname": "stock_type",
