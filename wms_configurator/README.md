@@ -101,6 +101,28 @@ top of `tools/extract_schema.py`. If you add a new configuration doctype to
 `app/js/wizard.js`, and add its name to `APPLY_ORDER` in
 `frappe_wms/setup/import_profile.py` (keep it after anything it links to).
 
+## Production mirror
+
+`frappe_wms/www/configurator/` is a copy of this `app/` directory, served by
+the Frappe site itself at `/configurator` - same-origin with the site's own
+REST API, so the direct-push "Apply to site" feature needs no CORS setup
+when used against that same site. It differs from `app/` in exactly one
+way: `index.html` has a `<base href="/configurator/">` tag, since Frappe
+serves `/configurator` and `/configurator/` identically and plain relative
+URLs would break on the no-trailing-slash form.
+
+If you change anything under `app/`, re-copy it:
+
+```
+cp -r app/* ../frappe_wms/www/configurator/
+```
+
+then re-add the `<base>` tag to the copied `index.html` (it's stripped by a
+plain copy) and re-run `python3 tools/extract_schema.py` first if the
+doctypes changed, so both copies of `schema.json`/`apply_order.json` agree.
+Access is gated by `frappe_wms/www/configurator/index.py` to the WMS
+Administrator / System Manager roles.
+
 ## What's out of scope
 
 Transactional/instance records (Goods Receipt, Warehouse Task, Handling Unit
