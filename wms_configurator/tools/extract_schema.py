@@ -61,6 +61,19 @@ IN_SCOPE_DOCTYPES = [
     "Billing Rate",
 ]
 
+# Day-to-day (transactional) doctypes. Never edited in a profile - they're only read here so the
+# "How it fits together" map can show which configuration feeds them. Only their Link fields
+# (including links inside child tables) are recorded.
+RUNTIME_DOCTYPES = [
+    "Inbound Delivery", "Goods Receipt", "WMS Quality Inspection",
+    "Handling Unit", "WMS Product", "WMS Product Warehouse",
+    "Warehouse Request", "Warehouse Order", "Warehouse Task", "WMS Print Spool",
+    "Consolidation Group", "Kitting Order",
+    "Outbound Delivery", "Stock Allocation", "WMS Wave", "Packing Order", "VAS Order",
+    "Goods Issue", "WMS Shipment",
+    "WMS Stock Balance", "WMS Stock Ledger Entry", "WMS Physical Inventory Count",
+]
+
 # Doctypes referenced from ERPNext / frappe core, not created by the configurator.
 # Kept in field metadata (so Link inputs still know what they point at) but never
 # added to the dependency graph or the doctypes we try to create.
@@ -168,6 +181,19 @@ def topological_order(doctypes, edges):
     return ordered
 
 
+def runtime_links(name):
+    doc = load_doctype(name)
+    links = []
+    for f in doc.get("fields", []):
+        if f.get("fieldtype") == "Link" and f.get("options"):
+            links.append({"target": f["options"], "label": f.get("label") or f["fieldname"]})
+        elif f.get("fieldtype") == "Table" and f.get("options"):
+            for cf in load_doctype(f["options"]).get("fields", []):
+                if cf.get("fieldtype") == "Link" and cf.get("options"):
+                    links.append({"target": cf["options"], "label": f"{f.get('label') or f['fieldname']} → {cf.get('label') or cf['fieldname']}"})
+    return {"module": doc.get("module"), "links": links}
+
+
 def main():
     child_doctypes = set()
     doctypes = {}
@@ -187,6 +213,7 @@ def main():
         "in_scope": IN_SCOPE_DOCTYPES,
         "external_doctypes": sorted(EXTERNAL_DOCTYPES),
         "doctypes": doctypes,
+        "runtime": {n: runtime_links(n) for n in RUNTIME_DOCTYPES},
     }
     (OUT_DIR / "schema.json").write_text(json.dumps(schema, indent=1, sort_keys=False))
     (OUT_DIR / "apply_order.json").write_text(json.dumps(apply_order, indent=1))

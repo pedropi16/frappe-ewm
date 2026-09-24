@@ -2679,5 +2679,993 @@
     "type": "none"
    }
   }
+ },
+ "runtime": {
+  "Inbound Delivery": {
+   "module": "WMS Inbound",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Supplier",
+     "label": "Supplier"
+    },
+    {
+     "target": "Company",
+     "label": "Company"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Receiving Bin"
+    },
+    {
+     "target": "Item",
+     "label": "Items \u2192 Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 Stock UOM"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 UOM"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Items \u2192 Expected Stock Type"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Items \u2192 Preferred Storage Type"
+    },
+    {
+     "target": "Purchase Order",
+     "label": "Items \u2192 Purchase Order"
+    }
+   ]
+  },
+  "Goods Receipt": {
+   "module": "WMS Inbound",
+   "links": [
+    {
+     "target": "Inbound Delivery",
+     "label": "Inbound Delivery"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Receiving Bin"
+    },
+    {
+     "target": "Item",
+     "label": "Items \u2192 Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 Stock UOM"
+    },
+    {
+     "target": "Batch",
+     "label": "Items \u2192 Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Items \u2192 Serial Number"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Items \u2192 Handling Unit"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Items \u2192 Stock Type"
+    },
+    {
+     "target": "WMS Exception Code",
+     "label": "Items \u2192 Discrepancy Code"
+    },
+    {
+     "target": "Goods Receipt",
+     "label": "Reversal Document"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Stock Entry"
+    },
+    {
+     "target": "Purchase Receipt",
+     "label": "ERPNext Purchase Receipt"
+    }
+   ]
+  },
+  "WMS Quality Inspection": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Handling Unit"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Storage Bin"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "From Stock Type"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Passed To Stock Type"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Failed To Stock Type"
+    },
+    {
+     "target": "User",
+     "label": "Inspector"
+    },
+    {
+     "target": "Goods Receipt",
+     "label": "Goods Receipt"
+    },
+    {
+     "target": "Quality Inspection",
+     "label": "ERPNext Quality Inspection"
+    }
+   ]
+  },
+  "Handling Unit": {
+   "module": "WMS Handling Units",
+   "links": [
+    {
+     "target": "Handling Unit Type",
+     "label": "HU Type"
+    },
+    {
+     "target": "Packaging Material",
+     "label": "Packaging Material"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Current Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Parent HU"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Top HU"
+    },
+    {
+     "target": "Outbound Delivery",
+     "label": "Outbound Delivery"
+    },
+    {
+     "target": "WMS Shipment",
+     "label": "Shipment"
+    }
+   ]
+  },
+  "WMS Product": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "Item",
+     "label": "Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    },
+    {
+     "target": "Handling Unit Type",
+     "label": "Default HU Type"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Preferred Storage Type"
+    }
+   ]
+  },
+  "WMS Product Warehouse": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "Item",
+     "label": "Item"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Fixed Bin"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Preferred Storage Type"
+    }
+   ]
+  },
+  "Warehouse Request": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    },
+    {
+     "target": "UOM",
+     "label": "UOM"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Source Area"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Destination Area"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Source Bin"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Destination Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Source HU"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Destination HU"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type"
+    },
+    {
+     "target": "DocType",
+     "label": "Reference DocType"
+    },
+    {
+     "target": "Warehouse Process Type",
+     "label": "Process Type"
+    },
+    {
+     "target": "Storage Process",
+     "label": "Storage Process"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Stock Entry"
+    }
+   ]
+  },
+  "Warehouse Order": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Warehouse Queue",
+     "label": "Queue"
+    },
+    {
+     "target": "WMS Wave",
+     "label": "Wave"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "Assigned Resource"
+    },
+    {
+     "target": "DocType",
+     "label": "Reference Document Type"
+    }
+   ]
+  },
+  "Warehouse Task": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "Warehouse Request",
+     "label": "Warehouse Request"
+    },
+    {
+     "target": "Stock Allocation",
+     "label": "Stock Allocation"
+    },
+    {
+     "target": "Stock Allocation",
+     "label": "Stock Allocations \u2192 Stock Allocation"
+    },
+    {
+     "target": "Consolidation Group Line",
+     "label": "Consolidation Group Line"
+    },
+    {
+     "target": "WMS Wave",
+     "label": "Wave"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    },
+    {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Source Bin"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Destination Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Source HU"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Destination HU"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type From"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type To"
+    },
+    {
+     "target": "WMS Movement Type",
+     "label": "Movement Type"
+    },
+    {
+     "target": "Warehouse Order",
+     "label": "Warehouse Order"
+    },
+    {
+     "target": "Warehouse Queue",
+     "label": "Queue"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "Assigned Resource"
+    },
+    {
+     "target": "User",
+     "label": "Confirmed By"
+    },
+    {
+     "target": "WMS Exception Code",
+     "label": "Exception Code"
+    },
+    {
+     "target": "Warehouse Task",
+     "label": "Reversal Of"
+    },
+    {
+     "target": "Warehouse Task",
+     "label": "Predecessor Task"
+    }
+   ]
+  },
+  "WMS Print Spool": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "DocType",
+     "label": "Reference Document Type"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "Output Device"
+    },
+    {
+     "target": "Print Format",
+     "label": "Print Format"
+    },
+    {
+     "target": "User",
+     "label": "Requested By"
+    },
+    {
+     "target": "User",
+     "label": "Printed By"
+    }
+   ]
+  },
+  "Consolidation Group": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Staging Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Target Handling Unit"
+    },
+    {
+     "target": "DocType",
+     "label": "Lines \u2192 Reference DocType"
+    },
+    {
+     "target": "Item",
+     "label": "Lines \u2192 Product"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Lines \u2192 Stock Type"
+    },
+    {
+     "target": "UOM",
+     "label": "Lines \u2192 Stock UOM"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Lines \u2192 Final Destination Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Lines \u2192 Final Destination HU"
+    },
+    {
+     "target": "Warehouse Task",
+     "label": "Lines \u2192 Gather Task"
+    },
+    {
+     "target": "Warehouse Task",
+     "label": "Lines \u2192 Deconsolidation Task"
+    },
+    {
+     "target": "User",
+     "label": "Completed By"
+    }
+   ]
+  },
+  "Kitting Order": {
+   "module": "WMS Execution",
+   "links": [
+    {
+     "target": "Item",
+     "label": "Kit Item"
+    },
+    {
+     "target": "BOM",
+     "label": "BOM"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Work Center Bin"
+    },
+    {
+     "target": "Item",
+     "label": "Components \u2192 Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Components \u2192 Stock UOM"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Stock Entry"
+    },
+    {
+     "target": "User",
+     "label": "Completed By"
+    }
+   ]
+  },
+  "Outbound Delivery": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Customer",
+     "label": "Customer"
+    },
+    {
+     "target": "WMS Route",
+     "label": "Route"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Staging Bin"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Door"
+    },
+    {
+     "target": "Item",
+     "label": "Items \u2192 Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 Stock UOM"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 UOM"
+    },
+    {
+     "target": "Batch",
+     "label": "Items \u2192 Required Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Items \u2192 Required Serial Number"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Items \u2192 Required Stock Type"
+    },
+    {
+     "target": "Sales Order",
+     "label": "Items \u2192 Sales Order"
+    }
+   ]
+  },
+  "Stock Allocation": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "Outbound Delivery",
+     "label": "Outbound Delivery"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "WMS Stock Balance",
+     "label": "Stock Balance"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Storage Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Handling Unit"
+    },
+    {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type"
+    }
+   ]
+  },
+  "WMS Wave": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "WMS Route",
+     "label": "Route"
+    },
+    {
+     "target": "Outbound Delivery",
+     "label": "Deliveries \u2192 Outbound Delivery"
+    },
+    {
+     "target": "Customer",
+     "label": "Deliveries \u2192 Customer"
+    },
+    {
+     "target": "User",
+     "label": "Released By"
+    },
+    {
+     "target": "Wave Template",
+     "label": "Wave Template"
+    }
+   ]
+  },
+  "Packing Order": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "Outbound Delivery",
+     "label": "Outbound Delivery"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Work Center Bin"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Source HUs \u2192 Handling Unit"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Destination HUs \u2192 Handling Unit"
+    },
+    {
+     "target": "User",
+     "label": "Verified By"
+    }
+   ]
+  },
+  "VAS Order": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "Handling Unit",
+     "label": "Handling Unit"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Work Center Bin"
+    },
+    {
+     "target": "DocType",
+     "label": "Reference Document Type"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "Assigned Resource"
+    },
+    {
+     "target": "UOM",
+     "label": "Activities \u2192 UOM"
+    },
+    {
+     "target": "User",
+     "label": "Activities \u2192 Completed By"
+    },
+    {
+     "target": "User",
+     "label": "Completed By"
+    }
+   ]
+  },
+  "Goods Issue": {
+   "module": "WMS Outbound",
+   "links": [
+    {
+     "target": "Outbound Delivery",
+     "label": "Outbound Delivery"
+    },
+    {
+     "target": "WMS Shipment",
+     "label": "Shipment"
+    },
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Staging Bin"
+    },
+    {
+     "target": "Item",
+     "label": "Items \u2192 Item"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 Stock UOM"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Items \u2192 Handling Unit"
+    },
+    {
+     "target": "Batch",
+     "label": "Items \u2192 Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Items \u2192 Serial Number"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Items \u2192 Stock Type"
+    },
+    {
+     "target": "Goods Issue",
+     "label": "Reversal Document"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Stock Entry"
+    },
+    {
+     "target": "Delivery Note",
+     "label": "ERPNext Delivery Note"
+    }
+   ]
+  },
+  "WMS Shipment": {
+   "module": "WMS Shipping",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "WMS Route",
+     "label": "Route"
+    },
+    {
+     "target": "Supplier",
+     "label": "Carrier"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Staging Bin"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Door"
+    },
+    {
+     "target": "Outbound Delivery",
+     "label": "Deliveries \u2192 Outbound Delivery"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Handling Units \u2192 Handling Unit"
+    }
+   ]
+  },
+  "WMS Stock Balance": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Handling Unit"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Storage Bin"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    }
+   ]
+  },
+  "WMS Stock Ledger Entry": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Handling Unit"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Storage Bin"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Stock Type"
+    },
+    {
+     "target": "UOM",
+     "label": "Stock UOM"
+    },
+    {
+     "target": "WMS Movement Type",
+     "label": "Movement Type"
+    },
+    {
+     "target": "DocType",
+     "label": "Reference DocType"
+    },
+    {
+     "target": "Warehouse Task",
+     "label": "Warehouse Task"
+    },
+    {
+     "target": "WMS Stock Ledger Entry",
+     "label": "Reversal Of"
+    },
+    {
+     "target": "User",
+     "label": "Posting User"
+    }
+   ]
+  },
+  "WMS Physical Inventory Count": {
+   "module": "WMS Inventory",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Storage Bin"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Storage Type"
+    },
+    {
+     "target": "Item",
+     "label": "Product"
+    },
+    {
+     "target": "Item",
+     "label": "Items \u2192 Product"
+    },
+    {
+     "target": "Batch",
+     "label": "Items \u2192 Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Items \u2192 Serial Number"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Items \u2192 Handling Unit"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Items \u2192 Storage Bin"
+    },
+    {
+     "target": "WMS Stock Type",
+     "label": "Items \u2192 Stock Type"
+    },
+    {
+     "target": "UOM",
+     "label": "Items \u2192 Stock UOM"
+    },
+    {
+     "target": "Count Tolerance Group",
+     "label": "Items \u2192 Tolerance Group"
+    },
+    {
+     "target": "User",
+     "label": "Counted By"
+    },
+    {
+     "target": "User",
+     "label": "Posted By"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Gain Stock Entry"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Loss Stock Entry"
+    },
+    {
+     "target": "User",
+     "label": "Approved By"
+    }
+   ]
+  }
  }
 }

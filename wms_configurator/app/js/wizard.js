@@ -5,12 +5,13 @@ import { renderPresetPicker } from "./presets.js";
 import { renderBinGenerator } from "./binpattern.js";
 import { renderReviewStep } from "./review.js";
 import { renderMapStep } from "./diagram.js";
+import { renderRecordTable } from "./listview.js";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },
   {
     id: "map", title: "How it fits together", kind: "map",
-    help: "A map of every configuration piece and how they link. Read it left to right: structure is what physically exists, building blocks describe a task, rules decide which one applies, and execution covers who does the work and how goods ship.",
+    help: "A map of every piece and how they link, in two bands. Top: what you configure - structure (what exists), building blocks (what a task is made of), rules (how the system decides), execution (who does it, how it ships) and the ERPNext masters they point at. Bottom: the day-to-day documents that use that configuration, and the ERPNext documents they mirror.",
   },
   {
     id: "settings", title: "WMS Settings", doctypes: ["WMS Settings"],
@@ -162,21 +163,13 @@ function renderDoctypeCard(doctypeName) {
 
   if (!isEditingThis) {
     if (records.length) {
-      const table = el("table", { class: "record-table" });
-      table.appendChild(
-        el("tbody", {}, records.map((r) =>
-          el("tr", {}, [
-            el("td", {}, Schema.recordLabel(doctypeName, r)),
-            el("td", {}, r.active === 0 ? "inactive" : ""),
-            el("td", { class: "row-actions" }, [
-              el("button", { type: "button", class: "btn btn-small btn-ghost", onclick: () => { editing = { doctypeName, id: r.__id }; renderStep(activeIndex); } }, "Edit"),
-              el("button", { type: "button", class: "btn btn-small btn-ghost", onclick: () => { Store.duplicateRecord(doctypeName, r.__id); } }, "Duplicate"),
-              el("button", { type: "button", class: "btn btn-small btn-ghost btn-danger", onclick: () => { if (confirm(`Delete this ${doctypeName} record?`)) Store.removeRecord(doctypeName, r.__id); } }, "Delete"),
-            ]),
-          ])
-        ))
+      card.appendChild(
+        renderRecordTable(doctypeName, records, {
+          onEdit: (r) => { editing = { doctypeName, id: r.__id }; renderStep(activeIndex); },
+          onDuplicate: (r) => { Store.duplicateRecord(doctypeName, r.__id); },
+          onDelete: (r) => { if (confirm(`Delete this ${doctypeName} record?`)) Store.removeRecord(doctypeName, r.__id); },
+        })
       );
-      card.appendChild(table);
     } else {
       card.appendChild(el("p", { class: "hint" }, "No records yet."));
     }
