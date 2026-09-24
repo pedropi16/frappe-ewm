@@ -1,12 +1,17 @@
 import * as Schema from "./schema.js";
 import * as Store from "./store.js";
-import { renderRecordForm, el } from "./render.js";
+import { renderRecordForm, el, toast } from "./render.js";
 import { renderPresetPicker } from "./presets.js";
 import { renderBinGenerator } from "./binpattern.js";
 import { renderReviewStep } from "./review.js";
+import { renderMapStep } from "./diagram.js";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },
+  {
+    id: "map", title: "How it fits together", kind: "map",
+    help: "A map of every configuration piece and how they link. Read it left to right: structure is what physically exists, building blocks describe a task, rules decide which one applies, and execution covers who does the work and how goods ship.",
+  },
   {
     id: "settings", title: "WMS Settings", doctypes: ["WMS Settings"],
     help: "App-wide switches: whether WMS is the only path stock can move through, whether Storage Type mixing rules are enforced, and the default Handling Unit Type the RF app falls back to.",
@@ -146,6 +151,7 @@ function renderDoctypeCard(doctypeName) {
           onSave: (data) => {
             if (records[0]) Store.updateRecord(doctypeName, records[0].__id, data);
             else Store.addRecord(doctypeName, data);
+            toast(`${dt.name} saved`);
           },
           onCancel: () => {},
         })
@@ -182,9 +188,11 @@ function renderDoctypeCard(doctypeName) {
     card.appendChild(
       renderRecordForm(doctypeName, existing || {}, {
         onSave: (data) => {
-          if (editing.id) Store.updateRecord(doctypeName, editing.id, data);
+          const id = editing.id;
+          editing = null; // clear first: the store change below re-renders the step
+          if (id) Store.updateRecord(doctypeName, id, data);
           else Store.addRecord(doctypeName, data);
-          editing = null;
+          toast(`${dt.name} saved`);
         },
         onCancel: () => { editing = null; renderStep(activeIndex); },
       })
@@ -217,7 +225,16 @@ export function renderStep(index) {
   }
 
   if (step.kind === "preset") {
-    renderPresetPicker(container, () => goToStep(1));
+    renderPresetPicker(container, () => goToStep("settings"));
+    return;
+  }
+  if (step.kind === "map") {
+    renderMapStep(container, {
+      openDoctype: (name) => {
+        const i = STEPS.findIndex((st) => st.doctypes && st.doctypes.includes(name));
+        if (i >= 0) goToStep(i);
+      },
+    });
     return;
   }
   if (step.kind === "roles") {

@@ -19,24 +19,31 @@ function axisValues(axis) {
   return values;
 }
 
+const AXIS_HELP = {
+  Aisle: "First part of the bin code, e.g. aisle 1 to 3 gives 01, 02, 03.",
+  Rack: "Bay/rack within each aisle.",
+  Level: "Shelf level within each rack (1 = lowest).",
+  Position: "Slot on the level - only switch on if a shelf holds several bins.",
+};
+
 function axisRow(label, axis, onChange) {
-  const fields = ["use", "start", "end", "pad"];
-  const row = el("div", { class: "field" }, [
-    el("label", {}, label),
-    el("div", { style: "display:flex; gap:4px; align-items:center;" }, [
-      (() => {
-        const cb = el("input", { type: "checkbox" });
-        cb.checked = axis.use;
-        cb.title = "Include this axis";
-        cb.addEventListener("change", (e) => onChange({ ...axis, use: e.target.checked }));
-        return cb;
-      })(),
-      el("input", { type: "number", value: axis.start, placeholder: "from", style: "width:56px", onchange: (e) => onChange({ ...axis, start: e.target.value }) }),
-      el("input", { type: "number", value: axis.end, placeholder: "to", style: "width:56px", onchange: (e) => onChange({ ...axis, end: e.target.value }) }),
-      el("input", { type: "number", value: axis.pad, placeholder: "digits", style: "width:56px", onchange: (e) => onChange({ ...axis, pad: e.target.value }) }),
+  const mini = (text, key, help) => el("label", { class: "mini", title: help }, [
+    el("span", {}, text),
+    el("input", { type: "number", min: "0", value: axis[key], onchange: (e) => onChange({ ...axis, [key]: e.target.value }) }),
+  ]);
+  const toggle = el("span", { class: "switch" }, [
+    el("input", { type: "checkbox", checked: !!axis.use, onchange: (e) => onChange({ ...axis, use: e.target.checked }) }),
+    el("span", { class: "switch-track" }),
+  ]);
+  return el("div", { class: "axis-row" }, [
+    el("div", { class: "axis-head" }, [toggle, el("strong", {}, label)]),
+    el("p", { class: "field-help" }, AXIS_HELP[label]),
+    el("div", { class: "axis-inputs" }, [
+      mini("From", "start", "First number in the range"),
+      mini("To", "end", "Last number in the range"),
+      mini("Digits", "pad", "Zero-pad to this many digits: 2 turns 1 into 01"),
     ]),
   ]);
-  return row;
 }
 
 export function renderBinGenerator() {
@@ -58,7 +65,7 @@ export function renderBinGenerator() {
   const linkField = (label, key, target) => {
     const input = document.createElement("input");
     input.value = state[key];
-    input.placeholder = target ? `${target} code` : "";
+    input.placeholder = Store.getRecords(target).length ? "Select or type…" : "None yet - type a code";
     const listId = "dl-bin-" + key;
     input.setAttribute("list", listId);
     input.addEventListener("change", (e) => (state[key] = e.target.value));
@@ -85,11 +92,11 @@ export function renderBinGenerator() {
     ])
   );
 
-  const genGrid = el("div", { class: "bin-generator" });
-  genGrid.appendChild(axisRow("Aisle (from / to / digits)", state.aisle, (v) => { state.aisle = v; rerenderPreview(); }));
-  genGrid.appendChild(axisRow("Rack (from / to / digits)", state.rack, (v) => { state.rack = v; rerenderPreview(); }));
-  genGrid.appendChild(axisRow("Level (from / to / digits)", state.level, (v) => { state.level = v; rerenderPreview(); }));
-  genGrid.appendChild(axisRow("Position (from / to / digits)", state.position, (v) => { state.position = v; rerenderPreview(); }));
+  const genGrid = el("div", { class: "axis-grid" });
+  genGrid.appendChild(axisRow("Aisle", state.aisle, (v) => { state.aisle = v; rerenderPreview(); }));
+  genGrid.appendChild(axisRow("Rack", state.rack, (v) => { state.rack = v; rerenderPreview(); }));
+  genGrid.appendChild(axisRow("Level", state.level, (v) => { state.level = v; rerenderPreview(); }));
+  genGrid.appendChild(axisRow("Position", state.position, (v) => { state.position = v; rerenderPreview(); }));
 
   form.appendChild(
     el("div", { class: "field" }, [
@@ -107,7 +114,7 @@ export function renderBinGenerator() {
       })(),
     ])
   );
-  form.appendChild(el("div", { class: "field" }, [el("label", {}, "Maximum HUs"), el("input", { type: "number", value: state.maxHus, onchange: (e) => (state.maxHus = e.target.value) })]));
+  form.appendChild(el("div", { class: "field" }, [el("label", {}, "Maximum HUs"), el("input", { type: "number", min: "0", value: state.maxHus, onchange: (e) => (state.maxHus = e.target.value) })]));
   form.appendChild(el("div", { class: "field" }, [el("label", {}, "Maximum weight"), el("input", { type: "number", value: state.maxWeight, onchange: (e) => (state.maxWeight = e.target.value) })]));
   form.appendChild(el("div", { class: "field" }, [el("label", {}, "Maximum volume"), el("input", { type: "number", value: state.maxVolume, onchange: (e) => (state.maxVolume = e.target.value) })]));
 

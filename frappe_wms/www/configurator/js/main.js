@@ -22,7 +22,7 @@ async function main() {
     if (!file) return;
     try {
       await importProfileFromFile(file);
-      goToStep(1);
+      goToStep("settings");
     } catch (err) {
       alert(err.message);
     } finally {
@@ -41,7 +41,7 @@ async function main() {
   initWizard();
 
   const hasData = Object.values(Store.getProfile().records).some((r) => r.length);
-  if (hasData) goToStep(1);
+  if (hasData) goToStep("settings");
 }
 
 main().catch((err) => {

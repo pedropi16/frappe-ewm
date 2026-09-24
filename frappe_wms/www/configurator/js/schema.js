@@ -3,12 +3,24 @@ let _applyOrder = null;
 
 export async function loadSchema() {
   if (_schema) return _schema;
-  const [schemaRes, orderRes] = await Promise.all([
+  const [schemaRes, orderRes, helpRes] = await Promise.all([
     fetch("schema.json"),
     fetch("apply_order.json"),
+    fetch("field_help.json").catch(() => null),
   ]);
   _schema = await schemaRes.json();
   _applyOrder = await orderRes.json();
+  // field_help.json is hand-written guidance layered over the generated schema, so
+  // re-running tools/extract_schema.py never loses it. A description that already
+  // exists in the doctype JSON wins over the overlay.
+  const help = helpRes && helpRes.ok ? await helpRes.json() : {};
+  for (const [name, dt] of Object.entries(_schema.doctypes)) {
+    const h = help[name];
+    if (!h) continue;
+    if (!dt.description) dt.description = h.intro;
+    dt.intro = h.intro;
+    for (const f of dt.fields) if (!f.description && h.fields[f.fieldname]) f.description = h.fields[f.fieldname];
+  }
   return _schema;
 }
 

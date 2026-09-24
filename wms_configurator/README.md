@@ -87,6 +87,8 @@ written into an exported profile, and gone when the tab closes.
 
 ## Regenerating the schema
 
+`app/field_help.json` is hand-written guidance (per-doctype intro plus a description for every field) layered over the generated schema at load time, so re-running the extractor never loses it. When a doctype gains a field, add its description there. The **How it fits together** step draws its diagram from the schema's Link fields, so new links appear on their own.
+
 `app/schema.json` and `app/apply_order.json` are generated from the live
 doctype JSON files in `../frappe_wms`, not hand-maintained. Re-run after
 changing any in-scope doctype's fields:

@@ -1,0 +1,536 @@
+{
+ "WMS Warehouse": {
+  "intro": "A warehouse WMS manages. Wraps one ERPNext Warehouse (created automatically on save) and adds WMS-only settings. Everything else - storage types, bins, rules - hangs off a WMS Warehouse, so this is the first thing to define.",
+  "fields": {
+   "warehouse_code": "Short unique code, e.g. MAIN or DC1. It's the record's name, so other records (bins, rules) reference the warehouse by this value. Can't be changed once other records point at it.",
+   "warehouse_name": "Human-readable name shown in lists and on the RF scanner, e.g. \"Main Distribution Centre\".",
+   "company": "The ERPNext Company that owns this warehouse's stock. Stock postings mirrored into ERPNext (Stock Entries, Purchase Receipts, Delivery Notes) are booked against this company.",
+   "erpnext_warehouse": "Filled in by the system: the ERPNext Warehouse that mirrors this one. Leave blank - it's created (or matched) automatically when the warehouse is saved on the site.",
+   "default_receiving_bin": "Where goods land on arrival if no other bin is given. Pick a bin in a Receiving-role storage type. Bins don't exist yet on a new profile - create them in Storage Bins, then come back and fill this in.",
+   "default_shipping_bin": "Fallback bin for outgoing goods (a Shipping-role bin). Create the bin in Storage Bins first, then return here.",
+   "default_difference_bin": "Where count differences and unexplained stock are parked (a Difference-role bin). Optional, but exceptions like 'Create Difference Task' need somewhere to put stock.",
+   "default_stock_type": "Stock Type assigned to stock that arrives without one - normally AVAILABLE. Decides whether freshly received stock can be picked and shipped straight away.",
+   "allow_negative_stock": "Off (recommended): a posting that would take a bin/HU below zero is rejected. Turn on only for warehouses where physical stock is sometimes moved before its receipt is booked.",
+   "active": "Untick to retire the warehouse without deleting it. Inactive warehouses are ignored by rules and RF screens."
+  }
+ },
+ "Storage Type": {
+  "intro": "A zone or class of bins inside a warehouse (RECEIVING, BULK, PICK, STAGING, SHIP, QUALITY, DAMAGE...). The storage type - not the individual bin - decides the role (receiving, door, staging...), whether products may be mixed, and how capacity is checked. Bin Determination Rules choose a storage type first, then a bin inside it.",
+  "fields": {
+   "warehouse": "The WMS Warehouse this zone belongs to. Storage types are per-warehouse; the same code can exist in several warehouses.",
+   "storage_type_code": "Short code, unique within the warehouse, e.g. BULK or PICK. Combined with the warehouse it forms the record's name.",
+   "storage_type_name": "Descriptive name, e.g. \"Bulk pallet racking\".",
+   "storage_role": "What this zone is used for. Drives system behaviour: Door bins are the only ones Goods Issue will ship from and Routes can use as a door; Receiving/Staging/Door/Shipping stock is kept out of the allocatable pool. Add at least one Door-role storage type, or shipments can never be loaded.",
+   "allow_mixed_products": "Allow different products in the same bin. Only enforced when 'Enforce Storage Type Mixing Rules' is on in WMS Settings. Typically on for bulk/reserve, off for fixed pick faces.",
+   "allow_mixed_stock_types": "Allow stock of different Stock Types (e.g. AVAILABLE next to QUALITY) in the same bin. Usually off, so blocked/quality stock is never physically mixed with saleable stock.",
+   "allow_mixed_batches": "Allow more than one batch of the same product in one bin. Turn off where batch traceability or FEFO picking needs one batch per bin.",
+   "hu_managed": "On: stock is tracked per Handling Unit (pallet/tote) inside bins here - the usual choice for reserve and receiving areas. Off: stock is tracked loose per bin (typical for small-parts pick faces).",
+   "capacity_check_method": "How putaway checks whether a bin still has room: HU Count (against the bin's Maximum HUs), Weight, Volume, or None (no capacity check). The matching maximum must be filled in on the bins for this to have effect.",
+   "putaway_blocked": "Freeze the whole zone for incoming stock - no putaway will pick a bin here. Bins can be blocked individually too.",
+   "removal_blocked": "Freeze the whole zone for outgoing stock - nothing will be picked or moved out of it.",
+   "active": "Untick to retire this storage type without deleting it."
+  }
+ },
+ "Storage Section": {
+  "intro": "Optional subdivision of a storage type (e.g. an aisle group or a temperature zone) used to narrow bin determination.",
+  "fields": {
+   "storage_type": "The Storage Type this section belongs to.",
+   "section_code": "Short code, unique within the storage type, e.g. A or COLD.",
+   "section_name": "Descriptive name, optional.",
+   "active": "Untick to retire the section."
+  }
+ },
+ "Bin Type": {
+  "intro": "A physical bin template - dimensions and weight/volume limits shared by many bins (e.g. EURO-PALLET slot, SHELF-S). Optional; assign to bins to avoid retyping limits.",
+  "fields": {
+   "bin_type_code": "Short unique code, e.g. EUR-PAL or SHELF-S.",
+   "bin_type_name": "Descriptive name, optional.",
+   "maximum_weight": "Heaviest load a bin of this type can carry (kg, or your standard weight unit).",
+   "maximum_volume": "Largest volume a bin of this type holds (m³, or your standard volume unit).",
+   "length": "Inner length of the slot, in your standard length unit.",
+   "width": "Inner width of the slot, in your standard length unit.",
+   "height": "Usable height of the slot, in your standard length unit.",
+   "active": "Untick to retire the bin type."
+  }
+ },
+ "Activity Area": {
+  "intro": "A working area (e.g. 'Cold room pickers', 'Mezzanine') used to route tasks to the right people. A Warehouse Queue can be narrowed to one area; assign bins to areas to control which queue their tasks fall into.",
+  "fields": {
+   "warehouse": "The WMS Warehouse this area is in.",
+   "area_code": "Short code, unique in the warehouse, e.g. MEZZ.",
+   "area_name": "Descriptive name, optional.",
+   "active": "Untick to retire the area."
+  }
+ },
+ "Storage Bin": {
+  "intro": "A physical storage location - one shelf slot, pallet position, door or staging spot. Bins live in a Storage Type, and the type provides the role and rules; the bin adds the address, capacity limits and blocks. Use the pattern generator above to create many at once.",
+  "fields": {
+   "bin_code": "Unique code for the bin - usually the scanned/printed location label, e.g. A-01-02-1 (aisle-rack-level-position). It's the record's name and what pickers scan.",
+   "bin_name": "Optional friendlier name for special bins (e.g. \"Dock door 3\").",
+   "warehouse": "The WMS Warehouse the bin is in.",
+   "storage_type": "The zone this bin belongs to. It decides the bin's real role (Door, Receiving, Staging...), mixing rules and capacity method - so pick carefully. The storage type must belong to the same warehouse.",
+   "storage_section": "Optional: a subdivision of the storage type this bin sits in.",
+   "bin_type": "Optional: a Bin Type template with the slot's dimensions.",
+   "activity_area": "Optional: the working area the bin is in. Only needed if queues must be narrower than a whole Storage Type.",
+   "parent_bin": "Optional: a bin this one is physically nested inside (e.g. a trolley position inside a trolley bin).",
+   "bin_role": "A label for the bin's purpose (Standard, Receiving, Door...). Descriptive only - system checks such as 'must be a Door' read the Storage Type's Storage Role, not this field. Set the role on the Storage Type.",
+   "aisle": "Aisle part of the address, e.g. A. Free text; part of the bin's readable address.",
+   "rack": "Rack/bay part of the address, e.g. 01.",
+   "level": "Shelf level within the rack, e.g. 02.",
+   "position": "Position on the level, e.g. 1.",
+   "sequence": "Pick-path order. Lower numbers come first. The Bin Sequence, First Empty Bin and General Storage strategies use it to walk bins in a sensible order.",
+   "maximum_hus": "Most Handling Units the bin can hold (1 for a single-pallet position). Leave blank for no limit. Putaway skips a bin that is full.",
+   "maximum_weight": "Weight limit for the bin. Putaway skips a bin if current weight plus the incoming load would exceed it. Blank = no weight limit.",
+   "maximum_volume": "Volume limit for the bin. Blank = no volume limit.",
+   "current_hu_count": "Maintained by the system as stock moves - leave blank/zero on new bins.",
+   "current_weight": "Maintained by the system as stock moves - leave blank/zero on new bins.",
+   "putaway_blocked": "Take the bin out of use for incoming stock (e.g. damaged rack).",
+   "removal_blocked": "Stop anything being picked or moved out of this bin.",
+   "inventory_blocked": "Block the bin from cycle/physical counts, e.g. while it is being repaired.",
+   "allowed_stock_types": "Optional whitelist: only these Stock Types may be stored here. Empty = any.",
+   "allowed_hu_types": "Optional whitelist: only these Handling Unit Types may be stored here (e.g. only EUR pallets). Empty = any.",
+   "active": "Untick to retire the bin without deleting it."
+  }
+ },
+ "Work Center": {
+  "intro": "A processing station tied to a bin (packing bench, kitting table). Optional: it's a second RF logon step so value-added-service actions can default the bin from it.",
+  "fields": {
+   "warehouse": "The WMS Warehouse the station is in.",
+   "work_center_code": "Short unique code, e.g. PACK-1.",
+   "work_center_name": "Descriptive name, optional.",
+   "active": "Untick to retire the work center."
+  }
+ },
+ "WMS Stock Type": {
+  "intro": "A status layered on top of a physical location: the same pallet in the same bin can be AVAILABLE, in QUALITY inspection, BLOCKED or DAMAGED. Each stock type switches on/off whether stock can be allocated, picked, shipped or moved. A standard set (AVAILABLE, QUALITY, DAMAGED, SCRAP, ...) is seeded on install and included in the presets.",
+  "fields": {
+   "stock_type_code": "Short unique code in capitals, e.g. AVAILABLE, QUALITY, BLOCKED. Rules and bins reference it by this code.",
+   "stock_type_name": "Descriptive name shown to users.",
+   "availability_category": "Broad meaning of the status: Available (saleable), Quality (awaiting inspection), Blocked, Damaged, Scrap. Used for reporting and to group similar stock types.",
+   "available_for_allocation": "On: outbound orders may reserve this stock. Off for anything not saleable (quality, blocked, damaged).",
+   "picking_allowed": "On: pickers may take this stock to fulfil orders.",
+   "shipping_allowed": "On: this stock may be loaded and shipped. Off keeps it in the building.",
+   "movement_allowed": "On: stock of this type may be moved between bins (putaway, internal moves). Turn off to freeze it in place.",
+   "requires_release": "On: stock in this status needs an explicit release (e.g. after a quality decision) before it can move to another stock type.",
+   "requires_reason": "On: changing stock out of this status requires an exception/reason code, so write-offs and unblocks leave an audit trail.",
+   "active": "Untick to retire the stock type."
+  }
+ },
+ "WMS Movement Type": {
+  "intro": "The ledger-level classification of a stock movement (goods receipt, putaway, pick, goods issue, inventory gain/loss...). Each one says whether quantity increases, decreases or just moves. Warehouse Process Types point at a movement type to decide what gets posted. The seeded set covers standard flows.",
+  "fields": {
+   "movement_type_code": "Short unique code, e.g. GR, PUTAWAY, PICK. Referenced by process types.",
+   "movement_type_name": "Descriptive name.",
+   "movement_category": "What kind of business event this is (Receipt, Putaway, Picking, Goods Issue, Inventory Gain/Loss, Pack/Unpack, their reversals, Stock Type Change...). Used to group and report movements.",
+   "requires_source": "On: the movement must name a source bin (typical for putaway, picking, issue).",
+   "requires_destination": "On: the movement must name a destination bin (typical for receipt, putaway, transfer).",
+   "updates_hu": "On: the movement also updates the Handling Unit's location/status, not only the bin's stock.",
+   "inventory_effect": "Effect on total quantity: Increase (receipts, gains), Decrease (issues, losses), Transfer (moves stock between locations, total unchanged), No Quantity Change (status-only).",
+   "reversal_movement_type": "Optional: the movement type used to undo this one on cancellation (e.g. GR -> GR Reversal).",
+   "active": "Untick to retire the movement type."
+  }
+ },
+ "Warehouse Process Type": {
+  "intro": "Defines what one kind of task requires: which activity it is, whether it needs source/destination/HU/stock, how the operator confirms it, and which movement type it posts. Tasks are built from process types (GR_UNLOAD, GR_PUTAWAY, OB_PICK, OB_STAGE, OB_LOAD...). The seeded set usually covers an MVP.",
+  "fields": {
+   "process_type_code": "Short unique code, e.g. GR_PUTAWAY.",
+   "process_type_name": "Descriptive name.",
+   "activity": "The kind of work: Unload, Putaway, Pick, Internal Move, Deconsolidation, Consolidation, Pack, Stage, Load, Posting Change or Inventory Count. Queues, work-order rules and labor standards match on this activity.",
+   "source_required": "On: the operator must scan/confirm the bin the stock comes from.",
+   "destination_required": "On: the operator must scan/confirm the bin the stock goes to.",
+   "hu_required": "On: the task works on a whole Handling Unit, so an HU must be scanned.",
+   "stock_required": "On (default): the task moves stock, so a quantity is confirmed. Turn off for pure location moves.",
+   "confirmation_mode": "What the operator scans to confirm: Product and Quantity, the Handling Unit, Bin to Bin (whole bin contents), or Serial Number.",
+   "movement_type": "The Movement Type posted to the stock ledger when the task is confirmed.",
+   "active": "Untick to retire the process type."
+  }
+ },
+ "Bin Determination Rule": {
+  "intro": "Decides where stock goes (putaway) or where it is taken from. Rules are checked in priority order (lowest number first) and the first full match wins; a blank field means 'matches anything'. Add narrow high-priority rules for exceptions and always keep one broad fallback per (warehouse, activity) with no filters, or determination can dead-end.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first, first match wins. Use gaps (10, 20, 30) so you can slot rules in later; give the fallback the highest number.",
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "activity": "Which movement the rule answers for: Putaway, Pick, Internal Move, Stage or Load.",
+   "item": "Match only this Item. Blank = any item.",
+   "item_group": "Match only items in this Item Group. Blank = any group.",
+   "stock_type": "Match only stock in this Stock Type (e.g. QUALITY goes to the quality zone). Blank = any.",
+   "hu_type": "Match only this Handling Unit Type (e.g. pallets to bulk, totes to pick). Blank = any.",
+   "source_storage_type": "Match only when the stock comes from this Storage Type (e.g. from RECEIVING). Blank = any.",
+   "destination_storage_type": "The zone to search for a bin. Leave blank to use a Search Sequence instead (below).",
+   "search_sequence": "Optional: an ordered list of storage types to try in turn when no single destination type is set. Create it under Storage Type Search Sequence (same step).",
+   "destination_section": "Optional: narrow the search to one Storage Section within the destination storage type.",
+   "fixed_destination_bin": "Only for the Fixed Bin strategy: the exact bin to use every time.",
+   "strategy": "How to choose a bin: Fixed Bin (one named bin); First Empty Bin (bins with nothing in them first); Addition to Existing Stock (a bin already holding this product); Bin Sequence / General Storage (by pick-path sequence); Least Utilized Bin (emptiest first); Pallet (one HU per bin); Bulk (existing product, then most free space); Near Fixed Bin; Manual Selection (operator picks).",
+   "active": "Untick to switch the rule off without deleting it."
+  }
+ },
+ "Process Determination Rule": {
+  "intro": "Decides which Storage Process (or Route) runs for a document - e.g. 'goods receipts of product X get quality-inspected first'. Same matching as other rules: lowest priority number wins, blank = matches anything. Keep one fallback per (warehouse, document type).",
+  "fields": {
+   "priority": "Evaluation order: lowest number first, first match wins. Put the broad fallback last.",
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "document_type": "Which document triggers the rule: Inbound Delivery, Outbound Delivery or Internal Movement.",
+   "item": "Match only this Item. Blank = any.",
+   "item_group": "Match only this Item Group. Blank = any.",
+   "stock_type": "Match only this Stock Type. Blank = any.",
+   "source_storage_type": "Match only when stock originates in this Storage Type. Blank = any.",
+   "destination_storage_type": "Match only when stock is heading to this Storage Type. Blank = any.",
+   "route": "Optional: the WMS Route to use for shipping when this rule matches (outbound).",
+   "storage_process": "The Storage Process (ordered steps) to execute when the rule matches. Create it in the Storage Process step first.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "Storage Process": {
+  "intro": "An ordered chain of steps a document runs through, e.g. Unload -> Quality check -> Putaway. Only needed where a document must run more than one step. When one step's task is confirmed the next is created automatically.",
+  "fields": {
+   "process_code": "Short unique code, e.g. INBOUND-QC.",
+   "process_name": "Descriptive name.",
+   "process_category": "Whether the process handles Inbound, Outbound or Internal work.",
+   "warehouse": "The WMS Warehouse the process belongs to.",
+   "steps": "The ordered steps. Each step points at a Warehouse Process Type and can force the source/destination storage type or bin.",
+   "active": "Untick to retire the process."
+  }
+ },
+ "Storage Type Search Sequence": {
+  "intro": "An ordered list of storage types to try, moving to the next only when the current one has no usable bin. Example putaway: try PICK first, then BULK, then OVERFLOW. Referenced from a Bin Determination Rule.",
+  "fields": {
+   "warehouse": "The WMS Warehouse this sequence is for.",
+   "direction": "Putaway (where to store) or Removal (where to take from).",
+   "stock_type": "Optional: only apply to this Stock Type.",
+   "storage_types": "The storage types to try, in order. Sequence 1 is tried first.",
+   "active": "Untick to retire the sequence."
+  }
+ },
+ "Removal Rule": {
+  "intro": "Decides which stock is taken first when picking. With no matching rule the default is FEFO (soonest expiry) then FIFO (oldest receipt). Add a rule where you need something else, per warehouse and item / item group / stock type.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first, first match wins.",
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "item": "Match only this Item. Blank = any.",
+   "item_group": "Match only this Item Group. Blank = any.",
+   "stock_type": "Match only this Stock Type. Blank = any.",
+   "strategy": "FIFO (oldest receipt first), LIFO (newest first), FEFO (soonest expiry first), Stringent FIFO (FIFO, ignores custom sort fields), Partial Quantity First (smallest quantities first), By Quantity (largest first), Fixed Bin (only take from one bin).",
+   "sort_fields": "Optional custom ordering that overrides the strategy's default: pick a field (receipt date, expiry date, quantity, bin) and Asc/Desc; earlier rows sort first.",
+   "fixed_bin": "Only for the Fixed Bin strategy: the one bin stock may be taken from.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "Warehouse Process Type Determination Rule": {
+  "intro": "Re-routes an activity to a different Warehouse Process Type depending on item, priority or the product's own indicator. Optional: with no rule, each step keeps using the process type it always used. Lowest priority number wins.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first, first match wins.",
+   "warehouse": "Optional: restrict to one WMS Warehouse. Blank = all warehouses.",
+   "activity": "Which activity is being re-routed (Putaway, Pick, Internal Move, Stage, Load, Deconsolidation, Replenish).",
+   "item": "Match only this Item. Blank = any.",
+   "item_group": "Match only this Item Group. Blank = any.",
+   "stock_type": "Match only this Stock Type. Blank = any.",
+   "priority_level": "Match only tasks with this urgency (Low/Normal/High/Urgent). Blank = any.",
+   "process_type_determination_indicator": "Match products whose own 'process type determination indicator' equals this text (set on the WMS Product). Lets you flag a family of items without listing each one.",
+   "process_type": "The Warehouse Process Type to use when this rule matches.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "WO Creation Rule": {
+  "intro": "Caps how many tasks one Warehouse Order (a batch of tasks handed to a queue) can hold. When the cap is reached, extra tasks spill into a new order. Optional: with no rule, one batch is one order.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "activity": "Which activity's tasks are batched.",
+   "item_group": "Optional: only for this Item Group.",
+   "stock_type": "Optional: only for this Stock Type.",
+   "maximum_tasks": "Most tasks in one Warehouse Order, e.g. 20 - a size an operator can carry out in one round. Blank = no cap.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "Inspection Rule": {
+  "intro": "Sends matching goods-receipt lines to the QUALITY stock type automatically and creates a quality inspection at receipt, instead of triggering it by hand. Optional: with none, inspection is fully manual.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "Optional: restrict to one WMS Warehouse. Blank = all.",
+   "item": "Inspect this Item. Blank = any item.",
+   "item_group": "Inspect items in this Item Group. Blank = any.",
+   "sampling_percentage": "Share of received lines that get inspected: 100 = every line, 10 = about one in ten.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "WMS Exception Code": {
+  "intro": "A reason an operator can raise when a task can't go to plan (bin empty, damaged goods, wrong quantity...). Each code says who must approve and what the system does next. Standard codes are seeded and included in the presets.",
+  "fields": {
+   "exception_code": "Short unique code, e.g. BIN_EMPTY, DAMAGED.",
+   "exception_name": "Wording operators see on the scanner.",
+   "category": "Groups the code by what went wrong: Stock, Bin, Handling Unit, Task, Route, Quality or System.",
+   "allowed_task_types": "Optional: limit the code to these task types (e.g. only for Pick). Empty = available on all tasks.",
+   "requires_supervisor": "On: a supervisor must approve before the exception takes effect.",
+   "requires_comment": "On: the operator must type a comment.",
+   "allows_quantity_change": "On: the operator may enter a different quantity than planned (e.g. short pick).",
+   "allows_bin_change": "On: the operator may use a different bin than planned.",
+   "follow_up_action": "What happens automatically afterwards: None, Block Stock, Block HU, Create Difference Task, Cancel Task or Create Follow-up Task.",
+   "active": "Untick to retire the code."
+  }
+ },
+ "Count Tolerance Group": {
+  "intro": "Sets how big a stock-count difference may be before it needs recount or approval. Optional: with no group, every count difference posts immediately.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "Optional: restrict to one WMS Warehouse. Blank = all.",
+   "item_group": "Optional: restrict to one Item Group.",
+   "tolerance_percentage": "Largest difference, as % of expected quantity, that still posts without extra steps. Required; 2 = 2%.",
+   "tolerance_quantity": "Optional absolute limit in units, alongside the percentage.",
+   "requires_recount": "On: a difference above tolerance sends the bin back for a recount.",
+   "requires_approval": "On: a difference above tolerance must be approved before it posts.",
+   "active": "Untick to switch the group off."
+  }
+ },
+ "Cycle Count Rule": {
+  "intro": "Schedules physical inventory counts automatically. Optional: with none, counts are created manually.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "The WMS Warehouse to count.",
+   "procedure_type": "Which counting method: ABC Cycle Count (by ABC class), Low Stock, Zero Stock (bins that should be empty), Putaway PI (count after putaway), Bin Check, or Annual (full count).",
+   "abc_indicator": "For ABC counts: which class (A fast movers, B, C slow) this rule covers.",
+   "storage_type": "Optional: only count bins in this Storage Type.",
+   "frequency_days": "How often, in days, the same stock should be counted again. Required; e.g. A items = 30.",
+   "active": "Untick to pause the schedule."
+  }
+ },
+ "Replenishment Rule": {
+  "intro": "Keeps a pick bin stocked: when its quantity falls to or below the minimum, an hourly job creates a request to refill it from a bulk storage type up to the target quantity.",
+  "fields": {
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "product": "The Item kept stocked in the pick bin.",
+   "storage_bin": "The pick bin to keep filled. It must exist first (Storage Bins step).",
+   "stock_type": "Which stock type to check and refill. Normally AVAILABLE.",
+   "minimum_quantity": "Trigger level: when the bin's quantity is at or below this, replenishment is requested.",
+   "target_quantity": "Fill level: how much the bin should hold after replenishment. Must be higher than the minimum.",
+   "source_storage_type": "The zone to take replenishment stock from, e.g. BULK.",
+   "priority": "Urgency given to the replenishment tasks (Low/Normal/High/Urgent).",
+   "active": "Untick to pause the rule."
+  }
+ },
+ "WMS Number Range": {
+  "intro": "Controls how documents and Handling Units are numbered. A global range for Handling Units and Shipments is seeded, so nothing breaks if you add none. Add a narrower range only where you want a specific prefix or number window. The narrowest matching range wins (warehouse + HU type, then either, then global).",
+  "fields": {
+   "range_for": "Which kind of document/record this range numbers: Handling Unit, WMS Shipment, Warehouse Order/Task/Request, deliveries, receipts, issues, packing/VAS orders, waves, counts or inspections.",
+   "warehouse": "Optional: use this range only in this warehouse. Blank = every warehouse.",
+   "hu_type": "Optional, Handling Units only: use this range only for this HU Type (e.g. a separate series for totes).",
+   "prefix": "Text put in front of the number, e.g. HU- or SHIP-. Numbers come out as prefix + zero-padded counter.",
+   "number_length": "Digits in the counter, zero-padded. 8 gives 00000001.",
+   "start_number": "First number handed out.",
+   "end_number": "Last number in the window. When reached, numbering stops with an error rather than wrapping around - raise it or add a new range.",
+   "current_number": "Maintained by the system: the last number issued. Leave blank; only set it to continue an existing series from a higher value.",
+   "active": "Untick to stop using this range."
+  }
+ },
+ "WMS HU Number Pool": {
+  "intro": "Numbers of recycled reusable Handling Units, handed out again before the range counter moves on. Normally filled by the system; add rows only to pre-load numbers.",
+  "fields": {
+   "number_range": "The Number Range these numbers belong to.",
+   "hu_number": "A specific HU number to keep available for reissue."
+  }
+ },
+ "WMS Print Determination Rule": {
+  "intro": "Decides which printer prints what and when. Optional: with no rule, nothing is queued for printing. A match queues a print job for the printer to pick up.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first, first match wins.",
+   "warehouse": "The WMS Warehouse the rule applies to.",
+   "event": "What triggers printing: HU Created (label), Putaway Confirmed, Goods Issue Posted, Shipment Loaded.",
+   "output_device": "The printer to send to. Must be a WMS Resource of type Printer in the same warehouse - create it under Resources & Queues.",
+   "print_format": "Optional: the ERPNext Print Format to use. Blank = the document's default.",
+   "active": "Untick to switch the rule off."
+  }
+ },
+ "Handling Unit Type": {
+  "intro": "A kind of physical container that stock travels in: pallet, carton, tote, crate. Sets limits and how its numbers are assigned. A default type is used by the scanner to auto-register unknown barcodes (see WMS Settings).",
+  "fields": {
+   "hu_type_code": "Short unique code, e.g. EUR-PAL or TOTE.",
+   "hu_type_name": "Descriptive name.",
+   "category": "Kind of container: Pallet, Box, Crate, Tote, Trolley, Container or Other.",
+   "maximum_weight": "Heaviest load this container carries. Used for capacity and packing checks.",
+   "maximum_volume": "Largest volume this container holds.",
+   "nestable": "On (default): this type can be placed inside another HU, e.g. cartons on a pallet.",
+   "reusable": "On: once empty, the container can be recycled and its number returned to the pool (e.g. totes, returnable pallets).",
+   "requires_seal": "On: the container must be sealed before it can be closed/shipped.",
+   "numbering_mode": "External (default): the number already printed on the container is scanned in. Internal: the system always assigns the next number from a Number Range and ignores any scanned value.",
+   "active": "Untick to retire the type."
+  }
+ },
+ "Packaging Material": {
+  "intro": "A concrete packaging item with dimensions and tare weight (a specific pallet, a carton size). Picking one when creating an HU fills in the HU Type and tare weight, which then feeds weight-based capacity checks.",
+  "fields": {
+   "packaging_material_code": "Short unique code, e.g. CARTON-M.",
+   "packaging_material_name": "Descriptive name.",
+   "hu_type": "The Handling Unit Type this material creates.",
+   "item": "Optional: the ERPNext Item used to buy/stock this packaging.",
+   "tare_weight": "Empty weight of the packaging itself; added to the contents' weight for the HU's gross weight.",
+   "length": "Outer length.",
+   "width": "Outer width.",
+   "height": "Outer height.",
+   "maximum_weight": "Load limit of this specific packaging.",
+   "reusable": "On: the packaging is returnable/reused.",
+   "active": "Untick to retire the material."
+  }
+ },
+ "Packaging Spec": {
+  "intro": "Describes how one item is packed, level by level: e.g. 12 units per carton, 8 cartons per pallet. Used to generate packing/VAS steps automatically. Optional.",
+  "fields": {
+   "item": "The Item this packing recipe is for.",
+   "levels": "Packing levels from innermost to outermost, each with a quantity and optionally an HU Type and packaging material.",
+   "active": "Untick to retire the spec."
+  }
+ },
+ "WMS Route": {
+  "intro": "How outgoing goods leave: which staging bin they gather in and which door they ship from. At least one active Route per warehouse is required - without it shipments can never be Loaded and Goods Issue can never post.",
+  "fields": {
+   "route_code": "Short unique code, e.g. NORTH-RUN.",
+   "route_name": "Descriptive name.",
+   "origin_warehouse": "The WMS Warehouse shipments on this route leave from.",
+   "default_staging_bin": "Where picked goods gather before loading. Pick a bin in a Staging-role storage type.",
+   "default_door": "The loading door for this route. Must be a bin whose Storage Type has role Door - the route is rejected on save otherwise.",
+   "carrier": "Optional: the ERPNext Supplier acting as carrier.",
+   "stops": "Optional ordered intermediate bins (marshalling, yard checkpoint) goods must pass through before the door.",
+   "active": "Untick to retire the route."
+  }
+ },
+ "WMS Resource": {
+  "intro": "A worker or device that does tasks: an operator login slot, forklift, scanner or printer. Resources can be pooled into a Resource Group so a queue can serve the whole group. Printers are resources too.",
+  "fields": {
+   "resource_code": "Short unique code, e.g. FORK-01.",
+   "warehouse": "The WMS Warehouse this resource works in.",
+   "resource_group": "Optional: pool this resource in a Resource Group so queues assigned to the group serve it.",
+   "resource_type": "What it is: Operator, Forklift, Reach Truck, Picking Trolley, Packing Station, Scanner or Printer. Use Printer for anything a Print Determination Rule prints to.",
+   "device_id": "Hardware identifier, e.g. the printer's network name/address. Mainly needed for printers so the spool knows where to send jobs.",
+   "user": "The user currently logged onto this resource. Set at RF logon - leave blank in a profile.",
+   "logged_in_at": "When the user logged on. Set by the system - leave blank.",
+   "current_queue": "The queue the resource is currently focused on. Set at runtime - leave blank.",
+   "current_work_center": "Optional: the work center the resource is at.",
+   "current_bin": "Where the resource is right now. Set at runtime - leave blank.",
+   "active": "Untick to retire the resource."
+  }
+ },
+ "WMS Resource Group": {
+  "intro": "A pool of resources (e.g. 'Forklift drivers'). A Warehouse Queue points at the group, so changing who works a queue is a one-place edit.",
+  "fields": {
+   "group_code": "Short unique code, e.g. FORKLIFTS.",
+   "group_name": "Descriptive name.",
+   "warehouse": "The WMS Warehouse the group belongs to.",
+   "description": "Optional notes on who belongs in the group.",
+   "active": "Untick to retire the group."
+  }
+ },
+ "Warehouse Queue": {
+  "intro": "A work queue for one activity in a warehouse, e.g. 'Pick queue - mezzanine'. Without an active queue for an activity, tasks are worked directly and never get Auto-pull or the Blocked/On Hold lifecycle. Tasks are batched into Warehouse Orders and handed to the queue's resource group.",
+  "fields": {
+   "queue_code": "Short unique code, e.g. PICK-MAIN.",
+   "queue_name": "Descriptive name.",
+   "warehouse": "The WMS Warehouse the queue is in.",
+   "activity": "Which activity's tasks land here (Pick, Putaway, Unload...).",
+   "storage_type": "Optional: narrow the queue to tasks in one Storage Type.",
+   "activity_area": "Optional: narrow the queue to one Activity Area.",
+   "resource_group": "The Resource Group whose members may work this queue.",
+   "sequence_rule": "Order tasks are offered: Priority Then FIFO (default), FIFO, Bin Sequence (walk path), Delivery Sequence or Oldest Stock First.",
+   "active": "Untick to retire the queue."
+  }
+ },
+ "Wave Template": {
+  "intro": "Schedules automatic wave generation: an hourly job sweeps matching outbound deliveries into a draft wave, and releases it after the cut-off if Auto Release is on. Optional.",
+  "fields": {
+   "template_code": "Short unique code, e.g. MORNING-WAVE.",
+   "template_name": "Descriptive name.",
+   "warehouse": "The WMS Warehouse the waves are for.",
+   "route": "Optional: only include deliveries for this Route.",
+   "priority": "Priority given to the generated waves.",
+   "picking_strategy": "Single Order (pick each order separately) or Cluster (pick several orders together).",
+   "cutoff_time": "Daily time the wave closes, e.g. 14:00. Deliveries released after this go into the next wave.",
+   "auto_release": "On (default): the wave is released for picking automatically once the cut-off has passed. Off: a supervisor releases it manually.",
+   "active": "Untick to pause wave generation."
+  }
+ },
+ "Labor Standard": {
+  "intro": "Planned time per unit for an activity. Feeds the KPI dashboard's efficiency figure (planned vs actual seconds). Optional.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "Optional: restrict to one WMS Warehouse. Blank = all.",
+   "task_type": "The activity the standard is for (Pick, Putaway...).",
+   "item_group": "Optional: only for this Item Group.",
+   "standard_seconds_per_unit": "Planned seconds to do one unit, e.g. 12.",
+   "active": "Untick to stop using the standard."
+  }
+ },
+ "Billing Rate": {
+  "intro": "What to charge a customer for warehouse activities (3PL billing). Used by the Monitor's Billing tab to create a draft Sales Invoice; never submitted automatically. Optional.",
+  "fields": {
+   "priority": "Evaluation order: lowest number first.",
+   "warehouse": "Optional: restrict to one WMS Warehouse.",
+   "customer": "Optional: only for this ERPNext Customer. Blank = any customer.",
+   "activity": "Which activity is charged (Pick, Putaway, Load, Cross Dock...).",
+   "uom_basis": "Charge Per Task (flat fee per confirmed task) or Per Unit (fee times quantity handled).",
+   "rate": "Amount charged per task or per unit, in the invoice currency.",
+   "billing_item": "The ERPNext Item put on the invoice line for this charge.",
+   "active": "Untick to stop using the rate."
+  }
+ },
+ "Allowed Task Type": {
+  "intro": "Task types a code or context may be used on.",
+  "fields": {
+   "task_type": "A task type (Pick, Putaway, Unload...)."
+  }
+ },
+ "Packaging Spec Level": {
+  "intro": "One packing level of an item.",
+  "fields": {
+   "level_name": "Name of the level, e.g. Carton or Pallet.",
+   "quantity_per_level": "How many of the level below fit in this one - e.g. 12 units per carton, then 8 cartons per pallet.",
+   "hu_type": "Optional: the HU Type at this level.",
+   "packaging_material": "Optional: the Packaging Material at this level."
+  }
+ },
+ "Removal Rule Sort Field": {
+  "intro": "One sort key of a custom removal ordering.",
+  "fields": {
+   "field": "What to sort stock on: receipt date, expiry date, quantity or bin.",
+   "direction": "Asc = smallest/oldest first, Desc = largest/newest first."
+  }
+ },
+ "Storage Bin Allowed HU Type": {
+  "intro": "HU types accepted in a bin.",
+  "fields": {
+   "hu_type": "A Handling Unit Type this bin accepts."
+  }
+ },
+ "Storage Bin Allowed Stock Type": {
+  "intro": "Stock types accepted in a bin.",
+  "fields": {
+   "stock_type": "A Stock Type this bin accepts."
+  }
+ },
+ "Storage Process Step": {
+  "intro": "One step of a Storage Process.",
+  "fields": {
+   "sequence": "Step order: 1 runs first.",
+   "step_code": "Short label for the step, e.g. UNLOAD.",
+   "process_type": "The Warehouse Process Type the step's task uses.",
+   "source_storage_type": "Optional: force the source zone.",
+   "destination_storage_type": "Optional: force the destination zone.",
+   "destination_bin": "Optional: force one specific destination bin.",
+   "require_hu_close": "On: the Handling Unit must be closed before this step completes.",
+   "create_task_automatically": "On (default): the step's task is created automatically when the previous step confirms.",
+   "next_step_on_confirmation": "On (default): confirming this step's task advances the process to the next step."
+  }
+ },
+ "Storage Type Search Sequence Item": {
+  "intro": "One storage type in a search sequence.",
+  "fields": {
+   "storage_type": "A storage type to try.",
+   "sequence": "Order tried: 1 first."
+  }
+ },
+ "WMS Route Stop": {
+  "intro": "One intermediate stop on a route.",
+  "fields": {
+   "sequence": "Order of the stop: 1 first.",
+   "storage_bin": "The bin goods pass through.",
+   "stop_type": "Kind of stop: Staging, Marshalling, Yard (descriptive only) or Checkpoint.",
+   "description": "Optional note."
+  }
+ }
+}
