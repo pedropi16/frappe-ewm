@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WMS Configurator</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">WMS Configurator</div>
+    <input id="profile-name" class="profile-name-input" placeholder="Untitled profile" spellcheck="false">
+    <div class="topbar-actions">
+      <button id="btn-export" class="btn btn-ghost">Export</button>
+      <label class="btn btn-ghost file-btn">Import<input id="file-import" type="file" accept="application/json" hidden></label>
+      <button id="btn-connect" class="btn btn-ghost">Connect</button>
+      <button id="btn-reset" class="btn btn-ghost btn-danger">Reset</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav id="stepper" class="stepper"></nav>
+    <main id="step-content" class="step-content"></main>
+  </div>
+
+  <div id="connect-modal" class="modal" hidden>
+    <div class="modal-card">
+      <h2>Connect to a WMS site</h2>
+      <p class="hint">Needed only for the "Apply to site" button. Everything else works fully offline.</p>
+      <label>Site URL <input id="conn-url" placeholder="https://wms.local"></label>
+      <label>API key <input id="conn-key" autocomplete="off"></label>
+      <label>API secret <input id="conn-secret" type="password" autocomplete="off"></label>
+      <p class="hint">Stored only in this browser tab's session storage — never written to exported profiles, cleared when the tab closes.</p>
+      <div id="conn-status" class="conn-status"></div>
+      <div class="modal-actions">
+        <button id="conn-test" class="btn">Test connection</button>
+        <button id="conn-save" class="btn btn-primary">Save</button>
+        <button id="conn-close" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

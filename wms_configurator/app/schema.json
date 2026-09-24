@@ -1,0 +1,2683 @@
+{
+ "generated_from": "frappe_wms doctype JSON",
+ "in_scope": [
+  "WMS Settings",
+  "WMS Warehouse",
+  "Storage Type",
+  "Storage Section",
+  "Bin Type",
+  "Activity Area",
+  "Storage Bin",
+  "Work Center",
+  "WMS Stock Type",
+  "WMS Movement Type",
+  "Warehouse Process Type",
+  "Bin Determination Rule",
+  "Process Determination Rule",
+  "Storage Process",
+  "Storage Type Search Sequence",
+  "Removal Rule",
+  "Warehouse Process Type Determination Rule",
+  "WO Creation Rule",
+  "Inspection Rule",
+  "WMS Exception Code",
+  "Count Tolerance Group",
+  "Cycle Count Rule",
+  "Replenishment Rule",
+  "WMS Number Range",
+  "WMS HU Number Pool",
+  "WMS Print Determination Rule",
+  "Handling Unit Type",
+  "Packaging Material",
+  "Packaging Spec",
+  "WMS Route",
+  "WMS Resource",
+  "WMS Resource Group",
+  "Warehouse Queue",
+  "Wave Template",
+  "Labor Standard",
+  "Billing Rate"
+ ],
+ "external_doctypes": [
+  "Company",
+  "Item",
+  "Item Group",
+  "Role",
+  "User",
+  "Warehouse"
+ ],
+ "doctypes": {
+  "WMS Settings": {
+   "name": "WMS Settings",
+   "module": "WMS Core",
+   "issingle": true,
+   "istable": false,
+   "description": "App-wide configuration for frappe_wms.",
+   "fields": [
+    {
+     "fieldname": "enforce_wms_only_stock_movements",
+     "label": "Enforce WMS-Only Stock Movements",
+     "fieldtype": "Check",
+     "default": "1",
+     "description": "When enabled, WMS-managed warehouses (any ERPNext Warehouse linked from a WMS Warehouse) cannot receive direct Stock Entry, Delivery Note, Purchase Receipt, or Stock Reconciliation postings from ERPNext's own desk. All stock movement must go through frappe_wms (Goods Receipt / Goods Issue / RF app), which mirrors it into ERPNext automatically. Turn this off only as a temporary escape hatch."
+    },
+    {
+     "fieldname": "enforce_storage_type_rules",
+     "label": "Enforce Storage Type Mixing Rules",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "When enabled, a Storage Type's Allow Mixed Products / Stock Types / Batches flags are enforced when choosing a destination bin: a bin already holding a different product/stock type/batch is excluded unless the storage type explicitly allows mixing. Off by default because most existing warehouses have never had these flags reviewed - turn on only after confirming each Storage Type's mixing flags reflect how it is actually used."
+    },
+    {
+     "fieldname": "require_scan_verification",
+     "label": "Require Scan Verification",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk."
+    },
+    {
+     "fieldname": "default_handling_unit_type",
+     "label": "Default Handling Unit Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "description": "Used by the RF app when a scanned Handling Unit barcode does not exist yet and needs to be auto-registered without asking the operator to pick a type."
+    }
+   ],
+   "key": {
+    "type": "single"
+   }
+  },
+  "WMS Warehouse": {
+   "name": "WMS Warehouse",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse_code",
+     "label": "Warehouse Code",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "warehouse_name",
+     "label": "Warehouse Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "company",
+     "label": "Company",
+     "fieldtype": "Link",
+     "options": "Company",
+     "reqd": 1
+    },
+    {
+     "fieldname": "erpnext_warehouse",
+     "label": "ERPNext Warehouse",
+     "fieldtype": "Link",
+     "options": "Warehouse",
+     "description": "Auto-created and kept in sync so WMS stock postings can be mirrored into ERPNext.",
+     "read_only": 1
+    },
+    {
+     "fieldname": "default_receiving_bin",
+     "label": "Default Receiving Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "default_shipping_bin",
+     "label": "Default Shipping Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "default_difference_bin",
+     "label": "Default Difference Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "default_stock_type",
+     "label": "Default Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "allow_negative_stock",
+     "label": "Allow Negative Stock",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "warehouse_code"
+    ]
+   }
+  },
+  "Storage Type": {
+   "name": "Storage Type",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_type_code",
+     "label": "Storage Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_type_name",
+     "label": "Storage Type Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_role",
+     "label": "Storage Role",
+     "fieldtype": "Select",
+     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply",
+     "reqd": 1
+    },
+    {
+     "fieldname": "allow_mixed_products",
+     "label": "Allow Mixed Products",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "allow_mixed_stock_types",
+     "label": "Allow Mixed Stock Types",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "allow_mixed_batches",
+     "label": "Allow Mixed Batches",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "hu_managed",
+     "label": "HU Managed",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "capacity_check_method",
+     "label": "Capacity Check Method",
+     "fieldtype": "Select",
+     "options": "None\nHU Count\nWeight\nVolume",
+     "reqd": 1,
+     "default": "None"
+    },
+    {
+     "fieldname": "putaway_blocked",
+     "label": "Putaway Blocked",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "removal_blocked",
+     "label": "Removal Blocked",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{warehouse}-{storage_type_code}",
+    "fields": [
+     "warehouse",
+     "storage_type_code"
+    ]
+   }
+  },
+  "Storage Section": {
+   "name": "Storage Section",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "section_code",
+     "label": "Section Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "section_name",
+     "label": "Section Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{storage_type}-{section_code}",
+    "fields": [
+     "storage_type",
+     "section_code"
+    ]
+   }
+  },
+  "Bin Type": {
+   "name": "Bin Type",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "bin_type_code",
+     "label": "Bin Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "bin_type_name",
+     "label": "Bin Type Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "maximum_weight",
+     "label": "Maximum Weight",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "maximum_volume",
+     "label": "Maximum Volume",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "length",
+     "label": "Length",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "width",
+     "label": "Width",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "height",
+     "label": "Height",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "bin_type_code"
+    ]
+   }
+  },
+  "Activity Area": {
+   "name": "Activity Area",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "area_code",
+     "label": "Area Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "area_name",
+     "label": "Area Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{warehouse}-{area_code}",
+    "fields": [
+     "warehouse",
+     "area_code"
+    ]
+   }
+  },
+  "Storage Bin": {
+   "name": "Storage Bin",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "bin_code",
+     "label": "Bin Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "bin_name",
+     "label": "Bin Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_section",
+     "label": "Storage Section",
+     "fieldtype": "Link",
+     "options": "Storage Section",
+     "description": "Sub-zone of this bin's Storage Type (e.g. fast/slow movers). Optional."
+    },
+    {
+     "fieldname": "bin_type",
+     "label": "Bin Type",
+     "fieldtype": "Link",
+     "options": "Bin Type",
+     "description": "Physical capacity class (max weight/volume/dimensions). Advisory only - actual capacity checks read this bin's own Maximum HUs/Weight/Volume fields."
+    },
+    {
+     "fieldname": "activity_area",
+     "label": "Activity Area",
+     "fieldtype": "Link",
+     "options": "Activity Area",
+     "description": "Optional, narrower-than-Storage-Type grouping of bins for queue determination and walking sequence. One Activity Area per bin."
+    },
+    {
+     "fieldname": "parent_bin",
+     "label": "Parent Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "bin_role",
+     "label": "Bin Role",
+     "fieldtype": "Select",
+     "options": "Standard\nReceiving\nTrolley\nPacking\nStaging\nDoor\nDifference",
+     "reqd": 1,
+     "default": "Standard"
+    },
+    {
+     "fieldname": "aisle",
+     "label": "Aisle",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "rack",
+     "label": "Rack",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "level",
+     "label": "Level",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "position",
+     "label": "Position",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "sequence",
+     "label": "Sequence",
+     "fieldtype": "Int"
+    },
+    {
+     "fieldname": "maximum_hus",
+     "label": "Maximum HUs",
+     "fieldtype": "Int"
+    },
+    {
+     "fieldname": "maximum_weight",
+     "label": "Maximum Weight",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "maximum_volume",
+     "label": "Maximum Volume",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "current_hu_count",
+     "label": "Current HU Count",
+     "fieldtype": "Int",
+     "read_only": 1
+    },
+    {
+     "fieldname": "current_weight",
+     "label": "Current Weight",
+     "fieldtype": "Float",
+     "read_only": 1
+    },
+    {
+     "fieldname": "putaway_blocked",
+     "label": "Putaway Blocked",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "removal_blocked",
+     "label": "Removal Blocked",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "inventory_blocked",
+     "label": "Inventory Blocked",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "allowed_stock_types",
+     "label": "Allowed Stock Types",
+     "fieldtype": "Table",
+     "options": "Storage Bin Allowed Stock Type"
+    },
+    {
+     "fieldname": "allowed_hu_types",
+     "label": "Allowed HU Types",
+     "fieldtype": "Table",
+     "options": "Storage Bin Allowed HU Type"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "bin_code"
+    ]
+   }
+  },
+  "Work Center": {
+   "name": "Work Center",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "work_center_code",
+     "label": "Work Center Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "work_center_name",
+     "label": "Work Center Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "bin",
+     "label": "Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1,
+     "description": "The physical station bin (e.g. a Packing-role bin) this Work Center resolves to. Actions that need a work center bin (VAS generation, Packing, Kitting) can default to it once an operator logs on to this Work Center."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{warehouse}-{work_center_code}",
+    "fields": [
+     "warehouse",
+     "work_center_code"
+    ]
+   }
+  },
+  "WMS Stock Type": {
+   "name": "WMS Stock Type",
+   "module": "WMS Inventory",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "stock_type_code",
+     "label": "Stock Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "stock_type_name",
+     "label": "Stock Type Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "availability_category",
+     "label": "Availability Category",
+     "fieldtype": "Select",
+     "options": "Available\nQuality\nBlocked\nDamaged\nScrap",
+     "reqd": 1
+    },
+    {
+     "fieldname": "available_for_allocation",
+     "label": "Available for Allocation",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "picking_allowed",
+     "label": "Picking Allowed",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "shipping_allowed",
+     "label": "Shipping Allowed",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "movement_allowed",
+     "label": "Movement Allowed",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "requires_release",
+     "label": "Requires Release",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "requires_reason",
+     "label": "Requires Reason",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "stock_type_code"
+    ]
+   }
+  },
+  "WMS Movement Type": {
+   "name": "WMS Movement Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "movement_type_code",
+     "label": "Movement Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "movement_type_name",
+     "label": "Movement Type Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "movement_category",
+     "label": "Movement Category",
+     "fieldtype": "Select",
+     "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack",
+     "reqd": 1
+    },
+    {
+     "fieldname": "requires_source",
+     "label": "Requires Source",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "requires_destination",
+     "label": "Requires Destination",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "updates_hu",
+     "label": "Updates HU",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "inventory_effect",
+     "label": "Inventory Effect",
+     "fieldtype": "Select",
+     "options": "Transfer\nIncrease\nDecrease\nNo Quantity Change",
+     "reqd": 1
+    },
+    {
+     "fieldname": "reversal_movement_type",
+     "label": "Reversal Movement Type",
+     "fieldtype": "Link",
+     "options": "WMS Movement Type"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "movement_type_code"
+    ]
+   }
+  },
+  "Warehouse Process Type": {
+   "name": "Warehouse Process Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "process_type_code",
+     "label": "Process Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "process_type_name",
+     "label": "Process Type Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+     "reqd": 1
+    },
+    {
+     "fieldname": "source_required",
+     "label": "Source Required",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "destination_required",
+     "label": "Destination Required",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "hu_required",
+     "label": "HU Required",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "stock_required",
+     "label": "Stock Required",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "confirmation_mode",
+     "label": "Confirmation Mode",
+     "fieldtype": "Select",
+     "options": "Product and Quantity\nHandling Unit\nBin to Bin\nSerial Number",
+     "reqd": 1
+    },
+    {
+     "fieldname": "movement_type",
+     "label": "Movement Type",
+     "fieldtype": "Link",
+     "options": "WMS Movement Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "process_type_code"
+    ]
+   }
+  },
+  "Bin Determination Rule": {
+   "name": "Bin Determination Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Putaway\nPick\nInternal Move\nStage\nLoad",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group"
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type"
+    },
+    {
+     "fieldname": "hu_type",
+     "label": "HU Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type"
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "destination_storage_type",
+     "label": "Destination Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "search_sequence",
+     "label": "Storage Type Search Sequence",
+     "fieldtype": "Link",
+     "options": "Storage Type Search Sequence",
+     "description": "Try several storage types in order instead of one fixed destination. Ignored when Destination Storage Type is also set."
+    },
+    {
+     "fieldname": "destination_section",
+     "label": "Destination Section",
+     "fieldtype": "Link",
+     "options": "Storage Section",
+     "description": "Optional - restricts candidate bins to this Storage Section within the destination storage type."
+    },
+    {
+     "fieldname": "fixed_destination_bin",
+     "label": "Fixed Destination Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "strategy",
+     "label": "Strategy",
+     "fieldtype": "Select",
+     "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Process Determination Rule": {
+   "name": "Process Determination Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "document_type",
+     "label": "Document Type",
+     "fieldtype": "Select",
+     "options": "Inbound Delivery\nOutbound Delivery\nInternal Movement",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group"
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type"
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "destination_storage_type",
+     "label": "Destination Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "route",
+     "label": "Route",
+     "fieldtype": "Link",
+     "options": "WMS Route"
+    },
+    {
+     "fieldname": "storage_process",
+     "label": "Storage Process",
+     "fieldtype": "Link",
+     "options": "Storage Process",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Storage Process": {
+   "name": "Storage Process",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "process_code",
+     "label": "Process Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "process_name",
+     "label": "Process Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "process_category",
+     "label": "Process Category",
+     "fieldtype": "Select",
+     "options": "Inbound\nOutbound\nInternal",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "steps",
+     "label": "Steps",
+     "fieldtype": "Table",
+     "options": "Storage Process Step",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "process_code"
+    ]
+   }
+  },
+  "Storage Type Search Sequence": {
+   "name": "Storage Type Search Sequence",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "direction",
+     "label": "Direction",
+     "fieldtype": "Select",
+     "options": "Putaway\nRemoval",
+     "reqd": 1
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "description": "Optional - only apply this sequence for this stock type. Leave blank to match any."
+    },
+    {
+     "fieldname": "storage_types",
+     "label": "Storage Types",
+     "fieldtype": "Table",
+     "options": "Storage Type Search Sequence Item",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Removal Rule": {
+   "name": "Removal Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group"
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type"
+    },
+    {
+     "fieldname": "strategy",
+     "label": "Strategy",
+     "fieldtype": "Select",
+     "options": "FIFO\nLIFO\nFEFO\nStringent FIFO\nPartial Quantity First\nBy Quantity\nFixed Bin",
+     "reqd": 1
+    },
+    {
+     "fieldname": "sort_fields",
+     "label": "Sort Fields",
+     "fieldtype": "Table",
+     "options": "Removal Rule Sort Field",
+     "description": "Optional - when set, overrides Strategy's default sort with a custom combination of fields (e.g. stock_type then first_receipt_date). Ignored for the Fixed Bin strategy."
+    },
+    {
+     "fieldname": "fixed_bin",
+     "label": "Fixed Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Only used when Strategy is 'Fixed Bin' - removal is restricted to this bin's stock."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Warehouse Process Type Determination Rule": {
+   "name": "Warehouse Process Type Determination Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Optional - leave blank for a default rule that applies to every warehouse."
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Putaway\nPick\nInternal Move\nStage\nLoad\nDeconsolidation\nReplenish",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group"
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type"
+    },
+    {
+     "fieldname": "priority_level",
+     "label": "Delivery Priority",
+     "fieldtype": "Select",
+     "options": "\nLow\nNormal\nHigh\nUrgent"
+    },
+    {
+     "fieldname": "process_type_determination_indicator",
+     "label": "Process Type Determination Indicator",
+     "fieldtype": "Data",
+     "description": "Optional - matches WMS Product Warehouse's Process Type Determination Indicator for the product/warehouse in context."
+    },
+    {
+     "fieldname": "process_type",
+     "label": "Process Type",
+     "fieldtype": "Link",
+     "options": "Warehouse Process Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WO Creation Rule": {
+   "name": "WO Creation Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group",
+     "description": "Optional - leave blank to match every item group."
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "description": "Optional - leave blank to match every stock type."
+    },
+    {
+     "fieldname": "maximum_tasks",
+     "label": "Maximum Tasks per Warehouse Order",
+     "fieldtype": "Int",
+     "description": "Once an open Warehouse Order matching this rule reaches this many tasks, further tasks spill into a new Warehouse Order instead of joining it. Leave blank for no limit."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Inspection Rule": {
+   "name": "Inspection Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Optional - leave blank for a default rule that applies to every warehouse."
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group"
+    },
+    {
+     "fieldname": "sampling_percentage",
+     "label": "Sampling Percentage",
+     "fieldtype": "Float",
+     "default": 100,
+     "description": "Reserved for future partial-sampling support - the full received quantity is always inspected today."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Exception Code": {
+   "name": "WMS Exception Code",
+   "module": "WMS Execution",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "exception_code",
+     "label": "Exception Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "exception_name",
+     "label": "Exception Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "category",
+     "label": "Category",
+     "fieldtype": "Select",
+     "options": "Stock\nBin\nHandling Unit\nTask\nRoute\nQuality\nSystem",
+     "reqd": 1
+    },
+    {
+     "fieldname": "allowed_task_types",
+     "label": "Allowed Task Types",
+     "fieldtype": "Table",
+     "options": "Allowed Task Type"
+    },
+    {
+     "fieldname": "requires_supervisor",
+     "label": "Requires Supervisor",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "requires_comment",
+     "label": "Requires Comment",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "allows_quantity_change",
+     "label": "Allows Quantity Change",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "allows_bin_change",
+     "label": "Allows Bin Change",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "follow_up_action",
+     "label": "Follow-up Action",
+     "fieldtype": "Select",
+     "options": "None\nBlock Stock\nBlock HU\nCreate Difference Task\nCancel Task\nCreate Follow-up Task",
+     "reqd": 1,
+     "default": "None"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "exception_code"
+    ]
+   }
+  },
+  "Count Tolerance Group": {
+   "name": "Count Tolerance Group",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Optional - leave blank for a default group that applies to every warehouse."
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group",
+     "description": "Optional - leave blank to match every item group."
+    },
+    {
+     "fieldname": "tolerance_percentage",
+     "label": "Tolerance Percentage",
+     "fieldtype": "Percent",
+     "reqd": 1,
+     "description": "A variance within this percentage of the book quantity posts automatically. A variance against a zero book quantity never counts as within tolerance."
+    },
+    {
+     "fieldname": "tolerance_quantity",
+     "label": "Tolerance Quantity",
+     "fieldtype": "Float",
+     "description": "Optional absolute-quantity tolerance - a variance within this quantity also posts automatically, even if it exceeds the percentage tolerance."
+    },
+    {
+     "fieldname": "requires_recount",
+     "label": "Requires Recount",
+     "fieldtype": "Check",
+     "default": 1,
+     "description": "An out-of-tolerance variance is held for a recount before it can be posted or escalated for approval."
+    },
+    {
+     "fieldname": "requires_approval",
+     "label": "Requires Supervisor Approval",
+     "fieldtype": "Check",
+     "default": 1,
+     "description": "An out-of-tolerance variance (after a recount, if required) is held for supervisor approval before posting."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Cycle Count Rule": {
+   "name": "Cycle Count Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "procedure_type",
+     "label": "Procedure Type",
+     "fieldtype": "Select",
+     "options": "ABC Cycle Count\nLow Stock\nZero Stock\nPutaway PI\nBin Check\nAnnual",
+     "reqd": 1
+    },
+    {
+     "fieldname": "abc_indicator",
+     "label": "ABC Indicator",
+     "fieldtype": "Select",
+     "options": "\nA\nB\nC",
+     "description": "Only read when Procedure Type is ABC Cycle Count - selects which WMS Product ABC class this rule generates counts for."
+    },
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "description": "Optional scope - used by Bin Check (required there) and to narrow Low Stock/Zero Stock/Putaway PI to one storage type."
+    },
+    {
+     "fieldname": "frequency_days",
+     "label": "Frequency (Days)",
+     "fieldtype": "Int",
+     "reqd": 1,
+     "description": "How often a matching scope gets a new count generated - a scope already covered by a count within this many days is skipped."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Replenishment Rule": {
+   "name": "Replenishment Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "product",
+     "label": "Product",
+     "fieldtype": "Link",
+     "options": "Item",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_bin",
+     "label": "Pick Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1,
+     "description": "The pick-face bin this rule keeps stocked."
+    },
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "reqd": 1,
+     "default": "AVAILABLE"
+    },
+    {
+     "fieldname": "minimum_quantity",
+     "label": "Minimum Quantity",
+     "fieldtype": "Float",
+     "reqd": 1,
+     "description": "Replenishment is triggered when the pick bin's quantity falls to or below this level."
+    },
+    {
+     "fieldname": "target_quantity",
+     "label": "Target Quantity",
+     "fieldtype": "Float",
+     "reqd": 1,
+     "description": "Replenish up to this quantity."
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1,
+     "description": "Where to pull replenishment stock from (e.g. bulk storage)."
+    },
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Select",
+     "options": "Low\nNormal\nHigh\nUrgent",
+     "reqd": 1,
+     "default": "Normal"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Number Range": {
+   "name": "WMS Number Range",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "range_for",
+     "label": "Range For",
+     "fieldtype": "Select",
+     "options": "Handling Unit\nWMS Shipment\nWarehouse Order\nWarehouse Task\nWarehouse Request\nOutbound Delivery\nInbound Delivery\nGoods Receipt\nGoods Issue\nPacking Order\nVAS Order\nWMS Wave\nWMS Physical Inventory Count\nWMS Quality Inspection",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Leave blank for a range that applies to every warehouse."
+    },
+    {
+     "fieldname": "hu_type",
+     "label": "Handling Unit Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "depends_on": "eval:doc.range_for=='Handling Unit'",
+     "description": "Only used when Range For is Handling Unit. Leave blank for a range that applies to every HU type."
+    },
+    {
+     "fieldname": "prefix",
+     "label": "Prefix",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "number_length",
+     "label": "Number Length",
+     "fieldtype": "Int",
+     "default": 8,
+     "description": "The numeric portion is zero-padded to this many digits."
+    },
+    {
+     "fieldname": "start_number",
+     "label": "Start Number",
+     "fieldtype": "Int",
+     "reqd": 1,
+     "default": 1
+    },
+    {
+     "fieldname": "end_number",
+     "label": "End Number",
+     "fieldtype": "Int",
+     "reqd": 1,
+     "default": 99999999
+    },
+    {
+     "fieldname": "current_number",
+     "label": "Current Number",
+     "fieldtype": "Int",
+     "description": "The last number handed out. Never edit this directly while the range is active.",
+     "read_only": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS HU Number Pool": {
+   "name": "WMS HU Number Pool",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "number_range",
+     "label": "Number Range",
+     "fieldtype": "Link",
+     "options": "WMS Number Range",
+     "reqd": 1
+    },
+    {
+     "fieldname": "hu_number",
+     "label": "HU Number",
+     "fieldtype": "Data",
+     "reqd": 1,
+     "description": "A number freed by recycling a reusable, empty Handling Unit - handed out again by services/numbering.next_number before the range increments further."
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Print Determination Rule": {
+   "name": "WMS Print Determination Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "event",
+     "label": "Event",
+     "fieldtype": "Select",
+     "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded",
+     "reqd": 1
+    },
+    {
+     "fieldname": "output_device",
+     "label": "Output Device",
+     "fieldtype": "Link",
+     "options": "WMS Resource",
+     "reqd": 1,
+     "description": "Must be a WMS Resource with Resource Type = Printer."
+    },
+    {
+     "fieldname": "print_format",
+     "label": "Print Format",
+     "fieldtype": "Link",
+     "options": "Print Format",
+     "description": "Optional. Left blank, the Print Station lets whoever marks it printed choose one at print time."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Handling Unit Type": {
+   "name": "Handling Unit Type",
+   "module": "WMS Handling Units",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "hu_type_code",
+     "label": "HU Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "hu_type_name",
+     "label": "HU Type Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "category",
+     "label": "Category",
+     "fieldtype": "Select",
+     "options": "Pallet\nBox\nCrate\nTote\nTrolley\nContainer\nOther",
+     "reqd": 1
+    },
+    {
+     "fieldname": "maximum_weight",
+     "label": "Maximum Weight",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "maximum_volume",
+     "label": "Maximum Volume",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "nestable",
+     "label": "Nestable",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "reusable",
+     "label": "Reusable",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "requires_seal",
+     "label": "Requires Seal",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "numbering_mode",
+     "label": "Numbering Mode",
+     "fieldtype": "Select",
+     "options": "External\nInternal",
+     "reqd": 1,
+     "default": "External",
+     "description": "External: the HU number is a pre-printed/scanned barcode supplied by the operator. Internal: the system always assigns the next number from a WMS Number Range, ignoring any number the caller passes."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "hu_type_code"
+    ]
+   }
+  },
+  "Packaging Material": {
+   "name": "Packaging Material",
+   "module": "WMS Handling Units",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "packaging_material_code",
+     "label": "Packaging Material Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "packaging_material_name",
+     "label": "Packaging Material Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "hu_type",
+     "label": "Handling Unit Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item"
+    },
+    {
+     "fieldname": "tare_weight",
+     "label": "Tare Weight",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "length",
+     "label": "Length",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "width",
+     "label": "Width",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "height",
+     "label": "Height",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "maximum_weight",
+     "label": "Maximum Weight",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "reusable",
+     "label": "Reusable",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "packaging_material_code"
+    ]
+   }
+  },
+  "Packaging Spec": {
+   "name": "Packaging Spec",
+   "module": "WMS Handling Units",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "item",
+     "label": "Item",
+     "fieldtype": "Link",
+     "options": "Item",
+     "reqd": 1
+    },
+    {
+     "fieldname": "levels",
+     "label": "Levels",
+     "fieldtype": "Table",
+     "options": "Packaging Spec Level",
+     "description": "Ordered smallest to largest (e.g. Each, Case, Pallet). Each level's quantity is how many of the level before it make one of this level."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "item"
+    ]
+   }
+  },
+  "WMS Route": {
+   "name": "WMS Route",
+   "module": "WMS Shipping",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "route_code",
+     "label": "Route Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "route_name",
+     "label": "Route Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "origin_warehouse",
+     "label": "Origin Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "default_staging_bin",
+     "label": "Default Staging Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "default_door",
+     "label": "Default Door",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "carrier",
+     "label": "Carrier",
+     "fieldtype": "Link",
+     "options": "Supplier"
+    },
+    {
+     "fieldname": "stops",
+     "label": "Stops",
+     "fieldtype": "Table",
+     "options": "WMS Route Stop",
+     "description": "Ordered intermediate bins an HU travels through between wherever it's picked/staged and the shipment's door (e.g. a marshalling or consolidation bin for cross-dock). Leave empty for a direct staging-bin-to-door move."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "route_code"
+    ]
+   }
+  },
+  "WMS Resource": {
+   "name": "WMS Resource",
+   "module": "WMS Execution",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "resource_code",
+     "label": "Resource Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "resource_group",
+     "label": "Resource Group",
+     "fieldtype": "Link",
+     "options": "WMS Resource Group",
+     "description": "The pool this physical device belongs to - a Warehouse Queue routes work to a Resource Group, not to one device directly."
+    },
+    {
+     "fieldname": "resource_type",
+     "label": "Resource Type",
+     "fieldtype": "Select",
+     "options": "Operator\nForklift\nReach Truck\nPicking Trolley\nPacking Station\nScanner\nPrinter",
+     "reqd": 1
+    },
+    {
+     "fieldname": "device_id",
+     "label": "Device ID",
+     "fieldtype": "Data",
+     "description": "Physical identifier of the device itself (serial number, MAC address, printer queue name, ...)."
+    },
+    {
+     "fieldname": "user",
+     "label": "User",
+     "fieldtype": "Link",
+     "options": "User",
+     "description": "Whoever is currently logged on to this device - normally set via Log On in the RF app (services/resource.log_on), not edited here directly, though a Supervisor can still fix it by hand if needed. A Resource models the device, not the person; only one user is logged on at a time, and a Supervisor can Kick whoever's on it."
+    },
+    {
+     "fieldname": "logged_in_at",
+     "label": "Logged In At",
+     "fieldtype": "Datetime",
+     "read_only": 1
+    },
+    {
+     "fieldname": "current_queue",
+     "label": "Current Queue",
+     "fieldtype": "Link",
+     "options": "Warehouse Queue"
+    },
+    {
+     "fieldname": "current_work_center",
+     "label": "Current Work Center",
+     "fieldtype": "Link",
+     "options": "Work Center",
+     "description": "Optional - an operator logs on to a Work Center only when the actions they're about to do need one (VAS generation, Packing, Kitting), so its bin can be defaulted instead of scanned every time."
+    },
+    {
+     "fieldname": "current_bin",
+     "label": "Current Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "resource_code"
+    ]
+   }
+  },
+  "WMS Resource Group": {
+   "name": "WMS Resource Group",
+   "module": "WMS Execution",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "group_code",
+     "label": "Resource Group Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "group_name",
+     "label": "Resource Group Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "group_code"
+    ]
+   }
+  },
+  "Warehouse Queue": {
+   "name": "Warehouse Queue",
+   "module": "WMS Execution",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "queue_code",
+     "label": "Queue Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "queue_name",
+     "label": "Queue Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "activity_area",
+     "label": "Activity Area",
+     "fieldtype": "Link",
+     "options": "Activity Area",
+     "description": "Narrower than Storage Type - a queue matching a task's bin's own Activity Area wins over one matching only its Storage Type."
+    },
+    {
+     "fieldname": "resource_group",
+     "label": "Resource Group",
+     "fieldtype": "Link",
+     "options": "WMS Resource Group",
+     "description": "The pool of physical Resources (devices) eligible to work this queue - mirrors SAP EWM's Queue-to-Resource-Group link."
+    },
+    {
+     "fieldname": "sequence_rule",
+     "label": "Sequence Rule",
+     "fieldtype": "Select",
+     "options": "Priority Then FIFO\nFIFO\nBin Sequence\nDelivery Sequence\nOldest Stock First",
+     "reqd": 1,
+     "default": "Priority Then FIFO"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "queue_code"
+    ]
+   }
+  },
+  "Wave Template": {
+   "name": "Wave Template",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "template_code",
+     "label": "Template Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "template_name",
+     "label": "Template Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "route",
+     "label": "Route",
+     "fieldtype": "Link",
+     "options": "WMS Route",
+     "description": "Optional - leave blank to sweep deliveries for every route."
+    },
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Select",
+     "options": "Low\nNormal\nHigh\nUrgent",
+     "reqd": 1,
+     "default": "Normal"
+    },
+    {
+     "fieldname": "picking_strategy",
+     "label": "Picking Strategy",
+     "fieldtype": "Select",
+     "options": "Single Order\nCluster",
+     "reqd": 1,
+     "default": "Single Order"
+    },
+    {
+     "fieldname": "cutoff_time",
+     "label": "Cutoff Time",
+     "fieldtype": "Time",
+     "reqd": 1,
+     "description": "Daily cutoff - a wave generated from this template auto-releases once this time passes for the day, if Auto Release is checked."
+    },
+    {
+     "fieldname": "auto_release",
+     "label": "Auto Release",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "template_code"
+    ]
+   }
+  },
+  "Labor Standard": {
+   "name": "Labor Standard",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Optional - leave blank for a default standard that applies to every warehouse."
+    },
+    {
+     "fieldname": "task_type",
+     "label": "Task Type",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "reqd": 1
+    },
+    {
+     "fieldname": "item_group",
+     "label": "Item Group",
+     "fieldtype": "Link",
+     "options": "Item Group",
+     "description": "Optional - leave blank to match every item group."
+    },
+    {
+     "fieldname": "standard_seconds_per_unit",
+     "label": "Standard Seconds per Unit",
+     "fieldtype": "Float",
+     "reqd": 1,
+     "description": "Expected seconds per unit of planned_quantity for a matching task."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Billing Rate": {
+   "name": "Billing Rate",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Optional - leave blank for a default rate that applies to every warehouse."
+    },
+    {
+     "fieldname": "customer",
+     "label": "Customer",
+     "fieldtype": "Link",
+     "options": "Customer",
+     "description": "Optional - leave blank for a default rate that applies to every customer."
+    },
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
+     "reqd": 1
+    },
+    {
+     "fieldname": "uom_basis",
+     "label": "UOM Basis",
+     "fieldtype": "Select",
+     "options": "Per Task\nPer Unit",
+     "reqd": 1
+    },
+    {
+     "fieldname": "rate",
+     "label": "Rate",
+     "fieldtype": "Currency",
+     "reqd": 1
+    },
+    {
+     "fieldname": "billing_item",
+     "label": "Billing Item",
+     "fieldtype": "Link",
+     "options": "Item",
+     "reqd": 1,
+     "description": "The ERPNext service-line Item used when generating a Sales Invoice for this activity."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Allowed Task Type": {
+   "name": "Allowed Task Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "task_type",
+     "label": "Task Type",
+     "fieldtype": "Select",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Packaging Spec Level": {
+   "name": "Packaging Spec Level",
+   "module": "WMS Handling Units",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "level_name",
+     "label": "Level Name",
+     "fieldtype": "Data",
+     "reqd": 1,
+     "description": "e.g. Each, Case, Pallet - ordered from the smallest unit up."
+    },
+    {
+     "fieldname": "quantity_per_level",
+     "label": "Quantity of Prior Level",
+     "fieldtype": "Float",
+     "reqd": 1,
+     "description": "How many of the previous (smaller) level make one of this level."
+    },
+    {
+     "fieldname": "hu_type",
+     "label": "Handling Unit Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type"
+    },
+    {
+     "fieldname": "packaging_material",
+     "label": "Packaging Material",
+     "fieldtype": "Link",
+     "options": "Packaging Material"
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Removal Rule Sort Field": {
+   "name": "Removal Rule Sort Field",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "field",
+     "label": "Field",
+     "fieldtype": "Select",
+     "options": "first_receipt_date\nshelf_life_expiry_date\nquantity\nstorage_bin",
+     "reqd": 1
+    },
+    {
+     "fieldname": "direction",
+     "label": "Direction",
+     "fieldtype": "Select",
+     "options": "Asc\nDesc",
+     "reqd": 1,
+     "default": "Asc"
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Storage Bin Allowed HU Type": {
+   "name": "Storage Bin Allowed HU Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "hu_type",
+     "label": "Handling Unit Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Storage Bin Allowed Stock Type": {
+   "name": "Storage Bin Allowed Stock Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "stock_type",
+     "label": "Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Storage Process Step": {
+   "name": "Storage Process Step",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "sequence",
+     "label": "Sequence",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "step_code",
+     "label": "Step Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "process_type",
+     "label": "Process Type",
+     "fieldtype": "Link",
+     "options": "Warehouse Process Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "destination_storage_type",
+     "label": "Destination Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "destination_bin",
+     "label": "Fixed Destination Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "require_hu_close",
+     "label": "Require HU Close",
+     "fieldtype": "Check"
+    },
+    {
+     "fieldname": "create_task_automatically",
+     "label": "Create Task Automatically",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "next_step_on_confirmation",
+     "label": "Create Next Step On Confirmation",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Storage Type Search Sequence Item": {
+   "name": "Storage Type Search Sequence Item",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "sequence",
+     "label": "Sequence",
+     "fieldtype": "Int",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Route Stop": {
+   "name": "WMS Route Stop",
+   "module": "WMS Shipping",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "sequence",
+     "label": "Sequence",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_bin",
+     "label": "Storage Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1
+    },
+    {
+     "fieldname": "stop_type",
+     "label": "Stop Type",
+     "fieldtype": "Select",
+     "options": "Staging\nMarshalling\nYard\nCheckpoint",
+     "reqd": 1,
+     "default": "Staging"
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Data"
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  }
+ }
+}
