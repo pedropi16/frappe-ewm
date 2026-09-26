@@ -1,7 +1,7 @@
-import * as ERP from "./erp.js";
-import { el } from "./render.js";
-import * as Schema from "./schema.js";
-import { suggest } from "./refs.js";
+import * as ERP from "./erp.js?v=c05329a55f";
+import { el } from "./render.js?v=c05329a55f";
+import * as Schema from "./schema.js?v=c05329a55f";
+import { suggest } from "./refs.js?v=c05329a55f";
 
 /**
  * Searchable dropdown for Link fields. Suggestions come from the records already in the profile

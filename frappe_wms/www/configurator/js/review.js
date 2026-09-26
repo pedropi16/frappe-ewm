@@ -1,14 +1,14 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { el } from "./render.js";
-import { exportProfile } from "./export_import.js";
-import { applyProfileToSite } from "./push.js";
-import * as ERP from "./erp.js";
-import { findBroken, fixAll } from "./refs.js";
-import { compareWithSite, pullAll } from "./sitesync.js";
-import { toast } from "./render.js";
-import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js";
-import { goToStep, STEPS } from "./wizard.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { el } from "./render.js?v=c05329a55f";
+import { exportProfile } from "./export_import.js?v=c05329a55f";
+import { applyProfileToSite } from "./push.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
+import { findBroken, fixAll } from "./refs.js?v=c05329a55f";
+import { compareWithSite, pullAll } from "./sitesync.js?v=c05329a55f";
+import { toast } from "./render.js?v=c05329a55f";
+import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js?v=c05329a55f";
+import { goToStep, STEPS } from "./wizard.js?v=c05329a55f";
 
 export function renderReviewStep(container) {
   container.appendChild(requiredCard());

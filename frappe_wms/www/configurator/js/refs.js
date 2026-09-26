@@ -1,5 +1,5 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
 
 /**
  * Link values that point at another record of the profile must equal that record's *name*.

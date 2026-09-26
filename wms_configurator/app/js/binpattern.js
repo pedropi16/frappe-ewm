@@ -1,7 +1,7 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { combobox } from "./combobox.js";
-import { el } from "./render.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { combobox } from "./combobox.js?v=c05329a55f";
+import { el } from "./render.js?v=c05329a55f";
 
 function pad(n, width) {
   const s = String(n);

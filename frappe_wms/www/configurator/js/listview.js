@@ -1,7 +1,7 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { el, toast } from "./render.js";
-import { openBulkEdit } from "./bulk.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { el, toast } from "./render.js?v=c05329a55f";
+import { openBulkEdit } from "./bulk.js?v=c05329a55f";
 
 // Row selection survives re-renders (a save elsewhere repaints the step) but is pruned to rows that still exist.
 const selections = new Map();

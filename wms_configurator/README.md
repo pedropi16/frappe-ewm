@@ -141,3 +141,13 @@ aren't in the profile. Neither are ERPNext-side masters the rules merely
 reference (Item, Item Group, Company, Warehouse) - those are assumed to
 already exist on the target site. User Permission rows are also out of
 scope, since they need real Users and aren't portable between systems.
+
+## After changing anything in `app/js` or `app/css`
+
+Frappe serves these files with a multi-hour browser cache, so a deploy can otherwise run old modules against new data files. Run
+
+```
+python3 tools/version_assets.py   # stamps every import / script / stylesheet with a content hash
+```
+
+then copy `app/js`, `app/css`, `app/*.json` and `app/presets` into `frappe_wms/www/configurator/` (its `index.html` differs only by the `<base>` tag, the CSRF script and the version stamp).

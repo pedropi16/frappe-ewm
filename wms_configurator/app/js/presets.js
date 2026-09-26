@@ -1,6 +1,6 @@
-import { autofillSingleCompany } from "./preflight.js";
-import * as Store from "./store.js";
-import { el } from "./render.js";
+import { autofillSingleCompany } from "./preflight.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { el } from "./render.js?v=c05329a55f";
 
 export const PRESETS = [
   { id: "blank", name: "Blank", description: "Start empty and build the configuration from scratch.", file: null },

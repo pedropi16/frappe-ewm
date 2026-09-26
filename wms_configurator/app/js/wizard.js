@@ -1,14 +1,14 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { renderRecordForm, el } from "./render.js";
-import { renderPresetPicker } from "./presets.js";
-import { renderBinGenerator } from "./binpattern.js";
-import { renderReviewStep } from "./review.js";
-import { renderMapStep } from "./diagram.js";
-import { renderRecordTable } from "./listview.js";
-import * as ERP from "./erp.js";
-import { previewPull, commitPull } from "./sitesync.js";
-import { toast } from "./render.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { renderRecordForm, el } from "./render.js?v=c05329a55f";
+import { renderPresetPicker } from "./presets.js?v=c05329a55f";
+import { renderBinGenerator } from "./binpattern.js?v=c05329a55f";
+import { renderReviewStep } from "./review.js?v=c05329a55f";
+import { renderMapStep } from "./diagram.js?v=c05329a55f";
+import { renderRecordTable } from "./listview.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
+import { previewPull, commitPull } from "./sitesync.js?v=c05329a55f";
+import { toast } from "./render.js?v=c05329a55f";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },

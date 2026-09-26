@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { combobox } from "./combobox.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { combobox } from "./combobox.js?v=c05329a55f";
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);

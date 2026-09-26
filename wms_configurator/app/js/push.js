@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import * as ERP from "./erp.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
 
 function cleanRecord(record) {
   const { __id, __siteName, ...rest } = record;
@@ -86,7 +86,8 @@ export async function applyProfileToSite(onProgress) {
 
     if (key.type === "single") {
       const data = cleanRecord(records[0]);
-      const r = await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}`, { method: "PUT", body: JSON.stringify(data) }, conn);
+      // a Single has no /api/resource route that accepts PUT (405) - set its values through the client API
+      const r = await apiFetch(baseUrl, "/api/method/frappe.client.set_value", { method: "POST", body: JSON.stringify({ doctype: doctypeName, name: doctypeName, fieldname: data }) }, conn);
       emit(doctypeName, doctypeName, r);
       continue;
     }

@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import { el } from "./render.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { el } from "./render.js?v=c05329a55f";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const svg = (tag, attrs = {}, children = []) => {

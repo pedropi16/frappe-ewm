@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import * as ERP from "./erp.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
 
 /**
  * Round trip with the connected site: pull what exists into the profile, compare the profile
@@ -41,9 +41,9 @@ function toRecord(doctypeName, doc) {
 export async function fetchFromSite(doctypeName) {
   const dt = Schema.doctype(doctypeName);
   if (dt.issingle) {
-    const r = await ERP.api("GET", `/api/resource/${enc(doctypeName)}/${enc(doctypeName)}`);
+    const r = await ERP.api("GET", `/api/method/frappe.client.get?doctype=${enc(doctypeName)}&name=${enc(doctypeName)}`);
     if (!r.ok) throw new Error(`${doctypeName}: ${r.body?.exception || r.body?.message || "HTTP " + r.status}`);
-    return [toRecord(doctypeName, r.body.data)];
+    return [toRecord(doctypeName, r.body.message)];
   }
   const r = await ERP.api("GET", `/api/resource/${enc(doctypeName)}?fields=${enc('["*"]')}&limit_page_length=0`);
   if (!r.ok) throw new Error(`${doctypeName}: ${r.body?.exception || r.body?.message || "HTTP " + r.status}`);

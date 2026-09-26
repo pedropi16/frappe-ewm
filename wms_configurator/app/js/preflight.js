@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js";
-import * as Store from "./store.js";
-import * as ERP from "./erp.js";
+import * as Schema from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
 
 /** Mandatory fields left empty in the profile - the site rejects those records outright. */
 export function findMissingRequired() {

@@ -1,9 +1,9 @@
-import { loadSchema } from "./schema.js";
-import * as Store from "./store.js";
-import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js";
-import { initConnectModal } from "./connect.js";
-import * as ERP from "./erp.js";
-import { exportProfile, importProfileFromFile } from "./export_import.js";
+import { loadSchema } from "./schema.js?v=c05329a55f";
+import * as Store from "./store.js?v=c05329a55f";
+import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js?v=c05329a55f";
+import { initConnectModal } from "./connect.js?v=c05329a55f";
+import * as ERP from "./erp.js?v=c05329a55f";
+import { exportProfile, importProfileFromFile } from "./export_import.js?v=c05329a55f";
 
 async function main() {
   await loadSchema();
