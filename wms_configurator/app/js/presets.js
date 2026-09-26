@@ -1,3 +1,4 @@
+import { autofillSingleCompany } from "./preflight.js";
 import * as Store from "./store.js";
 import { el } from "./render.js";
 
@@ -38,6 +39,7 @@ export function renderPresetPicker(container, onChosen) {
             } else {
               Store.resetProfile();
             }
+            await autofillSingleCompany(); // presets can't know your company; a single-company site has no choice to make
             onChosen();
           },
         },

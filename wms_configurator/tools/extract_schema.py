@@ -147,37 +147,55 @@ def build_doctype_entry(name, visited, child_doctypes):
 
 
 def dependency_edges(doctypes):
-    """(from, to) edges meaning `to` must be created before `from`."""
-    edges = []
+    """{(from, to): required} meaning `to` should exist before `from`.
+
+    Links inside child tables count towards their parent. `required` is True when the
+    Link field is mandatory; optional links may be applied in a second pass instead.
+    """
     names = set(doctypes)
+    edges = {}
+
+    def add(frm, to, required):
+        if not to or to == frm or to not in names:
+            return  # external doctype or self-link: handled at apply time, not here
+        edges[(frm, to)] = edges.get((frm, to), False) or required
+
     for name, entry in doctypes.items():
         for f in entry["fields"]:
-            if f["fieldtype"] != "Link":
-                continue
-            target = f.get("options")
-            if not target or target == name or target not in names:
-                continue  # external doctype or self-link: handled at apply time, not here
-            edges.append((name, target))
+            if f["fieldtype"] == "Link":
+                add(name, f.get("options"), bool(f.get("reqd")))
+            elif f["fieldtype"] == "Table" and f.get("options") in doctypes:
+                for cf in doctypes[f["options"]]["fields"]:
+                    if cf["fieldtype"] == "Link":
+                        add(name, cf.get("options"), bool(cf.get("reqd")))
     return edges
 
 
-def topological_order(doctypes, edges):
-    remaining = {name: set() for name in doctypes}
-    for frm, to in edges:
-        remaining[frm].add(to)
-    ordered = []
-    placed = set()
-    guard = 0
-    while remaining and guard < 10000:
-        guard += 1
-        ready = [n for n, deps in remaining.items() if deps <= placed]
+def topological_order(names, edges):
+    """Dependency order that respects every required link, and optional links wherever possible.
+
+    Optional links can form cycles (WMS Warehouse -> default bin -> Storage Bin -> WMS Warehouse).
+    When only such a cycle is left, the node whose *required* links are all satisfied and that the most
+    other nodes wait on (WMS Warehouse) goes first; its open optional links are then filled in by
+    a second pass at apply time (see forward_links()).
+    """
+    deps = {n: {} for n in names}
+    for (frm, to), required in edges.items():
+        deps[frm][to] = required
+    placed, ordered = set(), []
+    remaining = set(names)
+    while remaining:
+        ready = sorted(n for n in remaining if all(d in placed for d in deps[n]))
         if not ready:
-            # cycle among remaining doctypes: break it deterministically
-            ready = [sorted(remaining.keys())[0]]
-        for n in sorted(ready):
+            ok = sorted(n for n in remaining if all(d in placed for d, req in deps[n].items() if req))
+            pool = ok or sorted(remaining)
+            def dependents(n):
+                return sum(1 for m in remaining if n in deps[m])
+            ready = [min(pool, key=lambda n: (-dependents(n), sum(1 for d in deps[n] if d not in placed), n))]
+        for n in ready:
             ordered.append(n)
             placed.add(n)
-            del remaining[n]
+            remaining.discard(n)
     return ordered
 
 
@@ -204,8 +222,9 @@ def main():
     for name in sorted(child_doctypes):
         doctypes[name] = build_doctype_entry(name, set(), child_doctypes)
 
-    top_level_edges = dependency_edges({n: doctypes[n] for n in IN_SCOPE_DOCTYPES})
-    apply_order = topological_order({n: None for n in IN_SCOPE_DOCTYPES}, top_level_edges)
+    edges = dependency_edges(doctypes)
+    edges = {k: v for k, v in edges.items() if k[0] in IN_SCOPE_DOCTYPES and k[1] in IN_SCOPE_DOCTYPES}
+    apply_order = topological_order(IN_SCOPE_DOCTYPES, edges)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     schema = {

@@ -7,8 +7,11 @@ import * as ERP from "./erp.js";
 import { findBroken, fixAll } from "./refs.js";
 import { compareWithSite, pullAll } from "./sitesync.js";
 import { toast } from "./render.js";
+import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js";
+import { goToStep, STEPS } from "./wizard.js";
 
 export function renderReviewStep(container) {
+  container.appendChild(requiredCard());
   container.appendChild(referencesCard());
   container.appendChild(syncCard());
 
@@ -68,6 +71,12 @@ export function renderReviewStep(container) {
       }
     },
   }, "Apply to connected site");
+  const blocking = findMissingRequired().length;
+  if (blocking) {
+    pushBtn.disabled = true;
+    pushBtn.title = "Fill in the required fields first";
+    pushCard.appendChild(el("p", { class: "warn" }, `Applying is blocked: ${blocking} record(s) have mandatory fields empty (see above).`));
+  }
   pushCard.appendChild(pushBtn);
   pushCard.appendChild(log);
   container.appendChild(pushCard);
@@ -152,4 +161,31 @@ function renderReport(report) {
     wrap.appendChild(det);
   }
   return wrap;
+}
+
+function requiredCard() {
+  const card = el("div", { class: "card" });
+  card.appendChild(el("h2", {}, "Required fields"));
+  const missing = findMissingRequired();
+  if (!missing.length) {
+    card.appendChild(el("p", { class: "card-desc" }, "Every mandatory field is filled in."));
+    return card;
+  }
+  card.appendChild(el("p", { class: "card-desc" }, `${missing.length} record(s) have mandatory fields empty. The site rejects them, and everything that depends on them (bins need their storage type, which needs its warehouse) fails with it. Fix these before applying.`));
+  const noCompany = missing.some((m) => m.doctype === "WMS Warehouse" && m.fields.some((f) => f.fieldname === "company"));
+  if (noCompany) {
+    const row = el("div", { class: "card-actions" }, el("span", { class: "hint" }, ERP.isConnected() ? "Loading companies…" : "Company is needed for the warehouse - connect to a site to pick from its companies, or set it on the Warehouse step."));
+    card.appendChild(row);
+    if (ERP.isConnected()) siteCompanies().then((list) => {
+      row.innerHTML = "";
+      row.appendChild(el("span", {}, "Set the company on every warehouse: "));
+      for (const c of list) row.appendChild(el("button", { type: "button", class: "btn btn-small btn-primary", onclick: () => { toast(`Company set on ${fillCompany(c)} warehouse(s)`); } }, c));
+      if (!list.length) row.appendChild(el("span", { class: "hint" }, "the site has no companies yet."));
+    });
+  }
+  card.appendChild(el("ul", { class: "map-list" }, missing.slice(0, 40).map((m) => el("li", {}, [
+    el("button", { type: "button", class: "link-btn", onclick: () => { const i = STEPS.findIndex((s) => s.doctypes && s.doctypes.includes(m.doctype)); if (i >= 0) goToStep(i); } }, `${m.doctype} ${m.label}`),
+    el("span", { class: "hint" }, ` - missing: ${m.fields.map((f) => f.label).join(", ")}`),
+  ]))));
+  return card;
 }

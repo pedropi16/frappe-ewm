@@ -39,6 +39,15 @@ function selfReferentialSort(doctypeName, records) {
   return ordered;
 }
 
+/** Link fields of `doctypeName` that point at a doctype applied later - filled in by a second pass. */
+function forwardLinkFields(doctypeName) {
+  const order = Schema.applyOrder();
+  const here = order.indexOf(doctypeName);
+  return Schema.doctype(doctypeName).fields
+    .filter((f) => f.fieldtype === "Link" && order.indexOf(f.options) > here)
+    .map((f) => f.fieldname);
+}
+
 async function apiFetch(_baseUrl, path, opts) {
   const body = opts.body ? JSON.parse(opts.body) : undefined;
   return ERP.api(opts.method || "GET", path, body);
@@ -61,6 +70,7 @@ export async function applyProfileToSite(onProgress) {
   const profile = Store.getProfile();
   const results = [];
   const noneKeyCache = {};
+  const deferred = [];
 
   const emit = (doctypeName, label, r) => {
     const entry = { doctypeName, label, ok: !!r.ok, skipped: !!r.skipped, message: resultMessage(r) };
@@ -104,15 +114,25 @@ export async function applyProfileToSite(onProgress) {
       continue;
     }
 
+    const forward = forwardLinkFields(doctypeName);
     for (const record of records) {
       const name = Schema.computeName(doctypeName, record);
-      const data = cleanRecord(record);
+      const full = cleanRecord(record);
+      const data = Object.fromEntries(Object.entries(full).filter(([k]) => !forward.includes(k)));
+      const later = Object.fromEntries(forward.filter((k) => full[k]).map((k) => [k, full[k]]));
       const getRes = await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}/${encodeURIComponent(name)}`, { method: "GET" }, conn);
       const r = getRes.ok
         ? await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(data) }, conn)
         : await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}`, { method: "POST", body: JSON.stringify(data) }, conn);
       emit(doctypeName, name || Schema.recordLabel(doctypeName, record), r);
+      if (r.ok && Object.keys(later).length) deferred.push({ doctypeName, name, later });
     }
+  }
+
+  // second pass: links to records that only exist now (e.g. a warehouse's default bins)
+  for (const { doctypeName, name, later } of deferred) {
+    const r = await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(later) }, conn);
+    emit(doctypeName, `${name} (${Object.keys(later).join(", ")})`, r);
   }
   return results;
 }
