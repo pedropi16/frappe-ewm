@@ -1,5 +1,6 @@
 import * as Schema from "./schema.js";
 import * as Store from "./store.js";
+import { combobox } from "./combobox.js";
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -15,32 +16,23 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-let datalistCounter = 0;
-
 function linkInput(field, value, onChange) {
   const target = field.options;
   const inScope = target && Schema.isInScope(target);
-  const wrap = document.createDocumentFragment();
-  const listId = `dl-${datalistCounter++}`;
-  const input = el("input", {
-    type: "text",
-    value: value || "",
-    list: inScope ? listId : undefined,
-    placeholder: inScope ? (Store.getRecords(target).length ? "Select or type…" : "None yet - type a code") : target ? `${target} code` : "",
-    onchange: (e) => onChange(e.target.value),
+  const getLocal = () => (inScope
+    ? Store.getRecords(target).map((r) => {
+        const name = Schema.computeName(target, r) || Schema.recordLabel(target, r);
+        const label = Schema.recordLabel(target, r);
+        return { value: name, description: label !== name ? label : "" };
+      })
+    : []);
+  return combobox({
+    target,
+    value,
+    getLocal,
+    onChange,
+    placeholder: `Search ${target}…`,
   });
-  wrap.appendChild(input);
-  if (inScope) {
-    const options = Store.getRecords(target).map((r) => Schema.computeName(target, r) || Schema.recordLabel(target, r));
-    wrap.appendChild(
-      el(
-        "datalist",
-        { id: listId },
-        options.map((o) => el("option", { value: o }))
-      )
-    );
-  }
-  return wrap;
 }
 
 function numberInput(value, isInt, onChange) {

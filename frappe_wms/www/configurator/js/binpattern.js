@@ -1,5 +1,6 @@
 import * as Schema from "./schema.js";
 import * as Store from "./store.js";
+import { combobox } from "./combobox.js";
 import { el } from "./render.js";
 
 function pad(n, width) {
@@ -63,14 +64,13 @@ export function renderBinGenerator() {
 
   const form = el("div", { class: "form-grid" });
   const linkField = (label, key, target) => {
-    const input = document.createElement("input");
-    input.value = state[key];
-    input.placeholder = Store.getRecords(target).length ? "Select or type…" : "None yet - type a code";
-    const listId = "dl-bin-" + key;
-    input.setAttribute("list", listId);
-    input.addEventListener("change", (e) => (state[key] = e.target.value));
-    const datalist = el("datalist", { id: listId }, Store.getRecords(target).map((r) => el("option", { value: Schema.computeName(target, r) })));
-    return el("div", { class: "field" }, [el("label", {}, label), input, datalist]);
+    const getLocal = () => Store.getRecords(target).map((r) => {
+      const name = Schema.computeName(target, r);
+      const lab = Schema.recordLabel(target, r);
+      return { value: name, description: lab !== name ? lab : "" };
+    });
+    const input = combobox({ target, value: state[key], getLocal, placeholder: `Search ${target}…`, onChange: (v) => (state[key] = v) });
+    return el("div", { class: "field" }, [el("label", {}, label), input]);
   };
 
   form.appendChild(linkField("Warehouse", "warehouse", "WMS Warehouse"));

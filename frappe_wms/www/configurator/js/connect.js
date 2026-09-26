@@ -44,7 +44,7 @@ export async function testConnection(conn) {
   }
 }
 
-export function initConnectModal() {
+export function initConnectModal(ERP) {
   const modal = document.getElementById("connect-modal");
   const urlInput = document.getElementById("conn-url");
   const keyInput = document.getElementById("conn-key");
@@ -60,11 +60,26 @@ export function initConnectModal() {
     status.className = "conn-status";
   }
 
-  document.getElementById("btn-connect").addEventListener("click", () => { load(); modal.hidden = false; });
+  const sessionNote = document.getElementById("conn-session");
+  const paintSession = () => {
+    const st = ERP.status();
+    sessionNote.hidden = st.mode !== "session";
+    sessionNote.textContent = st.mode === "session" ? `Already connected: you're signed in to ${st.label} as ${st.user}, so this page reads data from it directly. You only need the fields below to push a profile to a different site.` : "";
+    if (st.mode !== "session" && st.error) { status.textContent = st.error; status.className = "conn-status err"; }
+  };
+  const open = () => { load(); paintSession(); modal.hidden = false; };
+  document.getElementById("btn-connect").addEventListener("click", open);
+  document.getElementById("erp-status").addEventListener("click", open);
   document.getElementById("conn-close").addEventListener("click", () => { modal.hidden = true; });
   document.getElementById("conn-save").addEventListener("click", () => {
     setConnection({ url: urlInput.value.trim(), key: keyInput.value.trim(), secret: secretInput.value.trim() });
-    modal.hidden = true;
+    status.textContent = "Connecting...";
+    status.className = "conn-status";
+    ERP.useToken().then((st) => {
+      if (st.mode === "token") modal.hidden = true;
+      else if (urlInput.value.trim()) { status.textContent = st.error || "Could not connect."; status.className = "conn-status err"; }
+      else modal.hidden = true;
+    });
   });
   document.getElementById("conn-test").addEventListener("click", async () => {
     status.textContent = "Testing...";

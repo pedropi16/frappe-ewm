@@ -1,7 +1,8 @@
 import { loadSchema } from "./schema.js";
 import * as Store from "./store.js";
-import { initWizard, goToStep } from "./wizard.js";
+import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js";
 import { initConnectModal } from "./connect.js";
+import * as ERP from "./erp.js";
 import { exportProfile, importProfileFromFile } from "./export_import.js";
 
 async function main() {
@@ -37,7 +38,19 @@ async function main() {
     }
   });
 
-  initConnectModal();
+  const pill = document.getElementById("erp-status");
+  const paintPill = () => {
+    const st = ERP.status();
+    pill.className = "erp-pill " + (st.mode === "none" ? "off" : "on");
+    pill.textContent = st.mode === "none" ? "Not connected to ERPNext" : `● ${st.label} · ${st.user}`;
+    pill.title = st.mode === "none" ? "Click to connect - Link fields will then search real data" : `Link fields search ${st.label} live (${st.mode === "session" ? "your session" : "API key"})`;
+  };
+  await ERP.init();
+  paintPill();
+  let lastMode = ERP.status().mode;
+  ERP.subscribe(() => { paintPill(); if (ERP.status().mode !== lastMode) { lastMode = ERP.status().mode; renderStep(currentStep()); } });
+
+  initConnectModal(ERP);
   initWizard();
 
   const hasData = Object.values(Store.getProfile().records).some((r) => r.length);

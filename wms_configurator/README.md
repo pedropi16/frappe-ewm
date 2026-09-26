@@ -23,6 +23,14 @@ python3 -m http.server 8000
 Then open `http://localhost:8000`. To host it for real, copy the `app/`
 directory to any static host (it's self-contained - no server-side code).
 
+## Live ERP data in Link fields
+
+Every Link field is a searchable dropdown. It always suggests the records already in your profile; when connected it also searches the site as you type (Items, Companies, Warehouses, Customers, existing stock types...), with a green tick when the value exists there and an amber `!` when it doesn't.
+
+- Served by the site itself (`/configurator`): nothing to set up - it uses your signed-in session, read-only, and respects your permissions. The top bar shows `● site · user`.
+- Hosted anywhere else: press **Connect** and enter the site URL and an API key/secret (the site must allow CORS).
+- Not connected: the dropdown still works from the profile and accepts typed values.
+
 ## Using it
 
 1. Pick a starting preset (or Blank) on the first screen.

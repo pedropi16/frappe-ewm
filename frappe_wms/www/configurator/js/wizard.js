@@ -102,6 +102,8 @@ export function initWizard() {
   renderStep(activeIndex);
 }
 
+export function currentStep() { return activeIndex; }
+
 export function goToStep(idOrIndex) {
   const idx = typeof idOrIndex === "number" ? idOrIndex : STEPS.findIndex((s) => s.id === idOrIndex);
   if (idx < 0) return;

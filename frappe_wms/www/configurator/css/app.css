@@ -407,3 +407,23 @@ tr.detail-row td { background: color-mix(in srgb, var(--text) 3%, transparent); 
 .step-item { display: flex; align-items: center; gap: 6px; }
 .step-item .count { float: none; margin-left: auto; }
 @media (max-width: 640px) { .step-item { display: inline-flex; } }
+
+/* ---- searchable link dropdown ---- */
+.combo { position: relative; display: block; }
+.combo input { padding-right: 46px !important; background-image: none !important; }
+.combo-chevron { position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; margin-top: -6px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); cursor: pointer; }
+.combo-badge { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; color: #fff; cursor: help; }
+.combo-badge[hidden] { display: none; }
+.combo-badge.ok { background: #2f7a3f; }
+.combo-badge.warn { background: #b7791f; }
+.combo-panel { position: fixed; z-index: 200; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 4px; }
+.combo-sec { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); padding: 6px 8px 2px; }
+.combo-item { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.combo-item.active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.combo-val { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.combo-desc { font-size: 11.5px; color: var(--text-dim); overflow-wrap: anywhere; }
+.combo-msg { padding: 8px; font-size: 12px; color: var(--text-dim); }
+.erp-pill { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-dim); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.erp-pill.on { color: #2f7a3f; border-color: color-mix(in srgb, #2f7a3f 50%, var(--border)); }
+.erp-pill:hover { border-color: var(--accent); }
+.conn-session { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, #2f7a3f 12%, transparent); }

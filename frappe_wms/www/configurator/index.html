@@ -17,6 +17,7 @@
     <div class="brand">WMS Configurator</div>
     <input id="profile-name" class="profile-name-input" placeholder="Untitled profile" spellcheck="false">
     <div class="topbar-actions">
+      <button id="erp-status" class="erp-pill" type="button" title="Connection to ERPNext"></button>
       <button id="btn-export" class="btn btn-ghost">Export</button>
       <label class="btn btn-ghost file-btn">Import<input id="file-import" type="file" accept="application/json" hidden></label>
       <button id="btn-connect" class="btn btn-ghost">Connect</button>
@@ -32,7 +33,8 @@
   <div id="connect-modal" class="modal" hidden>
     <div class="modal-card">
       <h2>Connect to a WMS site</h2>
-      <p class="hint">Needed only for the "Apply to site" button. Everything else works fully offline.</p>
+      <div id="conn-session" class="conn-session" hidden></div>
+      <p class="hint">Connecting lets every Link field search real data from the site (Items, Companies, Warehouses, existing WMS records...) and enables "Apply to site". Everything else works fully offline.</p>
       <label>Site URL <input id="conn-url" placeholder="https://wms.local"></label>
       <label>API key <input id="conn-key" autocomplete="off"></label>
       <label>API secret <input id="conn-secret" type="password" autocomplete="off"></label>
