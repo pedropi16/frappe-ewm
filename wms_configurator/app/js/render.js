@@ -103,7 +103,7 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
-function fieldInput(doctypeName, field, value, onChange) {
+export function fieldInput(doctypeName, field, value, onChange) {
   switch (field.fieldtype) {
     case "Check":
       return el("span", { class: "switch" }, [

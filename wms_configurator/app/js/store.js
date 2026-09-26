@@ -31,6 +31,9 @@ function persist() {
   }
 }
 
+/** Runs fn without notifying subscribers per change (one notify at the end). */
+export function batch(fn) { const r = fn(); notify(); return r; }
+
 export function loadFromLocalStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -88,9 +91,53 @@ export function duplicateRecord(doctypeName, id) {
   const rec = list.find((r) => r.__id === id);
   if (!rec) return;
   const copy = { ...structuredClone(rec), __id: uid() };
+  delete copy.__siteName; // a copy is a new record, never an update of the original
   list.push(copy);
   notify();
   return copy;
+}
+
+/** Applies `fn(record)` (returning a partial to merge, or nothing) to the given records in one change. */
+export function bulkUpdate(doctypeName, ids, fn) {
+  const wanted = new Set(ids);
+  let changed = 0;
+  profile.records[doctypeName] = (profile.records[doctypeName] || []).map((r) => {
+    if (!wanted.has(r.__id)) return r;
+    const patch = fn(r);
+    if (!patch) return r;
+    changed++;
+    const next = { ...r, ...patch, __id: r.__id };
+    for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k]; // undefined in a patch clears the field
+    return next;
+  });
+  if (changed) notify();
+  return changed;
+}
+
+export function removeMany(doctypeName, ids) {
+  const gone = new Set(ids);
+  profile.records[doctypeName] = (profile.records[doctypeName] || []).filter((r) => !gone.has(r.__id));
+  notify();
+}
+
+export function duplicateMany(doctypeName, ids) {
+  const wanted = new Set(ids);
+  const list = profile.records[doctypeName] || [];
+  for (const r of [...list]) if (wanted.has(r.__id)) { const c = { ...structuredClone(r), __id: uid() }; delete c.__siteName; list.push(c); }
+  notify();
+}
+
+/** Adds/updates many records at once (used when pulling from the site). match(r) -> existing record or undefined. */
+export function upsertMany(doctypeName, incoming, match) {
+  const list = profile.records[doctypeName] || (profile.records[doctypeName] = []);
+  let added = 0, updated = 0;
+  for (const rec of incoming) {
+    const existing = match(rec, list);
+    if (existing) { Object.assign(existing, rec, { __id: existing.__id }); updated++; }
+    else { list.push({ __id: uid(), ...rec }); added++; }
+  }
+  notify();
+  return { added, updated };
 }
 
 export function replaceRecords(doctypeName, records) {
@@ -120,7 +167,7 @@ export function serializeForExport() {
   const out = { formatVersion: PROFILE_FORMAT_VERSION, profileName: profile.profileName, records: {} };
   for (const [doctypeName, records] of Object.entries(profile.records)) {
     out.records[doctypeName] = records.map((r) => {
-      const { __id, ...rest } = r;
+      const { __id, __siteName, ...rest } = r;
       // strip child-table row __ids too
       const cleaned = {};
       for (const [k, v] of Object.entries(rest)) {

@@ -1,9 +1,9 @@
 import * as Schema from "./schema.js";
 import * as Store from "./store.js";
-import { getConnection, authHeader } from "./connect.js";
+import * as ERP from "./erp.js";
 
 function cleanRecord(record) {
-  const { __id, ...rest } = record;
+  const { __id, __siteName, ...rest } = record;
   const cleaned = {};
   for (const [k, v] of Object.entries(rest)) {
     cleaned[k] = Array.isArray(v) ? v.map(({ __id, ...c }) => c) : v;
@@ -39,19 +39,9 @@ function selfReferentialSort(doctypeName, records) {
   return ordered;
 }
 
-async function apiFetch(baseUrl, path, opts, conn) {
-  let res;
-  try {
-    res = await fetch(`${baseUrl}${path}`, {
-      ...opts,
-      headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeader(conn), ...(opts.headers || {}) },
-    });
-  } catch (e) {
-    return { ok: false, status: 0, body: { message: `network/CORS error: ${e.message}` } };
-  }
-  let body = null;
-  try { body = await res.json(); } catch { /* no body */ }
-  return { ok: res.ok, status: res.status, body };
+async function apiFetch(_baseUrl, path, opts) {
+  const body = opts.body ? JSON.parse(opts.body) : undefined;
+  return ERP.api(opts.method || "GET", path, body);
 }
 
 function resultMessage(r) {
@@ -64,9 +54,9 @@ function resultMessage(r) {
 /** Applies the current profile to the connected site, in dependency order.
  * `onProgress(entry)` is called after every record; entry = {doctypeName,label,ok,skipped,message}. */
 export async function applyProfileToSite(onProgress) {
-  const conn = getConnection();
-  if (!conn.url || !conn.key || !conn.secret) throw new Error("Not connected - set Site URL / API key / secret first (Connect button).");
-  const baseUrl = conn.url.replace(/\/+$/, "");
+  if (!ERP.isConnected()) throw new Error("Not connected to a site - press Connect (top right), or open this page from the site while signed in.");
+  const baseUrl = "";
+  const conn = null;
   const order = Schema.applyOrder();
   const profile = Store.getProfile();
   const results = [];
@@ -99,6 +89,11 @@ export async function applyProfileToSite(onProgress) {
       const plainFieldNames = Schema.plainFields(doctypeName).map((f) => f.fieldname);
       for (const record of records) {
         const data = cleanRecord(record);
+        if (record.__siteName) {
+          const r = await apiFetch(baseUrl, `/api/resource/${encodeURIComponent(doctypeName)}/${encodeURIComponent(record.__siteName)}`, { method: "PUT", body: JSON.stringify(data) }, conn);
+          emit(doctypeName, Schema.recordLabel(doctypeName, record), r);
+          continue;
+        }
         const isDuplicate = noneKeyCache[doctypeName].some((existing) =>
           plainFieldNames.every((f) => String(existing[f] ?? "") === String(data[f] ?? ""))
         );

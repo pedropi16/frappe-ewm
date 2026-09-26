@@ -427,3 +427,31 @@ tr.detail-row td { background: color-mix(in srgb, var(--text) 3%, transparent); 
 .erp-pill.on { color: #2f7a3f; border-color: color-mix(in srgb, #2f7a3f 50%, var(--border)); }
 .erp-pill:hover { border-color: var(--accent); }
 .conn-session { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, #2f7a3f 12%, transparent); }
+
+/* ---- bulk edit, selection, sync ---- */
+.col-check { width: 30px; padding-right: 0 !important; }
+.col-check input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+tr.rec-row.selected { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.bulk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); font-size: 12.5px; }
+.bulk-bar[hidden] { display: none; }
+.bar-spacer { flex: 1; }
+.card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.site-dot { color: #2f7a3f; font-size: 9px; margin-left: 6px; vertical-align: 1px; }
+.bulk-card { max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.bulk-body { display: flex; flex-direction: column; gap: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.seg-btn { border: none; background: transparent; padding: 6px 12px; font-size: 12.5px; cursor: pointer; color: var(--text-dim); }
+.seg-btn.on { background: var(--accent); color: var(--accent-contrast); }
+.inline-check { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.modal-card .field input:not([type=checkbox]), .modal-card .field select { width: 100%; }
+.bulk-preview { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; font-size: 12.5px; }
+.bulk-preview p { margin: 0 0 4px; }
+.bulk-sample { margin: 4px 0; padding-left: 18px; }
+.sync-out { margin-top: 10px; font-size: 13px; }
+.diff-group { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+.diff-group summary { cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.diff-rec ul { margin: 2px 0 8px; padding-left: 18px; font-size: 12px; }
+.diff-old { color: var(--danger); text-decoration: line-through; }
+.diff-new { color: #2f7a3f; font-weight: 600; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.modal-card .inline-check { flex-direction: row; align-items: center; color: var(--text); }

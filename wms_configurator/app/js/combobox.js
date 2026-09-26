@@ -1,5 +1,7 @@
 import * as ERP from "./erp.js";
 import { el } from "./render.js";
+import * as Schema from "./schema.js";
+import { suggest } from "./refs.js";
 
 /**
  * Searchable dropdown for Link fields. Suggestions come from the records already in the profile
@@ -93,16 +95,20 @@ export function combobox({ target, value, placeholder, getLocal = () => [], onCh
 
   async function verify() {
     badge.hidden = true;
+    delete badge.dataset.suggest;
     const v = input.value.trim();
-    if (!v || !ERP.isConnected()) return;
-    if (getLocal().some((r) => r.value === v)) { badge.hidden = false; badge.className = "combo-badge ok"; badge.textContent = "✓"; badge.title = "Defined in this profile"; return; }
+    if (!v) return;
+    const mark = (cls, text, title) => { badge.hidden = false; badge.className = `combo-badge ${cls}`; badge.textContent = text; badge.title = title; };
+    if (getLocal().some((r) => r.value === v)) { if (ERP.isConnected()) mark("ok", "✓", "Defined in this profile"); return; }
+    // a record of this profile that the typed text almost certainly means (e.g. "BULK" for "DC1-BULK")
+    const near = Schema.isInScope(target) ? suggest(target, v) : null;
+    if (near) { badge.dataset.suggest = near; mark("warn", "!", `No ${target} named "${v}" - did you mean "${near}"? Click to use it.`); return; }
+    if (!ERP.isConnected()) return;
     const found = await ERP.exists(target, v);
     if (input.value.trim() !== v || found === null) return;
-    badge.hidden = false;
-    badge.className = "combo-badge " + (found ? "ok" : "warn");
-    badge.textContent = found ? "✓" : "!";
-    badge.title = found ? `Found on ${ERP.status().label}` : `No ${target} named "${v}" on ${ERP.status().label} - check the spelling, or create it there first`;
+    mark(found ? "ok" : "warn", found ? "✓" : "!", found ? `Found on ${ERP.status().label}` : `No ${target} named "${v}" on ${ERP.status().label} - check the spelling, or create it there first`);
   }
+  badge.addEventListener("mousedown", (e) => { if (badge.dataset.suggest) { e.preventDefault(); commit(badge.dataset.suggest); } });
 
   input.addEventListener("focus", () => { input.select(); refresh(); });
   input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(refresh, 180); });

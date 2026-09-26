@@ -100,3 +100,37 @@ export async function exists(doctype, value) {
   const rows = await searchLink(doctype, value, 20);
   return rows.some((r) => r.value === value);
 }
+
+const csrf = () => (window.frappe && window.frappe.csrf_token) || document.querySelector('meta[name="csrf-token"]')?.content || "";
+
+/**
+ * Generic REST call against the connected site. Returns {ok, status, body} and never throws.
+ * Writes in "session" mode need the CSRF token the site injects into /configurator.
+ */
+export async function api(method, path, body) {
+  const init = { method, headers: { Accept: "application/json" } };
+  if (body !== undefined) { init.headers["Content-Type"] = "application/json"; init.body = JSON.stringify(body); }
+  let url = path;
+  if (state.mode === "session") {
+    init.credentials = "same-origin";
+    if (method !== "GET") {
+      const token = csrf();
+      if (!token || token === "None") return { ok: false, status: 0, body: { message: "No CSRF token - reload the page while signed in, or use the Connect dialog's API key." } };
+      init.headers["X-Frappe-CSRF-Token"] = token;
+    }
+  } else if (state.mode === "token") {
+    const conn = getConnection();
+    url = conn.url.replace(/\/+$/, "") + path;
+    Object.assign(init.headers, authHeader(conn));
+  } else {
+    return { ok: false, status: 0, body: { message: "Not connected to a site." } };
+  }
+  try {
+    const res = await fetch(url, init);
+    let json = null;
+    try { json = await res.json(); } catch { /* no body */ }
+    return { ok: res.ok, status: res.status, body: json };
+  } catch (e) {
+    return { ok: false, status: 0, body: { message: `network/CORS error: ${e.message}` } };
+  }
+}

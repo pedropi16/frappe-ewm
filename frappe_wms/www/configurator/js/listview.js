@@ -1,5 +1,10 @@
 import * as Schema from "./schema.js";
-import { el } from "./render.js";
+import * as Store from "./store.js";
+import { el, toast } from "./render.js";
+import { openBulkEdit } from "./bulk.js";
+
+// Row selection survives re-renders (a save elsewhere repaints the step) but is pruned to rows that still exist.
+const selections = new Map();
 
 // Columns shown in a doctype's record list. Anything not listed here gets an automatic
 // selection (see autoColumns). "@address" is a virtual aisle-rack-level-position column.
@@ -101,9 +106,42 @@ export function renderRecordTable(doctypeName, records, { onEdit, onDuplicate, o
   const cols = columnsFor(doctypeName);
   const hasFlags = dt.fields.some((f) => f.fieldtype === "Check" && f.fieldname !== "active");
   const hasActive = dt.fields.some((f) => f.fieldname === "active");
-  const nCols = cols.length + 3 + (hasFlags ? 1 : 0) + (hasActive ? 1 : 0);
+  const nCols = cols.length + 4 + (hasFlags ? 1 : 0) + (hasActive ? 1 : 0);
+
+  const ordered = sortForDisplay(doctypeName, records);
+  const alive = new Set(records.map((r) => r.__id));
+  const selected = new Set([...(selections.get(doctypeName) || [])].filter((id) => alive.has(id)));
+  selections.set(doctypeName, selected);
+
+  const rowChecks = new Map();
+  const headCheck = el("input", { type: "checkbox", title: "Select all", "aria-label": "Select all" });
+  const bar = el("div", { class: "bulk-bar", hidden: true });
+
+  function paintBar() {
+    for (const [id, cb] of rowChecks) { cb.checked = selected.has(id); cb.closest("tr").classList.toggle("selected", selected.has(id)); }
+    headCheck.checked = selected.size > 0 && selected.size === ordered.length;
+    headCheck.indeterminate = selected.size > 0 && selected.size < ordered.length;
+    bar.hidden = selected.size === 0;
+    bar.innerHTML = "";
+    if (!selected.size) return;
+    const ids = () => [...selected];
+    const act = (label, fn, cls = "") => el("button", { type: "button", class: `btn btn-small ${cls}`, onclick: fn }, label);
+    bar.appendChild(el("strong", {}, `${selected.size} selected`));
+    if (selected.size < ordered.length) bar.appendChild(el("button", { type: "button", class: "link-btn", onclick: () => { ordered.forEach((r) => selected.add(r.__id)); paintBar(); } }, `Select all ${ordered.length}`));
+    bar.appendChild(el("span", { class: "bar-spacer" }));
+    bar.appendChild(act("Edit a field…", () => openBulkEdit(doctypeName, ids()), "btn-primary"));
+    if (hasActive) {
+      bar.appendChild(act("Activate", () => { Store.bulkUpdate(doctypeName, ids(), (r) => (r.active === 1 ? null : { active: 1 })); toast("Activated"); }));
+      bar.appendChild(act("Deactivate", () => { Store.bulkUpdate(doctypeName, ids(), (r) => (r.active === 0 ? null : { active: 0 })); toast("Deactivated"); }));
+    }
+    bar.appendChild(act("Copy", () => { Store.duplicateMany(doctypeName, ids()); selected.clear(); toast("Copied"); }));
+    bar.appendChild(act("Delete", () => { if (confirm(`Delete ${selected.size} ${doctypeName} record(s)?`)) { const n = selected.size; Store.removeMany(doctypeName, ids()); selected.clear(); toast(`${n} deleted`); } }, "btn-danger"));
+    bar.appendChild(el("button", { type: "button", class: "link-btn", onclick: () => { selected.clear(); paintBar(); } }, "Clear"));
+  }
+  headCheck.addEventListener("change", () => { if (headCheck.checked) ordered.forEach((r) => selected.add(r.__id)); else selected.clear(); paintBar(); });
 
   const head = el("tr", {}, [
+    el("th", { class: "col-check" }, headCheck),
     el("th", { class: "col-expand" }, ""),
     el("th", {}, "Record"),
     ...cols.map((c) => el("th", {}, c.label)),
@@ -113,8 +151,11 @@ export function renderRecordTable(doctypeName, records, { onEdit, onDuplicate, o
   ]);
 
   const body = [];
-  for (const r of sortForDisplay(doctypeName, records)) {
+  for (const r of ordered) {
     const main = el("tr", { class: "rec-row" });
+    const check = el("input", { type: "checkbox", "aria-label": "Select record" });
+    check.addEventListener("change", () => { if (check.checked) selected.add(r.__id); else selected.delete(r.__id); paintBar(); });
+    rowChecks.set(r.__id, check);
     const toggle = el("button", { type: "button", class: "expand-btn", "aria-expanded": "false", title: "Show every value in this record" }, "▸");
     let detail = null;
     const flip = () => {
@@ -124,8 +165,9 @@ export function renderRecordTable(doctypeName, records, { onEdit, onDuplicate, o
       toggle.textContent = "▾"; toggle.setAttribute("aria-expanded", "true"); main.classList.add("open");
     };
     toggle.addEventListener("click", flip);
+    main.appendChild(el("td", { class: "col-check" }, check));
     main.appendChild(el("td", { class: "col-expand" }, toggle));
-    main.appendChild(el("td", { class: "rec-name", onclick: flip }, Schema.recordLabel(doctypeName, r)));
+    main.appendChild(el("td", { class: "rec-name", onclick: flip }, [Schema.recordLabel(doctypeName, r), r.__siteName ? el("span", { class: "site-dot", title: "Pulled from the site - applying updates that record" }, "●") : null]));
     for (const c of cols) {
       const raw = c.virtual ? c.virtual(r) : formatValue(c.field, r[c.field.fieldname]);
       main.appendChild(el("td", {}, raw || el("span", { class: "hint" }, "—")));
@@ -139,5 +181,7 @@ export function renderRecordTable(doctypeName, records, { onEdit, onDuplicate, o
     ]));
     body.push(main);
   }
-  return el("div", { class: "table-scroll" }, el("table", { class: "record-table rich" }, [el("thead", {}, head), el("tbody", {}, body)]));
+  const wrap = el("div", {}, [bar, el("div", { class: "table-scroll" }, el("table", { class: "record-table rich" }, [el("thead", {}, head), el("tbody", {}, body)]))]);
+  paintBar();
+  return wrap;
 }

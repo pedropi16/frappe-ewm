@@ -1,11 +1,14 @@
 import * as Schema from "./schema.js";
 import * as Store from "./store.js";
-import { renderRecordForm, el, toast } from "./render.js";
+import { renderRecordForm, el } from "./render.js";
 import { renderPresetPicker } from "./presets.js";
 import { renderBinGenerator } from "./binpattern.js";
 import { renderReviewStep } from "./review.js";
 import { renderMapStep } from "./diagram.js";
 import { renderRecordTable } from "./listview.js";
+import * as ERP from "./erp.js";
+import { previewPull, commitPull } from "./sitesync.js";
+import { toast } from "./render.js";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },
@@ -137,6 +140,21 @@ function renderStepper() {
   });
 }
 
+function pullButton(doctypeName, label = "Pull from site") {
+  if (!ERP.isConnected()) return null;
+  const btn = el("button", { type: "button", class: "btn btn-small btn-ghost", title: `Load the ${doctypeName} records that already exist on ${ERP.status().label} into this profile, so you can edit them here` }, `↓ ${label}`);
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const { records, added, updated } = await previewPull(doctypeName);
+      if (!records.length) { toast(`No ${doctypeName} records on the site`); return; }
+      const msg = `${records.length} ${doctypeName} record(s) on ${ERP.status().label}: ${added} new to this profile, ${updated} will overwrite the matching profile record(s).\n\nContinue?`;
+      if (confirm(msg)) { commitPull(doctypeName, records); toast(`Pulled ${records.length} ${doctypeName}`); }
+    } catch (e) { alert(e.message); } finally { btn.disabled = false; }
+  });
+  return btn;
+}
+
 function renderDoctypeCard(doctypeName) {
   const dt = Schema.doctype(doctypeName);
   const records = Store.getRecords(doctypeName);
@@ -145,8 +163,10 @@ function renderDoctypeCard(doctypeName) {
   if (dt.description) card.appendChild(el("p", { class: "card-desc" }, dt.description));
 
   const isEditingThis = editing && editing.doctypeName === doctypeName;
+  const pull = pullButton(doctypeName);
 
   if (dt.issingle) {
+    if (pull) card.appendChild(el("div", { class: "card-actions" }, pull));
     const record = records[0] || {};
     if (isEditingThis || true) {
       card.appendChild(
@@ -175,9 +195,10 @@ function renderDoctypeCard(doctypeName) {
     } else {
       card.appendChild(el("p", { class: "hint" }, "No records yet."));
     }
-    card.appendChild(
-      el("button", { type: "button", class: "btn btn-small", onclick: () => { editing = { doctypeName, id: null }; renderStep(activeIndex); } }, `+ Add ${dt.name}`)
-    );
+    card.appendChild(el("div", { class: "card-actions" }, [
+      el("button", { type: "button", class: "btn btn-small", onclick: () => { editing = { doctypeName, id: null }; renderStep(activeIndex); } }, `+ Add ${dt.name}`),
+      pull,
+    ]));
   } else {
     const existing = editing.id ? records.find((r) => r.__id === editing.id) : {};
     card.appendChild(
