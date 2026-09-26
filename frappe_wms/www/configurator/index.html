@@ -49,8 +49,7 @@
   </div>
 </div>
 
-<script>window.frappe = window.frappe || {};</script>
-<!-- csrf_token -->
+<script>window.frappe = { csrf_token: "{{ csrf_token }}" };</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
