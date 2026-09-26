@@ -12,5 +12,8 @@ def get_context(context):
         frappe.throw(frappe._("You need the WMS Administrator or System Manager role to use the configurator"), frappe.PermissionError)
 
     # Lets the page write (apply a profile) with the signed-in session, no API key needed.
-    context.csrf_token = frappe.sessions.get_csrf_token()
+    try:
+        context.csrf_token = frappe.sessions.get_csrf_token()
+    except AttributeError:
+        context.csrf_token = ""  # no session data (e.g. rendered outside a request): page stays read-only
     return context
