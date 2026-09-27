@@ -55,6 +55,11 @@ def create_deconsolidation_tasks(source_hu, lines):
             "stock_uom": stock_uom_by_key.get(key), "batch_no": line.get("batch_no"), "serial_no": line.get("serial_no"),
             "source_bin": hu.current_bin, "source_hu": source_hu,
             "destination_bin": line.get("destination_bin"), "destination_hu": line.get("destination_hu"),
+            # A line with a destination bin but no destination HU means "split this loose into
+            # the bin" - deliberately no HU, not merely undecided, so confirming it later must
+            # not silently fall back to source_hu (which would just put it right back where it
+            # came from, undoing the split).
+            "unpack_at_destination": 1 if line.get("destination_bin") and not line.get("destination_hu") else 0,
             "stock_type_from": line["stock_type"], "stock_type_to": line["stock_type"],
             "movement_type": process_type.movement_type, "priority": "Normal", "status": "Open",
             "consolidation_group_line": line.get("consolidation_group_line"),

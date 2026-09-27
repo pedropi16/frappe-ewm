@@ -274,7 +274,19 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed
     new_confirmed = already_confirmed + qty
     if qty <= 0 or round(new_confirmed, 6) > round(flt(task.planned_quantity), 6): frappe.throw(_("Invalid confirmed quantity"))
-    resolved_destination_hu = None if destination_hu == _UNPACK else (destination_hu or task.destination_hu or task.source_hu)
+    if destination_hu == _UNPACK:
+        resolved_destination_hu = None
+    elif destination_hu:
+        resolved_destination_hu = destination_hu
+    elif task.unpack_at_destination:
+        # The task itself was created knowing its destination is deliberately no HU (e.g. a
+        # Deconsolidation line splitting stock loose into a bin) - not merely undecided, so this
+        # must not fall back to task.source_hu the way an ordinary unspecified destination would
+        # (reproduced: confirming such a task with the field left blank re-attached the split
+        # stock to the very HU it was being deconsolidated out of, undoing the split entirely).
+        resolved_destination_hu = None
+    else:
+        resolved_destination_hu = task.destination_hu or task.source_hu
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
     destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
@@ -388,9 +400,11 @@ def _update_request(name):
 
 def _relocate_hu_for_task(task, destination_hu=None):
     # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source
-    # HU (which may still hold whatever of its balance wasn't just unpacked) must stay put.
+    # HU (which may still hold whatever of its balance wasn't just unpacked) must stay put. Same
+    # for a task created with unpack_at_destination set, unless the operator scanned a real HU
+    # at confirm time anyway (that still wins).
     if destination_hu == _UNPACK: return
-    hu = destination_hu or task.destination_hu or task.source_hu
+    hu = destination_hu or task.destination_hu or (None if task.unpack_at_destination else task.source_hu)
     if not hu or not task.destination_bin: return
     if task.move_top_hu:
         hu = frappe.db.get_value("Handling Unit", hu, "top_hu") or hu

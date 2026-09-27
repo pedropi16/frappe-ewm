@@ -164,6 +164,13 @@
       "options": "Handling Unit"
     },
     {
+      "fieldname": "unpack_at_destination",
+      "label": "Unpack At Destination",
+      "fieldtype": "Check",
+      "default": 0,
+      "description": "This task's destination is deliberately no Handling Unit (e.g. a deconsolidation line splitting stock loose into a bin), not merely undecided - confirming it must not fall back to the source HU."
+    },
+    {
       "fieldname": "move_top_hu",
       "label": "Move Top HU",
       "fieldtype": "Check",
