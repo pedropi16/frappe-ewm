@@ -211,7 +211,7 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
             task.db_set({"status": "Confirmed", "docstatus": 1}, update_modified=True)
             advance_to_next_step(task)
             _update_request(task.warehouse_request)
-            _move_hu_if_complete(task)
+            _relocate_hu_for_task(task)
             sync_warehouse_order(task.warehouse_order)
             released_tasks = release_next_in_sequence(task.warehouse_order) + _release_predecessor_gated_tasks(task.name)
             result = {"task": task.name, "status": "Confirmed", "released_tasks": released_tasks}
@@ -283,7 +283,15 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if task.consolidation_group_line:
         from frappe_wms.services.consolidation import update_consolidation_progress
         update_consolidation_progress(task, qty)
-    if fully_confirmed: _move_hu_if_complete(task, destination_hu)
+    # Not gated on fully_confirmed: transfer_stock above already moved this confirmation's
+    # quantity in the ledger regardless of whether the task itself is done, so leaving the HU
+    # record pointing at the old bin until the very last partial confirmation catches up would
+    # make it lie about where its own just-confirmed stock actually is (reproduced in
+    # production: a 100-unit Internal Move confirmed 50 at a time left Handling Unit.current_bin
+    # frozen at the source bin after the first 50 had already ledger-moved to the destination -
+    # the same HU then showed real stock at two different bins with no way to tell from the HU
+    # record itself, which is what "the same HU in two different bins" surfaced as).
+    _relocate_hu_for_task(task, destination_hu)
     if fully_confirmed and task.task_type == "Putaway":
         create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)
     if fully_confirmed and task.task_type == "Cross Dock":
@@ -367,7 +375,7 @@ def _update_request(name):
         if request.reference_doctype == "Work Order":
             erpnext_sync.sync_work_order_material_transfer(request)
 
-def _move_hu_if_complete(task, destination_hu=None):
+def _relocate_hu_for_task(task, destination_hu=None):
     hu = destination_hu or task.destination_hu or task.source_hu
     if not hu or not task.destination_bin: return
     if task.move_top_hu:

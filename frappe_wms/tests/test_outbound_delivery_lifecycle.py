@@ -169,7 +169,7 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
             post_goods_issue_for_delivery(obd.name)
 
     def test_post_goods_issue_for_delivery_requires_the_hu_to_be_loaded(self):
-        # Picking only stages the HU (see task.py's _move_hu_if_complete); Goods Issue must not
+        # Picking only stages the HU (see task.py's _relocate_hu_for_task); Goods Issue must not
         # be postable until it has actually been loaded onto a Shipment.
         scenario = self._new_scenario()
         self._receive_and_putaway(scenario, 4)

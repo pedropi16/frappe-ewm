@@ -15,7 +15,7 @@ OPEN_SHIPMENT_STATUSES = ("Planned", "Released", "Staging", "Ready to Load", "Lo
 def _staged_handling_units(delivery_names):
     # Stock Allocation.handling_unit is the pre-pick source HU, not where the line actually
     # ended up - only a confirmed Pick task's destination_hu records the real staged HU (it's
-    # what _move_hu_if_complete physically relocated). Walk allocation -> task to get it right.
+    # what _relocate_hu_for_task physically relocated). Walk allocation -> task to get it right.
     allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", delivery_names]}, pluck="name")
     if not allocation_names: return []
     task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
