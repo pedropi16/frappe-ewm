@@ -128,7 +128,11 @@ def _advance_hu_through_hops(hu_name, hops, reference_doctype, reference_name):
     # uses the movement type of the matching Warehouse Process Type (OB_STAGE for an
     # intermediate stop, OB_LOAD for the final hop into the door) rather than a hardcoded code.
     current_bin = frappe.db.get_value("Handling Unit", hu_name, "current_bin")
-    start = hops.index(current_bin) + 1 if current_bin in hops else 0
+    # Never skip the final hop outright, even if the HU is already sitting there (a
+    # single-hop route with no intermediate stops, most commonly): it's still the one that
+    # must mark the HU "Loaded", which _relocate_handling_unit now does even with nothing to
+    # physically move. Only intermediate hops already passed are safe to skip.
+    start = min(hops.index(current_bin) + 1, len(hops) - 1) if current_bin in hops else 0
     for i in range(start, len(hops)):
         is_final = i == len(hops) - 1
         process_type = frappe.get_cached_doc("Warehouse Process Type", "OB_LOAD" if is_final else "OB_STAGE")
@@ -138,16 +142,22 @@ def _advance_hu_through_hops(hu_name, hops, reference_doctype, reference_name):
 def _relocate_handling_unit(hu_name, destination_bin, movement_type, reference_doctype, reference_name, event_type, hu_status):
     hu = frappe.get_doc("Handling Unit", hu_name)
     source_bin = hu.current_bin
-    if source_bin == destination_bin: return
-    balances = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu_name, "storage_bin": source_bin, "quantity": [">", 0]},
-        fields=["product", "batch_no", "serial_no", "stock_type", "quantity", "stock_uom"])
-    for i, balance in enumerate(balances, 1):
-        source = {"warehouse": hu.warehouse, "product": balance.product, "batch_no": balance.batch_no, "serial_no": balance.serial_no,
-            "handling_unit": hu_name, "storage_bin": source_bin, "stock_type": balance.stock_type, "stock_uom": balance.stock_uom}
-        destination = {"handling_unit": hu_name, "storage_bin": destination_bin, "stock_type": balance.stock_type}
-        transfer_stock(source=source, destination=destination, quantity=balance.quantity, movement_type=movement_type,
-            reference_doctype=reference_doctype, reference_name=reference_name,
-            idempotency_key=f"{event_type.upper()}:{reference_name}:{hu_name}:{destination_bin}:{i}")
+    # An HU already sitting at this hop (a route with no intermediate stops between staging and
+    # the door, or the pick task's own destination already being the door bin - both real,
+    # supported configurations, not edge cases) needs no stock movement, but it still needs its
+    # own status/event recorded: skipping that here left the HU stuck at "Staged" even though the
+    # Shipment/Outbound Delivery correctly advanced to Loaded, which then broke Goods Issue -
+    # _loaded_handling_unit_for_line requires the HU's own status to actually say "Loaded".
+    if source_bin != destination_bin:
+        balances = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu_name, "storage_bin": source_bin, "quantity": [">", 0]},
+            fields=["product", "batch_no", "serial_no", "stock_type", "quantity", "stock_uom"])
+        for i, balance in enumerate(balances, 1):
+            source = {"warehouse": hu.warehouse, "product": balance.product, "batch_no": balance.batch_no, "serial_no": balance.serial_no,
+                "handling_unit": hu_name, "storage_bin": source_bin, "stock_type": balance.stock_type, "stock_uom": balance.stock_uom}
+            destination = {"handling_unit": hu_name, "storage_bin": destination_bin, "stock_type": balance.stock_type}
+            transfer_stock(source=source, destination=destination, quantity=balance.quantity, movement_type=movement_type,
+                reference_doctype=reference_doctype, reference_name=reference_name,
+                idempotency_key=f"{event_type.upper()}:{reference_name}:{hu_name}:{destination_bin}:{i}")
     hu.flags.wms_service_update = True
     hu.current_bin = destination_bin
     hu.status = hu_status
