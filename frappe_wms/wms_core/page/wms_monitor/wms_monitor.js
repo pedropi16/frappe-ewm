@@ -1293,23 +1293,29 @@ class WMSMonitor {
     ]));
   }
 
+  // Matches SAP's own "create Handling Units" screen: Type (required), Number (only meaningful
+  // for an External type - one barcode, one HU), Storage Bin (wherever's selected), and a
+  // Quantity of how many to create in one go - useful for staging several empty HUs ahead of a
+  // physical process where you'll repack one piece (or a different quantity) into each.
   render_repack_new_hu_controls() {
-    if (!this.repack.newDest) this.repack.newDest = { hu_type: "", hu_number: "" };
+    if (!this.repack.newDest) this.repack.newDest = { hu_type: "", hu_number: "", quantity: "1" };
     const nd = this.repack.newDest;
     const types = this.repack.hu_types || [];
     const type = types.find((t) => t.name === nd.hu_type);
     const internal = type && type.numbering_mode === "Internal";
-    const $wrap = $(`<div style="display:flex;gap:6px;align-items:center;"></div>`);
+    const $wrap = $(`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>`);
     const $select = $(`<select class="form-control input-sm" style="width:150px;">
       <option value="">${__("New HU type…")}</option>
       ${types.map((t) => `<option value="${frappe.utils.escape_html(t.name)}" ${t.name === nd.hu_type ? "selected" : ""}>${frappe.utils.escape_html(t.name)}</option>`).join("")}
     </select>`);
     $select.on("change", (e) => { nd.hu_type = e.target.value; this.render_repack_detail(); });
-    const $number = $(`<input class="form-control input-sm" style="width:170px;" placeholder="${internal ? __("Auto-assigned") : __("Scan blank HU barcode")}" ${internal ? "disabled" : ""}>`).val(nd.hu_number);
+    const $number = $(`<input class="form-control input-sm" style="width:160px;" placeholder="${internal ? __("Auto-assigned") : __("Scan blank HU barcode")}" ${internal ? "disabled" : ""}>`).val(nd.hu_number);
     $number.on("input", (e) => { nd.hu_number = e.target.value; });
+    const $qty = $(`<input type="number" min="1" step="1" class="form-control input-sm" style="width:70px;" placeholder="${__("Qty")}" title="${__("How many to create - only one at a time for an External-numbering type")}" ${internal ? "" : "disabled"}>`).val(nd.quantity);
+    $qty.on("input", (e) => { nd.quantity = e.target.value; });
     const $create = $(`<button type="button" class="btn btn-xs btn-default">${__("+ New HU here")}</button>`);
     $create.on("click", () => this.repack_create_here());
-    $wrap.append($select, $number, $create);
+    $wrap.append($select, $number, $qty, $create);
     return $wrap;
   }
 
@@ -1322,16 +1328,25 @@ class WMSMonitor {
     const sel = this.repack.selected;
     if (!sel) { frappe.show_alert({ message: __("Select a row first"), indicator: "orange" }); return; }
     const storage_bin = sel.kind === "item" ? sel.row.srcBin : this.repack_locator({ kind: sel.kind, overview: this.repack.detail }).bin;
-    let hu;
-    try {
-      hu = await frappe.call("frappe_wms.api.handling_unit.create_handling_unit", {
-        hu_type: nd.hu_type, hu_number: (nd.hu_number || "").trim() || undefined, storage_bin,
-      }).then((r) => r.message);
-    } catch (e) { frappe.show_alert({ message: e.message || String(e), indicator: "red" }); return; }
-    frappe.show_alert({ message: __("Created {0}", [hu.name]), indicator: "green" });
-    this.repack.newDest = { hu_type: "", hu_number: "" };
+    const qty = internal ? Math.max(1, parseInt(nd.quantity, 10) || 1) : 1;
+    const created = [];
+    let lastError = null;
+    for (let i = 0; i < qty; i++) {
+      try {
+        const hu = await frappe.call("frappe_wms.api.handling_unit.create_handling_unit", {
+          hu_type: nd.hu_type, hu_number: (nd.hu_number || "").trim() || undefined, storage_bin,
+        }).then((r) => r.message);
+        created.push(hu.name);
+      } catch (e) { lastError = e; break; }
+    }
+    if (!created.length) { frappe.show_alert({ message: (lastError && (lastError.message || String(lastError))) || __("Failed to create Handling Unit"), indicator: "red" }); return; }
+    frappe.show_alert({
+      message: created.length > 1 ? __("Created {0} Handling Units: {1}", [created.length, created.join(", ")]) : __("Created {0}", [created[0]]),
+      indicator: created.length === qty ? "green" : "orange",
+    });
+    this.repack.newDest = { hu_type: "", hu_number: "", quantity: "1" };
     await this.refresh_repack_after_move();
-    await this.select_repack_node("hu", hu.name);
+    await this.select_repack_node("hu", created[created.length - 1]);
   }
 
   render_repack_detail_row(row) {

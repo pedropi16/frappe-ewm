@@ -41,6 +41,17 @@ def create_tasks_for_request(request_name, batch_key=None):
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
     return task.name
 
+# confirm_task's destination_hu resolution defaults an unspecified destination to "the same HU
+# it came from" - correct for a task confirmed later at the RF, where a resource is physically
+# carrying an HU to a new bin and simply hasn't scanned a different one. create_and_confirm_move
+# has no such later confirm step - its caller's destination_hu (or lack of one) is the whole and
+# final word - so when it means "no HU, make it loose" it must say so unambiguously, not rely on
+# a bare None that confirm_task's fallback chain would otherwise silently reinterpret as "keep
+# the source HU" (reproduced: unpacking part of an HU's stock into a different bin left the
+# moved quantity still tagged to the source HU, now claiming to be in a bin that HU never
+# entered).
+_UNPACK = "\x00unpack\x00"
+
 def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_type, source_bin=None, source_hu=None, destination_bin, destination_hu=None, batch_no=None, serial_no=None, device=None):
     # The ad-hoc "move this HU/bin's stock to that bin now" action an RF operator does
     # directly from the floor (SAP EWM's immediate/direct TO creation), as opposed to a
@@ -62,7 +73,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
         "priority": "Normal", "status": "Open",
     })
     task.insert(ignore_permissions=True)
-    return confirm_task(task.name, confirmed_quantity=quantity, device=device)
+    return confirm_task(task.name, confirmed_quantity=quantity, device=device, destination_hu=destination_hu or _UNPACK)
 
 def create_pick_tasks(delivery_name, strategy="Single Order"):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
@@ -263,7 +274,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed
     new_confirmed = already_confirmed + qty
     if qty <= 0 or round(new_confirmed, 6) > round(flt(task.planned_quantity), 6): frappe.throw(_("Invalid confirmed quantity"))
-    resolved_destination_hu = destination_hu or task.destination_hu or task.source_hu
+    resolved_destination_hu = None if destination_hu == _UNPACK else (destination_hu or task.destination_hu or task.source_hu)
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
     destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
@@ -376,6 +387,9 @@ def _update_request(name):
             erpnext_sync.sync_work_order_material_transfer(request)
 
 def _relocate_hu_for_task(task, destination_hu=None):
+    # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source
+    # HU (which may still hold whatever of its balance wasn't just unpacked) must stay put.
+    if destination_hu == _UNPACK: return
     hu = destination_hu or task.destination_hu or task.source_hu
     if not hu or not task.destination_bin: return
     if task.move_top_hu:
