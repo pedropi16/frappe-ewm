@@ -784,11 +784,12 @@ class WMSMonitor {
     return $wrap;
   }
 
-  // ---------- Repack Center: modeled on SAP EWM's /SCWM/PACK repacking workstation - a single
-  // navigation tree of Storage Bins and Handling Units on the left (search seeds the root
-  // level), a tabbed-feeling detail panel on the right for whatever is selected (contents,
-  // with a per-line partial-quantity field), and Drag&Drop between tree rows to repack. A
-  // pinned 🎯 target plus "Repack All" mirrors moving everything at once. ----------
+  // ---------- Repack Center: modeled on SAP EWM's /SCWM/PACK repacking workstation - one
+  // navigation tree on the left with Storage Bins, Handling Units AND their individual stock
+  // lines all as rows you can select or drag directly; a tabbed detail panel on the right shows
+  // the SAME data as the selected row's children (Contents/Unpacked Products, Details/Info,
+  // Destination HUs) the way SAP's own tab set does, plus partial-quantity dragging. A pinned
+  // 🎯 target plus "Repack All" mirrors moving everything at once. ----------
   async load_repack_center() {
     const $wrap = this.body_for("repack");
     if (!$wrap.find(".wms-repack-filters").length) {
@@ -802,9 +803,9 @@ class WMSMonitor {
           <input class="form-control input-sm wms-repack-search-workcenter" placeholder="${__("Work Center")}" style="width:140px;">
           <button class="btn btn-primary btn-sm wms-repack-search">${__("Search")}</button>
         </div>
-        <div class="text-muted" style="margin-bottom:8px;font-size:12px;">${__("Click a row to browse it, the arrow to expand nested Handling Units. Drag a Handling Unit or a content line onto another row to repack it there. Pin a 🎯 target, then Repack All moves everything from the selected row at once.")}</div>
+        <div class="text-muted" style="margin-bottom:8px;font-size:12px;">${__("The tree shows bins, Handling Units and their stock lines - click any row to see it on the right, drag any row onto another to repack it. Pin a 🎯 target, then Repack All moves everything from the selected row at once.")}</div>
         <div style="display:flex;gap:16px;align-items:flex-start;">
-          <div class="wms-repack-tree" style="flex:0 0 360px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;"></div>
+          <div class="wms-repack-tree" style="flex:0 0 380px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;"></div>
           <div class="wms-repack-detail" style="flex:1;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:10px;"></div>
         </div>
       `);
@@ -820,6 +821,7 @@ class WMSMonitor {
   }
 
   repack_key(kind, name) { return JSON.stringify([kind, name]); }
+  item_key(row) { return JSON.stringify(["item", row.parentKind, row.parentName, row.product, row.batch_no || "", row.serial_no || "", row.stock_type]); }
 
   fetch_repack_overview(kind, name) {
     return kind === "hu"
@@ -880,12 +882,16 @@ class WMSMonitor {
     this.render_repack_detail();
   }
 
+  // Children of a tree node are BOTH nested Handling Units and its own stock lines - each
+  // stock line becomes its own leaf row (with the info SAP shows per line: product, batch,
+  // serial, stock type, quantity), carrying its own bin/HU location so it can be dragged
+  // straight from the tree without needing its parent selected first.
   async load_repack_children(kind, name) {
     const overview = await this.fetch_repack_overview(kind, name);
-    const children = this.repack_rows({ kind, overview }).filter((r) => r.kind === "hu").map((r) => ({
-      kind: "hu", name: r.name, nested: r.nested,
-      meta: `${r.hu_type || ""} · ${r.status || ""}${r.stock_status ? " · " + r.stock_status : ""}`,
-    }));
+    const loc = this.repack_locator({ kind, overview });
+    const children = this.repack_rows({ kind, overview }).map((r) => r.kind === "hu"
+      ? { kind: "hu", name: r.name, nested: r.nested, meta: `${r.hu_type || ""} · ${r.status || ""}${r.stock_status ? " · " + r.stock_status : ""}` }
+      : { kind: "item", ...r, srcBin: loc.bin, srcHu: loc.hu, parentKind: kind, parentName: name });
     this.repack.childrenOf[this.repack_key(kind, name)] = children;
     if (this.repack.selected && this.repack.selected.kind === kind && this.repack.selected.name === name) this.repack.detail = overview;
     return children;
@@ -901,7 +907,15 @@ class WMSMonitor {
 
   async select_repack_node(kind, name) {
     this.repack.selected = { kind, name };
+    this.repack.activeTab = kind === "bin" ? "unpacked" : "contents";
     this.repack.detail = await this.fetch_repack_overview(kind, name);
+    this.render_repack_tree();
+    this.render_repack_detail();
+  }
+
+  select_repack_item(row) {
+    this.repack.selected = { kind: "item", row };
+    this.repack.activeTab = "product";
     this.render_repack_tree();
     this.render_repack_detail();
   }
@@ -911,7 +925,17 @@ class WMSMonitor {
       const [kind, name] = JSON.parse(k);
       await this.load_repack_children(kind, name);
     }
-    if (this.repack.selected) this.repack.detail = await this.fetch_repack_overview(this.repack.selected.kind, this.repack.selected.name);
+    const sel = this.repack.selected;
+    if (sel && sel.kind !== "item") {
+      this.repack.detail = await this.fetch_repack_overview(sel.kind, sel.name);
+    } else if (sel && sel.kind === "item") {
+      // Re-resolve the selected line against its (just refreshed) parent's children - its
+      // quantity may have changed, or it may be gone entirely if it was fully moved out.
+      const parentKey = this.repack_key(sel.row.parentKind, sel.row.parentName);
+      const siblings = this.repack.childrenOf[parentKey] || (await this.load_repack_children(sel.row.parentKind, sel.row.parentName));
+      const match = siblings.find((c) => c.kind === "item" && this.item_key(c) === this.item_key(sel.row));
+      this.repack.selected = match ? { kind: "item", row: match } : null;
+    }
     this.render_repack_tree();
     this.render_repack_detail();
   }
@@ -923,9 +947,10 @@ class WMSMonitor {
   }
 
   render_repack_tree_node(node, depth) {
+    if (node.kind === "item") return this.render_repack_tree_item_node(node, depth);
     const k = this.repack_key(node.kind, node.name);
     const expanded = this.repack.expanded.has(k);
-    const selected = this.repack.selected && this.repack_key(this.repack.selected.kind, this.repack.selected.name) === k;
+    const selected = this.repack.selected && this.repack.selected.kind !== "item" && this.repack_key(this.repack.selected.kind, this.repack.selected.name) === k;
     const isTarget = this.repack.target && this.repack_key(this.repack.target.kind, this.repack.target.name) === k;
     const $wrap = $(`<div></div>`);
     const $row = $(`<div class="wms-repack-tree-row${selected ? " wms-repack-tree-selected" : ""}" style="display:flex;align-items:center;gap:6px;padding:3px 4px;margin-left:${depth * 16}px;border-radius:4px;cursor:pointer;"></div>`);
@@ -954,28 +979,56 @@ class WMSMonitor {
     $wrap.append($row);
     if (expanded) {
       const children = this.repack.childrenOf[k] || [];
-      if (!children.length) $wrap.append(`<div class="text-muted" style="margin-left:${(depth + 1) * 16 + 18}px;font-size:11px;">${__("No nested Handling Units")}</div>`);
+      if (!children.length) $wrap.append(`<div class="text-muted" style="margin-left:${(depth + 1) * 16 + 18}px;font-size:11px;">${__("Empty")}</div>`);
       children.forEach((c) => $wrap.append(this.render_repack_tree_node(c, depth + 1)));
     }
     return $wrap;
   }
 
+  // A stock line as its own tree leaf: same info a Contents-tab row shows (product, batch,
+  // serial, stock type, quantity), draggable at its full quantity - no expand arrow, and not a
+  // drop target itself.
+  render_repack_tree_item_node(node, depth) {
+    const selected = this.repack.selected && this.repack.selected.kind === "item" && this.item_key(this.repack.selected.row) === this.item_key(node);
+    const $row = $(`<div class="wms-repack-tree-row${selected ? " wms-repack-tree-selected" : ""}" draggable="true" style="display:flex;align-items:center;gap:6px;padding:3px 4px;margin-left:${depth * 16 + 14}px;border-radius:4px;cursor:grab;"></div>`);
+    $row.append(`<span>🏷️</span>`, `<span>${frappe.utils.escape_html(node.product)}</span>`);
+    const meta = [node.batch_no, node.serial_no, node.stock_type, `${node.quantity} ${node.stock_uom || ""}`.trim()].filter(Boolean);
+    $row.append(`<span class="text-muted" style="font-size:11px;">${frappe.utils.escape_html(meta.join(" · "))}</span>`);
+    $row.on("click", () => this.select_repack_item(node));
+    $row.on("dragstart", (e) => {
+      this.repack._drag = { kind: "item", ...node };
+      e.originalEvent.dataTransfer.effectAllowed = "move";
+      e.originalEvent.dataTransfer.setData("text/plain", node.product);
+      $row.addClass("wms-repack-dragging");
+    });
+    $row.on("dragend", () => { $row.removeClass("wms-repack-dragging"); this.repack._drag = null; });
+    return $row;
+  }
+
+  render_repack_tabs(tabs) {
+    const $bar = $(`<div style="display:flex;gap:4px;border-bottom:1px solid var(--border-color);margin-bottom:10px;"></div>`);
+    tabs.forEach(([key, label]) => {
+      const active = this.repack.activeTab === key;
+      const $t = $(`<div style="padding:5px 10px;cursor:pointer;font-size:12px;${active ? "border-bottom:2px solid #3b82f6;font-weight:bold;" : "color:var(--text-muted);"}">${frappe.utils.escape_html(label)}</div>`);
+      $t.on("click", () => { this.repack.activeTab = key; this.render_repack_detail(); });
+      $bar.append($t);
+    });
+    return $bar;
+  }
+
   render_repack_detail() {
     const $detail = this.body_for("repack").find(".wms-repack-detail").empty();
-    if (!this.repack.selected) { $detail.html(`<div class="text-muted">${__("Select a Handling Unit or Storage Bin in the tree to see its contents.")}</div>`); return; }
-    const { kind, name } = this.repack.selected;
+    const sel = this.repack.selected;
+    if (!sel) { $detail.html(`<div class="text-muted">${__("Select a row in the tree to see its details.")}</div>`); return; }
+    if (sel.kind === "item") { this.render_repack_item_detail($detail, sel.row); return; }
+
     const overview = this.repack.detail;
     if (!overview) { $detail.html(`<div class="text-muted">${__("Loading…")}</div>`); return; }
+    const { kind, name } = sel;
 
     const $head = $(`<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>`);
     $head.append(`<span>${kind === "hu" ? "📦" : "🗄"}</span>`, `<b>${frappe.utils.escape_html(name)}</b>`);
     $head.append(this.copy_btn(name));
-    if (kind === "hu") {
-      const hu = overview.handling_unit;
-      $head.append(`<span class="text-muted">${frappe.utils.escape_html(hu.hu_type || "")} · ${frappe.utils.escape_html(hu.current_bin || "-")} · ${frappe.utils.escape_html(hu.status || "")}${hu.stock_status ? " · " + frappe.utils.escape_html(hu.stock_status) : ""}</span>`);
-    } else {
-      $head.append(`<span class="text-muted">${__("Storage Bin")} · ${frappe.utils.escape_html(overview.storage_bin.storage_type || "")}</span>`);
-    }
     $detail.append($head);
 
     const target = this.repack.target;
@@ -987,9 +1040,104 @@ class WMSMonitor {
     $actions.append($allBtn, this.render_repack_new_hu_controls());
     $detail.append($actions);
 
-    const rows = this.repack_rows({ kind, overview });
-    if (!rows.length) $detail.append(`<div class="text-muted" style="font-size:12px;">${__("Empty")}</div>`);
-    rows.forEach((row) => $detail.append(this.render_repack_detail_row(row)));
+    const tabs = kind === "bin"
+      ? [["unpacked", __("Unpacked Products")], ["info", __("Info")]]
+      : [["contents", __("Contents")], ["details", __("Details")], ["destinations", __("Destination HUs")]];
+    $detail.append(this.render_repack_tabs(tabs));
+
+    const active = this.repack.activeTab;
+    if (kind === "bin") {
+      if (active === "info") this.render_repack_tab_bin_info($detail, overview);
+      else this.render_repack_tab_stock($detail, { kind, overview }, (r) => r.kind === "item");
+    } else if (active === "details") {
+      this.render_repack_tab_hu_details($detail, overview);
+    } else if (active === "destinations") {
+      this.render_repack_tab_destinations($detail, sel);
+    } else {
+      this.render_repack_tab_stock($detail, { kind, overview }, () => true);
+    }
+  }
+
+  // The Contents / Unpacked Products tab: the same lines the tree shows for this node, again -
+  // this copy is where partial-quantity dragging happens (a qty field per line), matching SAP's
+  // own "double-click the node, open Contents, enter a partial quantity, drag that row" flow.
+  render_repack_tab_stock($detail, node, filterFn) {
+    const loc = this.repack_locator(node);
+    const rows = this.repack_rows(node).filter(filterFn);
+    if (!rows.length) { $detail.append(`<div class="text-muted" style="font-size:12px;">${__("Empty")}</div>`); return; }
+    rows.forEach((row) => {
+      const enriched = row.kind === "item" ? { ...row, srcBin: loc.bin, srcHu: loc.hu } : row;
+      $detail.append(this.render_repack_detail_row(enriched));
+    });
+  }
+
+  render_repack_info_table(fields) {
+    const $t = $(`<table class="table table-sm" style="margin-bottom:0;"></table>`);
+    fields.forEach(([label, val]) => $t.append(`<tr><th style="width:150px;">${frappe.utils.escape_html(label)}</th><td>${frappe.utils.escape_html(String(val === null || val === undefined ? "" : val))}</td></tr>`));
+    return $t;
+  }
+
+  render_repack_tab_bin_info($detail, overview) {
+    const b = overview.storage_bin;
+    $detail.append(this.render_repack_info_table([
+      [__("Warehouse"), b.warehouse], [__("Storage Type"), b.storage_type], [__("Storage Section"), b.storage_section],
+      [__("Bin Type"), b.bin_type], [__("Max HUs"), b.maximum_hus], [__("Current HUs"), b.current_hu_count],
+      [__("Putaway Blocked"), b.putaway_blocked ? __("Yes") : __("No")], [__("Removal Blocked"), b.removal_blocked ? __("Yes") : __("No")],
+      [__("Inventory Blocked"), b.inventory_blocked ? __("Yes") : __("No")],
+    ]));
+  }
+
+  render_repack_tab_hu_details($detail, overview) {
+    const hu = overview.handling_unit;
+    $detail.append(this.render_repack_info_table([
+      [__("Type"), hu.hu_type], [__("Status"), hu.status], [__("Stock Status"), hu.stock_status],
+      [__("Current Bin"), hu.current_bin], [__("Parent HU"), hu.parent_hu || "-"], [__("Top HU"), hu.top_hu],
+      [__("Gross Weight"), hu.gross_weight], [__("Net Weight"), hu.net_weight], [__("Volume"), hu.volume],
+      [__("Closed"), hu.closed ? __("Yes") : __("No")], [__("Loaded"), hu.loaded ? __("Yes") : __("No")],
+      [__("Outbound Delivery"), hu.outbound_delivery || "-"], [__("Shipment"), hu.shipment || "-"],
+    ]));
+  }
+
+  // "Possible destination HUs": every other HU sitting in the same bin, with a click-to-move
+  // button - a non-drag alternative to Drag&Drop, same idea as SAP's own tab.
+  async render_repack_tab_destinations($detail, sel) {
+    $detail.append(`<div class="text-muted">${__("Loading…")}</div>`);
+    const bin = sel.kind === "hu" ? this.repack.detail.handling_unit.current_bin : sel.row.srcBin;
+    const excludeName = sel.kind === "hu" ? sel.name : sel.row.srcHu;
+    if (!bin) { $detail.empty().append(`<div class="text-muted">${__("No bin context for this line")}</div>`); return; }
+    const candidates = await frappe.call("frappe_wms.api.monitor.search_handling_units", { warehouse: this.warehouse, current_bin: bin, limit: 50 })
+      .then((r) => (r.message || []).filter((h) => h.name !== excludeName));
+    $detail.empty();
+    if (!candidates.length) { $detail.append(`<div class="text-muted">${__("No other Handling Units in this bin")}</div>`); return; }
+    candidates.forEach((c) => {
+      const $row = $(`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border-color);border-radius:4px;margin-bottom:4px;"></div>`);
+      $row.append(`<b>${frappe.utils.escape_html(c.name)}</b>`, `<span class="text-muted">${frappe.utils.escape_html(c.hu_type || "")} · ${frappe.utils.escape_html(c.status || "")}</span>`);
+      const $go = $(`<button type="button" class="btn btn-xs btn-default" style="margin-left:auto;">${__("Move Here")}</button>`);
+      $go.on("click", () => this.repack_quick_move(sel, c.name));
+      $row.append($go);
+      $detail.append($row);
+    });
+  }
+
+  async repack_quick_move(sel, targetHuName) {
+    this.repack._drag = sel.kind === "hu"
+      ? { kind: "hu", name: sel.name, nested: !!this.repack.detail.handling_unit.parent_hu }
+      : { kind: "item", ...sel.row };
+    await this.handle_repack_drop("hu", targetHuName);
+  }
+
+  render_repack_item_detail($detail, row) {
+    const $head = $(`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"></div>`);
+    $head.append(`<span>🏷️</span>`, `<b>${frappe.utils.escape_html(row.product)}</b>`);
+    $detail.append($head);
+    $detail.append($(`<div style="margin-bottom:10px;"></div>`).append(this.render_repack_new_hu_controls()));
+    $detail.append(this.render_repack_tabs([["product", __("Product Info")], ["destinations", __("Destination HUs")]]));
+    if (this.repack.activeTab === "destinations") { this.render_repack_tab_destinations($detail, { kind: "item", row }); return; }
+    $detail.append(this.render_repack_info_table([
+      [__("Product"), row.product], [__("Batch"), row.batch_no || "-"], [__("Serial"), row.serial_no || "-"],
+      [__("Stock Type"), row.stock_type], [__("Quantity"), row.quantity], [__("UOM"), row.stock_uom || ""],
+      [__("Storage Bin"), row.srcBin || "-"], [__("Handling Unit"), row.srcHu || "-"],
+    ]));
   }
 
   render_repack_new_hu_controls() {
@@ -1018,8 +1166,9 @@ class WMSMonitor {
     const type = (this.repack.hu_types || []).find((t) => t.name === nd.hu_type);
     const internal = type && type.numbering_mode === "Internal";
     if (!internal && !(nd.hu_number || "").trim()) { frappe.show_alert({ message: __("Scan or type the barcode of the blank Handling Unit"), indicator: "orange" }); return; }
-    if (!this.repack.selected) { frappe.show_alert({ message: __("Select a Handling Unit or Storage Bin first"), indicator: "orange" }); return; }
-    const storage_bin = this.repack_locator({ kind: this.repack.selected.kind, overview: this.repack.detail }).bin;
+    const sel = this.repack.selected;
+    if (!sel) { frappe.show_alert({ message: __("Select a row first"), indicator: "orange" }); return; }
+    const storage_bin = sel.kind === "item" ? sel.row.srcBin : this.repack_locator({ kind: sel.kind, overview: this.repack.detail }).bin;
     let hu;
     try {
       hu = await frappe.call("frappe_wms.api.handling_unit.create_handling_unit", {
@@ -1106,9 +1255,6 @@ class WMSMonitor {
   async handle_repack_drop(targetKind, targetName) {
     const drag = this.repack._drag;
     if (!drag) return;
-    if (this.repack.selected && this.repack.selected.kind === targetKind && this.repack.selected.name === targetName && drag.kind === "item") {
-      frappe.show_alert({ message: __("Already there"), indicator: "orange" }); return;
-    }
     try {
       if (drag.kind === "hu") {
         if (targetKind !== "hu") { frappe.show_alert({ message: __("Drop a Handling Unit onto another Handling Unit, not a bin"), indicator: "orange" }); return; }
@@ -1116,10 +1262,10 @@ class WMSMonitor {
         await this.repack_nest_row(drag, targetName);
         frappe.show_alert({ message: __("Nested {0} into {1}", [drag.name, targetName]), indicator: "green" });
       } else {
-        if (!this.repack.selected) { frappe.show_alert({ message: __("Select the row this line came from first"), indicator: "orange" }); return; }
+        const srcLoc = { bin: drag.srcBin, hu: drag.srcHu || null };
         const destOverview = await this.fetch_repack_overview(targetKind, targetName);
         const destLoc = this.repack_locator({ kind: targetKind, overview: destOverview });
-        const srcLoc = this.repack_locator({ kind: this.repack.selected.kind, overview: this.repack.detail });
+        if (srcLoc.bin === destLoc.bin && (srcLoc.hu || null) === (destLoc.hu || null)) { frappe.show_alert({ message: __("Already there"), indicator: "orange" }); return; }
         await this.repack_move_item(srcLoc, destLoc, drag);
         frappe.show_alert({ message: __("Moved {0} into {1}", [drag.product, targetName]), indicator: "green" });
       }
@@ -1132,7 +1278,7 @@ class WMSMonitor {
 
   repack_all() {
     const sel = this.repack.selected, target = this.repack.target;
-    if (!sel) { frappe.show_alert({ message: __("Select a Handling Unit or Storage Bin first"), indicator: "orange" }); return; }
+    if (!sel || sel.kind === "item") { frappe.show_alert({ message: __("Select a Handling Unit or Storage Bin first"), indicator: "orange" }); return; }
     if (!target) { frappe.show_alert({ message: __("Pin a 🎯 Repack All target in the tree first"), indicator: "orange" }); return; }
     if (sel.kind === target.kind && sel.name === target.name) { frappe.show_alert({ message: __("Source and target are the same"), indicator: "orange" }); return; }
     frappe.confirm(__("Move everything in {0} into {1}?", [sel.name, target.name]), async () => {
