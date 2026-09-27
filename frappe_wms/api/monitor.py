@@ -109,6 +109,21 @@ def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None,
     ], order_by="posting_datetime desc", limit=cint(limit) or 100)
 
 @frappe.whitelist()
+def stock_line_history(product, stock_type, storage_bin=None, handling_unit=None, batch_no=None, serial_no=None, limit=10):
+    """The last few postings that actually built up one specific balance line - a Repack Center
+    product row only ever shows the current quantity; this is "the document it's attached to"
+    (what created or last touched it) that a balance row itself has no way to carry."""
+    filters = {"product": product, "stock_type": stock_type}
+    filters["storage_bin"] = storage_bin if storage_bin else ["in", ["", None]]
+    filters["handling_unit"] = handling_unit if handling_unit else ["in", ["", None]]
+    if batch_no: filters["batch_no"] = batch_no
+    if serial_no: filters["serial_no"] = serial_no
+    return frappe.get_list("WMS Stock Ledger Entry", filters=filters, fields=[
+        "name", "posting_datetime", "quantity", "movement_type", "reference_doctype", "reference_name",
+        "warehouse_task", "posting_user",
+    ], order_by="posting_datetime desc", limit=cint(limit) or 10)
+
+@frappe.whitelist()
 def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None,
                   assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None,
                   confirmed_by=None, from_date=None, to_date=None, limit=200):
