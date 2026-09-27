@@ -62,28 +62,32 @@ def _update_delivery_issue_status(delivery_name):
     values = {"goods_issue_status": goods_issue_status, "status": "Goods Issued" if fully_issued else "Staged"}
     frappe.db.set_value("Outbound Delivery", delivery_name, values)
 
-def _loaded_handling_unit_for_line(outbound_delivery_item):
+def _loaded_handling_units_for_line(outbound_delivery_item):
     # Stock Allocation.handling_unit is the pre-pick source HU, not where the line actually
     # ended up - only a confirmed Pick task's destination_hu records the real HU it was staged
     # into (see the identical walk in services/shipping.py). Goods Issue additionally requires
     # that HU to have since been loaded onto a Shipment (see post_goods_issue), so only a
     # destination_hu whose current status is "Loaded" is offered up here.
+    #
+    # A line's picked quantity can legitimately span more than one physical HU - a normal
+    # allocation outcome whenever one delivery's need is filled from more than one source
+    # pallet/bin - so this returns every loaded one, not just the first.
     allocation_names = frappe.get_all("Stock Allocation",
         filters={"outbound_delivery_item": outbound_delivery_item, "status": ["in", ["Picked", "Partially Picked"]]}, pluck="name")
-    if not allocation_names: return None
+    if not allocation_names: return []
     task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
-    if not task_names: return None
+    if not task_names: return []
     destination_hus = frappe.get_all("Warehouse Task",
         filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
-        pluck="destination_hu")
-    for hu_name in destination_hus:
-        if frappe.db.get_value("Handling Unit", hu_name, "status") == "Loaded": return hu_name
-    return None
+        pluck="destination_hu", distinct=True)
+    return sorted({hu for hu in destination_hus if frappe.db.get_value("Handling Unit", hu, "status") == "Loaded"})
 
 def _ready_lines_for_delivery(delivery_name):
-    # Each line still owing a goods issue, with a suggested loaded HU if one can be inferred -
-    # shared by the RF Ship screen (list_ready_to_ship) and the Monitor's one-tap
-    # post_goods_issue_for_delivery, so both agree on what's actually ready.
+    # Each line still owing a goods issue, split across however many loaded HUs it actually
+    # takes to cover it (handling_unit_splits) - shared by the RF Ship screen (list_ready_to_ship)
+    # and the Monitor's one-tap post_goods_issue_for_delivery, so both agree on what's ready.
+    # suggested_handling_unit (the first split, if any) is kept only for whatever already reads
+    # it as a single-value hint.
     rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name},
         fields=["name", "item", "picked_quantity", "issued_quantity", "stock_uom", "required_stock_type"])
     lines = []
@@ -91,7 +95,20 @@ def _ready_lines_for_delivery(delivery_name):
         remaining = flt(row.picked_quantity) - flt(row.issued_quantity)
         if remaining <= 0: continue
         row["remaining_quantity"] = remaining
-        row["suggested_handling_unit"] = _loaded_handling_unit_for_line(row.name)
+        splits = []
+        need = remaining
+        for hu_name in _loaded_handling_units_for_line(row.name):
+            if need <= 0: break
+            bin_name = frappe.db.get_value("Handling Unit", hu_name, "current_bin")
+            on_hand = flt(frappe.db.get_value("WMS Stock Balance", {
+                "handling_unit": hu_name, "storage_bin": bin_name, "product": row.item, "stock_type": row.required_stock_type,
+            }, "quantity"))
+            if on_hand <= 0: continue
+            take = min(need, on_hand)
+            splits.append({"handling_unit": hu_name, "quantity": take})
+            need -= take
+        row["handling_unit_splits"] = splits
+        row["suggested_handling_unit"] = splits[0]["handling_unit"] if splits else None
         lines.append(row)
     return lines
 
@@ -122,14 +139,25 @@ def create_and_submit_goods_issue(outbound_delivery, items):
 
 def post_goods_issue_for_delivery(delivery_name):
     # The Monitor's one-tap "Post Goods Issue" - auto-builds the same payload the RF Ship
-    # screen's per-line form would, using whatever loaded HU was already suggested per line.
+    # screen's per-line form would, one Goods Issue line per loaded HU a delivery line's
+    # quantity is actually split across (see _ready_lines_for_delivery) rather than assuming a
+    # single HU covers all of it - that assumption used to throw "Insufficient stock" for
+    # whatever a line's first HU didn't happen to hold, once allocation legitimately split it
+    # across a second one (reproduced via the load-test generator at moderate volume).
     require_role("WMS Operator", "WMS Loader", "WMS Supervisor")
     lines = _ready_lines_for_delivery(delivery_name)
     if not lines: frappe.throw(_("Nothing left to issue for this delivery"))
-    missing = [l.item for l in lines if not l.suggested_handling_unit]
+    missing = [l.item for l in lines if not l.handling_unit_splits]
     if missing: frappe.throw(_("No loaded Handling Unit found for: {0}. Load it onto a Shipment first.").format(", ".join(missing)))
-    items = [{
-        "outbound_delivery_item": l.name, "item": l.item, "quantity": l.remaining_quantity,
-        "stock_uom": l.stock_uom, "handling_unit": l.suggested_handling_unit, "stock_type": l.required_stock_type,
-    } for l in lines]
-    return create_and_submit_goods_issue(delivery_name, items)
+    items = [
+        {"outbound_delivery_item": l.name, "item": l.item, "quantity": s["quantity"],
+         "stock_uom": l.stock_uom, "handling_unit": s["handling_unit"], "stock_type": l.required_stock_type}
+        for l in lines for s in l.handling_unit_splits
+    ]
+    result = create_and_submit_goods_issue(delivery_name, items)
+    # A line whose loaded HUs don't yet cover its full remaining quantity still gets whatever is
+    # actually ready issued now (a normal partial state - goods_issue_status already models
+    # "Partially Posted") instead of failing the whole call; flag it so the caller can tell.
+    short = [l.item for l in lines if sum(s["quantity"] for s in l.handling_unit_splits) < l.remaining_quantity - 0.000001]
+    if short: result["partially_issued"] = short
+    return result

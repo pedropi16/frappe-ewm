@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.determination import determine_route
 from frappe_wms.services.numbering import next_number
@@ -25,6 +25,33 @@ def _staged_handling_units(delivery_names):
         fields=["destination_hu"], distinct=True)
     return sorted({t.destination_hu for t in tasks})
 
+def _other_deliveries_sharing_hu(hu_name, deliveries_being_shipped):
+    # A confirmed Pick task's destination_hu defaults to its own source_hu when no distinct
+    # destination was scanned (the RF Pick screen's own documented default) - correct for a
+    # whole-HU pick, but when a source HU has enough stock to (partially) satisfy more than one
+    # Outbound Delivery, more than one delivery's pick can legitimately resolve to that *same*
+    # physical HU. Shipping it on this shipment alone would then claim it exclusively (Handling
+    # Unit.status/.shipment aren't per-delivery), stranding whatever the other delivery still
+    # needs from it: reproduced with two deliveries allocated off one bulk pallet, each shipped
+    # independently - the second could never post its Goods Issue once the first shipment's HU
+    # moved past "Loaded" to "Shipped". Returns the other delivery name(s) still owed stock from
+    # this HU that aren't part of *this* shipment, so the caller can refuse with an actionable
+    # message instead of silently mis-shipping.
+    task_names = frappe.get_all("Warehouse Task",
+        filters={"task_type": "Pick", "status": "Confirmed", "destination_hu": hu_name}, pluck="name")
+    if not task_names: return []
+    allocation_names = frappe.get_all("Warehouse Task Allocation", filters={"parent": ["in", task_names]}, pluck="stock_allocation")
+    if not allocation_names: return []
+    rows = frappe.get_all("Stock Allocation", filters={"name": ["in", allocation_names]},
+        fields=["outbound_delivery", "outbound_delivery_item", "picked_quantity"])
+    others = set()
+    for r in rows:
+        if not r.outbound_delivery or r.outbound_delivery in deliveries_being_shipped: continue
+        issued = flt(frappe.db.get_value("Outbound Delivery Item", r.outbound_delivery_item, "issued_quantity"))
+        if flt(r.picked_quantity) - issued > 0.000001:
+            others.add(r.outbound_delivery)
+    return sorted(others)
+
 def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, vehicle_registration=None, driver_name=None):
     require_role(*LOAD_ROLES)
     if not outbound_deliveries: frappe.throw(_("At least one Outbound Delivery is required"))
@@ -43,6 +70,13 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
 
     hus = _staged_handling_units(outbound_deliveries)
     if not hus: frappe.throw(_("None of these deliveries have a staged Handling Unit yet"))
+    delivery_set = set(outbound_deliveries)
+    for hu in hus:
+        others = _other_deliveries_sharing_hu(hu, delivery_set)
+        if others:
+            frappe.throw(_("Handling Unit {0} is also picked for {1}, which {2} not included in this shipment - "
+                "ship them together, or pick this delivery into a different Handling Unit").format(
+                hu, ", ".join(others), _("is") if len(others) == 1 else _("are")))
 
     shipment = frappe.get_doc({
         "doctype": "WMS Shipment", "shipment_number": next_number("WMS Shipment", warehouse=warehouse),
@@ -147,7 +181,7 @@ def _relocate_handling_unit(hu_name, destination_bin, movement_type, reference_d
     # supported configurations, not edge cases) needs no stock movement, but it still needs its
     # own status/event recorded: skipping that here left the HU stuck at "Staged" even though the
     # Shipment/Outbound Delivery correctly advanced to Loaded, which then broke Goods Issue -
-    # _loaded_handling_unit_for_line requires the HU's own status to actually say "Loaded".
+    # _loaded_handling_units_for_line requires the HU's own status to actually say "Loaded".
     if source_bin != destination_bin:
         balances = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu_name, "storage_bin": source_bin, "quantity": [">", 0]},
             fields=["product", "batch_no", "serial_no", "stock_type", "quantity", "stock_uom"])
