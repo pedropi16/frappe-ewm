@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move
-from frappe_wms.services.packing import repack as _repack, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
+from frappe_wms.services.packing import repack as _repack, repack_loose as _repack_loose, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
 from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.resource import RESOURCE_ROLES as RF_ROLES
 from frappe_wms.services.idempotency import run_once
@@ -62,13 +62,19 @@ def hu_overview(hu_number):
 def bin_overview(bin_code):
     bin_doc=frappe.get_doc("Storage Bin",bin_code); bin_doc.check_permission("read")
     stock=frappe.get_all("WMS Stock Balance",filters={"storage_bin":bin_doc.name,"quantity":[">",0]},fields=["product","handling_unit","batch_no","serial_no","stock_type","quantity","stock_uom"])
-    return {"storage_bin":bin_doc.as_dict(),"stock":stock}
+    handling_units=frappe.get_all("Handling Unit",filters={"current_bin":bin_doc.name,"parent_hu":["is","not set"]},fields=["name","hu_type","status","stock_status"])
+    return {"storage_bin":bin_doc.as_dict(),"stock":stock,"handling_units":handling_units}
 
 @frappe.whitelist()
 def repack(source_hu,destination_hu,items,idempotency_key,packing_order=None):
     reference_doctype = "Packing Order" if packing_order else "Handling Unit"
     reference_name = packing_order or source_hu
     return _repack(source_hu,destination_hu,parse_json(items,"items"),reference_doctype,reference_name,idempotency_key)
+
+@frappe.whitelist()
+def repack_loose(storage_bin,items,idempotency_key,source_hu=None,destination_hu=None):
+    reference_name = destination_hu or source_hu or storage_bin
+    return _repack_loose(storage_bin,source_hu,destination_hu,parse_json(items,"items"),"Handling Unit",reference_name,idempotency_key)
 
 @frappe.whitelist()
 def complete_packing_order(packing_order_name):

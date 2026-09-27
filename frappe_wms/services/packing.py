@@ -7,11 +7,27 @@ from frappe_wms.services.task import my_resource
 def repack(source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
     source=frappe.get_doc("Handling Unit",source_hu); destination=frappe.get_doc("Handling Unit",destination_hu)
     if source.warehouse != destination.warehouse or source.current_bin != destination.current_bin: frappe.throw(_("Source and destination HUs must be in the same bin"))
+    return repack_loose(source.current_bin, source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key)
+
+def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
+    # Same idea as repack() but either side may be loose stock sitting directly in storage_bin
+    # instead of inside a Handling Unit - covers bin->HU, HU->bin and HU->HU repacking, all at
+    # one spot. A Warehouse Task ("Internal Move") can't model this: it requires source and
+    # destination bins to differ, which same-bin repacking by definition never does.
+    if not source_hu and not destination_hu: frappe.throw(_("At least one side of a repack must be a Handling Unit"))
+    warehouse = None
+    for hu_name in (source_hu, destination_hu):
+        if not hu_name: continue
+        hu = frappe.get_doc("Handling Unit", hu_name)
+        if hu.current_bin != storage_bin: frappe.throw(_("{0} is not in bin {1}").format(hu_name, storage_bin))
+        warehouse = hu.warehouse
+    warehouse = warehouse or frappe.db.get_value("Storage Bin", storage_bin, "warehouse")
     for i,item in enumerate(items,1):
-        src={"warehouse":source.warehouse,"product":item["item"],"batch_no":item.get("batch_no"),"serial_no":item.get("serial_no"),"handling_unit":source.name,"storage_bin":source.current_bin,"stock_type":item["stock_type"],"stock_uom":item["stock_uom"]}
-        dst={"handling_unit":destination.name,"storage_bin":destination.current_bin,"stock_type":item["stock_type"]}
+        src={"warehouse":warehouse,"product":item["item"],"batch_no":item.get("batch_no"),"serial_no":item.get("serial_no"),"handling_unit":source_hu,"storage_bin":storage_bin,"stock_type":item["stock_type"],"stock_uom":item["stock_uom"]}
+        dst={"handling_unit":destination_hu,"storage_bin":storage_bin,"stock_type":item["stock_type"]}
         transfer_stock(source=src,destination=dst,quantity=item["quantity"],movement_type="801",reference_doctype=reference_doctype,reference_name=reference_name,idempotency_key=f"{idempotency_key}:{i}")
-    frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination.name,"event_type":"Packed","bin_after":destination.current_bin,"reference_doctype":reference_doctype,"reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
+    if destination_hu:
+        frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination_hu,"event_type":"Packed","bin_after":storage_bin,"reference_doctype":reference_doctype,"reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
 
 def complete_packing_order(packing_order_name):
     # Packing Order only records which HUs are involved, not a per-item/qty breakdown, so the

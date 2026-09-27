@@ -25,7 +25,7 @@ export const repackScan = {
   },
 };
 
-const d = { hu: null, detail: null, lines: [], dest: "", newType: "", types: [], form: { idem: "" }, w0: 0 };
+const d = { hu: null, detail: null, lines: [], dest: "", newType: "", newNumber: "", types: [], form: { idem: "" }, w0: 0 };
 const key = (n) => `repack:${n}`;
 const persist = () => saveDraft(key(d.hu), { lines: d.lines, dest: d.dest, idem: d.form.idem }, { label: `${_("Repack")} · ${d.hu}`, route: href("repack", d.hu) });
 
@@ -58,9 +58,12 @@ export const repackDetail = {
     if (items.length) wrap.append(Section({ title: _("Items") }, items.map(({ l, i }) => h("div.line-row",
       h("div.line-head", l.product), h("div.line-sub", `${l.batch_no || ""} ${_(l.stock_type)} · ${_("available {0} {1}", [fmtQty(l.available), l.stock_uom || ""])}`),
       Field({ name: `rq${i}`, kind: "qty", label: _("Quantity to repack"), value: l.quantity, unit: l.stock_uom, enterNext: true, onInput: (v) => { l.quantity = v; persist(); } })))));
+    const newTypeInfo = d.types.find((t) => t.name === d.newType);
+    const newInternal = newTypeInfo && newTypeInfo.numbering_mode === "Internal";
     wrap.append(Section({ title: _("Destination") },
       Field({ name: "dest", kind: "scan", label: _("Destination Handling Unit"), placeholder: _("Scan an existing HU barcode"), value: d.dest, onInput: (v) => { d.dest = v; persist(); }, onCommit: (v) => { d.dest = v; persist(); } }),
-      Field({ name: "newtype", kind: "select", label: _("...or create a new one"), value: d.newType, options: [{ value: "", label: _("Select HU type") }, ...d.types.map((t) => ({ value: t.name, label: t.name }))], onInput: (v) => { d.newType = v; } }),
+      Field({ name: "newtype", kind: "select", label: _("...or create a new one"), value: d.newType, options: [{ value: "", label: _("Select HU type") }, ...d.types.map((t) => ({ value: t.name, label: t.name }))], onInput: (v) => { d.newType = v; update(); } }),
+      Field({ name: "newnumber", kind: "scan", label: _("New HU barcode"), placeholder: newInternal ? _("Leave blank - number is auto-assigned") : _("Scan the blank HU barcode"), value: d.newNumber, disabled: !!newInternal, onInput: (v) => { d.newNumber = v; }, onCommit: (v) => { d.newNumber = v; } }),
       Btn({ label: _("Create as destination"), onClick: createDest })));
     return wrap;
   },
@@ -69,9 +72,12 @@ export const repackDetail = {
 
 async function createDest() {
   if (!d.newType) { S.fieldErrors.newtype = _("Pick a Handling Unit type."); feedback.error(); S.focusRequest = "newtype"; update(); return; }
-  const r = await run(() => api("frappe_wms.api.handling_unit.create_handling_unit", { hu_type: d.newType, storage_bin: d.detail.handling_unit.current_bin }), { label: _("Creating…") });
+  const type = d.types.find((t) => t.name === d.newType);
+  const internal = type && type.numbering_mode === "Internal";
+  if (!internal && !d.newNumber.trim()) { S.fieldErrors.newnumber = _("Scan the barcode of the blank Handling Unit."); feedback.error(); S.focusRequest = "newnumber"; update(); return; }
+  const r = await run(() => api("frappe_wms.api.handling_unit.create_handling_unit", { hu_type: d.newType, hu_number: d.newNumber.trim() || undefined, storage_bin: d.detail.handling_unit.current_bin }), { label: _("Creating…") });
   if (!r) return;
-  d.dest = r.name; persist(); notify.ok(_("Created {0} as the destination", [r.name])); update();
+  d.dest = r.name; d.newType = ""; d.newNumber = ""; persist(); notify.ok(_("Created {0} as the destination", [r.name])); update();
 }
 
 async function submit() {

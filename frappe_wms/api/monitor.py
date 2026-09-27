@@ -125,14 +125,18 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
 
 @frappe.whitelist()
 def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
-                           stock_status=None, outbound_delivery=None, work_center=None, limit=200):
+                           stock_status=None, outbound_delivery=None, storage_type=None, work_center=None, limit=200):
     filters = {"warehouse": warehouse}
     if hu_number: filters["hu_number"] = ["like", f"%{hu_number}%"]
     if status: filters["status"] = status
     if hu_type: filters["hu_type"] = hu_type
-    if current_bin: filters["current_bin"] = current_bin
     if stock_status: filters["stock_status"] = stock_status
     if outbound_delivery: filters["outbound_delivery"] = outbound_delivery
+    if current_bin:
+        filters["current_bin"] = current_bin
+    elif storage_type:
+        bins = frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": storage_type}, pluck="name")
+        filters["current_bin"] = ["in", bins or ["\x00no-such-bin\x00"]]
     if work_center:
         wc_bin = frappe.db.get_value("Work Center", work_center, "bin")
         filters["current_bin"] = wc_bin or "\x00no-such-bin\x00"
@@ -140,6 +144,19 @@ def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, 
         "name", "hu_number", "hu_type", "current_bin", "parent_hu", "top_hu", "status", "stock_status",
         "outbound_delivery", "shipment", "closed", "loaded", "gross_weight", "net_weight",
         "seal_number", "external_reference", "creation", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 200)
+
+@frappe.whitelist()
+def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, limit=200):
+    filters = {"warehouse": warehouse}
+    if bin_code: filters["name"] = ["like", f"%{bin_code}%"]
+    if storage_type: filters["storage_type"] = storage_type
+    if work_center:
+        wc_bin = frappe.db.get_value("Work Center", work_center, "bin")
+        filters["name"] = wc_bin or "\x00no-such-bin\x00"
+    return frappe.get_list("Storage Bin", filters=filters, fields=[
+        "name", "bin_name", "storage_type", "storage_section", "bin_type",
+        "current_hu_count", "maximum_hus", "putaway_blocked", "removal_blocked", "inventory_blocked", "active", "modified",
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 def _hu_node(hu_name):
