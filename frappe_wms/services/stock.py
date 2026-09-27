@@ -37,8 +37,10 @@ def _upsert_balance(values, delta):
     return doc
 
 def post_entries(entries, reference_doctype, reference_name, idempotency_key, warehouse_task=None, device=None):
-    if frappe.db.exists("WMS Stock Ledger Entry", {"idempotency_key": idempotency_key}):
-        return frappe.get_all("WMS Stock Ledger Entry", filters={"idempotency_key": idempotency_key}, pluck="name")
+    # Entries are stored as "<key>:<seq>", so a replay is detected by the first entry's key - matching the bare
+    # key never hit, and a retried request fell through to the unique index as a raw duplicate-entry error.
+    if frappe.db.exists("WMS Stock Ledger Entry", {"idempotency_key": f"{idempotency_key}:1"}):
+        return frappe.get_all("WMS Stock Ledger Entry", filters={"idempotency_key": ["like", f"{idempotency_key}:%"]}, pluck="name", order_by="creation asc")
     if round(sum(flt(x["quantity"]) for x in entries), 6) != 0 and len(entries) > 1:
         frappe.throw(_("Transfer postings must balance to zero"))
     created = []

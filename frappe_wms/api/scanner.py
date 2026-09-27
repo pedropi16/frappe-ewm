@@ -2,7 +2,9 @@ import frappe
 from frappe import _
 from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move
 from frappe_wms.services.packing import repack as _repack, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
-from frappe_wms.utils import parse_json
+from frappe_wms.utils import parse_json, require_role
+from frappe_wms.services.resource import RESOURCE_ROLES as RF_ROLES
+from frappe_wms.services.idempotency import run_once
 
 @frappe.whitelist()
 def get_task(task_name):
@@ -23,7 +25,10 @@ def get_task(task_name):
 
 @frappe.whitelist()
 def my_tasks():
-    return _list_my_tasks()
+    result = _list_my_tasks()
+    # The RF app needs this up front to know whether to add a product-scan step to the confirm flow.
+    result["settings"] = {"require_scan_verification": int(frappe.db.get_single_value("WMS Settings", "require_scan_verification") or 0)}
+    return result
 
 @frappe.whitelist()
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
@@ -74,9 +79,30 @@ def list_open_packing_orders():
     return _list_open_packing_orders()
 
 @frappe.whitelist()
-def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None):
-    return _create_and_confirm_move(
+def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None, idempotency_key=None):
+    return run_once(idempotency_key, lambda: _create_and_confirm_move(
         warehouse=warehouse, product=product, quantity=quantity, stock_uom=stock_uom, stock_type=stock_type,
         source_bin=source_bin, source_hu=source_hu, destination_bin=destination_bin, destination_hu=destination_hu,
         batch_no=batch_no, serial_no=serial_no, device=device,
-    )
+    ))
+
+@frappe.whitelist()
+def resolve_scan(code, warehouse=None):
+    """Classify a scanned code as a Storage Bin, Handling Unit and/or Item so the RF app can tell an operator "that is a
+    bin, not a product" instead of failing later, and can turn an item barcode (EAN/UPC) into the item code the task
+    verification compares against. Returns every match; the caller decides which kind it expects.
+
+    Gated on the RF roles, not on doctype read permission: an operator confirming a task may not be allowed to open the
+    Item form, but still has to be able to scan its barcode. Only existence, name, and unit of measure are returned."""
+    require_role(*RF_ROLES)
+    code = (code or "").strip()
+    matches = []
+    if not code: return {"code": code, "matches": matches}
+    if frappe.db.exists("Storage Bin", code):
+        matches.append({"type": "bin", "name": code, "warehouse": frappe.db.get_value("Storage Bin", code, "warehouse")})
+    if frappe.db.exists("Handling Unit", code):
+        matches.append({"type": "hu", "name": code})
+    item = code if frappe.db.exists("Item", code) else frappe.db.get_value("Item Barcode", {"barcode": code}, "parent")
+    if item:
+        matches.append({"type": "item", "name": item, "item_name": frappe.db.get_value("Item", item, "item_name"), "stock_uom": frappe.db.get_value("Item", item, "stock_uom")})
+    return {"code": code, "matches": matches}

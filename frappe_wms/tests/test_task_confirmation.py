@@ -68,6 +68,17 @@ class TestTaskConfirmation(IntegrationTestCase):
         self.assertEqual(ledger_qty[0], 2, "each partial confirmation should post its own ledger entries")
         self.assertEqual(ledger_qty[1], 10)
 
+    def test_retried_confirmation_with_same_idempotency_key_counts_once(self):
+        # A lost response (WiFi drop, reload mid-submit) makes the RF app resend the same request.
+        task = self._make_task()
+        first = confirm_task(task.name, confirmed_quantity=4, idempotency_key="TEST-RETRY-1")
+        again = confirm_task(task.name, confirmed_quantity=4, idempotency_key="TEST-RETRY-1")
+        self.assertEqual(first["status"], "Partially Confirmed")
+        self.assertTrue(again.get("replayed"))
+        task.reload()
+        self.assertEqual(task.confirmed_quantity, 4, "the retry must not count the quantity a second time")
+        self.assertEqual(frappe.db.count("WMS Stock Ledger Entry", {"warehouse_task": task.name}), 2)
+
     def test_overconfirming_beyond_planned_quantity_is_rejected(self):
         task = self._make_task()
         confirm_task(task.name, confirmed_quantity=8)

@@ -267,6 +267,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
     destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
+    if frappe.db.exists("WMS Stock Ledger Entry", {"idempotency_key": f"{key}:1"}):
+        # Same request retried after a lost response (flaky WiFi, reload mid-submit): it already posted and updated
+        # the task, so answer with the current state instead of counting the quantity a second time.
+        return {"task": task.name, "status": task.status, "quantity": qty, "released_tasks": [], "replayed": True}
     transfer_stock(source=source, destination=destination, quantity=qty, movement_type=task.movement_type, reference_doctype=task.doctype, reference_name=task.name, idempotency_key=key, warehouse_task=task.name, device=device)
     fully_confirmed = round(new_confirmed, 6) >= round(flt(task.planned_quantity), 6)
     status = "Confirmed" if fully_confirmed else "Partially Confirmed"

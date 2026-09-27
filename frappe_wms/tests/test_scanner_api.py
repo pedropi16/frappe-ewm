@@ -1,7 +1,7 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.api.scanner import list_exception_codes, my_tasks, raise_exception
+from frappe_wms.api.scanner import list_exception_codes, my_tasks, raise_exception, resolve_scan
 
 
 class TestScannerApi(IntegrationTestCase):
@@ -63,3 +63,26 @@ class TestScannerApi(IntegrationTestCase):
     def test_list_exception_codes_returns_active_codes(self):
         codes = list_exception_codes()
         self.assertTrue(all(isinstance(c, dict) and "name" in c for c in codes))
+
+    def test_resolve_scan_classifies_bins_items_and_unknown_codes(self):
+        bin_match = resolve_scan(self.bin_a)["matches"]
+        self.assertEqual([(m["type"], m["name"]) for m in bin_match], [("bin", self.bin_a)])
+        item_match = resolve_scan(f"  {self.item} ")["matches"]
+        self.assertIn(("item", self.item), [(m["type"], m["name"]) for m in item_match])
+        self.assertEqual(resolve_scan("NO-SUCH-CODE-XYZ")["matches"], [])
+        self.assertEqual(resolve_scan("")["matches"], [])
+
+    def test_run_once_returns_first_result_for_a_repeated_key(self):
+        from frappe_wms.services.idempotency import run_once
+        calls = []
+        def work():
+            calls.append(1)
+            return {"n": len(calls)}
+        first = run_once("TEST-RUN-ONCE-1", work)
+        again = run_once("TEST-RUN-ONCE-1", work)
+        self.assertEqual(first["n"], 1)
+        self.assertEqual(again["n"], 1)
+        self.assertTrue(again["replayed"])
+        self.assertEqual(len(calls), 1)
+        run_once(None, work); run_once(None, work)
+        self.assertEqual(len(calls), 3, "no key means no dedupe")

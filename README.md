@@ -921,6 +921,83 @@ proceed. Only then does the home menu appear, leading to:
 `api/scanner.py` and the other `api/*.py` modules are the whitelisted
 endpoints this frontend (and real barcode hardware) call.
 
+### How the scanner app behaves
+
+Built for a phone (iPhone Safari is the reference target), a Bluetooth HID
+scanner (Netum etc.) paired to it, or the phone camera - and later a
+self-scanning terminal, which is just another keyboard.
+
+- **Scanning.** A scan is a fast burst of characters ending in Enter. It is
+  routed to the field the screen is waiting on *whatever has focus* (iOS often
+  has nothing focused), and a scan that lands in a quantity box is pulled back
+  out of it. Codes are normalised (whitespace, control characters, AIM
+  `]C1`-style prefixes) and matched case-insensitively against what the task
+  expects. Item barcodes (Item Barcode / EAN) resolve to the item via
+  `api.scanner.resolve_scan`, which is also how "that is a bin, not a
+  product" is told apart from "unknown code". Scan fields keep the on-screen
+  keyboard hidden; a camera button and a keyboard toggle sit beside each. The
+  camera uses the native `BarcodeDetector` where present and the vendored
+  ZXing build (`public/js/wms_rf/vendor`, Apache-2.0) on iOS.
+- **Feedback.** Every outcome gives a tone + coloured flash (+ vibration where
+  the browser supports it; iOS Safari does not). Errors say what was scanned
+  and what was expected, stay on screen until dismissed, and keep the field
+  focused. *Device & session* has sound / vibration / theme switches.
+- **Back, reload and lost work.** Every screen and every wizard step is a
+  real history entry and a URL (`/wms#/task/WT-0001/quantity`), so Back / the
+  iOS swipe walk exactly the path taken and reload lands on the same screen.
+  In-progress work (a half-done Move, scanned Receipt lines, a task wizard) is
+  saved to the tab's `sessionStorage` as you go and offered under *Unfinished
+  work* on the menu; it survives reload, the OS killing the tab, and the login
+  round trip after a session expiry. Finished flows drop their steps from the
+  Back path, so Back cannot re-enter a completed task.
+- **Sending twice is safe.** Every mutating call carries an idempotency key
+  created once per user action and stored with the draft. The server answers a
+  repeat with the first result (`services/idempotency.run_once`; stock postings
+  and `confirm_task` dedupe on the ledger key). A lost response, a dead-WiFi
+  retry, or a double Enter/tap cannot post twice; failures show a Retry button
+  and keep every entry.
+- **Product verification.** When *WMS Settings → require scan verification* is
+  on, the confirm wizard gains a product-scan step; otherwise scanning the
+  product is not required.
+- **Files.** `www/wms/index.{html,py}` is a thin shell (an import map with a
+  content hash per module - `/assets` is cached for a year - plus a visible
+  boot-failure fallback). The app is native ES modules under
+  `public/js/wms_rf/` (`core/` = api, router, drafts, scan, camera, feedback;
+  `ui/` = shell, kit, keys; `screens/` = one file per area) and
+  `public/css/wms_rf.css`. No build step. Needs iOS 16.4+ (import maps).
+
+### Testing the scanner app
+
+```bash
+# pure-logic unit tests (Node >= 20, no browser, no site)
+node --test frappe_wms/tests/js/*.test.mjs
+
+# backend
+bench --site <site> run-tests --app frappe_wms --module frappe_wms.tests.test_scanner_api
+bench --site <site> run-tests --app frappe_wms --module frappe_wms.tests.test_task_confirmation
+
+# browser end-to-end (Playwright, phone viewport) against a dev bench site
+cd frappe_wms/tests/e2e && npm install && npx playwright install chromium
+BENCH_DIR=~/frappe-bench SITE=wms.local PORT=18001 npx playwright test
+```
+
+The e2e suite seeds an `E2E-WH` warehouse, bins, two Resources, an item
+barcode and two users (`frappe_wms/tests/e2e/seed.py`) and never touches other
+data; run it on a dev site, not production. If headless Chromium reports a
+missing `libasound.so.2`, unpack the `libasound2t64` .deb into
+`~/.local/pw-libs` (the config picks it up) or install it system-wide.
+
+Playwright runs Chromium; iOS-specific behaviour needs a manual pass on a
+real iPhone with the Bluetooth scanner:
+
+1. Pair the scanner in HID/keyboard mode (Netum: scan the "iOS/HID keyboard" setup code). The on-screen keyboard should disappear while it is connected.
+2. Log on, open a Pick task, scan source -> Enter on quantity -> scan destination -> Confirm; every step should beep-flash and advance without touching the screen.
+3. Scan a wrong bin: red flash + message naming what you scanned and what is expected.
+4. Mid-task: swipe Back (previous step), then reload the tab - you should land on the step with entries intact.
+5. Put the phone in airplane mode, Confirm: "No connection" with Retry; turn it back on, Retry: one confirmation.
+6. Tap the camera button beside a scan field, allow the camera, scan a Code 128 label.
+7. Add to Home Screen; launch it from there and repeat 2.
+
 ## Desk surfaces
 
 - **WMS workspace** (`/app/wms`) — every WMS doctype (including ones with no

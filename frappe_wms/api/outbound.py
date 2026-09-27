@@ -14,6 +14,7 @@ from frappe_wms.services.issue import (
     post_goods_issue_for_delivery as _post_goods_issue_for_delivery,
 )
 from frappe_wms.utils import parse_json
+from frappe_wms.services.idempotency import run_once
 
 @frappe.whitelist()
 def allocate_delivery(delivery_name):
@@ -48,8 +49,8 @@ def list_ready_to_ship():
     return _list_ready_to_ship()
 
 @frappe.whitelist()
-def create_and_submit_goods_issue(outbound_delivery, items):
-    return _create_and_submit_goods_issue(outbound_delivery, parse_json(items, "items"))
+def create_and_submit_goods_issue(outbound_delivery, items, idempotency_key=None):
+    return run_once(idempotency_key, lambda: _create_and_submit_goods_issue(outbound_delivery, parse_json(items, "items")))
 
 @frappe.whitelist()
 def post_goods_issue_for_delivery(delivery_name):

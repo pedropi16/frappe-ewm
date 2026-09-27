@@ -1,0 +1,128 @@
+import { h } from "#wms/ui/dom.js";
+import { S, nav, run, load, notify, update } from "#wms/app.js";
+import { api } from "#wms/core/api.js";
+import { _ } from "#wms/core/i18n.js";
+import { Section, Field, KV, Expect, Stepper, Btn, Hint } from "#wms/ui/kit.js";
+import { fmtQty, parseNum, isNumeric } from "#wms/core/util.js";
+import { feedback } from "#wms/core/feedback.js";
+import { href } from "#wms/core/routes.js";
+import { saveDraft, loadDraft, clearDraft, ensureKey, flushDrafts, sectionCrumb, sectionHash } from "#wms/screens/shared.js";
+
+// Ad-hoc move: scan the product, enter a quantity, scan the source, scan the destination, confirm. Same step-per-history-entry
+// and saved-draft behaviour as the task wizard. The product and bins are scanned/resolved, never free-typed.
+const STEPS = ["item", "quantity", "source", "destination", "review"];
+const KEY = "move";
+const blank = () => ({ product: "", product_name: "", stock_uom: "", stock_type: "AVAILABLE", quantity: "", source_bin: "", source_hu: "", destination_bin: "", destination_hu: "", idem: "", w0: nav.depth });
+const st = { form: blank(), stockTypes: null, resumed: false };
+
+// `step` is where the draft should resume: persisting just before navigating means the NEXT step, not the current one.
+const persist = (immediate, step) => { saveDraft(KEY, st.form, { label: `${_("Move")} · ${st.form.product || ""}`, route: href("move", step || currentStep()) }); if (immediate) flushDrafts(); };
+const currentStep = () => (S.route && S.route.params.step) || "item";
+const labels = () => ({ item: _("Scan product"), quantity: _("Quantity"), source: _("Scan source"), destination: _("Scan destination"), review: _("Review & move") });
+
+function done(step, f) {
+  return { item: !!f.product && !!f.stock_uom, quantity: parseNum(f.quantity) > 0, source: !!(f.source_bin || f.source_hu), destination: !!f.destination_bin, review: false }[step];
+}
+
+async function resolve(value, want) {
+  const r = await api("frappe_wms.api.scanner.resolve_scan", { code: value }, { read: true, timeoutMs: 8000 });
+  return (r.matches || []).find((m) => m.type === want) || { other: (r.matches || [])[0] };
+}
+const KIND = () => ({ bin: _("a bin"), hu: _("a Handling Unit"), item: _("a product") });
+const wrong = (v, m, want) => (m.other ? _("That is {0} ({1}), not {2}.", [KIND()[m.other.type], m.other.name, want]) : _("{0} is not a known code.", [v]));
+
+function go(step) { persist(true, step); nav.go(href("move", step)); }
+
+export default {
+  id: "move", pattern: "move/:step?",
+  title: () => _("Move"), crumb: () => sectionCrumb("internal"), parent: () => sectionHash("internal"),
+  async enter(ctx) {
+    if (ctx.meta.initial || !st.resumed) { const d = loadDraft(KEY); st.form = d || blank(); st.resumed = true; if (d) st.fromDraft = !!d.product; }
+    if (!st.stockTypes) {
+      const rows = await load(() => api("frappe.client.get_list", { doctype: "WMS Stock Type", fields: ["name"], limit_page_length: 50 }, { read: true }));
+      st.stockTypes = rows && rows.length ? rows.map((r) => r.name) : ["AVAILABLE"];
+    }
+    const step = ctx.params.step;
+    const firstOpen = STEPS.find((s) => s !== "review" && !done(s, st.form)) || "review";
+    const wanted = STEPS.includes(step) ? step : firstOpen;
+    if (STEPS.indexOf(wanted) > STEPS.indexOf(firstOpen)) return { redirect: href("move", firstOpen) };
+    if (wanted !== step) return { redirect: href("move", wanted) };
+    if (!ctx.meta.popped && !(S.prevRoute && S.prevRoute.id === "move")) st.form.w0 = nav.depth;
+    update();
+  },
+  render(ctx) {
+    const f = st.form, step = ctx.params.step || "item", idx = STEPS.indexOf(step);
+    const wrap = h("div");
+    if (st.fromDraft && step === "item") { wrap.append(h("div.notice.info", { style: { borderRadius: "10px", marginBottom: "12px" } }, h("span.notice-text", _("Resumed your unfinished move.")), h("button.notice-btn", { onclick: () => { clearDraft(KEY); st.form = blank(); st.fromDraft = false; update(); } }, _("Start over")))); }
+    wrap.append(Stepper(STEPS.length, Math.max(0, idx), STEPS.map((s) => labels()[s])));
+    const box = Section({});
+    if (step === "item") {
+      box.append(Field({ name: "product", kind: "scan", label: _("Product barcode or code"), placeholder: _("Scan the item"), value: f.product, autofocus: true,
+        hint: f.product_name ? `${f.product} · ${f.product_name} (${f.stock_uom})` : null,
+        onInput: (v) => { if (v !== f.product) { f.product = ""; f.stock_uom = ""; } persist(); },
+        onCommit: async (v) => {
+          const m = await resolve(v, "item");
+          if (!m.name) return wrong(v, m, _("a product"));
+          Object.assign(f, { product: m.name, product_name: m.item_name || "", stock_uom: m.stock_uom || "" });
+          if (!f.stock_uom) return _("That item has no unit of measure.");
+          go("quantity");
+        } }),
+        Field({ name: "stock_type", kind: "select", label: _("Stock type"), value: f.stock_type, options: (st.stockTypes || ["AVAILABLE"]).map((t) => ({ value: t, label: _(t) })), onInput: (v) => { f.stock_type = v; persist(); } }));
+    } else if (step === "quantity") {
+      box.append(Field({ name: "quantity", kind: "qty", label: `${_("Quantity")} · ${f.product}`, value: f.quantity, unit: f.stock_uom, autofocus: true, onInput: (v) => { f.quantity = v; persist(); } }));
+    } else if (step === "source") {
+      box.append(Field({ name: "source_bin", kind: "scan", label: _("Source bin"), placeholder: _("Scan bin barcode"), value: f.source_bin, autofocus: true,
+        onInput: (v) => { f.source_bin = v; persist(); },
+        onCommit: async (v) => { const m = await resolve(v, "bin"); if (!m.name) return wrong(v, m, _("a bin")); f.source_bin = m.name; go("destination"); } }),
+        Field({ name: "source_hu", kind: "scan", label: _("Source Handling Unit (optional)"), placeholder: _("Scan HU barcode"), value: f.source_hu,
+          onInput: (v) => { f.source_hu = v; persist(); },
+          onCommit: async (v) => { const m = await resolve(v, "hu"); if (!m.name) return wrong(v, m, _("a Handling Unit")); f.source_hu = m.name; persist(); } }));
+    } else if (step === "destination") {
+      box.append(Field({ name: "destination_bin", kind: "scan", label: _("Destination bin"), placeholder: _("Scan bin barcode"), value: f.destination_bin, autofocus: true,
+        onInput: (v) => { f.destination_bin = v; persist(); },
+        onCommit: async (v) => { const m = await resolve(v, "bin"); if (!m.name) return wrong(v, m, _("a bin")); f.destination_bin = m.name; go("review"); } }),
+        Field({ name: "destination_hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan HU barcode"), value: f.destination_hu,
+          onInput: (v) => { f.destination_hu = v; persist(); },
+          onCommit: async (v) => { const m = await resolve(v, "hu"); if (!m.name) return wrong(v, m, _("a Handling Unit")); f.destination_hu = m.name; persist(); } }));
+    } else {
+      box.append(KV([[_("Product"), `${f.product} · ${fmtQty(parseNum(f.quantity))} ${f.stock_uom}`], [_("Stock type"), _(f.stock_type)], [_("From"), f.source_bin + (f.source_hu ? ` / ${f.source_hu}` : "")], [_("To"), f.destination_bin + (f.destination_hu ? ` / ${f.destination_hu}` : "")]]));
+    }
+    wrap.append(box);
+    return wrap;
+  },
+  actions(ctx) {
+    const step = ctx.params.step || "item";
+    if (step === "review") return { primary: { label: _("Move"), icon: "✓", run: submit } };
+    return { primary: { label: _("Next"), run: () => nextFromButton(step) } };
+  },
+};
+
+function nextFromButton(step) {
+  const f = st.form;
+  if (step === "quantity") {
+    if (!isNumeric(f.quantity) || parseNum(f.quantity) <= 0) { S.fieldErrors.quantity = _("Enter a quantity greater than zero."); feedback.error(); S.focusRequest = "quantity"; update(); return; }
+    f.quantity = fmtQty(parseNum(f.quantity)); return go("source");
+  }
+  const name = { item: "product", source: "source_bin", destination: "destination_bin" }[step];
+  const rec = S.fields.find((x) => x.name === name);
+  if (rec && rec.input.value.trim()) rec.spec.onCommit(rec.input.value.trim()).then((err) => { if (err) { S.fieldErrors[name] = err; feedback.error(); S.focusRequest = name; update(); } });
+  else { S.fieldErrors[name] = _("Scan the code first."); feedback.error(); S.focusRequest = name; update(); }
+}
+
+async function submit() {
+  const f = st.form;
+  const key = ensureKey(f, "MV");
+  persist(true);
+  const warehouse = S.resource && S.resource.warehouse;
+  const result = await run(() => api("frappe_wms.api.scanner.create_and_confirm_move", {
+    warehouse, product: f.product, quantity: parseNum(f.quantity), stock_uom: f.stock_uom, stock_type: f.stock_type,
+    source_bin: f.source_bin || undefined, source_hu: f.source_hu || undefined, destination_bin: f.destination_bin, destination_hu: f.destination_hu || undefined, idempotency_key: key,
+  }), { label: _("Moving…"), again: submit });
+  if (!result) return;
+  feedback.done();
+  const msg = _("Moved {0} {1} to {2}", [fmtQty(result.quantity != null ? result.quantity : parseNum(f.quantity)), f.product, f.destination_bin]);
+  const steps = Math.max(0, nav.depth - (Number.isInteger(f.w0) ? f.w0 : nav.depth - 1)) + 1;
+  clearDraft(KEY); st.form = blank(); st.fromDraft = false;
+  notify.ok(msg);
+  nav.unwind(steps, sectionHash("internal"));
+}
