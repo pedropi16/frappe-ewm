@@ -38,3 +38,14 @@ def storage_bin_role(bin_name):
 def require_storage_role(bin_name, role, label=None):
     if storage_bin_role(bin_name) != role:
         frappe.throw(_("{0} {1} is not configured as a {2} bin").format(label or _("Storage Bin"), bin_name, role))
+
+def wildcard_filter(value):
+    """SAP selection-screen style: '*' is an explicit wildcard placeholder (like SQL '%').
+    No '*' in the value -> exact match. Any '*' -> a LIKE filter with '*' translated to '%'.
+    Returns None for a blank value so callers can skip adding the filter key entirely."""
+    if value is None: return None
+    value = str(value).strip()
+    if not value: return None
+    if "*" in value:
+        return ["like", value.replace("*", "%")]
+    return value

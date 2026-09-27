@@ -3,6 +3,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis, resource_performance as _resource_performance
+from frappe_wms.utils import wildcard_filter
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 ALERT_AGE_HOURS = 4
@@ -59,14 +60,17 @@ def get_summary(warehouse):
     }
 
 @frappe.whitelist()
-def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None, stock_type=None, handling_unit=None, limit=200):
+def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None, stock_type=None, handling_unit=None,
+                    batch_no=None, serial_no=None, limit=200):
     # Current on-hand positions (WMS Stock Balance), as opposed to search_ledger's movement
     # history - EWM's "Stock Overview" node vs. its "Document Monitor".
     filters = {"warehouse": warehouse, "quantity": [">", 0]}
-    if product: filters["product"] = product
-    if storage_bin: filters["storage_bin"] = storage_bin
+    if product: filters["product"] = wildcard_filter(product)
+    if storage_bin: filters["storage_bin"] = wildcard_filter(storage_bin)
     if stock_type: filters["stock_type"] = stock_type
-    if handling_unit: filters["handling_unit"] = handling_unit
+    if handling_unit: filters["handling_unit"] = wildcard_filter(handling_unit)
+    if batch_no: filters["batch_no"] = wildcard_filter(batch_no)
+    if serial_no: filters["serial_no"] = wildcard_filter(serial_no)
     rows = frappe.get_list("WMS Stock Balance", filters=filters, fields=[
         "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type",
         "quantity", "allocated_quantity", "available_quantity", "stock_uom", "last_movement_date",
@@ -86,12 +90,16 @@ def stock_overview_summary(warehouse):
     return [{"stock_type": r[0], "quantity": r[1], "allocated_quantity": r[2], "available_quantity": r[3], "balance_rows": r[4]} for r in rows]
 
 @frappe.whitelist()
-def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None, movement_type=None, from_date=None, to_date=None, limit=100):
+def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None, movement_type=None,
+                   batch_no=None, serial_no=None, posting_user=None, from_date=None, to_date=None, limit=100):
     filters = {"warehouse": warehouse}
-    if product: filters["product"] = product
-    if storage_bin: filters["storage_bin"] = storage_bin
-    if handling_unit: filters["handling_unit"] = handling_unit
+    if product: filters["product"] = wildcard_filter(product)
+    if storage_bin: filters["storage_bin"] = wildcard_filter(storage_bin)
+    if handling_unit: filters["handling_unit"] = wildcard_filter(handling_unit)
     if movement_type: filters["movement_type"] = movement_type
+    if batch_no: filters["batch_no"] = wildcard_filter(batch_no)
+    if serial_no: filters["serial_no"] = wildcard_filter(serial_no)
+    if posting_user: filters["posting_user"] = wildcard_filter(posting_user)
     if from_date or to_date:
         filters["posting_datetime"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     return frappe.get_list("WMS Stock Ledger Entry", filters=filters, fields=[
@@ -102,19 +110,22 @@ def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None,
 
 @frappe.whitelist()
 def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None,
-                  assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None, limit=200):
+                  assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None,
+                  confirmed_by=None, from_date=None, to_date=None, limit=200):
     filters = {"warehouse": warehouse}
     if task_type: filters["task_type"] = task_type
     if status: filters["status"] = status
-    if product: filters["product"] = product
-    if source_bin: filters["source_bin"] = source_bin
-    if destination_bin: filters["destination_bin"] = destination_bin
-    if assigned_resource: filters["assigned_resource"] = assigned_resource
-    if batch_no: filters["batch_no"] = batch_no
-    if serial_no: filters["serial_no"] = serial_no
-    if wave: filters["wave"] = wave
-    if queue: filters["queue"] = queue
+    if product: filters["product"] = wildcard_filter(product)
+    if source_bin: filters["source_bin"] = wildcard_filter(source_bin)
+    if destination_bin: filters["destination_bin"] = wildcard_filter(destination_bin)
+    if assigned_resource: filters["assigned_resource"] = wildcard_filter(assigned_resource)
+    if batch_no: filters["batch_no"] = wildcard_filter(batch_no)
+    if serial_no: filters["serial_no"] = wildcard_filter(serial_no)
+    if wave: filters["wave"] = wildcard_filter(wave)
+    if queue: filters["queue"] = wildcard_filter(queue)
     if priority: filters["priority"] = priority
+    if confirmed_by: filters["confirmed_by"] = wildcard_filter(confirmed_by)
+    if from_date or to_date: filters["confirmed_at"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     return frappe.get_list("Warehouse Task", filters=filters, fields=[
         "name", "task_type", "product", "planned_quantity", "confirmed_quantity", "stock_uom",
         "batch_no", "serial_no", "source_bin", "destination_bin", "source_hu", "destination_hu",
@@ -125,15 +136,18 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
 
 @frappe.whitelist()
 def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
-                           stock_status=None, outbound_delivery=None, storage_type=None, work_center=None, limit=200):
+                           stock_status=None, outbound_delivery=None, storage_type=None, work_center=None,
+                           modified_by=None, from_date=None, to_date=None, limit=200):
     filters = {"warehouse": warehouse}
-    if hu_number: filters["hu_number"] = ["like", f"%{hu_number}%"]
+    if hu_number: filters["hu_number"] = wildcard_filter(hu_number)
     if status: filters["status"] = status
-    if hu_type: filters["hu_type"] = hu_type
+    if hu_type: filters["hu_type"] = wildcard_filter(hu_type)
     if stock_status: filters["stock_status"] = stock_status
-    if outbound_delivery: filters["outbound_delivery"] = outbound_delivery
+    if outbound_delivery: filters["outbound_delivery"] = wildcard_filter(outbound_delivery)
+    if modified_by: filters["modified_by"] = wildcard_filter(modified_by)
+    if from_date or to_date: filters["modified"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     if current_bin:
-        filters["current_bin"] = current_bin
+        filters["current_bin"] = wildcard_filter(current_bin)
     elif storage_type:
         bins = frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": storage_type}, pluck="name")
         filters["current_bin"] = ["in", bins or ["\x00no-such-bin\x00"]]
@@ -149,7 +163,7 @@ def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, 
 @frappe.whitelist()
 def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, limit=200):
     filters = {"warehouse": warehouse}
-    if bin_code: filters["name"] = ["like", f"%{bin_code}%"]
+    if bin_code: filters["name"] = wildcard_filter(bin_code)
     if storage_type: filters["storage_type"] = storage_type
     if work_center:
         wc_bin = frappe.db.get_value("Work Center", work_center, "bin")
@@ -179,12 +193,16 @@ def handling_unit_tree(hu_name):
     return node
 
 @frappe.whitelist()
-def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None, limit=200):
+def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None,
+                               inbound_delivery_number=None, receiving_bin=None, from_date=None, to_date=None, limit=200):
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
-    if supplier: filters["supplier"] = supplier
+    if supplier: filters["supplier"] = wildcard_filter(supplier)
     if receipt_status: filters["receipt_status"] = receipt_status
     if process_status: filters["process_status"] = process_status
+    if inbound_delivery_number: filters["inbound_delivery_number"] = wildcard_filter(inbound_delivery_number)
+    if receiving_bin: filters["receiving_bin"] = wildcard_filter(receiving_bin)
+    if from_date or to_date: filters["expected_arrival"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     return frappe.get_list("Inbound Delivery", filters=filters, fields=[
         "name", "inbound_delivery_number", "warehouse", "company", "supplier", "receiving_bin",
         "expected_arrival", "posting_date", "receipt_status", "process_status", "status",
@@ -193,14 +211,21 @@ def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_sta
 
 @frappe.whitelist()
 def search_outbound_deliveries(warehouse, status=None, customer=None, allocation_status=None,
-                                packing_status=None, loading_status=None, priority=None, limit=200):
+                                packing_status=None, loading_status=None, priority=None,
+                                outbound_delivery_number=None, route=None, staging_bin=None, door=None,
+                                from_date=None, to_date=None, limit=200):
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
-    if customer: filters["customer"] = customer
+    if customer: filters["customer"] = wildcard_filter(customer)
     if allocation_status: filters["allocation_status"] = allocation_status
     if packing_status: filters["packing_status"] = packing_status
     if loading_status: filters["loading_status"] = loading_status
     if priority: filters["priority"] = priority
+    if outbound_delivery_number: filters["outbound_delivery_number"] = wildcard_filter(outbound_delivery_number)
+    if route: filters["route"] = wildcard_filter(route)
+    if staging_bin: filters["staging_bin"] = wildcard_filter(staging_bin)
+    if door: filters["door"] = wildcard_filter(door)
+    if from_date or to_date: filters["delivery_date"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     return frappe.get_list("Outbound Delivery", filters=filters, fields=[
         "name", "outbound_delivery_number", "warehouse", "customer", "route", "delivery_date", "priority",
         "staging_bin", "door", "allocation_status", "picking_status", "packing_status", "loading_status",
@@ -264,9 +289,12 @@ def get_alerts(warehouse):
     }
 
 @frappe.whitelist()
-def search_waves(warehouse, status=None, limit=100):
+def search_waves(warehouse, status=None, route=None, released_by=None, from_date=None, to_date=None, limit=100):
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
+    if route: filters["route"] = wildcard_filter(route)
+    if released_by: filters["released_by"] = wildcard_filter(released_by)
+    if from_date or to_date: filters["ship_date"] = ["between", [from_date or "1900-01-01", to_date or "2999-12-31 23:59:59"]]
     waves = frappe.get_list("WMS Wave", filters=filters, fields=[
         "name", "route", "ship_date", "priority", "picking_strategy", "status", "released_at", "released_by", "modified",
     ], order_by="modified desc", limit=cint(limit) or 100)

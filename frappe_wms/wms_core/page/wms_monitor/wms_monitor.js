@@ -223,6 +223,17 @@ function select_html(cls, options, placeholder) {
   return `<select class="form-control input-sm ${cls}" style="width:150px;">${opts.join("")}</select>`;
 }
 
+// SAP selection-screen convention used across every search tab: nothing loads until Execute is
+// pressed (no auto-run on tab entry, no auto-run on a filter changing), and any text field takes
+// '*' as an explicit wildcard placeholder (no '*' -> exact match; 'AB*'/'*AB'/'*AB*' -> prefix/
+// suffix/contains). This one-line hint plus the empty-until-executed state is shared everywhere.
+function sap_search_hint() {
+  return `<div class="text-muted" style="margin-bottom:8px;font-size:12px;">${__("Build your search, then click Execute. Use * as a wildcard in text fields (e.g. AB*, *AB, *AB*) - without it, text fields match exactly.")}</div>`;
+}
+function sap_unexecuted_html() {
+  return `<div class="text-muted">${__("Not executed yet - set your criteria and click Execute.")}</div>`;
+}
+
 const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock"];
 const TASK_STATUSES = ["Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Confirmed", "Cancelled", "Exception"];
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
@@ -300,11 +311,30 @@ class WMSMonitor {
     `);
     $filters.find(".wms-mon-warehouse").on("change", (e) => {
       this.warehouse = e.target.value || null;
+      this.reset_unexecuted_searches();
       if (this.warehouse) this.load_view(this.view);
     });
     this.show_view(this.view);
     if (warehouses.length === 1) {
       $filters.find(".wms-mon-warehouse").val(warehouses[0].name).trigger("change");
+    }
+  }
+
+  // The warehouse changed - any already-executed results belong to the OLD warehouse and would
+  // otherwise sit there looking current. Every "big list" tab goes back to its not-executed
+  // state instead of silently keeping stale rows around.
+  reset_unexecuted_searches() {
+    const selectors = [
+      ".wms-mon-ind-table", ".wms-mon-obd-table", ".wms-mon-wave-table", ".wms-mon-stock-table",
+      ".wms-mon-task-table", ".wms-mon-hu-table", ".wms-mon-ledger-table",
+    ];
+    selectors.forEach((sel) => { const $el = this.$body.find(sel); if ($el.length) $el.html(sap_unexecuted_html()); });
+    this.$body.find(".wms-mon-obd-detail").empty();
+    if (this.repack.roots.length || this.repack.selected) {
+      this.repack = { roots: [], expanded: new Set(), childrenOf: {}, selected: null, detail: null, target: null, hu_types: this.repack.hu_types, newDest: null, _drag: null };
+      const $tree = this.$body.find(".wms-repack-tree");
+      if ($tree.length) $tree.html(sap_unexecuted_html());
+      this.$body.find(".wms-repack-detail").empty();
     }
   }
 
@@ -371,19 +401,22 @@ class WMSMonitor {
     const $wrap = this.body_for("inbound");
     if (!$wrap.find(".wms-mon-ind-filters").length) {
       $wrap.html(`
-        <div class="wms-mon-ind-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-ind-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <input class="form-control input-sm wms-mon-ind-number" placeholder="${__("Delivery Number")}" style="width:150px;">
           ${select_html("wms-mon-ind-status", INBOUND_STATUSES, __("Status"))}
           <input class="form-control input-sm wms-mon-ind-supplier" placeholder="${__("Supplier")}" style="width:160px;">
+          <input class="form-control input-sm wms-mon-ind-bin" placeholder="${__("Receiving Bin")}" style="width:140px;">
           ${select_html("wms-mon-ind-receipt-status", ["Not Received", "Partially Received", "Fully Received"], __("Receipt Status"))}
           ${select_html("wms-mon-ind-process-status", ["Not Started", "In Process", "Completed", "Exception"], __("Process Status"))}
-          <button class="btn btn-primary btn-sm wms-mon-ind-search">${__("Search")}</button>
+          <label class="text-muted" style="font-size:11px;">${__("Expected")} <input type="date" class="form-control input-sm wms-mon-ind-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-ind-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-ind-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-ind-table"></div>
+        ${sap_search_hint()}
+        <div class="wms-mon-ind-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-ind-status, .wms-mon-ind-receipt-status, .wms-mon-ind-process-status").on("change", () => this.search_inbound_deliveries());
       $wrap.find(".wms-mon-ind-search").on("click", () => this.search_inbound_deliveries());
     }
-    this.search_inbound_deliveries();
   }
 
   async search_inbound_deliveries() {
@@ -391,10 +424,14 @@ class WMSMonitor {
     const $wrap = this.body_for("inbound");
     const args = {
       warehouse: this.warehouse,
+      inbound_delivery_number: $wrap.find(".wms-mon-ind-number").val() || undefined,
       status: $wrap.find(".wms-mon-ind-status").val() || undefined,
       supplier: $wrap.find(".wms-mon-ind-supplier").val() || undefined,
+      receiving_bin: $wrap.find(".wms-mon-ind-bin").val() || undefined,
       receipt_status: $wrap.find(".wms-mon-ind-receipt-status").val() || undefined,
       process_status: $wrap.find(".wms-mon-ind-process-status").val() || undefined,
+      from_date: $wrap.find(".wms-mon-ind-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-ind-to").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_inbound_deliveries", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-ind-table");
@@ -413,29 +450,36 @@ class WMSMonitor {
     const $wrap = this.body_for("outbound");
     if (!$wrap.find(".wms-mon-obd-filters").length) {
       $wrap.html(`
-        <div class="wms-mon-obd-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-obd-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <input class="form-control input-sm wms-mon-obd-number" placeholder="${__("Delivery Number")}" style="width:150px;">
           ${select_html("wms-mon-obd-status", OUTBOUND_STATUSES, __("Status"))}
           <input class="form-control input-sm wms-mon-obd-customer" placeholder="${__("Customer")}" style="width:160px;">
+          <input class="form-control input-sm wms-mon-obd-route" placeholder="${__("Route")}" style="width:130px;">
+          <input class="form-control input-sm wms-mon-obd-staging" placeholder="${__("Staging Bin")}" style="width:130px;">
+          <input class="form-control input-sm wms-mon-obd-door" placeholder="${__("Door")}" style="width:100px;">
           ${select_html("wms-mon-obd-priority", PRIORITIES, __("Priority"))}
           ${select_html("wms-mon-obd-allocation", ["Not Allocated", "Partially Allocated", "Fully Allocated"], __("Allocation"))}
-          <button class="btn btn-primary btn-sm wms-mon-obd-search">${__("Search")}</button>
+          <label class="text-muted" style="font-size:11px;">${__("Delivery")} <input type="date" class="form-control input-sm wms-mon-obd-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-obd-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-obd-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-obd-table" style="margin-bottom:12px;"></div>
+        ${sap_search_hint()}
+        <div class="wms-mon-obd-table" style="margin-bottom:12px;">${sap_unexecuted_html()}</div>
         <div class="wms-mon-obd-detail" style="margin-bottom:24px;"></div>
         <h5>${__("Waves")}</h5>
-        <div class="wms-mon-wave-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-wave-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           ${select_html("wms-mon-wave-status", WAVE_STATUSES, __("Status"))}
-          <button class="btn btn-primary btn-sm wms-mon-wave-search">${__("Search")}</button>
+          <input class="form-control input-sm wms-mon-wave-route" placeholder="${__("Route")}" style="width:130px;">
+          <input class="form-control input-sm wms-mon-wave-released-by" placeholder="${__("Released By")}" style="width:140px;">
+          <label class="text-muted" style="font-size:11px;">${__("Ship")} <input type="date" class="form-control input-sm wms-mon-wave-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-wave-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-wave-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-wave-table"></div>
+        <div class="wms-mon-wave-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-obd-status, .wms-mon-obd-priority, .wms-mon-obd-allocation").on("change", () => this.search_outbound_deliveries());
       $wrap.find(".wms-mon-obd-search").on("click", () => this.search_outbound_deliveries());
-      $wrap.find(".wms-mon-wave-status").on("change", () => this.search_waves());
       $wrap.find(".wms-mon-wave-search").on("click", () => this.search_waves());
     }
-    this.search_outbound_deliveries();
-    this.search_waves();
   }
 
   async search_outbound_deliveries() {
@@ -443,10 +487,16 @@ class WMSMonitor {
     const $wrap = this.body_for("outbound");
     const args = {
       warehouse: this.warehouse,
+      outbound_delivery_number: $wrap.find(".wms-mon-obd-number").val() || undefined,
       status: $wrap.find(".wms-mon-obd-status").val() || undefined,
       customer: $wrap.find(".wms-mon-obd-customer").val() || undefined,
+      route: $wrap.find(".wms-mon-obd-route").val() || undefined,
+      staging_bin: $wrap.find(".wms-mon-obd-staging").val() || undefined,
+      door: $wrap.find(".wms-mon-obd-door").val() || undefined,
       priority: $wrap.find(".wms-mon-obd-priority").val() || undefined,
       allocation_status: $wrap.find(".wms-mon-obd-allocation").val() || undefined,
+      from_date: $wrap.find(".wms-mon-obd-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-obd-to").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_outbound_deliveries", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-obd-table");
@@ -563,7 +613,14 @@ class WMSMonitor {
   async search_waves() {
     if (!this.warehouse) return;
     const $wrap = this.body_for("outbound");
-    const args = { warehouse: this.warehouse, status: $wrap.find(".wms-mon-wave-status").val() || undefined };
+    const args = {
+      warehouse: this.warehouse,
+      status: $wrap.find(".wms-mon-wave-status").val() || undefined,
+      route: $wrap.find(".wms-mon-wave-route").val() || undefined,
+      released_by: $wrap.find(".wms-mon-wave-released-by").val() || undefined,
+      from_date: $wrap.find(".wms-mon-wave-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-wave-to").val() || undefined,
+    };
     const rows = await frappe.call("frappe_wms.api.monitor.search_waves", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-wave-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No waves found")}</div>`); return; }
@@ -591,15 +648,18 @@ class WMSMonitor {
     if (!$wrap.find(".wms-mon-stock-filters").length) {
       $wrap.html(`
         <div class="wms-mon-stock-summary" style="margin-bottom:16px;"></div>
-        <div class="wms-mon-stock-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-stock-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <input class="form-control input-sm wms-mon-stock-product" placeholder="${__("Product")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-stock-bin" placeholder="${__("Storage Bin")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-stock-storage-type" placeholder="${__("Storage Type")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-stock-stock-type" placeholder="${__("Stock Type")}" style="width:120px;">
           <input class="form-control input-sm wms-mon-stock-hu" placeholder="${__("Handling Unit")}" style="width:140px;">
-          <button class="btn btn-primary btn-sm wms-mon-stock-search">${__("Search")}</button>
+          <input class="form-control input-sm wms-mon-stock-batch" placeholder="${__("Batch No")}" style="width:120px;">
+          <input class="form-control input-sm wms-mon-stock-serial" placeholder="${__("Serial No")}" style="width:120px;">
+          <button class="btn btn-primary btn-sm wms-mon-stock-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-stock-table"></div>
+        ${sap_search_hint()}
+        <div class="wms-mon-stock-table">${sap_unexecuted_html()}</div>
       `);
       $wrap.find(".wms-mon-stock-search").on("click", () => this.search_stock_overview());
     }
@@ -608,7 +668,6 @@ class WMSMonitor {
       label: __("{0} ({1} rows)", [row.stock_type || __("(no stock type)"), row.balance_rows]),
       value: `${flt(row.quantity)} / ${flt(row.available_quantity)} ${__("avail")}`,
     })));
-    this.search_stock_overview();
   }
 
   async search_stock_overview() {
@@ -621,6 +680,8 @@ class WMSMonitor {
       storage_type: $wrap.find(".wms-mon-stock-storage-type").val() || undefined,
       stock_type: $wrap.find(".wms-mon-stock-stock-type").val() || undefined,
       handling_unit: $wrap.find(".wms-mon-stock-hu").val() || undefined,
+      batch_no: $wrap.find(".wms-mon-stock-batch").val() || undefined,
+      serial_no: $wrap.find(".wms-mon-stock-serial").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.stock_overview", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-stock-table");
@@ -638,7 +699,7 @@ class WMSMonitor {
     const $wrap = this.body_for("tasks");
     if (!$wrap.find(".wms-mon-task-filters").length) {
       $wrap.html(`
-        <div class="wms-mon-task-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-task-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <input class="form-control input-sm wms-mon-task-product" placeholder="${__("Product")}" style="width:140px;">
           ${select_html("wms-mon-task-type", TASK_TYPES, __("Task Type"))}
           ${select_html("wms-mon-task-status", TASK_STATUSES, __("Status"))}
@@ -646,14 +707,16 @@ class WMSMonitor {
           <input class="form-control input-sm wms-mon-task-resource" placeholder="${__("Resource")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-task-batch" placeholder="${__("Batch No")}" style="width:120px;">
           <input class="form-control input-sm wms-mon-task-wave" placeholder="${__("Wave")}" style="width:120px;">
-          <button class="btn btn-primary btn-sm wms-mon-task-search">${__("Search")}</button>
+          <input class="form-control input-sm wms-mon-task-confirmed-by" placeholder="${__("Confirmed By")}" style="width:140px;">
+          <label class="text-muted" style="font-size:11px;">${__("Confirmed")} <input type="date" class="form-control input-sm wms-mon-task-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-task-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-task-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-task-table"></div>
+        ${sap_search_hint()}
+        <div class="wms-mon-task-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-task-type, .wms-mon-task-status, .wms-mon-task-priority").on("change", () => this.search_tasks());
       $wrap.find(".wms-mon-task-search").on("click", () => this.search_tasks());
     }
-    this.search_tasks();
   }
 
   async search_tasks() {
@@ -668,6 +731,9 @@ class WMSMonitor {
       assigned_resource: $wrap.find(".wms-mon-task-resource").val() || undefined,
       batch_no: $wrap.find(".wms-mon-task-batch").val() || undefined,
       wave: $wrap.find(".wms-mon-task-wave").val() || undefined,
+      confirmed_by: $wrap.find(".wms-mon-task-confirmed-by").val() || undefined,
+      from_date: $wrap.find(".wms-mon-task-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-task-to").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_tasks", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-task-table");
@@ -691,7 +757,7 @@ class WMSMonitor {
     const $wrap = this.body_for("hu");
     if (!$wrap.find(".wms-mon-hu-filters").length) {
       $wrap.html(`
-        <div class="wms-mon-hu-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-hu-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <input class="form-control input-sm wms-mon-hu-number" placeholder="${__("HU Number")}" style="width:140px;">
           ${select_html("wms-mon-hu-status", HU_STATUSES, __("Status"))}
           ${select_html("wms-mon-hu-stock-status", HU_STOCK_STATUSES, __("Stock Status"))}
@@ -699,15 +765,17 @@ class WMSMonitor {
           <input class="form-control input-sm wms-mon-hu-bin" placeholder="${__("Current Bin")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-hu-workcenter" placeholder="${__("Work Center")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-hu-obd" placeholder="${__("Outbound Delivery")}" style="width:160px;">
-          <button class="btn btn-primary btn-sm wms-mon-hu-search">${__("Search")}</button>
+          <input class="form-control input-sm wms-mon-hu-modified-by" placeholder="${__("Last Modified By")}" style="width:150px;">
+          <label class="text-muted" style="font-size:11px;">${__("Modified")} <input type="date" class="form-control input-sm wms-mon-hu-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-hu-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-hu-search">${__("Execute")}</button>
         </div>
+        ${sap_search_hint()}
         <div class="wms-mon-hu-hint text-muted" style="margin-bottom:6px;font-size:12px;">${__("Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons.")}</div>
-        <div class="wms-mon-hu-table"></div>
+        <div class="wms-mon-hu-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-hu-status, .wms-mon-hu-stock-status").on("change", () => this.search_handling_units());
       $wrap.find(".wms-mon-hu-search").on("click", () => this.search_handling_units());
     }
-    this.search_handling_units();
   }
 
   async search_handling_units() {
@@ -722,6 +790,9 @@ class WMSMonitor {
       current_bin: $wrap.find(".wms-mon-hu-bin").val() || undefined,
       work_center: $wrap.find(".wms-mon-hu-workcenter").val() || undefined,
       outbound_delivery: $wrap.find(".wms-mon-hu-obd").val() || undefined,
+      modified_by: $wrap.find(".wms-mon-hu-modified-by").val() || undefined,
+      from_date: $wrap.find(".wms-mon-hu-from").val() || undefined,
+      to_date: $wrap.find(".wms-mon-hu-to").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_handling_units", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-hu-table");
@@ -795,24 +866,24 @@ class WMSMonitor {
     if (!$wrap.find(".wms-repack-filters").length) {
       ensure_repack_styles();
       $wrap.html(`
-        <div class="wms-repack-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div class="wms-repack-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <input class="form-control input-sm wms-repack-search-number" placeholder="${__("HU Number")}" style="width:140px;">
           <input class="form-control input-sm wms-repack-search-type" placeholder="${__("HU Type")}" style="width:140px;">
           <input class="form-control input-sm wms-repack-search-bin" placeholder="${__("Storage Bin")}" style="width:140px;">
           <input class="form-control input-sm wms-repack-search-storagetype" placeholder="${__("Storage Type")}" style="width:140px;">
           <input class="form-control input-sm wms-repack-search-workcenter" placeholder="${__("Work Center")}" style="width:140px;">
-          <button class="btn btn-primary btn-sm wms-repack-search">${__("Search")}</button>
+          <button class="btn btn-primary btn-sm wms-repack-search">${__("Execute")}</button>
         </div>
+        ${sap_search_hint()}
         <div class="text-muted" style="margin-bottom:8px;font-size:12px;">${__("The tree shows bins, Handling Units and their stock lines - click any row to see it on the right, drag any row onto another to repack it. Pin a 🎯 target, then Repack All moves everything from the selected row at once.")}</div>
         <div style="display:flex;gap:16px;align-items:flex-start;">
-          <div class="wms-repack-tree" style="flex:0 0 380px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;"></div>
+          <div class="wms-repack-tree" style="flex:0 0 380px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;">${sap_unexecuted_html()}</div>
           <div class="wms-repack-detail" style="flex:1;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:10px;"></div>
         </div>
       `);
       $wrap.find(".wms-repack-search").on("click", () => this.search_repack_center());
       this.ensure_hu_types();
     }
-    this.search_repack_center();
   }
 
   async ensure_hu_types() {
@@ -890,7 +961,7 @@ class WMSMonitor {
     const overview = await this.fetch_repack_overview(kind, name);
     const loc = this.repack_locator({ kind, overview });
     const children = this.repack_rows({ kind, overview }).map((r) => r.kind === "hu"
-      ? { kind: "hu", name: r.name, nested: r.nested, meta: `${r.hu_type || ""} · ${r.status || ""}${r.stock_status ? " · " + r.stock_status : ""}` }
+      ? { kind: "hu", name: r.name, nested: r.nested, meta: `${r.hu_type || ""} · ${loc.bin || "-"} · ${r.status || ""}${r.stock_status ? " · " + r.stock_status : ""}` }
       : { kind: "item", ...r, srcBin: loc.bin, srcHu: loc.hu, parentKind: kind, parentName: name });
     this.repack.childrenOf[this.repack_key(kind, name)] = children;
     if (this.repack.selected && this.repack.selected.kind === kind && this.repack.selected.name === name) this.repack.detail = overview;
@@ -1066,7 +1137,7 @@ class WMSMonitor {
     const rows = this.repack_rows(node).filter(filterFn);
     if (!rows.length) { $detail.append(`<div class="text-muted" style="font-size:12px;">${__("Empty")}</div>`); return; }
     rows.forEach((row) => {
-      const enriched = row.kind === "item" ? { ...row, srcBin: loc.bin, srcHu: loc.hu } : row;
+      const enriched = row.kind === "item" ? { ...row, srcBin: loc.bin, srcHu: loc.hu } : { ...row, atBin: loc.bin };
       $detail.append(this.render_repack_detail_row(enriched));
     });
   }
@@ -1185,7 +1256,7 @@ class WMSMonitor {
     const $row = $(`<div class="wms-repack-row" draggable="true" style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border-color);border-radius:4px;margin-bottom:4px;cursor:grab;"></div>`);
     if (row.kind === "hu") {
       $row.append(`<span>📦</span><b>${frappe.utils.escape_html(row.name)}</b>`);
-      $row.append(`<span class="text-muted">${frappe.utils.escape_html(row.hu_type || "")} · ${frappe.utils.escape_html(row.status || "")}${row.stock_status ? " · " + frappe.utils.escape_html(row.stock_status) : ""}</span>`);
+      $row.append(`<span class="text-muted">${frappe.utils.escape_html(row.hu_type || "")} · ${frappe.utils.escape_html(row.atBin || row.current_bin || "-")} · ${frappe.utils.escape_html(row.status || "")}${row.stock_status ? " · " + frappe.utils.escape_html(row.stock_status) : ""}</span>`);
       const $browse = $(`<a href="#" style="margin-left:auto;">${__("Browse")}</a>`);
       $browse.on("click", (e) => { e.preventDefault(); e.stopPropagation(); this.select_repack_node("hu", row.name); });
       $row.append($browse);
@@ -1313,20 +1384,23 @@ class WMSMonitor {
     const $wrap = this.body_for("movements");
     if (!$wrap.find(".wms-mon-ledger-filters").length) {
       $wrap.html(`
-        <div class="wms-mon-ledger-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="wms-mon-ledger-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <input class="form-control input-sm wms-mon-ledger-product" placeholder="${__("Product")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-ledger-bin" placeholder="${__("Storage Bin")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-ledger-hu" placeholder="${__("Handling Unit")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-ledger-movement" placeholder="${__("Movement Type")}" style="width:120px;">
-          <input type="date" class="form-control input-sm wms-mon-ledger-from" style="width:150px;">
-          <input type="date" class="form-control input-sm wms-mon-ledger-to" style="width:150px;">
-          <button class="btn btn-primary btn-sm wms-mon-ledger-search">${__("Search")}</button>
+          <input class="form-control input-sm wms-mon-ledger-batch" placeholder="${__("Batch No")}" style="width:120px;">
+          <input class="form-control input-sm wms-mon-ledger-serial" placeholder="${__("Serial No")}" style="width:120px;">
+          <input class="form-control input-sm wms-mon-ledger-user" placeholder="${__("Posted By")}" style="width:140px;">
+          <label class="text-muted" style="font-size:11px;">${__("Posted")} <input type="date" class="form-control input-sm wms-mon-ledger-from" style="width:145px;display:inline-block;"></label>
+          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-ledger-to" style="width:145px;display:inline-block;"></label>
+          <button class="btn btn-primary btn-sm wms-mon-ledger-search">${__("Execute")}</button>
         </div>
-        <div class="wms-mon-ledger-table"></div>
+        ${sap_search_hint()}
+        <div class="wms-mon-ledger-table">${sap_unexecuted_html()}</div>
       `);
       $wrap.find(".wms-mon-ledger-search").on("click", () => this.search_ledger());
     }
-    this.search_ledger();
   }
 
   async search_ledger() {
@@ -1338,6 +1412,9 @@ class WMSMonitor {
       storage_bin: $wrap.find(".wms-mon-ledger-bin").val() || undefined,
       handling_unit: $wrap.find(".wms-mon-ledger-hu").val() || undefined,
       movement_type: $wrap.find(".wms-mon-ledger-movement").val() || undefined,
+      batch_no: $wrap.find(".wms-mon-ledger-batch").val() || undefined,
+      serial_no: $wrap.find(".wms-mon-ledger-serial").val() || undefined,
+      posting_user: $wrap.find(".wms-mon-ledger-user").val() || undefined,
       from_date: $wrap.find(".wms-mon-ledger-from").val() || undefined,
       to_date: $wrap.find(".wms-mon-ledger-to").val() || undefined,
     };
