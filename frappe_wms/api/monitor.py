@@ -173,6 +173,21 @@ def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, l
         "current_hu_count", "maximum_hus", "putaway_blocked", "removal_blocked", "inventory_blocked", "active", "modified",
     ], order_by="modified desc", limit=cint(limit) or 200)
 
+@frappe.whitelist()
+def hu_ancestor_chain(hu_name):
+    """Walks parent_hu up to the top, so a search hit that's nested several levels deep can be
+    shown where it actually is (its bin, then each ancestor HU in order) instead of as a bare,
+    context-free row - current_bin is already correct at every level regardless of nesting depth."""
+    chain = [hu_name]
+    cur = frappe.db.get_value("Handling Unit", hu_name, "parent_hu")
+    seen = {hu_name}
+    while cur and cur not in seen:
+        chain.append(cur)
+        seen.add(cur)
+        cur = frappe.db.get_value("Handling Unit", cur, "parent_hu")
+    chain.reverse()
+    return {"bin": frappe.db.get_value("Handling Unit", hu_name, "current_bin"), "chain": chain}
+
 def _hu_node(hu_name):
     fields = ["name", "hu_number", "hu_type", "current_bin", "parent_hu", "top_hu", "status", "stock_status",
                "outbound_delivery", "shipment", "closed", "loaded", "gross_weight", "net_weight",

@@ -926,31 +926,62 @@ class WMSMonitor {
   async search_repack_center() {
     if (!this.warehouse) return;
     const $wrap = this.body_for("repack");
+    const hu_number = $wrap.find(".wms-repack-search-number").val() || undefined;
+    const hu_type = $wrap.find(".wms-repack-search-type").val() || undefined;
     const bin_code = $wrap.find(".wms-repack-search-bin").val() || undefined;
     const storage_type = $wrap.find(".wms-repack-search-storagetype").val() || undefined;
     const work_center = $wrap.find(".wms-repack-search-workcenter").val() || undefined;
-    const huArgs = {
-      warehouse: this.warehouse, current_bin: bin_code, storage_type, work_center,
-      hu_number: $wrap.find(".wms-repack-search-number").val() || undefined,
-      hu_type: $wrap.find(".wms-repack-search-type").val() || undefined,
-      limit: 50,
-    };
+    // Only search the object type the criteria actually asks about - HU Number/Type alone means
+    // "find this HU", not "and also list every bin in the warehouse"; Storage Bin/Type/Work
+    // Center alone means "find this bin", not "and also list unrelated HUs". Blank criteria
+    // (Execute with nothing filled in) still searches both, same as a blank SAP selection screen.
+    const wantsHu = !!(hu_number || hu_type);
+    const wantsBin = !!(bin_code || storage_type || work_center);
+    const searchHu = wantsHu || !wantsBin;
+    const searchBin = wantsBin || !wantsHu;
+    const huArgs = { warehouse: this.warehouse, current_bin: bin_code, storage_type, work_center, hu_number, hu_type, limit: 50 };
     const binArgs = { warehouse: this.warehouse, bin_code, storage_type, work_center, limit: 50 };
     const [hus, bins] = await Promise.all([
-      frappe.call("frappe_wms.api.monitor.search_handling_units", huArgs).then((r) => r.message || []),
-      frappe.call("frappe_wms.api.monitor.search_bins", binArgs).then((r) => r.message || []),
+      searchHu ? frappe.call("frappe_wms.api.monitor.search_handling_units", huArgs).then((r) => r.message || []) : [],
+      searchBin ? frappe.call("frappe_wms.api.monitor.search_bins", binArgs).then((r) => r.message || []) : [],
     ]);
-    this.repack.roots = [
-      ...bins.map((b) => ({ kind: "bin", name: b.name, meta: b.storage_type || "" })),
-      ...hus.map((h) => ({ kind: "hu", name: h.name, meta: `${h.hu_type || ""} · ${h.current_bin || "-"} · ${h.status || ""}` })),
-    ];
+    this.repack.roots = [];
     this.repack.expanded = new Set();
     this.repack.childrenOf = {};
     this.repack.selected = null;
     this.repack.detail = null;
     this.repack.target = null;
+    // A nested match gets shown in its actual context (bin -> ancestor chain -> the HU) instead
+    // of as a bare, buried row; a top-level match already shows its bin in its own meta line.
+    const plainHus = hus.filter((h) => !h.parent_hu);
+    const nestedHus = hus.filter((h) => h.parent_hu);
+    plainHus.forEach((h) => this.repack.roots.push({ kind: "hu", name: h.name, meta: `${h.hu_type || ""} · ${h.current_bin || "-"} · ${h.status || ""}` }));
+    bins.forEach((b) => this.repack.roots.push({ kind: "bin", name: b.name, meta: b.storage_type || "" }));
+    for (const h of nestedHus) await this.reveal_repack_hu(h.name);
+    if (hus.length === 1) await this.select_repack_node("hu", hus[0].name);
     this.render_repack_tree();
     this.render_repack_detail();
+  }
+
+  async ensure_repack_expanded(kind, name) {
+    const k = this.repack_key(kind, name);
+    this.repack.expanded.add(k);
+    if (!this.repack.childrenOf[k]) await this.load_repack_children(kind, name);
+  }
+
+  // Reveals a nested search hit in place: adds its bin as a root if not already one, then
+  // expands every ancestor along the way so the matched HU shows up as a visible tree row.
+  async reveal_repack_hu(hu_name) {
+    const { bin, chain } = await frappe.call("frappe_wms.api.monitor.hu_ancestor_chain", { hu_name }).then((r) => r.message);
+    if (!bin || !chain.length) return;
+    if (!this.repack.roots.some((r) => r.kind === "bin" && r.name === bin)) {
+      this.repack.roots.unshift({ kind: "bin", name: bin, meta: "" });
+    }
+    let curKind = "bin", curName = bin;
+    for (const link of chain) {
+      await this.ensure_repack_expanded(curKind, curName);
+      curKind = "hu"; curName = link;
+    }
   }
 
   // Children of a tree node are BOTH nested Handling Units and its own stock lines - each
