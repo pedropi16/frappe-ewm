@@ -45,7 +45,19 @@ def get_or_create_handling_unit(hu_number, hu_type=None, storage_bin=None, wareh
     # registered Handling Unit (Goods Receipt lines, RF "unknown barcode" auto-registration).
     # Falls back to WMS Settings.default_handling_unit_type so an unconfigured hu_type doesn't
     # dead-end receiving, matching the RF "Receive" behavior documented in the README.
-    if frappe.db.exists("Handling Unit", hu_number):
+    existing = frappe.db.get_value("Handling Unit", hu_number, ["stock_status", "status"], as_dict=True)
+    if existing:
+        # An already-posted, still-non-empty HU (or one a supervisor blocked) must not silently
+        # absorb an unrelated new receipt - confirmed reproducible: receive under HU 1, put it
+        # away, then receive again under the same HU 1 and it's accepted, even though HU 1's
+        # stock ledger/current_bin now describe two different physical locations for the same
+        # unit. A brand-new HU created earlier in this same call (multiple lines of one Goods
+        # Receipt sharing one HU) is unaffected - nothing posts until the whole thing submits,
+        # so stock_status stays "Empty" for every line until then.
+        if existing.status == "Blocked":
+            frappe.throw(_("Handling Unit {0} is blocked").format(hu_number))
+        if existing.stock_status != "Empty":
+            frappe.throw(_("Handling Unit {0} already has stock ({1}) - use a different Handling Unit for this receipt").format(hu_number, existing.stock_status))
         return hu_number
     hu_type = hu_type or frappe.db.get_single_value("WMS Settings", "default_handling_unit_type")
     if not hu_type: frappe.throw(_("Handling Unit {0} does not exist; specify a Handling Unit Type to create it").format(hu_number))
