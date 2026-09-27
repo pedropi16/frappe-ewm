@@ -11,7 +11,8 @@ def search_bins_for_assignment(warehouse, storage_type=None, storage_section=Non
     if aisle: filters["aisle"] = aisle
     if rack: filters["rack"] = rack
     return frappe.get_list("Storage Bin", filters=filters,
-        fields=["name", "bin_code", "storage_type", "storage_section", "activity_area", "aisle", "rack"],
+        fields=["name", "bin_code", "storage_type", "storage_section", "activity_area", "aisle", "rack",
+                "level", "position", "bin_role", "bin_type", "maximum_hus", "current_hu_count"],
         order_by="sequence asc, bin_code asc", limit=500)
 
 

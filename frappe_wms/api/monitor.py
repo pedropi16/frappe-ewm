@@ -13,12 +13,14 @@ def get_delivery_execution_status(delivery_name):
     doc = frappe.get_doc("Outbound Delivery", delivery_name)
     doc.check_permission("read")
     allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": delivery_name}, fields=[
-        "name", "product", "storage_bin", "handling_unit", "allocated_quantity", "picked_quantity", "status",
+        "name", "product", "storage_bin", "handling_unit", "batch_no", "serial_no",
+        "allocated_quantity", "picked_quantity", "status",
     ])
     task_names = list(task_names_for_allocations([a.name for a in allocations]))
     tasks = frappe.get_all("Warehouse Task", filters={"name": ["in", task_names]}, fields=[
-        "name", "task_type", "status", "planned_quantity", "confirmed_quantity",
-        "source_bin", "destination_bin", "assigned_resource", "warehouse_order",
+        "name", "task_type", "status", "product", "planned_quantity", "confirmed_quantity", "stock_uom",
+        "batch_no", "serial_no", "source_bin", "destination_bin", "source_hu", "destination_hu",
+        "priority", "assigned_resource", "warehouse_order", "sequence",
     ], order_by="sequence asc, creation asc") if task_names else []
     warehouse_orders = sorted({t.warehouse_order for t in tasks if t.warehouse_order})
     packing_orders = frappe.get_all("Packing Order", filters={"outbound_delivery": delivery_name}, fields=[
@@ -98,7 +100,8 @@ def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None,
     ], order_by="posting_datetime desc", limit=cint(limit) or 100)
 
 @frappe.whitelist()
-def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None, assigned_resource=None, limit=100):
+def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None,
+                  assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None, limit=200):
     filters = {"warehouse": warehouse}
     if task_type: filters["task_type"] = task_type
     if status: filters["status"] = status
@@ -106,47 +109,69 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
     if source_bin: filters["source_bin"] = source_bin
     if destination_bin: filters["destination_bin"] = destination_bin
     if assigned_resource: filters["assigned_resource"] = assigned_resource
+    if batch_no: filters["batch_no"] = batch_no
+    if serial_no: filters["serial_no"] = serial_no
+    if wave: filters["wave"] = wave
+    if queue: filters["queue"] = queue
+    if priority: filters["priority"] = priority
     return frappe.get_list("Warehouse Task", filters=filters, fields=[
         "name", "task_type", "product", "planned_quantity", "confirmed_quantity", "stock_uom",
-        "source_bin", "destination_bin", "source_hu", "destination_hu", "priority", "status",
-        "assigned_resource", "wave", "queue", "modified",
-    ], order_by="modified desc", limit=cint(limit) or 100)
+        "batch_no", "serial_no", "source_bin", "destination_bin", "source_hu", "destination_hu",
+        "stock_type_from", "stock_type_to", "movement_type", "priority", "status", "assigned_resource",
+        "wave", "queue", "warehouse_order", "sequence", "started_at", "confirmed_at", "confirmed_by",
+        "exception_code", "blocking_reason", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
-def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None, limit=100):
+def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
+                           stock_status=None, outbound_delivery=None, limit=200):
     filters = {"warehouse": warehouse}
     if hu_number: filters["hu_number"] = ["like", f"%{hu_number}%"]
     if status: filters["status"] = status
     if hu_type: filters["hu_type"] = hu_type
     if current_bin: filters["current_bin"] = current_bin
+    if stock_status: filters["stock_status"] = stock_status
+    if outbound_delivery: filters["outbound_delivery"] = outbound_delivery
     return frappe.get_list("Handling Unit", filters=filters, fields=[
-        "name", "hu_number", "hu_type", "current_bin", "parent_hu", "status", "stock_status",
-        "outbound_delivery", "shipment", "closed", "loaded", "modified",
-    ], order_by="modified desc", limit=cint(limit) or 100)
+        "name", "hu_number", "hu_type", "current_bin", "parent_hu", "top_hu", "status", "stock_status",
+        "outbound_delivery", "shipment", "closed", "loaded", "gross_weight", "net_weight",
+        "seal_number", "external_reference", "creation", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
-def search_inbound_deliveries(warehouse, status=None, supplier=None, limit=100):
+def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None, limit=200):
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
     if supplier: filters["supplier"] = supplier
+    if receipt_status: filters["receipt_status"] = receipt_status
+    if process_status: filters["process_status"] = process_status
     return frappe.get_list("Inbound Delivery", filters=filters, fields=[
-        "name", "inbound_delivery_number", "supplier", "receiving_bin", "status", "modified",
-    ], order_by="modified desc", limit=cint(limit) or 100)
+        "name", "inbound_delivery_number", "warehouse", "company", "supplier", "receiving_bin",
+        "expected_arrival", "posting_date", "receipt_status", "process_status", "status",
+        "external_reference", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
-def search_outbound_deliveries(warehouse, status=None, customer=None, limit=100):
+def search_outbound_deliveries(warehouse, status=None, customer=None, allocation_status=None,
+                                packing_status=None, loading_status=None, priority=None, limit=200):
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
     if customer: filters["customer"] = customer
+    if allocation_status: filters["allocation_status"] = allocation_status
+    if packing_status: filters["packing_status"] = packing_status
+    if loading_status: filters["loading_status"] = loading_status
+    if priority: filters["priority"] = priority
     return frappe.get_list("Outbound Delivery", filters=filters, fields=[
-        "name", "outbound_delivery_number", "customer", "staging_bin", "picking_status",
-        "goods_issue_status", "status", "modified",
-    ], order_by="modified desc", limit=cint(limit) or 100)
+        "name", "outbound_delivery_number", "warehouse", "customer", "route", "delivery_date", "priority",
+        "staging_bin", "door", "allocation_status", "picking_status", "packing_status", "loading_status",
+        "goods_issue_status", "status", "external_reference", "modified",
+    ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
 def resource_workload(warehouse):
     resources = frappe.get_list("WMS Resource", filters={"warehouse": warehouse, "active": 1}, fields=[
-        "name", "resource_code", "user", "resource_type", "resource_group", "current_queue", "current_bin",
+        "name", "resource_code", "user", "resource_type", "resource_group", "device_id",
+        "current_queue", "current_work_center", "current_bin", "logged_in_at",
     ], order_by="resource_code asc", limit=200)
     rows = frappe.db.sql(
         "select assigned_resource, count(*) from `tabWarehouse Task` "
@@ -164,7 +189,8 @@ def search_queues(warehouse, activity=None, limit=100):
     filters = {"warehouse": warehouse}
     if activity: filters["activity"] = activity
     return frappe.get_list("Warehouse Queue", filters=filters, fields=[
-        "name", "queue_code", "queue_name", "activity", "storage_type", "resource_group", "active",
+        "name", "queue_code", "queue_name", "activity", "storage_type", "activity_area",
+        "resource_group", "sequence_rule", "active",
     ], order_by="queue_code asc", limit=cint(limit) or 100)
 
 @frappe.whitelist()
@@ -188,11 +214,12 @@ def get_alerts(warehouse):
             order_by="modified asc", limit=50),
         "aged_exceptions": frappe.get_list("Warehouse Task",
             filters={"warehouse": warehouse, "status": "Exception", "modified": ["<", cutoff]},
-            fields=["name", "task_type", "product", "exception_code", "blocking_reason", "modified"],
+            fields=["name", "task_type", "product", "source_bin", "destination_bin", "assigned_resource",
+                    "exception_code", "blocking_reason", "modified"],
             order_by="modified asc", limit=50),
         "stalled_warehouse_orders": frappe.get_list("Warehouse Order",
             filters={"warehouse": warehouse, "status": "Open", "assigned_resource": ["in", ["", None]], "creation": ["<", cutoff]},
-            fields=["name", "activity", "queue", "priority", "task_count", "creation"],
+            fields=["name", "activity", "queue", "priority", "status", "task_count", "creation"],
             order_by="creation asc", limit=50),
     }
 

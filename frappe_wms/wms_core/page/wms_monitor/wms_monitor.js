@@ -29,6 +29,194 @@ const VIEWS = [
   { key: "alerts", label: __("Alerts") },
 ];
 
+let _grid_styles_injected = false;
+function ensure_grid_styles() {
+  if (_grid_styles_injected) return;
+  _grid_styles_injected = true;
+  $("<style>", { text: `
+    .wms-grid-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .wms-grid-toolbar .wms-grid-hint { font-size:12px; }
+    .wms-grid-scroll { overflow:auto; max-height:65vh; border:1px solid var(--border-color); }
+    .wms-grid-table { margin-bottom:0; user-select:none; }
+    .wms-grid-table th, .wms-grid-table td { white-space:nowrap; }
+    .wms-grid-corner, .wms-grid-colhead, .wms-grid-rowhead { cursor:pointer; background:var(--control-bg,#f5f5f5); }
+    .wms-grid-colhead:hover, .wms-grid-rowhead:hover { background:var(--bg-color,#e9ecef); }
+    .wms-grid-cell { cursor:cell; }
+    .wms-grid-selected { background:rgba(59,130,246,.18) !important; }
+    .wms-grid-anchor { outline:1px solid rgba(59,130,246,.7); outline-offset:-1px; }
+  ` }).appendTo("head");
+}
+
+// Excel-like grid: click a cell to select it, shift+click or drag to extend a rectangular
+// range, click a column/row header (or the corner) to select a whole column/row/everything.
+// Ctrl/Cmd+C or the Copy button copies the selection as tab-separated text - pastes straight
+// into a spreadsheet. Row/reference links still navigate normally; only the surrounding cell
+// area starts a drag-select. A quick-filter box narrows visible rows client-side (substring
+// match across every column), independent of whatever server-side filters a view also has.
+class DataGrid {
+  constructor(rows, columns, doctype) {
+    this.rows = rows || [];
+    this.columns = columns || [];
+    this.doctype = doctype;
+    this.filterText = "";
+    this.sel = null; // {r0,r1,c0,c1} - r0 includes the header row (0); c0 excludes the gutter (starts at 1)
+    this.anchor = null;
+    this.$el = $(`<div class="wms-grid"></div>`);
+    ensure_grid_styles();
+    this._build();
+  }
+
+  _visibleRows() {
+    if (!this.filterText) return this.rows;
+    const needle = this.filterText.toLowerCase();
+    return this.rows.filter((row) => this.columns.some(([f]) => String(row[f] ?? "").toLowerCase().includes(needle)));
+  }
+
+  _build() {
+    const $toolbar = $(`
+      <div class="wms-grid-toolbar">
+        <input type="text" class="form-control input-sm wms-grid-filter" style="width:220px;" placeholder="${__("Filter visible rows...")}">
+        <button type="button" class="btn btn-default btn-xs wms-grid-copy">${__("Copy")}</button>
+        <span class="text-muted wms-grid-hint"></span>
+      </div>
+    `);
+    this.$scroll = $(`<div class="wms-grid-scroll"><table class="table table-bordered table-sm wms-grid-table"></table></div>`);
+    this.$el.empty().append($toolbar, this.$scroll);
+    this.$table = this.$scroll.find("table");
+    this.$el.attr("tabindex", 0).css("outline", "none");
+    $toolbar.find(".wms-grid-filter").on("input", (e) => { this.filterText = e.target.value; this.sel = null; this._render(); });
+    $toolbar.find(".wms-grid-copy").on("click", () => this._copy());
+    this._bindSelection();
+    this.$el.on("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) { e.preventDefault(); this._copy(); }
+    });
+    this._render();
+  }
+
+  _render() {
+    const rows = this._visibleRows();
+    this._visRows = rows;
+    const maxR = rows.length, maxC = this.columns.length;
+    const head = [`<th class="wms-grid-corner" data-r="0" data-c="0"></th>`].concat(
+      this.columns.map(([, label], ci) => `<th class="wms-grid-colhead" data-r="0" data-c="${ci + 1}">${frappe.utils.escape_html(label)}</th>`)
+    ).join("");
+    const body = rows.map((row, ri) => {
+      const cells = [`<th class="wms-grid-rowhead" data-r="${ri + 1}" data-c="0">${ri + 1}</th>`].concat(
+        this.columns.map(([field, , renderFn], ci) => {
+          const raw = row[field];
+          let inner;
+          if (renderFn) {
+            inner = renderFn(row, ri);
+          } else if ((field === "name" || field === "reference_name") && raw) {
+            const target_doctype = field === "reference_name" ? row.reference_doctype : this.doctype;
+            inner = target_doctype
+              ? `<a href="/app/${frappe.router.slug(target_doctype)}/${encodeURIComponent(raw)}">${frappe.utils.escape_html(String(raw))}</a>`
+              : frappe.utils.escape_html(String(raw));
+          } else {
+            inner = raw === null || raw === undefined ? "" : frappe.utils.escape_html(String(raw));
+          }
+          return `<td class="wms-grid-cell" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
+        })
+      ).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    this.$table.html(`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`);
+    this._maxR = maxR; this._maxC = maxC;
+    this.$el.find(".wms-grid-hint").text(rows.length === this.rows.length ? __("{0} row(s)", [rows.length]) : __("{0} of {1} row(s)", [rows.length, this.rows.length]));
+    this._applyHighlight();
+  }
+
+  _cellsInRange(r0, r1, c0, c1) {
+    const lo_r = Math.min(r0, r1), hi_r = Math.max(r0, r1);
+    const lo_c = Math.max(1, Math.min(c0, c1)), hi_c = Math.max(c0, c1); // never select the gutter (col 0)
+    const out = [];
+    for (let r = Math.max(0, lo_r); r <= hi_r; r++) for (let c = lo_c; c <= hi_c; c++) out.push([r, c]);
+    return out;
+  }
+
+  _applyHighlight() {
+    this.$table.find(".wms-grid-selected, .wms-grid-anchor").removeClass("wms-grid-selected wms-grid-anchor");
+    if (!this.sel) return;
+    for (const [r, c] of this._cellsInRange(this.sel.r0, this.sel.r1, this.sel.c0, this.sel.c1)) {
+      this.$table.find(`[data-r="${r}"][data-c="${c}"]`).addClass("wms-grid-selected");
+    }
+    if (this.anchor) this.$table.find(`[data-r="${this.anchor.r}"][data-c="${this.anchor.c}"]`).addClass("wms-grid-anchor");
+  }
+
+  _bindSelection() {
+    let dragging = false;
+    this.$table.on("mousedown", "th, td", (e) => {
+      if ($(e.target).is("a, button, input, select, textarea, label")) return; // let interactive controls work normally, don't hijack them into a selection
+      const $cell = $(e.currentTarget);
+      const r = Number($cell.data("r")), c = Number($cell.data("c"));
+      this.$el.trigger("focus");
+      if (c === 0 && r === 0) { this.sel = { r0: 0, r1: this._maxR, c0: 1, c1: this._maxC }; this.anchor = { r: 0, c: 1 }; }
+      else if (c === 0) { this.sel = { r0: r, r1: r, c0: 1, c1: this._maxC }; this.anchor = { r, c: 1 }; }
+      else if (r === 0) { this.sel = { r0: 0, r1: this._maxR, c0: c, c1: c }; this.anchor = { r: 0, c }; }
+      else if (e.shiftKey && this.anchor) { this.sel = { r0: this.anchor.r, r1: r, c0: this.anchor.c, c1: c }; }
+      else { this.sel = { r0: r, r1: r, c0: c, c1: c }; this.anchor = { r, c }; dragging = true; }
+      this._applyHighlight();
+      e.preventDefault();
+    });
+    this.$table.on("mouseenter", "td.wms-grid-cell", (e) => {
+      if (!dragging || !this.anchor) return;
+      const $cell = $(e.currentTarget);
+      this.sel = { r0: this.anchor.r, r1: Number($cell.data("r")), c0: this.anchor.c, c1: Number($cell.data("c")) };
+      this._applyHighlight();
+    });
+    $(document).on("mouseup", () => { dragging = false; });
+  }
+
+  _copy() {
+    if (!this.sel) { frappe.show_alert({ message: __("Select a cell, row, or column first"), indicator: "orange" }); return; }
+    const cells = this._cellsInRange(this.sel.r0, this.sel.r1, this.sel.c0, this.sel.c1);
+    const byRow = {};
+    for (const [r, c] of cells) (byRow[r] || (byRow[r] = [])).push(c);
+    const lines = Object.keys(byRow).map(Number).sort((a, b) => a - b).map((r) => {
+      const cs = byRow[r].sort((a, b) => a - b);
+      return cs.map((c) => {
+        if (r === 0) return this.columns[c - 1][1];
+        const row = this._visRows[r - 1];
+        const value = row[this.columns[c - 1][0]];
+        return value === null || value === undefined ? "" : String(value);
+      }).join("\t");
+    });
+    const text = lines.join("\n");
+    const done = () => frappe.show_alert({ message: __("Copied {0} cell(s)", [cells.length]), indicator: "green" });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => this._copy_fallback(text, done));
+    } else {
+      this._copy_fallback(text, done);
+    }
+  }
+
+  _copy_fallback(text, done) {
+    const $ta = $("<textarea>").val(text).css({ position: "fixed", opacity: 0 }).appendTo("body");
+    $ta[0].select();
+    try { document.execCommand("copy"); done(); }
+    catch (e) { frappe.show_alert({ message: __("Could not copy - your browser blocked it"), indicator: "red" }); }
+    $ta.remove();
+  }
+}
+
+// Builds a <select class="...cls..."> with a blank "any" option - used for filter fields backed
+// by a fixed Select fieldtype, so a filter can't silently return nothing from a typo or a
+// mismatched case (e.g. typing "picked" instead of "Picked").
+function select_html(cls, options, placeholder) {
+  const opts = [`<option value="">${frappe.utils.escape_html(placeholder || __("Any"))}</option>`]
+    .concat(options.map((o) => `<option value="${frappe.utils.escape_html(o)}">${frappe.utils.escape_html(o)}</option>`));
+  return `<select class="form-control input-sm ${cls}" style="width:150px;">${opts.join("")}</select>`;
+}
+
+const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock"];
+const TASK_STATUSES = ["Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Confirmed", "Cancelled", "Exception"];
+const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
+const INBOUND_STATUSES = ["Draft", "Expected", "Arrived", "Receiving", "Partially Received", "Received", "Putaway In Process", "Completed", "Cancelled"];
+const OUTBOUND_STATUSES = ["Draft", "Open", "Allocated", "Picking", "Picked", "Packing", "Packed", "Staging", "Staged", "Loading", "Loaded", "Goods Issued", "Completed", "Cancelled"];
+const HU_STATUSES = ["Created", "Open", "Closed", "In Process", "Staged", "Loaded", "Shipped", "Empty", "Blocked", "Cancelled"];
+const HU_STOCK_STATUSES = ["Empty", "Partial", "Full"];
+const WAVE_STATUSES = ["Draft", "Released", "Picking", "Picked", "Completed", "Cancelled"];
+
 class WMSMonitor {
   constructor(page) {
     this.page = page;
@@ -167,12 +355,15 @@ class WMSMonitor {
     if (!$wrap.find(".wms-mon-ind-filters").length) {
       $wrap.html(`
         <div class="wms-mon-ind-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-          <input class="form-control input-sm wms-mon-ind-status" placeholder="${__("Status")}" style="width:140px;">
+          ${select_html("wms-mon-ind-status", INBOUND_STATUSES, __("Status"))}
           <input class="form-control input-sm wms-mon-ind-supplier" placeholder="${__("Supplier")}" style="width:160px;">
+          ${select_html("wms-mon-ind-receipt-status", ["Not Received", "Partially Received", "Fully Received"], __("Receipt Status"))}
+          ${select_html("wms-mon-ind-process-status", ["Not Started", "In Process", "Completed", "Exception"], __("Process Status"))}
           <button class="btn btn-primary btn-sm wms-mon-ind-search">${__("Search")}</button>
         </div>
         <div class="wms-mon-ind-table"></div>
       `);
+      $wrap.find(".wms-mon-ind-status, .wms-mon-ind-receipt-status, .wms-mon-ind-process-status").on("change", () => this.search_inbound_deliveries());
       $wrap.find(".wms-mon-ind-search").on("click", () => this.search_inbound_deliveries());
     }
     this.search_inbound_deliveries();
@@ -185,13 +376,18 @@ class WMSMonitor {
       warehouse: this.warehouse,
       status: $wrap.find(".wms-mon-ind-status").val() || undefined,
       supplier: $wrap.find(".wms-mon-ind-supplier").val() || undefined,
+      receipt_status: $wrap.find(".wms-mon-ind-receipt-status").val() || undefined,
+      process_status: $wrap.find(".wms-mon-ind-process-status").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_inbound_deliveries", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-ind-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No inbound deliveries found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["name", __("Delivery")], ["inbound_delivery_number", __("Number")], ["supplier", __("Supplier")],
-      ["receiving_bin", __("Receiving Bin")], ["status", __("Status")],
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Delivery")], ["inbound_delivery_number", __("Number")], ["warehouse", __("Warehouse")],
+      ["company", __("Company")], ["supplier", __("Supplier")], ["receiving_bin", __("Receiving Bin")],
+      ["expected_arrival", __("Expected Arrival")], ["posting_date", __("Posting Date")],
+      ["receipt_status", __("Receipt Status")], ["process_status", __("Process Status")], ["status", __("Status")],
+      ["external_reference", __("External Ref")], ["modified", __("Last Modified")],
     ], "Inbound Delivery"));
   }
 
@@ -201,20 +397,24 @@ class WMSMonitor {
     if (!$wrap.find(".wms-mon-obd-filters").length) {
       $wrap.html(`
         <div class="wms-mon-obd-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-          <input class="form-control input-sm wms-mon-obd-status" placeholder="${__("Status")}" style="width:140px;">
+          ${select_html("wms-mon-obd-status", OUTBOUND_STATUSES, __("Status"))}
           <input class="form-control input-sm wms-mon-obd-customer" placeholder="${__("Customer")}" style="width:160px;">
+          ${select_html("wms-mon-obd-priority", PRIORITIES, __("Priority"))}
+          ${select_html("wms-mon-obd-allocation", ["Not Allocated", "Partially Allocated", "Fully Allocated"], __("Allocation"))}
           <button class="btn btn-primary btn-sm wms-mon-obd-search">${__("Search")}</button>
         </div>
         <div class="wms-mon-obd-table" style="margin-bottom:12px;"></div>
         <div class="wms-mon-obd-detail" style="margin-bottom:24px;"></div>
         <h5>${__("Waves")}</h5>
         <div class="wms-mon-wave-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-          <input class="form-control input-sm wms-mon-wave-status" placeholder="${__("Status")}" style="width:140px;">
+          ${select_html("wms-mon-wave-status", WAVE_STATUSES, __("Status"))}
           <button class="btn btn-primary btn-sm wms-mon-wave-search">${__("Search")}</button>
         </div>
         <div class="wms-mon-wave-table"></div>
       `);
+      $wrap.find(".wms-mon-obd-status, .wms-mon-obd-priority, .wms-mon-obd-allocation").on("change", () => this.search_outbound_deliveries());
       $wrap.find(".wms-mon-obd-search").on("click", () => this.search_outbound_deliveries());
+      $wrap.find(".wms-mon-wave-status").on("change", () => this.search_waves());
       $wrap.find(".wms-mon-wave-search").on("click", () => this.search_waves());
     }
     this.search_outbound_deliveries();
@@ -228,23 +428,23 @@ class WMSMonitor {
       warehouse: this.warehouse,
       status: $wrap.find(".wms-mon-obd-status").val() || undefined,
       customer: $wrap.find(".wms-mon-obd-customer").val() || undefined,
+      priority: $wrap.find(".wms-mon-obd-priority").val() || undefined,
+      allocation_status: $wrap.find(".wms-mon-obd-allocation").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_outbound_deliveries", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-obd-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No outbound deliveries found")}</div>`); return; }
-    const head = [__("Delivery"), __("Number"), __("Customer"), __("Picking"), __("Goods Issue"), __("Status")].map((l) => `<th>${l}</th>`).join("");
-    const body = rows.map((row) => `
-      <tr class="wms-mon-obd-row" data-delivery="${frappe.utils.escape_html(row.name)}" style="cursor:pointer;">
-        <td>${frappe.utils.escape_html(row.name)}</td>
-        <td>${frappe.utils.escape_html(row.outbound_delivery_number || "")}</td>
-        <td>${frappe.utils.escape_html(row.customer || "")}</td>
-        <td>${frappe.utils.escape_html(row.picking_status || "")}</td>
-        <td>${frappe.utils.escape_html(row.goods_issue_status || "")}</td>
-        <td>${frappe.utils.escape_html(row.status || "")}</td>
-      </tr>
-    `).join("");
-    $table.html(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
-    $table.find(".wms-mon-obd-row").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery));
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Delivery")],
+      ["view", __(""), (row) => `<button type="button" class="btn btn-xs btn-default wms-mon-obd-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("View")}</button>`],
+      ["outbound_delivery_number", __("Number")], ["warehouse", __("Warehouse")], ["customer", __("Customer")],
+      ["route", __("Route")], ["delivery_date", __("Delivery Date")], ["priority", __("Priority")],
+      ["staging_bin", __("Staging Bin")], ["door", __("Door")], ["allocation_status", __("Allocation")],
+      ["picking_status", __("Picking")], ["packing_status", __("Packing")], ["loading_status", __("Loading")],
+      ["goods_issue_status", __("Goods Issue")], ["status", __("Status")], ["external_reference", __("External Ref")],
+      ["modified", __("Last Modified")],
+    ], "Outbound Delivery"));
+    $table.find(".wms-mon-obd-view").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery));
   }
 
   async load_delivery_detail(delivery_name) {
@@ -293,14 +493,28 @@ class WMSMonitor {
     }
     $wrap.append($actions);
 
-    $wrap.append(`<h6>${__("Pick Tasks")}</h6>`);
+    $wrap.append(`<h6>${__("Stock Allocations")}</h6>`);
+    if (!status.allocations.length) {
+      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
+    } else {
+      $wrap.append(this.render_table(status.allocations, [
+        ["name", __("Allocation")], ["product", __("Product")], ["storage_bin", __("Bin")], ["handling_unit", __("HU")],
+        ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["allocated_quantity", __("Allocated")],
+        ["picked_quantity", __("Picked")], ["status", __("Status")],
+      ], "Stock Allocation"));
+    }
+
+    $wrap.append(`<h6 style="margin-top:10px;">${__("Pick Tasks")}</h6>`);
     if (!status.tasks.length) {
       $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
     } else {
       $wrap.append(this.render_table(status.tasks, [
-        ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")],
-        ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")],
-        ["source_bin", __("Source")], ["destination_bin", __("Destination")], ["assigned_resource", __("Resource")],
+        ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
+        ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")], ["stock_uom", __("UOM")],
+        ["batch_no", __("Batch")], ["serial_no", __("Serial")],
+        ["source_bin", __("Source")], ["destination_bin", __("Destination")],
+        ["source_hu", __("Source HU")], ["destination_hu", __("Destination HU")],
+        ["priority", __("Priority")], ["assigned_resource", __("Resource")], ["sequence", __("Sequence")],
       ], "Warehouse Task"));
     }
     if (status.warehouse_orders.length) {
@@ -321,16 +535,9 @@ class WMSMonitor {
     if (!status.goods_issues.length) {
       $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
     } else {
-      const gi_head = [__("Goods Issue"), __("Status"), __("Posted"), __("Reversed")].map((l) => `<th>${l}</th>`).join("");
-      const gi_body = status.goods_issues.map((g) => `
-        <tr>
-          <td><a href="/app/goods-issue/${encodeURIComponent(g.name)}">${frappe.utils.escape_html(g.name)}</a></td>
-          <td>${frappe.utils.escape_html(g.status || "")}</td>
-          <td>${frappe.utils.escape_html(g.posting_datetime || "")}</td>
-          <td>${g.reversed ? __("Yes") : __("No")}</td>
-        </tr>
-      `).join("");
-      $wrap.append(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${gi_head}</tr></thead><tbody>${gi_body}</tbody></table></div>`);
+      $wrap.append(this.render_table(status.goods_issues, [
+        ["name", __("Goods Issue")], ["status", __("Status")], ["posting_datetime", __("Posted")], ["reversed", __("Reversed")],
+      ], "Goods Issue"));
     }
 
     $detail.empty().append($wrap);
@@ -343,19 +550,13 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.search_waves", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-wave-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No waves found")}</div>`); return; }
-    const head = [__("Wave"), __("Route"), __("Ship Date"), __("Strategy"), __("Status"), __("Deliveries"), __("")].map((l) => `<th>${l}</th>`).join("");
-    const body = rows.map((row) => `
-      <tr>
-        <td><a href="/app/wms-wave/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a></td>
-        <td>${frappe.utils.escape_html(row.route || "")}</td>
-        <td>${frappe.utils.escape_html(row.ship_date || "")}</td>
-        <td>${frappe.utils.escape_html(row.picking_strategy || "")}</td>
-        <td>${frappe.utils.escape_html(row.status || "")}</td>
-        <td>${row.delivery_count}</td>
-        <td>${row.status === "Draft" ? `<button class="btn btn-xs btn-primary wms-mon-release-wave" data-wave="${frappe.utils.escape_html(row.name)}">${__("Release")}</button>` : ""}</td>
-      </tr>
-    `).join("");
-    $table.html(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Wave")], ["route", __("Route")], ["ship_date", __("Ship Date")], ["priority", __("Priority")],
+      ["picking_strategy", __("Strategy")], ["status", __("Status")], ["delivery_count", __("Deliveries")],
+      ["released_at", __("Released At")], ["released_by", __("Released By")], ["modified", __("Last Modified")],
+      ["release", __(""), (row) => row.status === "Draft"
+        ? `<button type="button" class="btn btn-xs btn-primary wms-mon-release-wave" data-wave="${frappe.utils.escape_html(row.name)}">${__("Release")}</button>` : ""],
+    ], "WMS Wave"));
     $table.find(".wms-mon-release-wave").on("click", (e) => {
       const wave = e.currentTarget.dataset.wave;
       frappe.confirm(__("Release wave {0}? This allocates and creates pick tasks for every delivery in it.", [wave]), () => {
@@ -407,10 +608,11 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.stock_overview", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-stock-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No stock found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
+    $table.empty().append(this.render_table(rows, [
       ["product", __("Product")], ["storage_bin", __("Bin")], ["handling_unit", __("HU")],
-      ["stock_type", __("Stock Type")], ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
-      ["available_quantity", __("Available")], ["stock_uom", __("UOM")],
+      ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["stock_type", __("Stock Type")],
+      ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
+      ["available_quantity", __("Available")], ["stock_uom", __("UOM")], ["last_movement_date", __("Last Movement")],
     ]));
   }
 
@@ -421,13 +623,17 @@ class WMSMonitor {
       $wrap.html(`
         <div class="wms-mon-task-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <input class="form-control input-sm wms-mon-task-product" placeholder="${__("Product")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-task-type" placeholder="${__("Task Type")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-task-status" placeholder="${__("Status")}" style="width:120px;">
+          ${select_html("wms-mon-task-type", TASK_TYPES, __("Task Type"))}
+          ${select_html("wms-mon-task-status", TASK_STATUSES, __("Status"))}
+          ${select_html("wms-mon-task-priority", PRIORITIES, __("Priority"))}
           <input class="form-control input-sm wms-mon-task-resource" placeholder="${__("Resource")}" style="width:140px;">
+          <input class="form-control input-sm wms-mon-task-batch" placeholder="${__("Batch No")}" style="width:120px;">
+          <input class="form-control input-sm wms-mon-task-wave" placeholder="${__("Wave")}" style="width:120px;">
           <button class="btn btn-primary btn-sm wms-mon-task-search">${__("Search")}</button>
         </div>
         <div class="wms-mon-task-table"></div>
       `);
+      $wrap.find(".wms-mon-task-type, .wms-mon-task-status, .wms-mon-task-priority").on("change", () => this.search_tasks());
       $wrap.find(".wms-mon-task-search").on("click", () => this.search_tasks());
     }
     this.search_tasks();
@@ -441,16 +647,25 @@ class WMSMonitor {
       product: $wrap.find(".wms-mon-task-product").val() || undefined,
       task_type: $wrap.find(".wms-mon-task-type").val() || undefined,
       status: $wrap.find(".wms-mon-task-status").val() || undefined,
+      priority: $wrap.find(".wms-mon-task-priority").val() || undefined,
       assigned_resource: $wrap.find(".wms-mon-task-resource").val() || undefined,
+      batch_no: $wrap.find(".wms-mon-task-batch").val() || undefined,
+      wave: $wrap.find(".wms-mon-task-wave").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_tasks", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-task-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No tasks found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
+    $table.empty().append(this.render_table(rows, [
       ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
-      ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")],
-      ["source_bin", __("Source")], ["destination_bin", __("Destination")],
-      ["priority", __("Priority")], ["assigned_resource", __("Resource")],
+      ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")], ["stock_uom", __("UOM")],
+      ["batch_no", __("Batch")], ["serial_no", __("Serial")],
+      ["source_bin", __("Source Bin")], ["destination_bin", __("Destination Bin")],
+      ["source_hu", __("Source HU")], ["destination_hu", __("Destination HU")],
+      ["stock_type_from", __("Stock Type From")], ["stock_type_to", __("Stock Type To")],
+      ["movement_type", __("Movement Type")], ["priority", __("Priority")], ["assigned_resource", __("Resource")],
+      ["wave", __("Wave")], ["queue", __("Queue")], ["warehouse_order", __("Warehouse Order")], ["sequence", __("Sequence")],
+      ["started_at", __("Started")], ["confirmed_at", __("Confirmed At")], ["confirmed_by", __("Confirmed By")],
+      ["exception_code", __("Exception")], ["blocking_reason", __("Blocking Reason")], ["modified", __("Last Modified")],
     ], "Warehouse Task"));
   }
 
@@ -461,13 +676,16 @@ class WMSMonitor {
       $wrap.html(`
         <div class="wms-mon-hu-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <input class="form-control input-sm wms-mon-hu-number" placeholder="${__("HU Number")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-hu-status" placeholder="${__("Status")}" style="width:120px;">
+          ${select_html("wms-mon-hu-status", HU_STATUSES, __("Status"))}
+          ${select_html("wms-mon-hu-stock-status", HU_STOCK_STATUSES, __("Stock Status"))}
           <input class="form-control input-sm wms-mon-hu-type" placeholder="${__("HU Type")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-hu-bin" placeholder="${__("Current Bin")}" style="width:140px;">
+          <input class="form-control input-sm wms-mon-hu-obd" placeholder="${__("Outbound Delivery")}" style="width:160px;">
           <button class="btn btn-primary btn-sm wms-mon-hu-search">${__("Search")}</button>
         </div>
         <div class="wms-mon-hu-table"></div>
       `);
+      $wrap.find(".wms-mon-hu-status, .wms-mon-hu-stock-status").on("change", () => this.search_handling_units());
       $wrap.find(".wms-mon-hu-search").on("click", () => this.search_handling_units());
     }
     this.search_handling_units();
@@ -480,15 +698,21 @@ class WMSMonitor {
       warehouse: this.warehouse,
       hu_number: $wrap.find(".wms-mon-hu-number").val() || undefined,
       status: $wrap.find(".wms-mon-hu-status").val() || undefined,
+      stock_status: $wrap.find(".wms-mon-hu-stock-status").val() || undefined,
       hu_type: $wrap.find(".wms-mon-hu-type").val() || undefined,
       current_bin: $wrap.find(".wms-mon-hu-bin").val() || undefined,
+      outbound_delivery: $wrap.find(".wms-mon-hu-obd").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_handling_units", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-hu-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No handling units found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["hu_number", __("HU")], ["hu_type", __("Type")], ["current_bin", __("Bin")], ["parent_hu", __("Parent HU")],
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("HU")], ["hu_type", __("Type")], ["current_bin", __("Bin")],
+      ["parent_hu", __("Parent HU")], ["top_hu", __("Top HU")],
       ["status", __("Status")], ["stock_status", __("Stock Status")], ["outbound_delivery", __("Outbound Delivery")],
+      ["shipment", __("Shipment")], ["closed", __("Closed")], ["loaded", __("Loaded")],
+      ["gross_weight", __("Gross Weight")], ["net_weight", __("Net Weight")], ["seal_number", __("Seal")],
+      ["external_reference", __("External Ref")], ["creation", __("Created")], ["modified", __("Last Modified")],
     ], "Handling Unit"));
   }
 
@@ -528,10 +752,12 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.search_ledger", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-ledger-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No movements found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["product", __("Product")],
-      ["quantity", __("Qty")], ["storage_bin", __("Bin")], ["handling_unit", __("HU")],
-      ["stock_type", __("Stock Type")], ["reference_doctype", __("Reference Type")], ["reference_name", __("Reference")],
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Entry")], ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["product", __("Product")],
+      ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["quantity", __("Qty")], ["stock_uom", __("UOM")],
+      ["storage_bin", __("Bin")], ["handling_unit", __("HU")], ["stock_type", __("Stock Type")],
+      ["reference_doctype", __("Reference Type")], ["reference_name", __("Reference")],
+      ["warehouse_task", __("Warehouse Task")], ["posting_user", __("Posted By")],
     ], "WMS Stock Ledger Entry"));
   }
 
@@ -561,9 +787,11 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.resource_workload", { warehouse: this.warehouse }).then((r) => r.message || []);
     const $table = this.body_for("resources").find(".wms-mon-resource-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No active resources")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["resource_code", __("Resource")], ["resource_type", __("Type")], ["resource_group", __("Resource Group")], ["user", __("User")],
-      ["current_queue", __("Queue")], ["current_bin", __("Bin")], ["open_tasks", __("Open Tasks")],
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Resource")], ["resource_code", __("Code")], ["resource_type", __("Type")],
+      ["resource_group", __("Resource Group")], ["user", __("User")], ["device_id", __("Device ID")],
+      ["current_queue", __("Queue")], ["current_work_center", __("Work Center")], ["current_bin", __("Bin")],
+      ["logged_in_at", __("Logged In At")], ["open_tasks", __("Open Tasks")],
     ], "WMS Resource"));
   }
 
@@ -572,9 +800,10 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.monitor.search_queues", { warehouse: this.warehouse }).then((r) => r.message || []);
     const $table = this.body_for("resources").find(".wms-mon-queue-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No queues configured")}</div>`); return; }
-    $table.html(this.render_table(rows, [
-      ["queue_code", __("Queue")], ["queue_name", __("Name")], ["activity", __("Activity")],
-      ["storage_type", __("Storage Type")], ["resource_group", __("Resource Group")], ["active", __("Active")],
+    $table.empty().append(this.render_table(rows, [
+      ["name", __("Queue")], ["queue_code", __("Code")], ["queue_name", __("Name")], ["activity", __("Activity")],
+      ["storage_type", __("Storage Type")], ["activity_area", __("Activity Area")],
+      ["resource_group", __("Resource Group")], ["sequence_rule", __("Sequence Rule")], ["active", __("Active")],
     ], "Warehouse Queue"));
   }
 
@@ -608,7 +837,7 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.inventory.analyze_differences", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-diff-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No posted count variances found")}</div>`); return; }
-    $table.html(this.render_table(rows, [
+    $table.empty().append(this.render_table(rows, [
       ["product", __("Product")], ["total_gain", __("Total Gain")], ["total_loss", __("Total Loss")],
       ["net_variance", __("Net Variance")], ["over_tolerance_events", __("Over-Tolerance Events")], ["line_count", __("Lines")],
     ], "WMS Physical Inventory Count"));
@@ -645,7 +874,7 @@ class WMSMonitor {
       assigned_resource: r.assigned_resource, task_count: r.task_count,
       avg_task_cycle_time_hours: hrs(r.avg_task_cycle_time_hours), efficiency_percent: pct(r.efficiency_percent),
     }));
-    $resources.html(this.render_table(rows, [
+    $resources.empty().append(this.render_table(rows, [
       ["assigned_resource", __("Resource")], ["task_count", __("Tasks")],
       ["avg_task_cycle_time_hours", __("Avg Cycle Time")], ["efficiency_percent", __("Efficiency")],
     ], "WMS Resource"));
@@ -679,30 +908,19 @@ class WMSMonitor {
       min_picks: $wrap.find(".wms-mon-slot-min-picks").val() || 5,
     };
     const recommendations = await frappe.call("frappe_wms.api.slotting.analyze_slotting", args).then((r) => r.message || []);
+    // A stable id independent of display order/filtering, so the "Generate" button below can
+    // map a checked box back to its recommendation even after the grid's quick-filter reorders
+    // or hides rows - a recommendation isn't a saved record, so there's no name to key off.
+    recommendations.forEach((rec, idx) => { rec.__idx = idx; });
     this._slotting_recommendations = recommendations;
     const $table = $wrap.find(".wms-mon-slot-table");
     if (!recommendations.length) { $table.html(`<div class="text-muted">${__("No rearrangement recommendations")}</div>`); return; }
-    const body = recommendations.map((rec, idx) => `
-      <tr>
-        <td><input type="checkbox" class="wms-mon-slot-check" value="${idx}"></td>
-        <td>${frappe.utils.escape_html(rec.product || "")}</td>
-        <td>${frappe.utils.escape_html(rec.current_bin || "")}</td>
-        <td>${frappe.utils.escape_html(rec.current_storage_type || "")}</td>
-        <td>${frappe.utils.escape_html(rec.preferred_storage_type || "")}</td>
-        <td>${rec.quantity}</td>
-        <td>${rec.recent_picks}</td>
-      </tr>
-    `).join("");
-    $table.html(`
-      <div class="table-responsive">
-        <table class="table table-bordered table-sm">
-          <thead><tr><th></th><th>${__("Product")}</th><th>${__("Current Bin")}</th><th>${__("Current Storage Type")}</th>
-            <th>${__("Preferred Storage Type")}</th><th>${__("Quantity")}</th><th>${__("Recent Picks")}</th></tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-      <button class="btn btn-primary btn-sm wms-mon-slot-generate">${__("Generate Rearrangement Tasks")}</button>
-    `);
+    $table.empty().append(this.render_table(recommendations, [
+      ["check", __(""), (row) => `<input type="checkbox" class="wms-mon-slot-check" value="${row.__idx}">`],
+      ["product", __("Product")], ["current_bin", __("Current Bin")], ["current_storage_type", __("Current Storage Type")],
+      ["preferred_storage_type", __("Preferred Storage Type")], ["quantity", __("Quantity")], ["recent_picks", __("Recent Picks")],
+    ]));
+    $table.append(`<button type="button" class="btn btn-primary btn-sm wms-mon-slot-generate" style="margin-top:8px;">${__("Generate Rearrangement Tasks")}</button>`);
     // One mass action for this tab, matching the Alerts tab's "Approve Selected" pattern:
     // the whitelisted call takes the actual recommendation objects (not doctype names -
     // a recommendation isn't a saved record), sliced from the last search's own results.
@@ -755,25 +973,17 @@ class WMSMonitor {
     const rows = await frappe.call("frappe_wms.api.bin_assignment.search_bins_for_assignment", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-bin-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No bins match these filters")}</div>`); return; }
-    const head = [__(""), __("Bin"), __("Storage Type"), __("Section"), __("Activity Area"), __("Aisle"), __("Rack")].map((l) => `<th>${l}</th>`).join("");
-    const body = rows.map((row) => `
-      <tr>
-        <td><input type="checkbox" class="wms-mon-bin-check" value="${frappe.utils.escape_html(row.name)}"></td>
-        <td><a href="/app/storage-bin/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.bin_code)}</a></td>
-        <td>${frappe.utils.escape_html(row.storage_type || "")}</td>
-        <td>${frappe.utils.escape_html(row.storage_section || "")}</td>
-        <td>${frappe.utils.escape_html(row.activity_area || "")}</td>
-        <td>${frappe.utils.escape_html(row.aisle || "")}</td>
-        <td>${frappe.utils.escape_html(row.rack || "")}</td>
-      </tr>
-    `).join("");
-    $table.html(`
-      <div class="table-responsive">
-        <table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-      </div>
-      <div class="form-inline" style="display:flex;gap:8px;align-items:center;">
+    $table.empty().append(this.render_table(rows, [
+      ["check", __(""), (row) => `<input type="checkbox" class="wms-mon-bin-check" value="${frappe.utils.escape_html(row.name)}">`],
+      ["name", __("Bin")], ["storage_type", __("Storage Type")], ["storage_section", __("Section")],
+      ["activity_area", __("Activity Area")], ["aisle", __("Aisle")], ["rack", __("Rack")],
+      ["level", __("Level")], ["position", __("Position")], ["bin_role", __("Role")],
+      ["bin_type", __("Bin Type")], ["maximum_hus", __("Max HUs")], ["current_hu_count", __("Current HUs")],
+    ], "Storage Bin"));
+    $table.append(`
+      <div class="form-inline" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
         <input class="form-control input-sm wms-mon-bin-assign-value" placeholder="${__("Activity Area (blank to clear)")}" style="width:220px;">
-        <button class="btn btn-primary btn-sm wms-mon-bin-assign">${__("Assign Activity Area to Selected")}</button>
+        <button type="button" class="btn btn-primary btn-sm wms-mon-bin-assign">${__("Assign Activity Area to Selected")}</button>
       </div>
     `);
     $table.find(".wms-mon-bin-assign").on("click", () => {
@@ -847,19 +1057,12 @@ class WMSMonitor {
     const filtered = rows.filter((r) => r.warehouse === this.warehouse);
     const $table = $wrap.find(".wms-mon-kit-table");
     if (!filtered.length) { $table.html(`<div class="text-muted">${__("No open Kitting Orders")}</div>`); return; }
-    const head = [__("Order"), __("Kit Item"), __("Direction"), __("Quantity"), __("Work Center Bin"), __("Status"), __("")].map((l) => `<th>${l}</th>`).join("");
-    const body = filtered.map((row) => `
-      <tr>
-        <td><a href="/app/kitting-order/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a></td>
-        <td>${frappe.utils.escape_html(row.kit_item || "")}</td>
-        <td>${frappe.utils.escape_html(row.direction || "")}</td>
-        <td>${row.quantity}</td>
-        <td>${frappe.utils.escape_html(row.work_center_bin || "")}</td>
-        <td>${frappe.utils.escape_html(row.status || "")}</td>
-        <td><button class="btn btn-xs btn-primary wms-mon-kit-complete" data-order="${frappe.utils.escape_html(row.name)}">${__("Complete")}</button></td>
-      </tr>
-    `).join("");
-    $table.html(`<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
+    $table.empty().append(this.render_table(filtered, [
+      ["name", __("Order")], ["kit_item", __("Kit Item")], ["bom", __("BOM")], ["direction", __("Direction")],
+      ["quantity", __("Quantity")], ["work_center_bin", __("Work Center Bin")], ["status", __("Status")],
+      ["creation", __("Created")],
+      ["complete", __(""), (row) => `<button type="button" class="btn btn-xs btn-primary wms-mon-kit-complete" data-order="${frappe.utils.escape_html(row.name)}">${__("Complete")}</button>`],
+    ], "Kitting Order"));
     $table.find(".wms-mon-kit-complete").on("click", (e) => {
       const order = e.currentTarget.dataset.order;
       frappe.confirm(__("Complete Kitting Order {0}? This consumes/produces stock immediately.", [order]), () => {
@@ -910,7 +1113,7 @@ class WMSMonitor {
     const $table = this.body_for("billing").find(".wms-mon-bill-table");
     const lines = await frappe.call("frappe_wms.api.billing.generate_billing_for_period", args).then((r) => r.message || []);
     if (!lines.length) { $table.html(`<div class="text-muted">${__("No billable activity found for this period")}</div>`); return; }
-    $table.html(this.render_table(lines, [
+    $table.empty().append(this.render_table(lines, [
       ["activity", __("Activity")], ["task_count", __("Tasks")], ["quantity", __("Quantity")],
       ["uom_basis", __("Basis")], ["rate", __("Rate")], ["billed_quantity", __("Billed Qty")], ["charge", __("Charge")],
     ], "Warehouse Task"));
@@ -955,16 +1158,19 @@ class WMSMonitor {
     `);
     this.render_pending_approval_alerts(alerts.pending_approval_counts || []);
     this.render_alert_table($wrap.find(".wms-mon-alert-exceptions"), alerts.aged_exceptions || [],
-      [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["exception_code", __("Exception")], ["blocking_reason", __("Reason")], ["modified", __("Since")]],
+      [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["source_bin", __("Source Bin")],
+       ["destination_bin", __("Destination Bin")], ["assigned_resource", __("Resource")],
+       ["exception_code", __("Exception")], ["blocking_reason", __("Reason")], ["modified", __("Since")]],
       "Warehouse Task", __("No aged exceptions"));
     this.render_alert_table($wrap.find(".wms-mon-alert-wos"), alerts.stalled_warehouse_orders || [],
-      [["name", __("Warehouse Order")], ["activity", __("Activity")], ["queue", __("Queue")], ["priority", __("Priority")], ["task_count", __("Tasks")], ["creation", __("Created")]],
+      [["name", __("Warehouse Order")], ["activity", __("Activity")], ["queue", __("Queue")], ["priority", __("Priority")],
+       ["status", __("Status")], ["task_count", __("Tasks")], ["creation", __("Created")]],
       "Warehouse Order", __("No stalled Warehouse Orders"));
   }
 
   render_alert_table($container, rows, columns, doctype, empty_message) {
     if (!rows.length) { $container.html(`<div class="text-muted">${empty_message}</div>`); return; }
-    $container.html(this.render_table(rows, columns, doctype));
+    $container.empty().append(this.render_table(rows, columns, doctype));
   }
 
   // A supervisor's one bulk action in this page: select several Under Review counts and
@@ -972,24 +1178,12 @@ class WMSMonitor {
   render_pending_approval_alerts(rows) {
     const $container = this.body_for("alerts").find(".wms-mon-alert-approval");
     if (!rows.length) { $container.html(`<div class="text-muted">${__("No counts awaiting approval")}</div>`); return; }
-    const body = rows.map((row) => `
-      <tr>
-        <td><input type="checkbox" class="wms-mon-approve-check" value="${frappe.utils.escape_html(row.name)}"></td>
-        <td><a href="/app/wms-physical-inventory-count/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a></td>
-        <td>${frappe.utils.escape_html(row.product || "")}</td>
-        <td>${frappe.utils.escape_html(row.storage_bin || row.storage_type || "")}</td>
-        <td>${frappe.utils.escape_html(row.count_date || "")}</td>
-      </tr>
-    `).join("");
-    $container.html(`
-      <div class="table-responsive">
-        <table class="table table-bordered table-sm">
-          <thead><tr><th></th><th>${__("Count")}</th><th>${__("Product")}</th><th>${__("Scope")}</th><th>${__("Count Date")}</th></tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-      <button class="btn btn-primary btn-sm wms-mon-approve-selected">${__("Approve Selected")}</button>
-    `);
+    $container.empty().append(this.render_table(rows, [
+      ["check", __(""), (row) => `<input type="checkbox" class="wms-mon-approve-check" value="${frappe.utils.escape_html(row.name)}">`],
+      ["name", __("Count")], ["product", __("Product")], ["storage_bin", __("Bin")], ["storage_type", __("Storage Type")],
+      ["count_date", __("Count Date")], ["modified", __("Last Modified")],
+    ], "WMS Physical Inventory Count"));
+    $container.append(`<button type="button" class="btn btn-primary btn-sm wms-mon-approve-selected" style="margin-top:8px;">${__("Approve Selected")}</button>`);
     // Sequential per-count approval (not Promise.all) so one failure doesn't silently
     // swallow the rest, and the final summary reflects exactly how many actually succeeded.
     $container.find(".wms-mon-approve-selected").on("click", () => {
@@ -1011,20 +1205,10 @@ class WMSMonitor {
     });
   }
 
+  // Returns a DataGrid's element (not an HTML string) - callers use .empty().append(...),
+  // not .html(...), since the grid carries live selection/copy event handlers.
   render_table(rows, columns, doctype) {
-    const head = columns.map(([, label]) => `<th>${frappe.utils.escape_html(label)}</th>`).join("");
-    const body = rows.map((row) => {
-      const cells = columns.map(([field]) => {
-        let value = row[field];
-        if (field === "name" || field === "reference_name") {
-          const target_doctype = field === "reference_name" ? row.reference_doctype : doctype;
-          if (value && target_doctype) return `<td><a href="/app/${frappe.router.slug(target_doctype)}/${encodeURIComponent(value)}">${frappe.utils.escape_html(String(value))}</a></td>`;
-        }
-        return `<td>${value === null || value === undefined ? "" : frappe.utils.escape_html(String(value))}</td>`;
-      }).join("");
-      return `<tr>${cells}</tr>`;
-    }).join("");
-    return `<div class="table-responsive"><table class="table table-bordered table-sm"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    return new DataGrid(rows, columns, doctype).$el;
   }
 }
 
