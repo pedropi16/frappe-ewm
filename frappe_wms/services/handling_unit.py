@@ -187,18 +187,24 @@ def relocate_handling_unit(hu_name, destination_bin):
     # the HU and its descendants has to move with it via relocate_hu_balances, or they go stale.
     require_role(*HU_ROLES)
     hu = frappe.get_doc("Handling Unit", hu_name)
-    if hu.current_bin == destination_bin: frappe.throw(_("{0} is already in {1}").format(hu_name, destination_bin))
+    # "Already there" is only a real no-op if it's also not nested - dropping a nested HU onto
+    # the bin it's already physically in (without picking a different bin) is exactly how an
+    # operator unnests it in place, and must not be rejected as pointless.
+    if hu.current_bin == destination_bin and not hu.parent_hu:
+        frappe.throw(_("{0} is already in {1}").format(hu_name, destination_bin))
     destination = frappe.get_doc("Storage Bin", destination_bin)
     if destination.warehouse != hu.warehouse: frappe.throw(_("Destination bin must be in the same warehouse"))
     validate_destination_bin(destination_bin, hu_type=hu.hu_type, destination_hu=hu.name)
     before = {"parent_hu_before": hu.parent_hu, "bin_before": hu.current_bin}
+    moved = hu.current_bin != destination_bin
     hu.parent_hu = None
     hu.current_bin = destination_bin
     hu.flags.wms_service_update = True
     hu.save(ignore_permissions=True)
-    relocate_hu_balances(hu.name, destination_bin)
-    _cascade_current_bin(hu.name, destination_bin)
-    _log_event(hu.name, "Moved", parent_hu_after=None, bin_after=destination_bin, **before)
+    if moved:
+        relocate_hu_balances(hu.name, destination_bin)
+        _cascade_current_bin(hu.name, destination_bin)
+    _log_event(hu.name, "Moved" if moved else "Unnested", parent_hu_after=None, bin_after=destination_bin, **before)
     return hu.as_dict()
 
 def set_handling_unit_blocked(hu_name, blocked, reason_code=None, remarks=None):

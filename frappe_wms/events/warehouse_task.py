@@ -7,7 +7,7 @@ def validate_task(doc, method=None):
         frappe.throw(_("Planned quantity must be greater than zero"))
     if flt(doc.confirmed_quantity) < 0:
         frappe.throw(_("Confirmed quantity cannot be negative"))
-    if doc.source_bin and doc.destination_bin and doc.source_bin == doc.destination_bin and doc.task_type != "Posting Change":
+    if doc.source_bin and doc.destination_bin and doc.source_bin == doc.destination_bin and doc.task_type not in ("Posting Change", "Repack"):
         frappe.throw(_("Source and destination bins must differ"))
     for field in ("source_bin", "destination_bin"):
         if doc.get(field) and frappe.db.get_value("Storage Bin", doc.get(field), "warehouse") != doc.warehouse:

@@ -12,8 +12,12 @@ def repack(source_hu, destination_hu, items, reference_doctype, reference_name, 
 def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
     # Same idea as repack() but either side may be loose stock sitting directly in storage_bin
     # instead of inside a Handling Unit - covers bin->HU, HU->bin and HU->HU repacking, all at
-    # one spot. A Warehouse Task ("Internal Move") can't model this: it requires source and
-    # destination bins to differ, which same-bin repacking by definition never does.
+    # one spot. An ordinary Warehouse Task ("Internal Move") can't model this - it requires
+    # source and destination bins to differ, which same-bin repacking by definition never does -
+    # so each line also gets its own "Repack" task (the one task_type exempted from that rule),
+    # created Open, confirmed only after its matching ledger entries actually post. Without this,
+    # a same-bin repack changed stock location with literally no task record to find it by later
+    # (reproduced: real repacks left correct balances but zero Warehouse Tasks referencing them).
     if not source_hu and not destination_hu: frappe.throw(_("At least one side of a repack must be a Handling Unit"))
     warehouse = None
     for hu_name in (source_hu, destination_hu):
@@ -23,9 +27,26 @@ def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctyp
         warehouse = hu.warehouse
     warehouse = warehouse or frappe.db.get_value("Storage Bin", storage_bin, "warehouse")
     for i,item in enumerate(items,1):
+        line_key = f"{idempotency_key}:{i}"
+        if frappe.db.exists("Warehouse Task", {"idempotency_key": line_key}):
+            continue  # a retried request already posted and recorded this line
+        task = frappe.get_doc({
+            "doctype": "Warehouse Task", "task_type": "Repack", "warehouse": warehouse,
+            "product": item["item"], "planned_quantity": item["quantity"], "stock_uom": item["stock_uom"],
+            "batch_no": item.get("batch_no"), "serial_no": item.get("serial_no"),
+            "source_bin": storage_bin, "destination_bin": storage_bin,
+            "source_hu": source_hu, "destination_hu": destination_hu,
+            "stock_type_from": item["stock_type"], "stock_type_to": item["stock_type"],
+            "movement_type": "801", "priority": "Normal", "status": "Open", "idempotency_key": line_key,
+        })
+        task.insert(ignore_permissions=True)
         src={"warehouse":warehouse,"product":item["item"],"batch_no":item.get("batch_no"),"serial_no":item.get("serial_no"),"handling_unit":source_hu,"storage_bin":storage_bin,"stock_type":item["stock_type"],"stock_uom":item["stock_uom"]}
         dst={"handling_unit":destination_hu,"storage_bin":storage_bin,"stock_type":item["stock_type"]}
-        transfer_stock(source=src,destination=dst,quantity=item["quantity"],movement_type="801",reference_doctype=reference_doctype,reference_name=reference_name,idempotency_key=f"{idempotency_key}:{i}")
+        transfer_stock(source=src,destination=dst,quantity=item["quantity"],movement_type="801",reference_doctype=reference_doctype,reference_name=reference_name,idempotency_key=line_key,warehouse_task=task.name)
+        task.db_set({
+            "confirmed_quantity": item["quantity"], "status": "Confirmed",
+            "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "docstatus": 1,
+        }, update_modified=True)
     if destination_hu:
         frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination_hu,"event_type":"Packed","bin_after":storage_bin,"reference_doctype":reference_doctype,"reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
 
