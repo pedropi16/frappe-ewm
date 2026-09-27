@@ -59,6 +59,7 @@ function ensure_repack_styles() {
     .wms-repack-tree-row.wms-repack-dragging { opacity:.4; }
     .wms-repack-tree-row.wms-repack-dragover { outline:2px dashed rgba(59,130,246,.7); outline-offset:-2px; background:rgba(59,130,246,.06); }
     .wms-repack-tree-row.wms-repack-tree-selected { background:rgba(59,130,246,.15); font-weight:bold; }
+    .wms-repack-table td, .wms-repack-table th { vertical-align:middle; }
   ` }).appendTo("head");
 }
 
@@ -234,7 +235,7 @@ function sap_unexecuted_html() {
   return `<div class="text-muted">${__("Not executed yet - set your criteria and click Execute.")}</div>`;
 }
 
-const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock"];
+const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock", "Repack"];
 const TASK_STATUSES = ["Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Confirmed", "Cancelled", "Exception"];
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
 const INBOUND_STATUSES = ["Draft", "Expected", "Arrived", "Receiving", "Partially Received", "Received", "Putaway In Process", "Completed", "Cancelled"];
@@ -887,11 +888,19 @@ class WMSMonitor {
         ${sap_search_hint()}
         <div class="text-muted" style="margin-bottom:8px;font-size:12px;">${__("The tree shows bins, Handling Units and their stock lines - click any row to see it on the right, drag any row onto another to repack it. Pin a 🎯 target, then Repack All moves everything from the selected row at once.")}</div>
         <div style="display:flex;gap:16px;align-items:flex-start;">
-          <div class="wms-repack-tree" style="flex:0 0 380px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;">${sap_unexecuted_html()}</div>
+          <div style="flex:0 0 380px;min-width:0;">
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+              <button type="button" class="btn btn-default btn-xs wms-repack-expand-all">${__("Expand All")}</button>
+              <button type="button" class="btn btn-default btn-xs wms-repack-collapse-all">${__("Collapse All")}</button>
+            </div>
+            <div class="wms-repack-tree" style="max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:8px;">${sap_unexecuted_html()}</div>
+          </div>
           <div class="wms-repack-detail" style="flex:1 1 480px;max-width:560px;min-width:0;max-height:65vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;padding:10px;"></div>
         </div>
       `);
       $wrap.find(".wms-repack-search").on("click", () => this.search_repack_center());
+      $wrap.find(".wms-repack-expand-all").on("click", () => this.repack_expand_all());
+      $wrap.find(".wms-repack-collapse-all").on("click", () => this.repack_collapse_all());
       this.ensure_hu_types();
     }
   }
@@ -981,7 +990,29 @@ class WMSMonitor {
   async ensure_repack_expanded(kind, name) {
     const k = this.repack_key(kind, name);
     this.repack.expanded.add(k);
-    if (!this.repack.childrenOf[k]) await this.load_repack_children(kind, name);
+    if (kind !== "warehouse" && !this.repack.childrenOf[k]) await this.load_repack_children(kind, name);
+  }
+
+  // Walks every bin/HU currently reachable from the roots, expanding (and fetching, where not
+  // already loaded) each one in turn - deep nesting means this can take a moment on a large
+  // result, but it's a deliberate one-shot action, not something that runs on every render.
+  async repack_expand_all() {
+    const walk = async (nodes) => {
+      for (const n of nodes) {
+        if (n.kind === "item") continue;
+        await this.ensure_repack_expanded(n.kind, n.name);
+        await walk(this.repack.childrenOf[this.repack_key(n.kind, n.name)] || []);
+      }
+    };
+    await walk(this.repack.roots);
+    this.render_repack_tree();
+  }
+
+  // Back to just the Warehouse root open - everything else (bins, HUs, nested HUs) collapses,
+  // without discarding any already-fetched children so re-expanding stays instant.
+  repack_collapse_all() {
+    this.repack.expanded = new Set([this.repack_key("warehouse", this.warehouse)]);
+    this.render_repack_tree();
   }
 
   // Reveals a nested search hit in place: adds its bin as a root if not already one, then
@@ -1207,10 +1238,24 @@ class WMSMonitor {
     const $bulkBar = $(`<div class="wms-repack-bulk-bar" style="margin-bottom:8px;"></div>`);
     $detail.append($bulkBar);
     this.update_repack_bulk_bar($bulkBar);
+    const $table = $(`
+      <table class="table table-sm table-bordered wms-repack-table" style="margin-bottom:0;">
+        <thead><tr>
+          <th style="width:24px;"></th>
+          <th>${__("Item")}</th>
+          <th>${__("Details")}</th>
+          <th style="text-align:right;">${__("Quantity")}</th>
+          <th style="width:110px;"></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    `);
+    const $tbody = $table.find("tbody");
     rows.forEach((row) => {
       const enriched = row.kind === "item" ? { ...row, srcBin: loc.bin, srcHu: loc.hu } : { ...row, atBin: loc.bin };
-      $detail.append(this.render_repack_detail_row(enriched));
+      $tbody.append(this.render_repack_detail_row(enriched));
     });
+    $detail.append($table);
   }
 
   // A stable identity for a row regardless of whether it came from the tree or a detail tab, so
@@ -1225,11 +1270,42 @@ class WMSMonitor {
     const n = this.repack.selectedRows.size;
     const target = this.repack.target;
     $bar.empty();
-    if (!n) { $bar.append(`<span class="text-muted" style="font-size:11px;">${__("Check lines to move several at once")}</span>`); return; }
+    if (!n) { $bar.append(`<span class="text-muted" style="font-size:11px;">${__("Check lines to move or delete several at once")}</span>`); return; }
     const $btn = $(`<button type="button" class="btn btn-xs btn-primary">${target ? __("Move Selected ({0}) → {1}", [n, target.name]) : __("Move Selected ({0}) - pin a 🎯 target first", [n])}</button>`);
     $btn.prop("disabled", !target);
     $btn.on("click", () => this.repack_move_selected());
     $bar.append($btn);
+    // Deletion only makes sense for Handling Unit rows - a checked stock line just skips it -
+    // so the button only shows, and only counts, the HUs actually checked.
+    const huCount = [...this.repack.selectedRows.values()].filter((r) => r.kind === "hu").length;
+    if (huCount) {
+      const $del = $(`<button type="button" class="btn btn-xs btn-danger" style="margin-left:6px;">${__("Delete Selected HU(s) ({0})", [huCount])}</button>`);
+      $del.on("click", () => this.repack_delete_selected());
+      $bar.append($del);
+    }
+  }
+
+  // The bulk equivalent of the old per-HU "Delete (Recycle)" button - was one-at-a-time in the
+  // Details tab, forcing a full reload between each; now checks every selected HU row and
+  // recycles them all in one pass, matching Move Selected's pattern.
+  async repack_delete_selected() {
+    const rows = [...this.repack.selectedRows.values()].filter((r) => r.kind === "hu");
+    if (!rows.length) { frappe.show_alert({ message: __("Check at least one Handling Unit first"), indicator: "orange" }); return; }
+    frappe.confirm(__("Delete (recycle) {0} Handling Unit(s)? Each must be empty, unnested, with no nested HUs of its own. Frees their numbers for reuse; cannot be undone.", [rows.length]), async () => {
+      let ok = 0, fail = 0;
+      for (const row of rows) {
+        try { await frappe.call("frappe_wms.api.handling_unit.recycle_handling_unit", { hu_name: row.name }); ok++; }
+        catch (e) { fail++; frappe.show_alert({ message: e.message || String(e), indicator: "red" }); }
+      }
+      this.repack.selectedRows = new Map();
+      if (this.repack.target && rows.some((r) => r.name === this.repack.target.name)) this.repack.target = null;
+      if (this.repack.selected && this.repack.selected.kind === "hu" && rows.some((r) => r.name === this.repack.selected.name)) {
+        this.repack.selected = null;
+        this.repack.detail = null;
+      }
+      frappe.show_alert({ message: fail ? __("Deleted {0}, {1} failed", [ok, fail]) : __("Deleted {0} Handling Unit(s)", [ok]), indicator: fail ? "orange" : "green" });
+      await this.refresh_repack_after_move();
+    });
   }
 
   render_repack_info_table(fields) {
@@ -1255,10 +1331,8 @@ class WMSMonitor {
     const $blockBtn = $(`<button type="button" class="btn btn-xs btn-default">${hu.status === "Blocked" ? __("Unblock") : __("Block")}</button>`);
     $blockBtn.on("click", () => this.repack_toggle_block_hu(hu.name, hu.status === "Blocked"));
     $actions.append($blockBtn);
-    const $deleteBtn = $(`<button type="button" class="btn btn-xs btn-danger">${__("Delete (Recycle)")}</button>`);
-    $deleteBtn.on("click", () => this.repack_delete_hu(hu.name));
-    $actions.append($deleteBtn);
     $detail.append($actions);
+    $detail.append(`<div class="text-muted" style="font-size:11px;margin-bottom:6px;">${__("To delete this HU, check its row where it's listed (in its parent bin or HU) and use Delete Selected there - deletion is a bulk action now.")}</div>`);
     $detail.append(this.render_repack_info_table([
       [__("Type"), hu.hu_type], [__("Status"), hu.status], [__("Stock Status"), hu.stock_status],
       [__("Current Bin"), hu.current_bin], [__("Parent HU"), hu.parent_hu || "-"], [__("Top HU"), hu.top_hu],
@@ -1275,21 +1349,6 @@ class WMSMonitor {
     } catch (e) { frappe.show_alert({ message: e.message || String(e), indicator: "red" }); return; }
     frappe.show_alert({ message: currentlyBlocked ? __("Unblocked {0}", [hu_name]) : __("Blocked {0}", [hu_name]), indicator: "green" });
     await this.refresh_repack_after_move();
-  }
-
-  repack_delete_hu(hu_name) {
-    frappe.confirm(__("Delete (recycle) {0}? It must be empty, unnested, with no nested HUs of its own. Frees its number for reuse; cannot be undone.", [hu_name]), async () => {
-      try {
-        await frappe.call("frappe_wms.api.handling_unit.recycle_handling_unit", { hu_name });
-      } catch (e) { frappe.show_alert({ message: e.message || String(e), indicator: "red" }); return; }
-      frappe.show_alert({ message: __("Deleted {0}", [hu_name]), indicator: "green" });
-      if (this.repack.target && this.repack.target.kind === "hu" && this.repack.target.name === hu_name) this.repack.target = null;
-      this.repack.selected = null;
-      this.repack.detail = null;
-      await this.refresh_repack_after_move();
-      this.render_repack_tree();
-      this.render_repack_detail();
-    });
   }
 
   // "Possible destination HUs": every other HU sitting in the same bin, with a click-to-move
@@ -1436,22 +1495,32 @@ class WMSMonitor {
     await this.select_repack_node("hu", created[created.length - 1]);
   }
 
+  // One <tr> per line, with real columns (checkbox / item / details / quantity / action) instead
+  // of a flexbox strip - a row with several pieces of info (batch, serial, stock type, bin,
+  // status) had nowhere consistent to put them and effectively vanished into unlabeled text.
   render_repack_detail_row(row) {
-    const $row = $(`<div class="wms-repack-row" draggable="true" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border-color);border-radius:4px;margin-bottom:4px;cursor:grab;"></div>`);
+    const $row = $(`<tr class="wms-repack-row" draggable="true" style="cursor:grab;"></tr>`);
     const rowKey = this.repack_row_key(row);
-    const $check = $(`<input type="checkbox" title="${__("Select for Move Selected")}">`).prop("checked", this.repack.selectedRows.has(rowKey));
+    const $checkCell = $(`<td></td>`);
+    const $check = $(`<input type="checkbox" title="${__("Select for Move Selected / Delete Selected")}">`).prop("checked", this.repack.selectedRows.has(rowKey));
     $check.on("mousedown click", (e) => e.stopPropagation());
     $check.on("change", (e) => {
       if (e.target.checked) this.repack.selectedRows.set(rowKey, row); else this.repack.selectedRows.delete(rowKey);
       this.update_repack_bulk_bar($row.closest(".wms-repack-detail").find(".wms-repack-bulk-bar"));
     });
-    $row.append($check);
+    $checkCell.append($check);
+    $row.append($checkCell);
+
     if (row.kind === "hu") {
-      $row.append(`<span>📦</span><b>${frappe.utils.escape_html(row.name)}</b>`);
-      $row.append(`<span class="text-muted">${frappe.utils.escape_html(row.hu_type || "")} · ${frappe.utils.escape_html(row.atBin || row.current_bin || "-")} · ${frappe.utils.escape_html(row.status || "")}${row.stock_status ? " · " + frappe.utils.escape_html(row.stock_status) : ""}</span>`);
-      const $browse = $(`<a href="#" style="margin-left:auto;">${__("Browse")}</a>`);
+      $row.append(`<td style="cursor:pointer;">📦 <b>${frappe.utils.escape_html(row.name)}</b></td>`);
+      $row.append(`<td class="text-muted" style="font-size:12px;">${frappe.utils.escape_html(row.hu_type || "")} · ${frappe.utils.escape_html(row.atBin || row.current_bin || "-")} · ${frappe.utils.escape_html(row.status || "")}${row.stock_status ? " · " + frappe.utils.escape_html(row.stock_status) : ""}</td>`);
+      $row.append(`<td></td>`);
+      const $actionCell = $(`<td style="text-align:right;"></td>`);
+      const $browse = $(`<a href="#">${__("Browse")}</a>`);
       $browse.on("click", (e) => { e.preventDefault(); e.stopPropagation(); this.select_repack_node("hu", row.name); });
-      $row.append($browse);
+      $actionCell.append($browse);
+      $row.append($actionCell);
+      $row.on("click", () => this.select_repack_node("hu", row.name));
       $row.on("dragstart", (e) => {
         this.repack._drag = { kind: "hu", name: row.name, nested: row.nested };
         e.originalEvent.dataTransfer.effectAllowed = "move";
@@ -1459,13 +1528,23 @@ class WMSMonitor {
         $row.addClass("wms-repack-dragging");
       });
     } else {
-      $row.append(`<span style="min-width:140px;cursor:pointer;" title="${__("Click for full details")}">${frappe.utils.escape_html(row.product)}</span>`);
-      $row.append(`<span class="text-muted">${[row.batch_no, row.serial_no].filter(Boolean).map((v) => frappe.utils.escape_html(v)).join(" · ")}</span>`);
-      $row.append(`<span class="text-muted">${frappe.utils.escape_html(row.stock_type || "")}</span>`);
-      $row.append(`<span style="font-weight:bold;font-size:14px;">${row.quantity}</span><span class="text-muted">${frappe.utils.escape_html(row.stock_uom || "")}</span>`);
-      const $qty = $(`<input type="number" step="any" min="0" max="${row.quantity}" placeholder="${__("qty")}" title="${__("Partial quantity (default: all of it)")}" class="form-control input-sm" style="width:80px;margin-left:auto;">`);
+      $row.append(`<td style="cursor:pointer;" title="${__("Click for full details")}">🏷️ ${frappe.utils.escape_html(row.product)}</td>`);
+      const meta = [row.batch_no, row.serial_no, row.stock_type].filter(Boolean).map((v) => frappe.utils.escape_html(v)).join(" · ");
+      $row.append(`<td class="text-muted" style="font-size:12px;">${meta}</td>`);
+      const $qtyCell = $(`<td style="text-align:right;white-space:nowrap;"></td>`);
+      $qtyCell.append(`<span style="font-weight:bold;font-size:14px;">${row.quantity}</span> <span class="text-muted">${frappe.utils.escape_html(row.stock_uom || "")}</span>`);
+      const $qty = $(`<input type="number" step="any" min="0" max="${row.quantity}" placeholder="${__("qty")}" title="${__("Partial quantity (default: all of it)")}" class="form-control input-sm" style="width:70px;display:inline-block;margin-left:8px;">`);
       $qty.on("mousedown click", (e) => e.stopPropagation());
-      $row.append($qty);
+      $qtyCell.append($qty);
+      $row.append($qtyCell);
+      const $actionCell = $(`<td style="text-align:right;"></td>`);
+      // A click-driven alternative to dragging, for a partial quantity too - moves to whatever's
+      // pinned as the 🎯 target, since drag-and-drop isn't reliable on every input device.
+      const $move = $(`<button type="button" class="btn btn-xs btn-default" title="${__("Move to the pinned 🎯 target")}">${__("Move")}</button>`);
+      $move.on("mousedown", (e) => e.stopPropagation());
+      $move.on("click", (e) => { e.stopPropagation(); this.repack_click_move_item(row, $qty); });
+      $actionCell.append($move);
+      $row.append($actionCell);
       $row.on("click", () => this.select_repack_item(row));
       $row.on("dragstart", (e) => {
         const q = parseFloat($qty.val());
@@ -1475,12 +1554,6 @@ class WMSMonitor {
         e.originalEvent.dataTransfer.setData("text/plain", row.product);
         $row.addClass("wms-repack-dragging");
       });
-      // A click-driven alternative to dragging, for a partial quantity too - moves to whatever's
-      // pinned as the 🎯 target, since drag-and-drop isn't reliable on every input device.
-      const $move = $(`<button type="button" class="btn btn-xs btn-default" title="${__("Move to the pinned 🎯 target")}">${__("Move")}</button>`);
-      $move.on("mousedown", (e) => e.stopPropagation());
-      $move.on("click", (e) => { e.stopPropagation(); this.repack_click_move_item(row, $qty); });
-      $row.append($move);
     }
     $row.on("dragend", () => { $row.removeClass("wms-repack-dragging"); this.repack._drag = null; });
     return $row;
