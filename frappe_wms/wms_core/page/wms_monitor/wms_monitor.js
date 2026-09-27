@@ -945,20 +945,24 @@ class WMSMonitor {
       searchHu ? frappe.call("frappe_wms.api.monitor.search_handling_units", huArgs).then((r) => r.message || []) : [],
       searchBin ? frappe.call("frappe_wms.api.monitor.search_bins", binArgs).then((r) => r.message || []) : [],
     ]);
-    this.repack.roots = [];
-    this.repack.expanded = new Set();
+    // Everything lives under one Warehouse root, the way SAP's own tree is organized top-down
+    // (warehouse -> bin -> HU -> nested HU...) rather than a flat mix of unrelated top-level
+    // rows. A matched HU - nested or not - is always shown inside its actual bin: current_bin is
+    // correct at any nesting depth, so even a several-levels-deep match resolves to the right bin.
+    const wk = this.repack_key("warehouse", this.warehouse);
+    this.repack.roots = [{ kind: "warehouse", name: this.warehouse, meta: "" }];
+    this.repack.expanded = new Set([wk]);
     this.repack.childrenOf = {};
     this.repack.selected = null;
     this.repack.detail = null;
     this.repack.target = null;
-    // A nested match gets shown in its actual context (bin -> ancestor chain -> the HU) instead
-    // of as a bare, buried row; a top-level match already shows its bin in its own meta line.
-    const plainHus = hus.filter((h) => !h.parent_hu);
-    const nestedHus = hus.filter((h) => h.parent_hu);
-    plainHus.forEach((h) => this.repack.roots.push({ kind: "hu", name: h.name, meta: `${h.hu_type || ""} · ${h.current_bin || "-"} · ${h.status || ""}` }));
-    bins.forEach((b) => this.repack.roots.push({ kind: "bin", name: b.name, meta: b.storage_type || "" }));
-    for (const h of nestedHus) await this.reveal_repack_hu(h.name);
+    const binMeta = {};
+    bins.forEach((b) => { binMeta[b.name] = b.storage_type || ""; });
+    hus.forEach((h) => { if (h.current_bin && !(h.current_bin in binMeta)) binMeta[h.current_bin] = ""; });
+    this.repack.childrenOf[wk] = Object.keys(binMeta).sort().map((name) => ({ kind: "bin", name, meta: binMeta[name] }));
+    for (const h of hus) await this.reveal_repack_hu(h.name);
     if (hus.length === 1) await this.select_repack_node("hu", hus[0].name);
+    else if (!hus.length && bins.length === 1) await this.select_repack_node("bin", bins[0].name);
     this.render_repack_tree();
     this.render_repack_detail();
   }
@@ -974,9 +978,6 @@ class WMSMonitor {
   async reveal_repack_hu(hu_name) {
     const { bin, chain } = await frappe.call("frappe_wms.api.monitor.hu_ancestor_chain", { hu_name }).then((r) => r.message);
     if (!bin || !chain.length) return;
-    if (!this.repack.roots.some((r) => r.kind === "bin" && r.name === bin)) {
-      this.repack.roots.unshift({ kind: "bin", name: bin, meta: "" });
-    }
     let curKind = "bin", curName = bin;
     for (const link of chain) {
       await this.ensure_repack_expanded(curKind, curName);
@@ -1003,7 +1004,9 @@ class WMSMonitor {
     const k = this.repack_key(kind, name);
     if (this.repack.expanded.has(k)) { this.repack.expanded.delete(k); this.render_repack_tree(); return; }
     this.repack.expanded.add(k);
-    if (!this.repack.childrenOf[k]) await this.load_repack_children(kind, name);
+    // The Warehouse root's children are the search-result bins, computed directly in
+    // search_repack_center - there's no hu_overview/bin_overview equivalent to fetch for it.
+    if (kind !== "warehouse" && !this.repack.childrenOf[k]) await this.load_repack_children(kind, name);
     this.render_repack_tree();
   }
 
@@ -1025,6 +1028,7 @@ class WMSMonitor {
   async refresh_repack_after_move() {
     for (const k of this.repack.expanded) {
       const [kind, name] = JSON.parse(k);
+      if (kind === "warehouse") continue;
       await this.load_repack_children(kind, name);
     }
     const sel = this.repack.selected;
@@ -1044,12 +1048,32 @@ class WMSMonitor {
 
   render_repack_tree() {
     const $tree = this.body_for("repack").find(".wms-repack-tree").empty();
-    if (!this.repack.roots.length) { $tree.html(`<div class="text-muted">${__("No Handling Units or Storage Bins found")}</div>`); return; }
+    if (!this.repack.roots.length) { $tree.html(`<div class="text-muted">${__("Execute a search to browse the warehouse.")}</div>`); return; }
     this.repack.roots.forEach((n) => $tree.append(this.render_repack_tree_node(n, 0)));
+  }
+
+  // The single root: not draggable, not a drop target, click only toggles - its children are
+  // the search-result bins, already computed directly (see search_repack_center).
+  render_repack_tree_warehouse_node(node, depth) {
+    const k = this.repack_key(node.kind, node.name);
+    const expanded = this.repack.expanded.has(k);
+    const $wrap = $(`<div></div>`);
+    const $row = $(`<div class="wms-repack-tree-row" style="display:flex;align-items:center;gap:6px;padding:3px 4px;margin-left:${depth * 16}px;border-radius:4px;cursor:pointer;font-weight:bold;"></div>`);
+    const $toggle = $(`<span style="width:14px;display:inline-block;text-align:center;">${expanded ? "▾" : "▸"}</span>`);
+    $row.append($toggle, `<span>🏭</span>`, `<span>${frappe.utils.escape_html(node.name)}</span>`);
+    $row.on("click", () => this.toggle_repack_node(node.kind, node.name));
+    $wrap.append($row);
+    if (expanded) {
+      const children = this.repack.childrenOf[k] || [];
+      if (!children.length) $wrap.append(`<div class="text-muted" style="margin-left:${(depth + 1) * 16 + 18}px;font-size:11px;">${__("No Handling Units or Storage Bins matched")}</div>`);
+      children.forEach((c) => $wrap.append(this.render_repack_tree_node(c, depth + 1)));
+    }
+    return $wrap;
   }
 
   render_repack_tree_node(node, depth) {
     if (node.kind === "item") return this.render_repack_tree_item_node(node, depth);
+    if (node.kind === "warehouse") return this.render_repack_tree_warehouse_node(node, depth);
     const k = this.repack_key(node.kind, node.name);
     const expanded = this.repack.expanded.has(k);
     const selected = this.repack.selected && this.repack.selected.kind !== "item" && this.repack_key(this.repack.selected.kind, this.repack.selected.name) === k;
