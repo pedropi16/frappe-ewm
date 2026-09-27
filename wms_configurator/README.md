@@ -68,6 +68,25 @@ are only inserted if an identical row doesn't already exist.
 Pass `dry_run=True` in the kwargs to see what would be created/updated
 without writing anything.
 
+Because this only ever creates or updates, it can never clean up a record a
+previous, since-corrected profile left behind (there's no way to know a
+no-natural-key row like a `Bin Determination Rule` that's no longer in the
+profile was deliberately removed rather than just not mentioned this time).
+If you need to guarantee a clean reinstall - after fixing a bad rule that
+already applied, say - wipe first:
+
+```
+bench --site <site> execute frappe_wms.setup.wipe_config.wipe_configuration \
+  --kwargs "{'confirm': True}"
+```
+
+Deletes every record of every in-scope doctype (`WMS Settings` is reset
+instead, since a Single can't be deleted) and is itself idempotent - safe to
+run on an already-empty site. Also pass `dry_run=True` to preview. The
+Configurator's Review & Apply step has a "Wipe configuration" card with the
+same two options (bench command, or a live "Wipe connected site" button for
+whatever site you're connected to) for exactly this.
+
 ## Applying a profile: direct connection
 
 Useful while iterating, or when you don't have server access. Click

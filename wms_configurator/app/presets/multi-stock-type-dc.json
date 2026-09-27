@@ -7,7 +7,7 @@
     "enforce_wms_only_stock_movements": 1,
     "enforce_storage_type_rules": 1,
     "require_scan_verification": 0,
-    "default_handling_unit_type": "PALLET"
+    "default_handling_unit_type": "INBOUND"
    }
   ],
   "Bin Type": [
@@ -52,7 +52,7 @@
     "nestable": 0,
     "reusable": 1,
     "requires_seal": 0,
-    "numbering_mode": "External",
+    "numbering_mode": "Internal",
     "active": 1
    },
    {
@@ -65,6 +65,18 @@
     "reusable": 1,
     "requires_seal": 0,
     "numbering_mode": "Internal",
+    "active": 1
+   },
+   {
+    "hu_type_code": "INBOUND",
+    "hu_type_name": "Inbound Unit (Supplier-Barcoded)",
+    "category": "Other",
+    "maximum_weight": 0,
+    "maximum_volume": 0,
+    "nestable": 0,
+    "reusable": 0,
+    "requires_seal": 0,
+    "numbering_mode": "External",
     "active": 1
    }
   ],
@@ -781,11 +793,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-A02",
@@ -810,11 +818,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-A03",
@@ -839,11 +843,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-A04",
@@ -868,11 +868,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-B01",
@@ -897,11 +893,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-B02",
@@ -926,11 +918,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-B03",
@@ -955,11 +943,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK-B04",
@@ -984,11 +968,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK2-C01",
@@ -1013,11 +993,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-BULK2-C02",
@@ -1042,11 +1018,7 @@
     "inventory_blocked": 0,
     "active": 1,
     "allowed_stock_types": [],
-    "allowed_hu_types": [
-     {
-      "hu_type": "PALLET"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-PICK-P01",
@@ -1075,11 +1047,7 @@
       "stock_type": "AVAILABLE"
      }
     ],
-    "allowed_hu_types": [
-     {
-      "hu_type": "TOTE"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-PICK-P02",
@@ -1108,11 +1076,7 @@
       "stock_type": "AVAILABLE"
      }
     ],
-    "allowed_hu_types": [
-     {
-      "hu_type": "TOTE"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-PICK-P03",
@@ -1141,11 +1105,7 @@
       "stock_type": "AVAILABLE"
      }
     ],
-    "allowed_hu_types": [
-     {
-      "hu_type": "TOTE"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-PICK-P04",
@@ -1174,11 +1134,7 @@
       "stock_type": "AVAILABLE"
      }
     ],
-    "allowed_hu_types": [
-     {
-      "hu_type": "TOTE"
-     }
-    ]
+    "allowed_hu_types": []
    },
    {
     "bin_code": "DC1-PACK-STATION1",
@@ -1823,6 +1779,17 @@
    }
   ],
   "WMS Number Range": [
+   {
+    "range_for": "Handling Unit",
+    "warehouse": "",
+    "hu_type": "PALLET",
+    "prefix": "HU-",
+    "number_length": 8,
+    "start_number": 1,
+    "end_number": 99999999,
+    "current_number": 0,
+    "active": 1
+   },
    {
     "range_for": "Handling Unit",
     "warehouse": "",

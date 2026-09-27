@@ -1,14 +1,15 @@
-import * as Schema from "./schema.js?v=c05329a55f";
-import * as Store from "./store.js?v=c05329a55f";
-import { el } from "./render.js?v=c05329a55f";
-import { exportProfile } from "./export_import.js?v=c05329a55f";
-import { applyProfileToSite } from "./push.js?v=c05329a55f";
-import * as ERP from "./erp.js?v=c05329a55f";
-import { findBroken, fixAll } from "./refs.js?v=c05329a55f";
-import { compareWithSite, pullAll } from "./sitesync.js?v=c05329a55f";
-import { toast } from "./render.js?v=c05329a55f";
-import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js?v=c05329a55f";
-import { goToStep, STEPS } from "./wizard.js?v=c05329a55f";
+import * as Schema from "./schema.js?v=383abd39dd";
+import * as Store from "./store.js?v=383abd39dd";
+import { el } from "./render.js?v=383abd39dd";
+import { exportProfile } from "./export_import.js?v=383abd39dd";
+import { applyProfileToSite } from "./push.js?v=383abd39dd";
+import { wipeSite } from "./wipe.js?v=383abd39dd";
+import * as ERP from "./erp.js?v=383abd39dd";
+import { findBroken, fixAll } from "./refs.js?v=383abd39dd";
+import { compareWithSite, pullAll } from "./sitesync.js?v=383abd39dd";
+import { toast } from "./render.js?v=383abd39dd";
+import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js?v=383abd39dd";
+import { goToStep, STEPS } from "./wizard.js?v=383abd39dd";
 
 export function renderReviewStep(container) {
   container.appendChild(requiredCard());
@@ -80,6 +81,56 @@ export function renderReviewStep(container) {
   pushCard.appendChild(pushBtn);
   pushCard.appendChild(log);
   container.appendChild(pushCard);
+
+  container.appendChild(wipeCard());
+}
+
+function wipeCard() {
+  const card = el("div", { class: "card card-danger" });
+  card.appendChild(el("h2", {}, "Wipe configuration"));
+  card.appendChild(el("p", { class: "card-desc" }, "Deletes every record of every configuration doctype from a site - the \"pull the plug\" counterpart to applying a profile. Applying only ever creates or updates, so it can never clean up a rule a previous, since-corrected profile left behind; wipe first when you want to guarantee a clean reinstall instead of chasing stale leftovers by hand."));
+
+  const benchWipe = el("div", { class: "card-subsection" });
+  benchWipe.appendChild(el("p", { class: "card-desc" }, "Safest path for a production site - no CORS or API key needed:"));
+  benchWipe.appendChild(el("pre", { class: "apply-log" }, "bench --site <site> execute frappe_wms.setup.wipe_config.wipe_configuration \\\n  --kwargs \"{'confirm': True}\""));
+  benchWipe.appendChild(el("p", { class: "hint" }, "Pass dry_run=True instead of confirm=True to preview what would be deleted."));
+  card.appendChild(benchWipe);
+
+  const st = ERP.status();
+  const liveWipe = el("div", { class: "card-subsection" });
+  liveWipe.appendChild(el("p", { class: "card-desc" }, st.mode === "none"
+    ? "Not connected yet - use the Connect button in the top bar (or open this page from the site while signed in) to wipe a connected site directly."
+    : `Connected to ${st.label}. This deletes records one at a time over the REST API - everything, not just what's in this profile.`));
+  const log = el("div", { class: "apply-log" }, "");
+  const wipeBtn = el("button", {
+    class: "btn btn-danger", type: "button", disabled: st.mode === "none" ? true : undefined,
+    onclick: async () => {
+      const typed = prompt(`This permanently deletes ALL WMS configuration on ${st.label} - warehouses, storage types, bins, every rule, all of it. This cannot be undone.\n\nType the site name (${st.label}) to confirm:`);
+      if (typed !== st.label) { if (typed !== null) toast("Site name didn't match - nothing was wiped."); return; }
+      wipeBtn.disabled = true;
+      log.textContent = "Wiping...\n";
+      try {
+        const results = await wipeSite((entry) => {
+          const line = `${entry.ok ? "OK  " : "FAIL"}  ${entry.doctypeName}: ${entry.label} - ${entry.message}\n`;
+          const span = document.createElement("span");
+          span.className = entry.ok ? "ok" : "err";
+          span.textContent = line;
+          log.appendChild(span);
+        });
+        const failed = results.filter((r) => !r.ok).length;
+        log.appendChild(document.createTextNode(`\nDone: ${results.length} record(s) processed, ${failed} failed.`));
+      } catch (e) {
+        log.appendChild(document.createTextNode(`\nError: ${e.message}`));
+      } finally {
+        wipeBtn.disabled = false;
+      }
+    },
+  }, "Wipe connected site");
+  liveWipe.appendChild(wipeBtn);
+  liveWipe.appendChild(log);
+  card.appendChild(liveWipe);
+
+  return card;
 }
 
 function referencesCard() {

@@ -1,4 +1,4 @@
-import { getConnection, authHeader } from "./connect.js?v=c05329a55f";
+import { getConnection, authHeader } from "./connect.js?v=383abd39dd";
 
 /**
  * Live link to an ERPNext / frappe_wms site, used to fill Link fields from real data.
