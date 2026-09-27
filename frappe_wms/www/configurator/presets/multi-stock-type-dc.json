@@ -52,7 +52,7 @@
     "nestable": 0,
     "reusable": 1,
     "requires_seal": 0,
-    "numbering_mode": "Internal",
+    "numbering_mode": "External",
     "active": 1
    },
    {
@@ -1743,19 +1743,6 @@
    {
     "priority": 100,
     "warehouse": "DC1",
-    "document_type": "Inbound Delivery",
-    "item": "",
-    "item_group": "",
-    "stock_type": "",
-    "source_storage_type": "",
-    "destination_storage_type": "",
-    "route": "",
-    "storage_process": "GR_FLOW",
-    "active": 1
-   },
-   {
-    "priority": 100,
-    "warehouse": "DC1",
     "document_type": "Outbound Delivery",
     "item": "",
     "item_group": "",
@@ -1802,16 +1789,7 @@
     "active": 1
    }
   ],
-  "Inspection Rule": [
-   {
-    "priority": 100,
-    "warehouse": "DC1",
-    "item": "",
-    "item_group": "",
-    "sampling_percentage": 100,
-    "active": 1
-   }
-  ],
+  "Inspection Rule": [],
   "Count Tolerance Group": [
    {
     "priority": 100,
@@ -1845,17 +1823,6 @@
    }
   ],
   "WMS Number Range": [
-   {
-    "range_for": "Handling Unit",
-    "warehouse": "",
-    "hu_type": "PALLET",
-    "prefix": "HU-",
-    "number_length": 8,
-    "start_number": 1,
-    "end_number": 99999999,
-    "current_number": 0,
-    "active": 1
-   },
    {
     "range_for": "Handling Unit",
     "warehouse": "",
