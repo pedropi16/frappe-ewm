@@ -680,9 +680,11 @@ class WMSMonitor {
           ${select_html("wms-mon-hu-stock-status", HU_STOCK_STATUSES, __("Stock Status"))}
           <input class="form-control input-sm wms-mon-hu-type" placeholder="${__("HU Type")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-hu-bin" placeholder="${__("Current Bin")}" style="width:140px;">
+          <input class="form-control input-sm wms-mon-hu-workcenter" placeholder="${__("Work Center")}" style="width:140px;">
           <input class="form-control input-sm wms-mon-hu-obd" placeholder="${__("Outbound Delivery")}" style="width:160px;">
           <button class="btn btn-primary btn-sm wms-mon-hu-search">${__("Search")}</button>
         </div>
+        <div class="wms-mon-hu-hint text-muted" style="margin-bottom:6px;font-size:12px;">${__("Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons.")}</div>
         <div class="wms-mon-hu-table"></div>
       `);
       $wrap.find(".wms-mon-hu-status, .wms-mon-hu-stock-status").on("change", () => this.search_handling_units());
@@ -701,19 +703,68 @@ class WMSMonitor {
       stock_status: $wrap.find(".wms-mon-hu-stock-status").val() || undefined,
       hu_type: $wrap.find(".wms-mon-hu-type").val() || undefined,
       current_bin: $wrap.find(".wms-mon-hu-bin").val() || undefined,
+      work_center: $wrap.find(".wms-mon-hu-workcenter").val() || undefined,
       outbound_delivery: $wrap.find(".wms-mon-hu-obd").val() || undefined,
     };
     const rows = await frappe.call("frappe_wms.api.monitor.search_handling_units", args).then((r) => r.message || []);
     const $table = $wrap.find(".wms-mon-hu-table");
     if (!rows.length) { $table.html(`<div class="text-muted">${__("No handling units found")}</div>`); return; }
     $table.empty().append(this.render_table(rows, [
-      ["name", __("HU")], ["hu_type", __("Type")], ["current_bin", __("Bin")],
+      ["name", __("HU"), (row) => `<a href="#" class="wms-hu-open" data-hu="${frappe.utils.escape_html(row.name)}">${frappe.utils.escape_html(row.name)}</a>`],
+      ["hu_type", __("Type")], ["current_bin", __("Bin")],
       ["parent_hu", __("Parent HU")], ["top_hu", __("Top HU")],
       ["status", __("Status")], ["stock_status", __("Stock Status")], ["outbound_delivery", __("Outbound Delivery")],
       ["shipment", __("Shipment")], ["closed", __("Closed")], ["loaded", __("Loaded")],
       ["gross_weight", __("Gross Weight")], ["net_weight", __("Net Weight")], ["seal_number", __("Seal")],
       ["external_reference", __("External Ref")], ["creation", __("Created")], ["modified", __("Last Modified")],
     ], "Handling Unit"));
+    $table.find(".wms-hu-open").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
+  }
+
+  // ---------- Repack Center: full recursive HU detail ----------
+  async open_hu_detail(hu_name) {
+    const dialog = new frappe.ui.Dialog({
+      title: __("Handling Unit {0}", [hu_name]),
+      size: "large",
+      fields: [{ fieldtype: "HTML", fieldname: "body" }],
+    });
+    dialog.get_field("body").$wrapper.html(`<div class="text-muted">${__("Loading…")}</div>`);
+    dialog.show();
+    let node;
+    try {
+      node = await frappe.call("frappe_wms.api.monitor.handling_unit_tree", { hu_name }).then((r) => r.message);
+    } catch (e) {
+      dialog.get_field("body").$wrapper.html(`<div class="text-danger">${frappe.utils.escape_html(e.message || String(e))}</div>`);
+      return;
+    }
+    const $body = dialog.get_field("body").$wrapper.empty();
+    $body.append(`<div style="margin-bottom:10px;"><a href="/app/handling-unit/${encodeURIComponent(hu_name)}" target="_blank">${__("Open in Desk")}</a></div>`);
+    $body.append(this.render_hu_node(node, 0));
+  }
+
+  copy_btn(value) {
+    return $(`<button type="button" class="btn btn-xs btn-default wms-copy-btn" title="${__("Copy")}" style="padding:0 5px;margin-left:6px;line-height:1.6;">⧉</button>`)
+      .on("click", () => frappe.utils.copy_to_clipboard(value, __("Copied {0}", [value])));
+  }
+
+  render_hu_node(node, depth) {
+    const hu = node.hu;
+    const $wrap = $(`<div class="wms-hu-node" style="margin-left:${depth * 18}px;border-left:${depth ? "2px solid var(--border-color)" : "none"};padding-left:${depth ? "12px" : "0"};margin-bottom:14px;"></div>`);
+    const $head = $(`<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-weight:${depth ? "normal" : "bold"};margin-bottom:6px;">
+      <span>${frappe.utils.escape_html(hu.name)}</span></div>`);
+    $head.append(this.copy_btn(hu.name));
+    $head.append(`<span class="text-muted" style="margin-left:10px;">${frappe.utils.escape_html(hu.hu_type || "")} · ${frappe.utils.escape_html(hu.current_bin || "-")} · ${frappe.utils.escape_html(hu.status || "")}${hu.stock_status ? " · " + frappe.utils.escape_html(hu.stock_status) : ""}</span>`);
+    $wrap.append($head);
+    if (node.stock && node.stock.length) {
+      $wrap.append(this.render_table(node.stock, [
+        ["product", __("Product")], ["batch_no", __("Batch")], ["serial_no", __("Serial")],
+        ["stock_type", __("Stock Type")], ["quantity", __("Qty")], ["stock_uom", __("UOM")],
+      ], null));
+    } else {
+      $wrap.append(`<div class="text-muted" style="font-size:12px;">${__("No stock in this HU")}</div>`);
+    }
+    (node.children || []).forEach((child) => $wrap.append(this.render_hu_node(child, depth + 1)));
+    return $wrap;
   }
 
   // ---------- Stock Movements ----------

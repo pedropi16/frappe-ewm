@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis, resource_performance as _resource_performance
@@ -124,7 +125,7 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
 
 @frappe.whitelist()
 def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
-                           stock_status=None, outbound_delivery=None, limit=200):
+                           stock_status=None, outbound_delivery=None, work_center=None, limit=200):
     filters = {"warehouse": warehouse}
     if hu_number: filters["hu_number"] = ["like", f"%{hu_number}%"]
     if status: filters["status"] = status
@@ -132,11 +133,33 @@ def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, 
     if current_bin: filters["current_bin"] = current_bin
     if stock_status: filters["stock_status"] = stock_status
     if outbound_delivery: filters["outbound_delivery"] = outbound_delivery
+    if work_center:
+        wc_bin = frappe.db.get_value("Work Center", work_center, "bin")
+        filters["current_bin"] = wc_bin or "\x00no-such-bin\x00"
     return frappe.get_list("Handling Unit", filters=filters, fields=[
         "name", "hu_number", "hu_type", "current_bin", "parent_hu", "top_hu", "status", "stock_status",
         "outbound_delivery", "shipment", "closed", "loaded", "gross_weight", "net_weight",
         "seal_number", "external_reference", "creation", "modified",
     ], order_by="modified desc", limit=cint(limit) or 200)
+
+def _hu_node(hu_name):
+    fields = ["name", "hu_number", "hu_type", "current_bin", "parent_hu", "top_hu", "status", "stock_status",
+               "outbound_delivery", "shipment", "closed", "loaded", "gross_weight", "net_weight",
+               "seal_number", "external_reference"]
+    hu = frappe.db.get_value("Handling Unit", hu_name, fields, as_dict=True)
+    if not hu: return None
+    stock = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu_name, "quantity": [">", 0]},
+        fields=["product", "batch_no", "serial_no", "stock_type", "quantity", "stock_uom"], order_by="product")
+    children = frappe.get_all("Handling Unit", filters={"parent_hu": hu_name}, pluck="name", order_by="hu_number")
+    return {"hu": hu, "stock": stock, "children": [_hu_node(c) for c in children]}
+
+@frappe.whitelist()
+def handling_unit_tree(hu_name):
+    """Full recursive nesting (all descendants, every level) plus contents at each node -
+    the flat search grid and RF hu_overview only ever show one level of children."""
+    node = _hu_node(hu_name)
+    if not node: frappe.throw(_("Handling Unit {0} not found").format(hu_name))
+    return node
 
 @frappe.whitelist()
 def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None, limit=200):
