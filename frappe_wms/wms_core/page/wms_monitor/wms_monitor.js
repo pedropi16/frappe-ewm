@@ -1227,21 +1227,27 @@ class WMSMonitor {
   // "Possible destination HUs": every other HU sitting in the same bin, with a click-to-move
   // button - a non-drag alternative to Drag&Drop, same idea as SAP's own tab.
   async render_repack_tab_destinations($detail, sel) {
-    $detail.append(`<div class="text-muted">${__("Loading…")}</div>`);
+    // Own sub-container so the async gap below only ever touches its own content - $detail
+    // itself already carries the head/actions/tabs bar that render_repack_detail() built before
+    // calling this, and must never be wiped out from under them (that's what made the whole
+    // panel - tabs included - disappear after opening this tab).
+    const $box = $(`<div></div>`);
+    $box.append(`<div class="text-muted">${__("Loading…")}</div>`);
+    $detail.append($box);
     const bin = sel.kind === "hu" ? this.repack.detail.handling_unit.current_bin : sel.row.srcBin;
     const excludeName = sel.kind === "hu" ? sel.name : sel.row.srcHu;
-    if (!bin) { $detail.empty().append(`<div class="text-muted">${__("No bin context for this line")}</div>`); return; }
+    if (!bin) { $box.empty().append(`<div class="text-muted">${__("No bin context for this line")}</div>`); return; }
     const candidates = await frappe.call("frappe_wms.api.monitor.search_handling_units", { warehouse: this.warehouse, current_bin: bin, limit: 50 })
       .then((r) => (r.message || []).filter((h) => h.name !== excludeName));
-    $detail.empty();
-    if (!candidates.length) { $detail.append(`<div class="text-muted">${__("No other Handling Units in this bin")}</div>`); return; }
+    $box.empty();
+    if (!candidates.length) { $box.append(`<div class="text-muted">${__("No other Handling Units in this bin")}</div>`); return; }
     candidates.forEach((c) => {
       const $row = $(`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border-color);border-radius:4px;margin-bottom:4px;"></div>`);
       $row.append(`<b>${frappe.utils.escape_html(c.name)}</b>`, `<span class="text-muted">${frappe.utils.escape_html(c.hu_type || "")} · ${frappe.utils.escape_html(c.status || "")}</span>`);
       const $go = $(`<button type="button" class="btn btn-xs btn-default" style="margin-left:auto;">${__("Move Here")}</button>`);
       $go.on("click", () => this.repack_quick_move(sel, c.name));
       $row.append($go);
-      $detail.append($row);
+      $box.append($row);
     });
   }
 
@@ -1250,6 +1256,27 @@ class WMSMonitor {
       ? { kind: "hu", name: sel.name, nested: !!this.repack.detail.handling_unit.parent_hu }
       : { kind: "item", ...sel.row };
     await this.handle_repack_drop("hu", targetHuName);
+  }
+
+  // The click-driven equivalent of dragging a stock line - moves the qty field's value (or the
+  // whole line if left blank) to whatever's pinned as the 🎯 target, same rules as a real drop.
+  async repack_click_move_item(row, $qty) {
+    const target = this.repack.target;
+    if (!target) { frappe.show_alert({ message: __("Pin a 🎯 target first"), indicator: "orange" }); return; }
+    const q = parseFloat($qty.val());
+    const quantity = q > 0 && q <= row.quantity ? q : row.quantity;
+    const srcLoc = { bin: row.srcBin, hu: row.srcHu || null };
+    try {
+      const destOverview = await this.fetch_repack_overview(target.kind, target.name);
+      const destLoc = this.repack_locator({ kind: target.kind, overview: destOverview });
+      if (srcLoc.bin === destLoc.bin && (srcLoc.hu || null) === (destLoc.hu || null)) { frappe.show_alert({ message: __("Already there"), indicator: "orange" }); return; }
+      await this.repack_move_item(srcLoc, destLoc, { ...row, quantity });
+      frappe.show_alert({ message: __("Moved {0} into {1}", [row.product, target.name]), indicator: "green" });
+    } catch (e) {
+      frappe.show_alert({ message: e.message || String(e), indicator: "red" });
+      return;
+    }
+    await this.refresh_repack_after_move();
   }
 
   render_repack_item_detail($detail, row) {
@@ -1325,7 +1352,7 @@ class WMSMonitor {
       $row.append(`<span style="min-width:140px;">${frappe.utils.escape_html(row.product)}</span>`);
       $row.append(`<span class="text-muted">${[row.batch_no, row.serial_no].filter(Boolean).map((v) => frappe.utils.escape_html(v)).join(" · ")}</span>`);
       $row.append(`<span class="text-muted">${frappe.utils.escape_html(row.stock_type || "")} · ${__("avail.")} ${row.quantity} ${frappe.utils.escape_html(row.stock_uom || "")}</span>`);
-      const $qty = $(`<input type="number" step="any" min="0" max="${row.quantity}" placeholder="${__("qty")}" title="${__("Partial quantity to drag (default: all of it)")}" class="form-control input-sm" style="width:80px;margin-left:auto;">`);
+      const $qty = $(`<input type="number" step="any" min="0" max="${row.quantity}" placeholder="${__("qty")}" title="${__("Partial quantity (default: all of it)")}" class="form-control input-sm" style="width:80px;margin-left:auto;">`);
       $qty.on("mousedown click", (e) => e.stopPropagation());
       $row.append($qty);
       $row.on("dragstart", (e) => {
@@ -1336,6 +1363,12 @@ class WMSMonitor {
         e.originalEvent.dataTransfer.setData("text/plain", row.product);
         $row.addClass("wms-repack-dragging");
       });
+      // A click-driven alternative to dragging, for a partial quantity too - moves to whatever's
+      // pinned as the 🎯 target, since drag-and-drop isn't reliable on every input device.
+      const $move = $(`<button type="button" class="btn btn-xs btn-default" title="${__("Move to the pinned 🎯 target")}">${__("Move")}</button>`);
+      $move.on("mousedown", (e) => e.stopPropagation());
+      $move.on("click", (e) => { e.stopPropagation(); this.repack_click_move_item(row, $qty); });
+      $row.append($move);
     }
     $row.on("dragend", () => { $row.removeClass("wms-repack-dragging"); this.repack._drag = null; });
     return $row;
