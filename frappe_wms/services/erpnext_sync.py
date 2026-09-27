@@ -129,34 +129,50 @@ def _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse):
     se.submit()
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
+_PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate",
+    "purchase_order", "purchase_order_item", "expense_account", "cost_center", "asset_location", "asset_category")
+
 def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
     from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
     po_names = {link[0] for link in po_links}
     if len(po_names) != 1:
         frappe.throw(_("Goods Receipt {0} references more than one Purchase Order; post them separately").format(doc.name))
-    qty_by_po_item = {}
-    stock_type_by_po_item = {}
+    # One Purchase Receipt row per (PO item, batch, serial) group, not one summed row per PO
+    # item - a summed row never carried batch_no/serial_no at all (they were simply never
+    # copied onto it), so ERPNext's own valuation/traceability silently lost which batch or
+    # serial the receipt actually recorded, and submission itself would fail outright for a
+    # batch/serial-managed item (ERPNext requires that data on such a row).
+    groups = {}
     for row, (_po, po_item) in zip(doc.items, po_links):
-        qty_by_po_item[po_item] = qty_by_po_item.get(po_item, 0) + flt(row.quantity)
-        stock_type_by_po_item[po_item] = row.stock_type
+        key = (po_item, row.batch_no, row.serial_no, row.stock_type)
+        groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     pr = make_purchase_receipt(po_names.pop())
+    template_by_po_item = {item.purchase_order_item: item for item in pr.items}
     kept = []
-    for item in pr.items:
-        qty = qty_by_po_item.get(item.purchase_order_item)
-        if not qty: continue
+    for (po_item, batch_no, serial_no, stock_type), qty in groups.items():
+        template = template_by_po_item.get(po_item)
+        if not template: continue
+        row = pr.append("items", {})
+        for field in _PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
         # qty here is already a stock-uom-derived sum (WMS row.quantity is always stock_uom).
-        # Setting item.qty = qty directly while leaving the PO row's own conversion_factor in
+        # Setting row.qty = qty directly while leaving the PO row's own conversion_factor in
         # place would make ERPNext double-apply it when deriving stock_qty - divide back down
         # so stock_qty (the actual stock movement) recomputes to exactly qty.
-        item.qty = qty / flt(item.conversion_factor or 1)
-        item.stock_qty = qty
-        item.warehouse = erpnext_warehouse
+        row.qty = qty / flt(template.conversion_factor or 1)
+        row.stock_qty = qty
+        row.warehouse = erpnext_warehouse
+        row.batch_no = batch_no
+        row.serial_no = serial_no
+        row.use_serial_batch_fields = 1
         # Purchase Receipt Item's dimension field for its primary "warehouse" (the
         # receiving/target warehouse) is unprefixed, unlike Stock Entry's source/target split.
-        item.wms_stock_type = stock_type_by_po_item.get(item.purchase_order_item)
-        kept.append(item)
+        row.wms_stock_type = stock_type
+        kept.append(row)
     if not kept: frappe.throw(_("No matching Purchase Order rows found for Goods Receipt {0}").format(doc.name))
+    # Drop whatever template rows make_purchase_receipt pre-filled from the PO itself (their
+    # qty reflects what was ordered, not what this specific receipt actually recorded) and keep
+    # only the grouped rows just built above.
     pr.items = kept
     pr.flags.ignore_permissions = True
     pr.flags.wms_managed_posting = True
@@ -191,6 +207,35 @@ def sync_work_order_material_transfer(request):
     se.insert(ignore_permissions=True)
     se.submit()
     frappe.db.set_value("Warehouse Request", request.name, "erpnext_stock_entry", se.name)
+    return se.name
+
+# --- WMS Quality Inspection -> Stock Entry (same-warehouse stock-type change) ---
+#
+# A QI decision moves stock between WMS Stock Types (QUALITY -> AVAILABLE/BLOCKED) without
+# moving the physical warehouse at all - this was always the intended design (see the target
+# ERPNext-integration table in app_gap.md: "Material Transfer inside the same Warehouse that
+# changes the stock-type Inventory Dimension"), but nothing ever called it, so ERPNext's own
+# stock ledger and reports kept showing released stock as still sitting in QUALITY forever.
+# Confirmed live that ERPNext accepts a Material Transfer row whose s_warehouse and
+# t_warehouse are the same physical warehouse (only the Inventory Dimension differs).
+
+def sync_quality_inspection(doc, passed, failed):
+    erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
+    if not erpnext_warehouse: return None
+    company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
+    se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Quality Inspection {doc.name}")
+    for qty, to_stock_type in ((passed, doc.passed_to_stock_type), (failed, doc.failed_to_stock_type)):
+        if qty <= 0: continue
+        se.append("items", {
+            "item_code": doc.product, "qty": flt(qty), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
+            "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
+            "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
+            "wms_stock_type": doc.from_stock_type, "to_wms_stock_type": to_stock_type,
+        })
+    if not se.items: return None
+    se.flags.wms_managed_posting = True
+    se.insert(ignore_permissions=True)
+    se.submit()
     return se.name
 
 def reverse_goods_receipt(doc):
@@ -231,32 +276,44 @@ def _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse):
     se.submit()
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
+_DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate",
+    "so_detail", "against_sales_order", "income_account", "cost_center")
+
 def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
     from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
     so_names = {link[0] for link in so_links}
     if len(so_names) != 1:
         frappe.throw(_("Goods Issue {0} references more than one Sales Order; post them separately").format(doc.name))
-    qty_by_so_item = {}
-    stock_type_by_so_item = {}
+    # One Delivery Note row per (SO item, batch, serial) group, not one summed row per SO item -
+    # the same gap as the Purchase Receipt mirror above: a summed row never carried batch_no/
+    # serial_no at all, so ERPNext lost which batch or serial actually shipped and submission
+    # would fail outright for a batch/serial-managed item.
+    groups = {}
     for row, (_so, so_item) in zip(doc.items, so_links):
-        qty_by_so_item[so_item] = qty_by_so_item.get(so_item, 0) + flt(row.quantity)
-        stock_type_by_so_item[so_item] = row.stock_type
+        key = (so_item, row.batch_no, row.serial_no, row.stock_type)
+        groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     dn = make_delivery_note(so_names.pop())
+    template_by_so_item = {item.so_detail: item for item in dn.items}
     kept = []
-    for item in dn.items:
-        qty = qty_by_so_item.get(item.so_detail)
-        if not qty: continue
+    for (so_item, batch_no, serial_no, stock_type), qty in groups.items():
+        template = template_by_so_item.get(so_item)
+        if not template: continue
+        row = dn.append("items", {})
+        for field in _DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
         # Same double-application risk as the Purchase Receipt path above: qty is already
         # stock-uom, so divide by the SO row's own conversion_factor before assigning it as
         # the transactional qty, and let stock_qty carry the real (stock-uom) movement.
-        item.qty = qty / flt(item.conversion_factor or 1)
-        item.stock_qty = qty
-        item.warehouse = erpnext_warehouse
+        row.qty = qty / flt(template.conversion_factor or 1)
+        row.stock_qty = qty
+        row.warehouse = erpnext_warehouse
+        row.batch_no = batch_no
+        row.serial_no = serial_no
+        row.use_serial_batch_fields = 1
         # Delivery Note Item's dimension field for its primary "warehouse" (the
         # shipping-from/source warehouse) is unprefixed, matching Stock Entry's convention.
-        item.wms_stock_type = stock_type_by_so_item.get(item.so_detail)
-        kept.append(item)
+        row.wms_stock_type = stock_type
+        kept.append(row)
     if not kept: frappe.throw(_("No matching Sales Order rows found for Goods Issue {0}").format(doc.name))
     dn.items = kept
     dn.flags.ignore_permissions = True

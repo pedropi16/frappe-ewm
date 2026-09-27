@@ -7,18 +7,31 @@ from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
 
 def list_open_counts(user=None):
+    require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
     resource = my_resource(user)
     filters = {"status": ["in", ["Draft", "Counting", "Counted"]]}
     if resource: filters["warehouse"] = resource.warehouse
     counts = frappe.get_list("WMS Physical Inventory Count", filters=filters,
         fields=["name", "warehouse", "storage_bin", "storage_type", "product", "status", "count_date"],
         order_by="count_date asc, creation asc", limit=20)
+    # Blind counting (SAP EWM's own default RF behavior): a counter who can see the book
+    # quantity before counting just copies it in, which defeats the point of counting at all -
+    # reproduced by reading the code: book_quantity was always returned here with nothing
+    # gating it. The server still has the real value for variance math either way.
+    blind = bool(frappe.get_cached_value("WMS Settings", "WMS Settings", "blind_counting"))
+    item_fields = ["name", "product", "handling_unit", "storage_bin", "stock_type", "stock_uom", "counted_quantity"]
+    if not blind: item_fields.append("book_quantity")
     for count in counts:
         count["items"] = frappe.get_all("WMS Physical Inventory Count Item", filters={"parent": count.name, "status": "Open"},
-            fields=["name", "product", "handling_unit", "storage_bin", "stock_type", "stock_uom", "book_quantity", "counted_quantity"])
+            fields=item_fields)
     return counts
 
+def _release_blocked_bins(doc):
+    names = [b for b in (doc.blocked_bins or "").split(",") if b]
+    if names: frappe.db.set_value("Storage Bin", {"name": ["in", names]}, "removal_blocked", 0)
+
 def snapshot_count(count_name):
+    require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
     frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
     doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
     if doc.status != "Draft": frappe.throw(_("Count has already been started"))
@@ -37,14 +50,61 @@ def snapshot_count(count_name):
             "handling_unit": balance.handling_unit, "storage_bin": balance.storage_bin, "stock_type": balance.stock_type,
             "stock_uom": balance.stock_uom, "book_quantity": balance.quantity, "status": "Open",
         })
+    # Block every bin this count touches for removal so a pick or move can't slip stock out from
+    # under it between snapshot and posting (reproduced by reading the code: nothing here ever
+    # touched removal_blocked - a pick mid-count posted its own loss, then the count posted a
+    # SECOND loss for the very same units). Only bins not already blocked for some other reason
+    # are recorded here, and only those get released again once this count posts or is cancelled.
+    bin_names = sorted({b.storage_bin for b in balances if b.storage_bin})
+    newly_blocked = [b for b in bin_names if not frappe.db.get_value("Storage Bin", b, "removal_blocked")]
+    if newly_blocked:
+        frappe.db.set_value("Storage Bin", {"name": ["in", newly_blocked]}, "removal_blocked", 1)
+    doc.blocked_bins = ",".join(newly_blocked)
     doc.status = "Counting"
     doc.counted_by = frappe.session.user
     doc.counted_at = now_datetime()
     doc.save(ignore_permissions=True)
     return {"count": doc.name, "items": len(doc.items)}
 
+def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch_no=None, serial_no=None, handling_unit=None, stock_uom=None):
+    # A count could only ever confirm or reduce what the book already expected - there was no
+    # way to record stock physically found where the book shows nothing at all (a real gain, not
+    # noise). A found line has no book quantity to compare against, so its full quantity IS the
+    # variance and it's immediately "Counted" - there's nothing left to count against.
+    require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
+    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    if doc.status not in ("Counting", "Counted"): frappe.throw(_("Count is not open for recording"))
+    quantity = flt(quantity)
+    if quantity <= 0: frappe.throw(_("Found quantity must be greater than zero"))
+    stock_uom = stock_uom or frappe.db.get_value("WMS Product", {"item": product}, "stock_uom") or frappe.db.get_value("Item", product, "stock_uom")
+    doc.append("items", {
+        "product": product, "batch_no": batch_no, "serial_no": serial_no, "handling_unit": handling_unit,
+        "storage_bin": storage_bin, "stock_type": stock_type, "stock_uom": stock_uom,
+        "book_quantity": 0, "counted_quantity": quantity, "variance": quantity, "status": "Counted",
+    })
+    if storage_bin and not frappe.db.get_value("Storage Bin", storage_bin, "removal_blocked"):
+        blocked = set(filter(None, (doc.blocked_bins or "").split(",")))
+        blocked.add(storage_bin)
+        doc.blocked_bins = ",".join(sorted(blocked))
+        frappe.db.set_value("Storage Bin", storage_bin, "removal_blocked", 1)
+    doc.status = "Counted" if not any(r.status == "Open" for r in doc.items) else doc.status
+    doc.save(ignore_permissions=True)
+    return {"count": doc.name, "row": doc.items[-1].name}
+
+def cancel_count(count_name):
+    require_role("WMS Inventory Controller", "WMS Supervisor")
+    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    if doc.status in ("Posted", "Cancelled"): frappe.throw(_("A posted or already-cancelled count cannot be cancelled"))
+    _release_blocked_bins(doc)
+    doc.status = "Cancelled"
+    doc.save(ignore_permissions=True)
+    return {"count": doc.name, "status": doc.status}
+
 def record_counts(count_name, counted_quantities):
     # counted_quantities: {row_name: counted_quantity}
+    require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
     frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
     doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
     if doc.status not in {"Counting", "Counted"}: frappe.throw(_("Count is not open for recording"))
@@ -128,6 +188,7 @@ def post_count(count_name):
         if loss_entry: doc.erpnext_loss_stock_entry = loss_entry
         doc.posted_by = frappe.session.user
         doc.posted_at = now_datetime()
+        _release_blocked_bins(doc)
     doc.save(ignore_permissions=True)
     return {"count": doc.name, "status": doc.status}
 
@@ -163,10 +224,12 @@ def approve_variance(count_name, remarks=None):
         if loss_entry: doc.erpnext_loss_stock_entry = loss_entry
         doc.posted_by = frappe.session.user
         doc.posted_at = now_datetime()
+        _release_blocked_bins(doc)
     doc.save(ignore_permissions=True)
     return {"count": doc.name, "status": doc.status}
 
 def analyze_differences(warehouse, from_date=None, to_date=None, product=None):
+    require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
     # Per-product variance history from posted count lines - a row that ever passed through
     # Pending Recount/Pending Approval (recount_count > 0 or a tolerance_group is set) is
     # flagged as an over-tolerance event, distinguishing a real supervisor-reviewed

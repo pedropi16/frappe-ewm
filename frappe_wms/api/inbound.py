@@ -2,11 +2,14 @@ import frappe
 from frappe_wms.services.receipt import create_putaway_requests, list_open_inbound_deliveries as _list_open_inbound_deliveries, create_and_submit_goods_receipt as _create_and_submit_goods_receipt, create_fg_receipt_from_work_order as _create_fg_receipt_from_work_order
 from frappe_wms.services.task import create_tasks_for_request
 from frappe_wms.services.procurement import create_inbound_delivery_from_purchase_order as _create_inbound_delivery_from_purchase_order
-from frappe_wms.utils import parse_json
+from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.idempotency import run_once
+
+RECEIVING_ROLES = ("WMS Operator", "WMS Receiver", "WMS Supervisor")
 
 @frappe.whitelist()
 def create_putaway(receipt_name):
+    require_role(*RECEIVING_ROLES)
     request_names = create_putaway_requests(receipt_name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
@@ -14,10 +17,12 @@ def create_putaway(receipt_name):
 
 @frappe.whitelist()
 def create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse):
+    require_role(*RECEIVING_ROLES)
     return _create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse)
 
 @frappe.whitelist()
 def list_open_inbound_deliveries():
+    require_role(*RECEIVING_ROLES)
     return _list_open_inbound_deliveries()
 
 @frappe.whitelist()

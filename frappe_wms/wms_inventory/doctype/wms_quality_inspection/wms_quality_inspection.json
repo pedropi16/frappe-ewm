@@ -27,7 +27,8 @@
     "inspection_date",
     "completed_at",
     "goods_receipt",
-    "erpnext_quality_inspection"
+    "erpnext_quality_inspection",
+    "erpnext_stock_entry"
   ],
   "fields": [
     {
@@ -170,6 +171,14 @@
       "fieldtype": "Link",
       "options": "Quality Inspection",
       "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_stock_entry",
+      "label": "ERPNext Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1,
+      "description": "Same-warehouse Material Transfer posted to change the WMS Stock Type Inventory Dimension in ERPNext to match this decision, if the warehouse is ERPNext-linked."
     }
   ],
   "autoname": "QI-.########",

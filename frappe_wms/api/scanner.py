@@ -44,6 +44,7 @@ def reverse_task(task_name, reason=None):
 
 @frappe.whitelist()
 def list_exception_codes(task_type=None):
+    require_role(*RF_ROLES)
     filters = {"active": 1}
     if task_type:
         codes = frappe.get_all("Allowed Task Type", filters={"task_type": task_type}, pluck="parent")

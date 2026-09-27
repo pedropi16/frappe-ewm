@@ -21,6 +21,16 @@ class TestBinDeterminationStrategies(IntegrationTestCase):
         for i, bin_name in enumerate(cls.bins):
             if not frappe.db.exists("Storage Bin", bin_name):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": f"{cls.warehouse}-ST", "active": 1, "putaway_blocked": 0, "sequence": 3 - i}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Handling Unit Type", "BINSTRAT-PALLET"):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "BINSTRAT-PALLET", "hu_type_name": "Binstrat Pallet"}).insert(ignore_permissions=True)
+
+    def _make_hu(self, bin_name):
+        hu = frappe.get_doc({
+            "doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "BINSTRAT-PALLET",
+            "warehouse": self.warehouse, "current_bin": bin_name, "status": "Open",
+        })
+        hu.insert(ignore_permissions=True)
+        return hu.name
 
     def _make_rule(self, strategy):
         for existing in frappe.get_all("Bin Determination Rule", filters={"warehouse": self.warehouse, "activity": "Putaway"}, pluck="name"):
@@ -41,11 +51,16 @@ class TestBinDeterminationStrategies(IntegrationTestCase):
             determine_destination_bin({"warehouse": self.warehouse, "activity": "Putaway", "item": self.item, "stock_type": "AVAILABLE", "hu_type": None, "source_storage_type": None, "destination_hu": "DUMMY-HU"})
 
     def test_first_empty_bin_strategy_avoids_occupied_bins(self):
-        frappe.db.set_value("Storage Bin", self.bins[2], "current_hu_count", 1)
-        self._make_rule("First Empty Bin")
-        result = determine_destination_bin({"warehouse": self.warehouse, "activity": "Putaway", "item": self.item, "stock_type": "AVAILABLE", "hu_type": None, "source_storage_type": None, "destination_hu": "DUMMY-HU"})
-        self.assertNotEqual(result, self.bins[2])
-        frappe.db.set_value("Storage Bin", self.bins[2], "current_hu_count", 0)
+        # "Occupied" is now judged by a real Handling Unit sitting in the bin (bin_rules.
+        # live_hu_count), not the hourly-stale Storage Bin.current_hu_count cache this test
+        # used to stuff directly - see the D6 fix in services/bin_rules.py.
+        hu = self._make_hu(self.bins[2])
+        try:
+            self._make_rule("First Empty Bin")
+            result = determine_destination_bin({"warehouse": self.warehouse, "activity": "Putaway", "item": self.item, "stock_type": "AVAILABLE", "hu_type": None, "source_storage_type": None, "destination_hu": "DUMMY-HU"})
+            self.assertNotEqual(result, self.bins[2])
+        finally:
+            frappe.db.delete("Handling Unit", hu)
 
     def test_blank_destination_storage_type_falls_back_to_product_preferred_storage_type(self):
         # A rule with no destination_storage_type used to be silently dead code (the Storage
@@ -68,11 +83,13 @@ class TestBinDeterminationStrategies(IntegrationTestCase):
         self.assertEqual(result, self.bins[2])
 
     def test_pallet_strategy_behaves_like_first_empty_bin(self):
-        frappe.db.set_value("Storage Bin", self.bins[2], "current_hu_count", 1)
-        self._make_rule("Pallet")
-        result = determine_destination_bin({"warehouse": self.warehouse, "activity": "Putaway", "item": self.item, "stock_type": "AVAILABLE", "hu_type": None, "source_storage_type": None, "destination_hu": "DUMMY-HU"})
-        self.assertNotEqual(result, self.bins[2])
-        frappe.db.set_value("Storage Bin", self.bins[2], "current_hu_count", 0)
+        hu = self._make_hu(self.bins[2])
+        try:
+            self._make_rule("Pallet")
+            result = determine_destination_bin({"warehouse": self.warehouse, "activity": "Putaway", "item": self.item, "stock_type": "AVAILABLE", "hu_type": None, "source_storage_type": None, "destination_hu": "DUMMY-HU"})
+            self.assertNotEqual(result, self.bins[2])
+        finally:
+            frappe.db.delete("Handling Unit", hu)
 
     def test_bulk_strategy_prefers_occupied_bin_with_most_remaining_capacity(self):
         # maximum_hus is a NOT NULL column - 0 is this codebase's existing "no limit" sentinel

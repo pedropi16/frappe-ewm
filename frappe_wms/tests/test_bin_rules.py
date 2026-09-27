@@ -48,15 +48,31 @@ class TestBinRules(IntegrationTestCase):
         self.assertEqual(bin_violations(self.bin, stock_type="AVAILABLE"), [])
         self.assertTrue(bin_violations(self.bin, stock_type="QUALITY"))
 
+    def _make_hu(self, weight=0):
+        hu = frappe.get_doc({
+            "doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "BINRULES-PALLET",
+            "warehouse": self.warehouse, "current_bin": self.bin, "status": "Open", "gross_weight": weight,
+        })
+        hu.insert(ignore_permissions=True)
+        return hu.name
+
     def test_hu_count_capacity_is_enforced(self):
-        frappe.db.set_value("Storage Bin", self.bin, "current_hu_count", 2)
+        # Capacity is now checked live against real Handling Unit rows (bin_rules.live_hu_count),
+        # not the hourly-stale Storage Bin.current_hu_count cache this test used to stuff
+        # directly - see the D6 fix in services/bin_rules.py.
+        frappe.db.delete("Handling Unit", {"current_bin": self.bin})
+        self._make_hu(); self._make_hu()
         self.assertTrue(bin_violations(self.bin, incoming_hu_count=1))
-        frappe.db.set_value("Storage Bin", self.bin, "current_hu_count", 1)
+        frappe.db.delete("Handling Unit", {"current_bin": self.bin})
+        self._make_hu()
         self.assertEqual(bin_violations(self.bin, incoming_hu_count=1), [])
 
     def test_weight_capacity_is_enforced(self):
+        # Same live-computation change as above, for weight (bin_rules.live_weight).
         frappe.db.set_value("Storage Type", f"{self.warehouse}-ST", "capacity_check_method", "Weight")
-        frappe.db.set_value("Storage Bin", self.bin, {"maximum_weight": 100, "current_weight": 90})
+        frappe.db.set_value("Storage Bin", self.bin, "maximum_weight", 100)
+        frappe.db.delete("Handling Unit", {"current_bin": self.bin})
+        self._make_hu(weight=90)
         self.assertTrue(bin_violations(self.bin, incoming_weight=20))
         self.assertEqual(bin_violations(self.bin, incoming_weight=5), [])
 

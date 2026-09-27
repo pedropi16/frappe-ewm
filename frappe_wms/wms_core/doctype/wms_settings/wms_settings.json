@@ -11,6 +11,9 @@
   "column_break_enforcement",
   "verification_section",
   "require_scan_verification",
+  "column_break_verification",
+  "inventory_section",
+  "blind_counting",
   "defaults_section",
   "default_handling_unit_type"
  ],
@@ -49,6 +52,22 @@
    "fieldname": "require_scan_verification",
    "fieldtype": "Check",
    "label": "Require Scan Verification"
+  },
+  {
+   "fieldname": "column_break_verification",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inventory_section",
+   "fieldtype": "Section Break",
+   "label": "Physical Inventory"
+  },
+  {
+   "default": "1",
+   "description": "When enabled, the RF app and count APIs never return a line's book quantity to the counter before it's recorded - matching SAP EWM's own default RF counting behavior, since a counter who can see the book quantity beforehand tends to just copy it in rather than actually count. The server still compares against the real book quantity either way.",
+   "fieldname": "blind_counting",
+   "fieldtype": "Check",
+   "label": "Blind Counting"
   },
   {
    "fieldname": "defaults_section",

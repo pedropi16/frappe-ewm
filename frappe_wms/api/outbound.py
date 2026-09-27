@@ -13,8 +13,10 @@ from frappe_wms.services.issue import (
     create_and_submit_goods_issue as _create_and_submit_goods_issue,
     post_goods_issue_for_delivery as _post_goods_issue_for_delivery,
 )
-from frappe_wms.utils import parse_json
+from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.idempotency import run_once
+
+OUTBOUND_ROLES = ("WMS Operator", "WMS Picker", "WMS Loader", "WMS Supervisor")
 
 @frappe.whitelist()
 def allocate_delivery(delivery_name):
@@ -42,10 +44,12 @@ def find_pick_tasks(reference):
 
 @frappe.whitelist()
 def create_outbound_delivery_from_sales_order(sales_order_name, warehouse):
+    require_role(*OUTBOUND_ROLES)
     return _create_outbound_delivery_from_sales_order(sales_order_name, warehouse)
 
 @frappe.whitelist()
 def list_ready_to_ship():
+    require_role(*OUTBOUND_ROLES)
     return _list_ready_to_ship()
 
 @frappe.whitelist()

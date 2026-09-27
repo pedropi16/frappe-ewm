@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt
-from frappe_wms.services.bin_rules import bin_violations
+from frappe_wms.services.bin_rules import bin_violations, live_hu_count
 
 def determine_storage_process(context):
     rules=frappe.get_all("Process Determination Rule",filters={"active":1,"warehouse":context["warehouse"]},fields=["*"],order_by="priority asc")
@@ -58,7 +58,11 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context):
     filters={"warehouse":warehouse,"storage_type":storage_type,"active":1,"putaway_blocked":0}
     if section: filters["storage_section"]=section
     bins=frappe.get_all("Storage Bin",filters=filters,
-        fields=["name","current_hu_count","current_weight","maximum_hus","maximum_weight","sequence","aisle"],order_by="sequence asc")
+        fields=["name","maximum_hus","maximum_weight","sequence","aisle"],order_by="sequence asc")
+    # Ranking strategies (Least Utilized Bin, Bulk, First Empty Bin) need each bin's real,
+    # right-now fill level, not the hourly-stale cached field - two putaways within the same
+    # hour used to both rank the same bin as "emptiest" (see bin_rules.live_hu_count).
+    for b in bins: b.current_hu_count = live_hu_count(b.name)
     return [b for b in bins if not bin_violations(b.name, item=context.get("item"), stock_type=context.get("stock_type"),
         hu_type=context.get("hu_type"), batch_no=context.get("batch_no"), destination_hu=context.get("destination_hu"),
         incoming_weight=context.get("incoming_weight"), incoming_hu_count=context.get("incoming_hu_count", 1))]

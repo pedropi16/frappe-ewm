@@ -18,7 +18,16 @@ def _order_related_request_exists(task_name):
     })
 
 def _current_quantity(warehouse, product, storage_bin, stock_type):
-    return flt(frappe.db.get_value("WMS Stock Balance", {"warehouse": warehouse, "product": product, "storage_bin": storage_bin, "stock_type": stock_type}, "quantity"))
+    # A bin holding the same product/stock type in more than one Handling Unit or batch is one
+    # bin with several WMS Stock Balance rows, not one - get_value against a filter with no
+    # handling_unit/batch_no returns whichever single matching row the query happens to return
+    # first, silently ignoring the rest (reproduced by reading the code: no aggregation at all).
+    # A replenishment threshold has to see everything actually sitting in the bin.
+    total = frappe.db.sql(
+        "select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where warehouse=%s and product=%s and storage_bin=%s and stock_type=%s",
+        (warehouse, product, storage_bin, stock_type),
+    )[0][0]
+    return flt(total)
 
 def _best_source_bin(warehouse, product, storage_type, stock_type, exclude_bin):
     bins_in_type = frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": storage_type, "removal_blocked": 0}, pluck="name")
@@ -32,6 +41,7 @@ def _best_source_bin(warehouse, product, storage_type, stock_type, exclude_bin):
     return balances[0], balances[0].available_quantity
 
 def check_replenishment_needs():
+    require_role("WMS Operator", "WMS Supervisor")
     created = []
     for rule in frappe.get_all("Replenishment Rule", filters={"active": 1}, fields=["*"]):
         current = _current_quantity(rule.warehouse, rule.product, rule.storage_bin, rule.stock_type)

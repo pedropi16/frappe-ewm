@@ -260,12 +260,20 @@ def pull_next_warehouse_order(user=None):
     candidates = frappe.get_all("Warehouse Order",
         filters={"status": "Open", "warehouse": resource.warehouse, "queue": ["in", queues], "assigned_resource": ["in", ["", None]]},
         fields=["name", "priority", "creation"], order_by="creation asc")
-    if not candidates: return None
-    wo_name = _by_priority_then_age(candidates)[0].name
-    frappe.db.set_value("Warehouse Order", wo_name, "assigned_resource", resource.name)
-    frappe.db.set_value("Warehouse Order", wo_name, "status", "Assigned")
-    frappe.db.set_value("Warehouse Task", {"warehouse_order": wo_name}, "assigned_resource", resource.name)
-    return wo_name
+    for candidate in _by_priority_then_age(candidates):
+        # Atomic compare-and-set: two resources pulling at the same instant must never both walk
+        # away believing they own the same Warehouse Order - the read above is just a candidate
+        # list, not a reservation. A 0-row UPDATE means someone else claimed this one between
+        # that read and this write; fall through to the next candidate instead of trusting it.
+        frappe.db.sql(
+            "update `tabWarehouse Order` set assigned_resource=%s, status='Assigned', modified=%s, modified_by=%s "
+            "where name=%s and status='Open' and (assigned_resource is null or assigned_resource='')",
+            (resource.name, now_datetime(), frappe.session.user, candidate.name),
+        )
+        if frappe.db.sql("select row_count()")[0][0]:
+            frappe.db.set_value("Warehouse Task", {"warehouse_order": candidate.name}, "assigned_resource", resource.name)
+            return candidate.name
+    return None
 
 def warehouse_order_detail(wo_name):
     require_role(*RESOURCE_ROLES)

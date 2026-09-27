@@ -1,5 +1,5 @@
 import frappe
-from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts, request_recount as _request_recount, approve_variance as _approve_variance, analyze_differences as _analyze_differences
+from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts, request_recount as _request_recount, approve_variance as _approve_variance, analyze_differences as _analyze_differences, add_found_line as _add_found_line, cancel_count as _cancel_count
 from frappe_wms.services.quality import complete_inspection as _complete_inspection, list_open_inspections as _list_open_inspections
 from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs, request_direct_replenishment as _request_direct_replenishment
 from frappe_wms.utils import parse_json
@@ -27,6 +27,14 @@ def post_count(count_name):
 @frappe.whitelist()
 def request_recount(count_name):
     return _request_recount(count_name)
+
+@frappe.whitelist()
+def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch_no=None, serial_no=None, handling_unit=None, stock_uom=None):
+    return _add_found_line(count_name, product, storage_bin, stock_type, quantity, batch_no, serial_no, handling_unit, stock_uom)
+
+@frappe.whitelist()
+def cancel_count(count_name):
+    return _cancel_count(count_name)
 
 @frappe.whitelist()
 def approve_variance(count_name, remarks=None):

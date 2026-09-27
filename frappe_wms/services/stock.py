@@ -1,7 +1,32 @@
 import hashlib
+import time
 import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
+
+def _retrying_on_deadlock(fn):
+    # Two concurrent transfers moving stock in opposite directions between the same two
+    # locations lock their balance rows in whatever order their entries happen to list them -
+    # A->B locks A then wants B while B->A locks B then wants A, a textbook deadlock pair.
+    # post_entries now pre-locks every balance row it will touch in one globally-consistent
+    # sorted order (below) so that specific pattern can't happen at all, but InnoDB can still
+    # deadlock a write against unrelated lock interleavings (e.g. a concurrent allocation's own
+    # FOR UPDATE). MySQL always resolves a deadlock by killing one side and rolling its
+    # transaction back completely, so retrying the same call from scratch (safe: the
+    # idempotency-key dedup check at the top of post_entries sees nothing committed from the
+    # rolled-back attempt) is the correct recovery, not a client-visible failure.
+    def wrapper(*args, **kwargs):
+        attempts = 3
+        for attempt in range(attempts):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                if attempt < attempts - 1 and frappe.db.is_deadlocked(e):
+                    frappe.db.rollback()
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+                raise
+    return wrapper
 
 DIMENSIONS = ("warehouse", "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type")
 
@@ -22,8 +47,24 @@ def _upsert_balance(values, delta):
         doc.stock_uom = values.get("stock_uom")
         doc.quantity = 0
         doc.allocated_quantity = 0
-        doc.first_receipt_date = now_datetime() if delta > 0 else None
+        # A carried first_receipt_date/shelf_life_expiry_date (transfer_stock passes these
+        # through from the source balance row - the same physical stock, just relocated) wins
+        # over "now"/blank - only a genuine external receipt with nothing to carry forward gets
+        # today's date. Reproduced: every bin-to-bin move used to reset the GR date to the move
+        # time and drop the expiry date entirely, so FIFO/FEFO/SLED all silently ignored any
+        # stock that had ever been moved once.
+        doc.first_receipt_date = values.get("first_receipt_date") or (now_datetime() if delta > 0 else None)
         doc.shelf_life_expiry_date = values.get("shelf_life_expiry_date")
+    else:
+        # Merging into an already-existing balance row (two partial moves landing in the same
+        # bin, or stock already there): keep whichever date is actually older/soonest, so the
+        # oldest stock physically present is still what FIFO/FEFO see first.
+        incoming_receipt = values.get("first_receipt_date")
+        if incoming_receipt and (not doc.first_receipt_date or incoming_receipt < doc.first_receipt_date):
+            doc.first_receipt_date = incoming_receipt
+        incoming_expiry = values.get("shelf_life_expiry_date")
+        if incoming_expiry and (not doc.shelf_life_expiry_date or incoming_expiry < doc.shelf_life_expiry_date):
+            doc.shelf_life_expiry_date = incoming_expiry
     new_qty = flt(doc.quantity) + flt(delta)
     warehouse = frappe.get_cached_doc("WMS Warehouse", values["warehouse"])
     if new_qty < 0 and not warehouse.allow_negative_stock:
@@ -36,6 +77,7 @@ def _upsert_balance(values, delta):
     doc.save()
     return doc
 
+@_retrying_on_deadlock
 def post_entries(entries, reference_doctype, reference_name, idempotency_key, warehouse_task=None, device=None):
     # Entries are stored as "<key>:<seq>", so a replay is detected by the first entry's key - matching the bare
     # key never hit, and a retried request fell through to the unique index as a raw duplicate-entry error.
@@ -43,6 +85,21 @@ def post_entries(entries, reference_doctype, reference_name, idempotency_key, wa
         return frappe.get_all("WMS Stock Ledger Entry", filters={"idempotency_key": ["like", f"{idempotency_key}:%"]}, pluck="name", order_by="creation asc")
     if round(sum(flt(x["quantity"]) for x in entries), 6) != 0 and len(entries) > 1:
         frappe.throw(_("Transfer postings must balance to zero"))
+    # Lock every balance row this batch will touch up front, in one globally-consistent sorted
+    # order - not the order entries happen to be listed in - so opposite-direction transfers
+    # between the same two rows can never deadlock waiting on each other (see
+    # _retrying_on_deadlock above for the remaining, unavoidable case).
+    for name in sorted({_balance_name(e) for e in entries}):
+        _lock_balance(name)
+    for entry in entries:
+        # A serial number identifies exactly one physical unit - any entry carrying one that
+        # moves more or less than 1 is a data-entry mistake, not a real serialized movement
+        # (reproduced by reading the code: a receipt line could freely claim quantity 3 against
+        # a single serial number, silently pretending 3 units share one serial). Checked once
+        # here rather than at every individual call site, since every stock change - receipt,
+        # issue, internal move, repack, count - posts through this one function.
+        if entry.get("serial_no") and round(abs(flt(entry["quantity"])), 6) != 1:
+            frappe.throw(_("Serial {0} must move exactly 1 unit at a time (got {1})").format(entry["serial_no"], entry["quantity"]))
     created = []
     for seq, values in enumerate(entries, 1):
         payload = dict(values)
@@ -117,8 +174,18 @@ def transfer_stock(*, source, destination, quantity, movement_type, reference_do
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Transfer quantity must be greater than zero"))
     shared = {k: source.get(k) for k in ("warehouse", "product", "batch_no", "serial_no", "stock_uom")}
+    # A transfer relocates existing stock - it must carry that stock's own GR date and shelf-life
+    # expiry to wherever it lands, never reset them, whatever the destination row already looked
+    # like (see _upsert_balance). Read before the source balance is decremented; if the caller
+    # already knows better (a receipt inline with a transfer, e.g. inspection routing) its own
+    # destination dict wins.
+    source_name = _balance_name({**shared, "handling_unit": source.get("handling_unit"),
+        "storage_bin": source.get("storage_bin"), "stock_type": source.get("stock_type")})
+    carried = frappe.db.get_value("WMS Stock Balance", source_name, ["first_receipt_date", "shelf_life_expiry_date"], as_dict=True) or {}
     negative = {**shared, **source, "quantity": -quantity, "movement_type": movement_type}
-    positive = {**shared, **destination, "quantity": quantity, "movement_type": movement_type}
+    positive = {**shared, **destination, "quantity": quantity, "movement_type": movement_type,
+        "first_receipt_date": destination.get("first_receipt_date") or carried.get("first_receipt_date"),
+        "shelf_life_expiry_date": destination.get("shelf_life_expiry_date") or carried.get("shelf_life_expiry_date")}
     return post_entries([negative, positive], reference_doctype, reference_name, idempotency_key, warehouse_task, device)
 
 def release_allocation(values, quantity):

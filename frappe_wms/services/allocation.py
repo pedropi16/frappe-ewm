@@ -15,6 +15,13 @@ from frappe_wms.utils import require_role
 # reserved or in-transit once it physically arrives at that bin.
 NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing")
 
+# A balance row's own storage-role/bin-flag exclusion above says nothing about the Handling
+# Unit it's tied to - a Blocked HU (an operator's own "don't touch this" flag, e.g. Repack
+# Center's Block button) or one already Cancelled/Shipped/Loaded for a different movement was
+# still being freely allocated to a brand new delivery (reproduced by reading the code: nothing
+# here ever queried Handling Unit.status at all).
+NON_ALLOCATABLE_HU_STATUSES = ("Blocked", "Cancelled", "Shipped", "Loaded")
+
 def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
     if row.required_batch: filters["batch_no"]=row.required_batch
@@ -35,6 +42,12 @@ def _candidate_balances(row, warehouse):
     if min_remaining:
         cutoff = add_days(nowdate(), min_remaining)
         balances = [b for b in balances if not b.shelf_life_expiry_date or getdate(b.shelf_life_expiry_date) >= getdate(cutoff)]
+
+    hu_names = {b.handling_unit for b in balances if b.handling_unit}
+    if hu_names:
+        non_allocatable_hus = set(frappe.get_all("Handling Unit", filters={"name": ["in", list(hu_names)], "status": ["in", NON_ALLOCATABLE_HU_STATUSES]}, pluck="name"))
+        balances = [b for b in balances if not b.handling_unit or b.handling_unit not in non_allocatable_hus]
+
     bin_names = {b.storage_bin for b in balances if b.storage_bin}
     if not bin_names: return balances
     non_allocatable_bins = set(frappe.get_all("Storage Bin", filters={"name": ["in", list(bin_names)], "removal_blocked": 1}, pluck="name"))

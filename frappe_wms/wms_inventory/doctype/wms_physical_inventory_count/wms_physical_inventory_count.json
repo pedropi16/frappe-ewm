@@ -23,7 +23,8 @@
     "erpnext_loss_stock_entry",
     "approved_by",
     "approved_at",
-    "review_remarks"
+    "review_remarks",
+    "blocked_bins"
   ],
   "fields": [
     {
@@ -139,6 +140,13 @@
       "fieldname": "review_remarks",
       "label": "Review Remarks",
       "fieldtype": "Small Text"
+    },
+    {
+      "fieldname": "blocked_bins",
+      "label": "Blocked Bins",
+      "fieldtype": "Small Text",
+      "read_only": 1,
+      "description": "Storage Bins this count set removal_blocked on at snapshot time (that were not already blocked) - unblocked automatically once the count posts or is cancelled."
     }
   ],
   "autoname": "PIC-.########",

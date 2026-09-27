@@ -3,13 +3,14 @@ from frappe import _
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis, resource_performance as _resource_performance
-from frappe_wms.utils import wildcard_filter
+from frappe_wms.utils import wildcard_filter, require_wms_access
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 ALERT_AGE_HOURS = 4
 
 @frappe.whitelist()
 def get_delivery_execution_status(delivery_name):
+    require_wms_access()
     # Feeds the Outbound Monitor drill-down: everything a supervisor needs to see and drive the
     # pick -> pack -> ship lifecycle of one delivery in one place, instead of only from the RF app.
     doc = frappe.get_doc("Outbound Delivery", delivery_name)
@@ -42,6 +43,7 @@ def get_delivery_execution_status(delivery_name):
 
 @frappe.whitelist()
 def get_summary(warehouse):
+    require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     task_type_rows = frappe.db.sql(
         "select task_type, count(*) from `tabWarehouse Task` where warehouse=%s and status in %s and docstatus < 2 group by task_type",
@@ -62,6 +64,7 @@ def get_summary(warehouse):
 @frappe.whitelist()
 def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None, stock_type=None, handling_unit=None,
                     batch_no=None, serial_no=None, limit=200):
+    require_wms_access()
     # Current on-hand positions (WMS Stock Balance), as opposed to search_ledger's movement
     # history - EWM's "Stock Overview" node vs. its "Document Monitor".
     filters = {"warehouse": warehouse, "quantity": [">", 0]}
@@ -82,6 +85,7 @@ def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None,
 
 @frappe.whitelist()
 def stock_overview_summary(warehouse):
+    require_wms_access()
     rows = frappe.db.sql(
         "select stock_type, sum(quantity), sum(allocated_quantity), sum(available_quantity), count(*) "
         "from `tabWMS Stock Balance` where warehouse=%s and quantity > 0 group by stock_type",
@@ -92,6 +96,7 @@ def stock_overview_summary(warehouse):
 @frappe.whitelist()
 def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None, movement_type=None,
                    batch_no=None, serial_no=None, posting_user=None, from_date=None, to_date=None, limit=100):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if product: filters["product"] = wildcard_filter(product)
     if storage_bin: filters["storage_bin"] = wildcard_filter(storage_bin)
@@ -110,6 +115,7 @@ def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None,
 
 @frappe.whitelist()
 def stock_line_history(product, stock_type, storage_bin=None, handling_unit=None, batch_no=None, serial_no=None, limit=10):
+    require_wms_access()
     """The last few postings that actually built up one specific balance line - a Repack Center
     product row only ever shows the current quantity; this is "the document it's attached to"
     (what created or last touched it) that a balance row itself has no way to carry."""
@@ -127,6 +133,7 @@ def stock_line_history(product, stock_type, storage_bin=None, handling_unit=None
 def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None,
                   assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None,
                   confirmed_by=None, from_date=None, to_date=None, limit=200):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if task_type: filters["task_type"] = task_type
     if status: filters["status"] = status
@@ -153,6 +160,7 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
 def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
                            stock_status=None, outbound_delivery=None, storage_type=None, work_center=None,
                            modified_by=None, from_date=None, to_date=None, limit=200):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if hu_number: filters["hu_number"] = wildcard_filter(hu_number)
     if status: filters["status"] = status
@@ -177,6 +185,7 @@ def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, 
 
 @frappe.whitelist()
 def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, limit=200):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if bin_code: filters["name"] = wildcard_filter(bin_code)
     if storage_type: filters["storage_type"] = storage_type
@@ -190,6 +199,7 @@ def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, l
 
 @frappe.whitelist()
 def hu_ancestor_chain(hu_name):
+    require_wms_access()
     """Walks parent_hu up to the top, so a search hit that's nested several levels deep can be
     shown where it actually is (its bin, then each ancestor HU in order) instead of as a bare,
     context-free row - current_bin is already correct at every level regardless of nesting depth."""
@@ -216,6 +226,7 @@ def _hu_node(hu_name):
 
 @frappe.whitelist()
 def handling_unit_tree(hu_name):
+    require_wms_access()
     """Full recursive nesting (all descendants, every level) plus contents at each node -
     the flat search grid and RF hu_overview only ever show one level of children."""
     node = _hu_node(hu_name)
@@ -225,6 +236,7 @@ def handling_unit_tree(hu_name):
 @frappe.whitelist()
 def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None,
                                inbound_delivery_number=None, receiving_bin=None, from_date=None, to_date=None, limit=200):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
     if supplier: filters["supplier"] = wildcard_filter(supplier)
@@ -244,6 +256,7 @@ def search_outbound_deliveries(warehouse, status=None, customer=None, allocation
                                 packing_status=None, loading_status=None, priority=None,
                                 outbound_delivery_number=None, route=None, staging_bin=None, door=None,
                                 from_date=None, to_date=None, limit=200):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
     if customer: filters["customer"] = wildcard_filter(customer)
@@ -264,6 +277,7 @@ def search_outbound_deliveries(warehouse, status=None, customer=None, allocation
 
 @frappe.whitelist()
 def resource_workload(warehouse):
+    require_wms_access()
     resources = frappe.get_list("WMS Resource", filters={"warehouse": warehouse, "active": 1}, fields=[
         "name", "resource_code", "user", "resource_type", "resource_group", "device_id",
         "current_queue", "current_work_center", "current_bin", "logged_in_at",
@@ -281,6 +295,7 @@ def resource_workload(warehouse):
 
 @frappe.whitelist()
 def search_queues(warehouse, activity=None, limit=100):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if activity: filters["activity"] = activity
     return frappe.get_list("Warehouse Queue", filters=filters, fields=[
@@ -290,16 +305,19 @@ def search_queues(warehouse, activity=None, limit=100):
 
 @frappe.whitelist()
 def warehouse_kpis(warehouse, from_date=None, to_date=None):
+    require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     return _warehouse_kpis(warehouse, from_date, to_date)
 
 @frappe.whitelist()
 def resource_performance(warehouse, from_date=None, to_date=None):
+    require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     return _resource_performance(warehouse, from_date, to_date)
 
 @frappe.whitelist()
 def get_alerts(warehouse):
+    require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     cutoff = add_to_date(now_datetime(), hours=-ALERT_AGE_HOURS)
     return {
@@ -320,6 +338,7 @@ def get_alerts(warehouse):
 
 @frappe.whitelist()
 def search_waves(warehouse, status=None, route=None, released_by=None, from_date=None, to_date=None, limit=100):
+    require_wms_access()
     filters = {"warehouse": warehouse}
     if status: filters["status"] = status
     if route: filters["route"] = wildcard_filter(route)

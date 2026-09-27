@@ -1,0 +1,92 @@
+name: CI
+
+# Runs the full frappe_wms test suite against a brand-new site on every push/PR, so a failure
+# always means the code broke something - not that this dev site's shared fixtures drifted
+# after months of manual testing (see the 13 known-stale failures documented in app_gap.md /
+# the production-readiness audit, none of which reproduced against a genuinely fresh site in
+# local testing). No CI existed for this repo before this workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis-cache:
+        image: redis:alpine
+        ports: ["13000:6379"]
+      redis-queue:
+        image: redis:alpine
+        ports: ["11000:6379"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: apps/frappe_wms
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install wkhtmltopdf and other system deps
+        run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf
+
+      - name: Install bench
+        run: pip install frappe-bench
+
+      - name: Init bench
+        run: |
+          bench init --skip-redis-config-generation --skip-assets --python "$(which python3)" frappe-bench
+          mv apps/frappe_wms frappe-bench/apps/frappe_wms
+
+      - name: Configure bench
+        working-directory: frappe-bench
+        run: |
+          bench set-mariadb-host 127.0.0.1
+          bench set-redis-cache-host redis://localhost:13000
+          bench set-redis-queue-host redis://localhost:11000
+          bench set-redis-socketio-host redis://localhost:11000
+          sed -i "s/watch:.*/watch: false/g" Procfile || true
+
+      - name: Get ERPNext
+        working-directory: frappe-bench
+        run: bench get-app erpnext --branch version-15
+
+      - name: Create fresh site
+        working-directory: frappe-bench
+        run: |
+          bench new-site wms-ci.local \
+            --db-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site wms-ci.local install-app erpnext
+          bench --site wms-ci.local install-app frappe_wms
+          bench --site wms-ci.local set-config allow_tests true
+
+      - name: Run frappe_wms test suite
+        working-directory: frappe-bench
+        run: bench --site wms-ci.local run-tests --app frappe_wms
+
+      - name: Show recent Error Log on failure
+        if: failure()
+        working-directory: frappe-bench
+        run: bench --site wms-ci.local mariadb -e "select method, error from \`tabError Log\` order by creation desc limit 10;" || true

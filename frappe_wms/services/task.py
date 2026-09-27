@@ -4,7 +4,7 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
 from frappe_wms.services.bin_rules import validate_destination_bin
-from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues
+from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues, RESOURCE_ROLES
 from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
 from frappe_wms.services import erpnext_sync
@@ -176,6 +176,7 @@ def my_resource(user=None):
     return resource
 
 def list_my_tasks(user=None):
+    require_role(*RESOURCE_ROLES)
     resource = my_resource(user)
     filters = {"status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
     if resource: filters["warehouse"] = resource.warehouse
@@ -198,6 +199,52 @@ def list_my_tasks(user=None):
             or (not t.assigned_resource and (not t.queue or t.queue in eligible))][:100]
     return {"resource": resource, "tasks": tasks}
 
+def _release_short_pick_reservation(task, shortfall):
+    # Whatever this task will now never confirm (planned - revised, once it closes out below
+    # what was originally planned) was reserved on a WMS Stock Balance row and on one or more
+    # Stock Allocations that can never be fulfilled from here - left alone, that reservation is
+    # permanently stuck (nobody else can ever allocate it, and the Stock Allocation sits at
+    # "Partially Picked" forever since its own allocated_quantity can never be reached). Shrinks
+    # each affected Stock Allocation's own allocated_quantity down to what was truly picked, and
+    # the Outbound Delivery Item down with it, so picking can still reach "Picked" for what's
+    # actually real - a short pick's own follow-up replenishment already exists separately via
+    # create_order_related_replenishment.
+    if shortfall <= 0: return
+    rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation)] if task.stock_allocation else [])
+    if not rows: return
+    release_allocation({"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no,
+        "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin,
+        "stock_type": task.stock_type_from}, shortfall)
+    remaining = shortfall
+    delivery_names = set()
+    for row in rows:
+        if remaining <= 0: break
+        allocation = frappe.get_doc("Stock Allocation", row.stock_allocation)
+        outstanding = flt(allocation.allocated_quantity) - flt(allocation.picked_quantity)
+        if outstanding <= 0: continue
+        take = min(remaining, outstanding)
+        new_allocated = flt(allocation.allocated_quantity) - take
+        frappe.db.set_value("Stock Allocation", allocation.name, {
+            "allocated_quantity": new_allocated,
+            "status": "Picked" if flt(allocation.picked_quantity) >= new_allocated else allocation.status,
+        })
+        if allocation.outbound_delivery_item:
+            item_name = allocation.outbound_delivery_item
+            frappe.db.set_value("Outbound Delivery Item", item_name, {
+                "requested_quantity": flt(frappe.db.get_value("Outbound Delivery Item", item_name, "requested_quantity")) - take,
+                "allocated_quantity": flt(frappe.db.get_value("Outbound Delivery Item", item_name, "allocated_quantity")) - take,
+            })
+        if allocation.outbound_delivery: delivery_names.add(allocation.outbound_delivery)
+        remaining -= take
+    for delivery_name in delivery_names:
+        _update_delivery_picking_status(delivery_name)
+        rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name}, fields=["requested_quantity", "allocated_quantity"])
+        if rows:
+            fully_allocated = all(flt(r.allocated_quantity) >= flt(r.requested_quantity) for r in rows)
+            any_allocated = any(flt(r.allocated_quantity) > 0 for r in rows)
+            frappe.db.set_value("Outbound Delivery", delivery_name, "allocation_status",
+                "Fully Allocated" if fully_allocated else ("Partially Allocated" if any_allocated else "Not Allocated"))
+
 def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
     require_role("WMS Operator", "WMS Supervisor")
     code = frappe.get_cached_doc("WMS Exception Code", exception_code)
@@ -215,14 +262,22 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
         # isn't there.
         revised_quantity = flt(revised_quantity)
         already_confirmed = flt(task.confirmed_quantity)
+        original_planned = flt(task.planned_quantity)
         if revised_quantity < already_confirmed: frappe.throw(_("Revised quantity cannot be less than what is already confirmed"))
-        if revised_quantity > flt(task.planned_quantity): frappe.throw(_("Revised quantity cannot exceed the planned quantity"))
+        if revised_quantity > original_planned: frappe.throw(_("Revised quantity cannot exceed the planned quantity"))
         task.db_set("planned_quantity", revised_quantity, update_modified=True)
         if round(already_confirmed, 6) >= round(revised_quantity, 6):
             task.db_set({"status": "Confirmed", "docstatus": 1}, update_modified=True)
             advance_to_next_step(task)
             _update_request(task.warehouse_request)
-            _relocate_hu_for_task(task)
+            _release_short_pick_reservation(task, original_planned - revised_quantity)
+            # Only relocate the HU if this task actually moved real, ledger-backed stock
+            # (already_confirmed > 0 via an earlier confirm_task call) - closing a task that
+            # denied its full quantity with nothing ever confirmed has no stock movement to
+            # reflect, and relocating the HU here anyway would make its current_bin lie about
+            # where its physical stock actually is (reproduced: a fully-denied pick moved the
+            # source HU's bin record to the delivery's staging bin with zero units following it).
+            if already_confirmed > 0: _relocate_hu_for_task(task)
             sync_warehouse_order(task.warehouse_order)
             released_tasks = release_next_in_sequence(task.warehouse_order) + _release_predecessor_gated_tasks(task.name)
             result = {"task": task.name, "status": "Confirmed", "released_tasks": released_tasks}
@@ -422,12 +477,44 @@ def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
     for child in frappe.get_all("Handling Unit", filters={"parent_hu": hu}, pluck="name"):
         _move_hu_and_descendants(child, destination_bin, source_bin, task, top_level=False)
 
+def _unwind_pick_task_allocations(task, qty):
+    # A reversed Pick task's stock is physically back at the source - the Stock Allocation and
+    # Outbound Delivery Item it fed must revert with it, or the delivery is stuck reporting more
+    # picked than is actually sitting in any Handling Unit (reproduced by reading the reversal
+    # path against _ready_lines_for_delivery: nothing re-enables a fresh pick, and Goods Issue
+    # could be attempted against a delivery whose "picked" stock had already moved back to the
+    # shelf).
+    rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation)] if task.stock_allocation else [])
+    if not rows: return
+    delivery_names = set()
+    remaining = qty
+    for row in rows:
+        if remaining <= 0: break
+        allocation = frappe.get_doc("Stock Allocation", row.stock_allocation)
+        take = min(remaining, flt(allocation.picked_quantity))
+        if take <= 0: continue
+        new_picked = flt(allocation.picked_quantity) - take
+        status = "Picked" if new_picked > 0 and new_picked >= flt(allocation.allocated_quantity) else ("Partially Picked" if new_picked > 0 else "Allocated")
+        frappe.db.set_value("Stock Allocation", allocation.name, {"picked_quantity": new_picked, "status": status})
+        if allocation.outbound_delivery_item:
+            item_name = allocation.outbound_delivery_item
+            frappe.db.set_value("Outbound Delivery Item", item_name, "picked_quantity",
+                max(flt(frappe.db.get_value("Outbound Delivery Item", item_name, "picked_quantity")) - take, 0))
+        if allocation.outbound_delivery: delivery_names.add(allocation.outbound_delivery)
+        remaining -= take
+    for delivery_name in delivery_names:
+        _update_delivery_picking_status(delivery_name)
+        current_status, picking_status = frappe.db.get_value("Outbound Delivery", delivery_name, ["status", "picking_status"])
+        if current_status == "Picked" and picking_status != "Picked":
+            frappe.db.set_value("Outbound Delivery", delivery_name, "status", "Picking" if picking_status != "Not Started" else "Allocated")
+
 def reverse_task(task_name, reason=None):
     # Creates and confirms a compensating task that moves the confirmed quantity back from
     # destination to source, rather than un-confirming the original (the stock ledger is
     # immutable, mirroring how goods receipt/issue reversals work). This corrects the physical
-    # stock position; it does not cascade into the Stock Allocation/Outbound Delivery status
-    # that a Pick task's confirmation may have advanced.
+    # stock position; for a Pick task it also unwinds the Stock Allocation/Outbound Delivery
+    # status the original confirmation advanced (_unwind_pick_task_allocations) - otherwise the
+    # delivery keeps reporting stock as picked that has actually moved back to the shelf.
     require_role("WMS Supervisor")
     frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
     original = frappe.get_doc("Warehouse Task", task_name)
@@ -448,5 +535,6 @@ def reverse_task(task_name, reason=None):
     })
     reversal.insert(ignore_permissions=True)
     result = confirm_task(reversal.name, confirmed_quantity=qty)
+    if original.task_type == "Pick": _unwind_pick_task_allocations(original, qty)
     frappe.db.set_value("Warehouse Task", original.name, "blocking_reason", reason or _("Reversed by {0}").format(reversal.name))
     return {"original": original.name, "reversal": reversal.name, "status": result["status"]}

@@ -17,10 +17,15 @@ def release_due_waves():
     _auto_release_due_waves()
 
 def recalculate_stale_bin_capacity():
+    # No longer load-bearing for capacity enforcement (services/bin_rules.py and
+    # services/determination.py now compute both live, on demand, top-level-HUs-only) - this
+    # only keeps the cached display fields on Storage Bin from drifting too far for whatever
+    # still reads them directly (Monitor list views). A nested HU shares its parent's
+    # current_bin but isn't a second pallet in the same slot, so it's excluded here too.
     bins=frappe.get_all("Storage Bin",filters={"active":1},pluck="name")
     for name in bins:
-        count=frappe.db.count("Handling Unit",{"current_bin":name,"status":["not in",["Shipped","Cancelled"]]})
-        weight=frappe.db.sql("select coalesce(sum(gross_weight),0) from `tabHandling Unit` where current_bin=%s and status not in ('Shipped','Cancelled')",name)[0][0]
+        count=frappe.db.count("Handling Unit",{"current_bin":name,"parent_hu":["in",["",None]],"status":["not in",["Shipped","Cancelled"]]})
+        weight=frappe.db.sql("select coalesce(sum(gross_weight),0) from `tabHandling Unit` where current_bin=%s and (parent_hu is null or parent_hu='') and status not in ('Shipped','Cancelled')",name)[0][0]
         frappe.db.set_value("Storage Bin",name,{"current_hu_count":count,"current_weight":weight},update_modified=False)
 
 def verify_stock_balance_integrity():

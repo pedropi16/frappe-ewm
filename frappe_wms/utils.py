@@ -28,6 +28,18 @@ def require_role(*roles):
     if not set(roles).intersection(frappe.get_roles()):
         frappe.throw(_("You are not permitted to perform this warehouse operation"), frappe.PermissionError)
 
+def require_wms_access():
+    # The Monitor's own read/reporting API surface had no role check at all - `has_app_permission`
+    # keeps a user with no WMS role from seeing the Monitor page in the desk UI, but every one of
+    # its ~19 API endpoints could still be called directly by any other logged-in ERPNext user
+    # (reproduced by reading the code: zero require_role calls anywhere in api/monitor.py). Any
+    # WMS role is enough here - this only gates "can see warehouse data", the individual write
+    # endpoints elsewhere still require their own specific role.
+    if "System Manager" in frappe.get_roles():
+        return
+    if not any(role.startswith("WMS ") for role in frappe.get_roles()):
+        frappe.throw(_("You are not permitted to view warehouse data"), frappe.PermissionError)
+
 def storage_bin_role(bin_name):
     # A bin's role comes from its Storage Type (storage_role) - the same field allocation.py
     # already reads to keep Receiving/Staging/Door/etc. stock out of the allocatable pool.

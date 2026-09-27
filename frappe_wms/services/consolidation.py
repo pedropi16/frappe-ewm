@@ -45,6 +45,7 @@ def set_consolidation_target_hu(group_name, target_hu=None, hu_type=None):
 
 
 def find_joinable_references(barcode):
+    require_role("WMS Operator", "WMS Supervisor")
     # A scanned barcode could be an Outbound Delivery, a Work Order, or the reference row
     # itself (Stock Allocation / Warehouse Request name) - resolve whichever it is into the
     # candidate lines an operator could add, already excluding anything joined elsewhere.

@@ -3,13 +3,18 @@ from frappe import _
 from frappe.utils import now_datetime
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.task import my_resource
+from frappe_wms.utils import require_role
+
+PACKING_ROLES = ("WMS Operator", "WMS Packer", "WMS Supervisor")
 
 def repack(source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
+    require_role(*PACKING_ROLES)
     source=frappe.get_doc("Handling Unit",source_hu); destination=frappe.get_doc("Handling Unit",destination_hu)
     if source.warehouse != destination.warehouse or source.current_bin != destination.current_bin: frappe.throw(_("Source and destination HUs must be in the same bin"))
     return repack_loose(source.current_bin, source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key)
 
 def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctype, reference_name, idempotency_key):
+    require_role(*PACKING_ROLES)
     # Same idea as repack() but either side may be loose stock sitting directly in storage_bin
     # instead of inside a Handling Unit - covers bin->HU, HU->bin and HU->HU repacking, all at
     # one spot. An ordinary Warehouse Task ("Internal Move") can't model this - it requires
@@ -51,6 +56,7 @@ def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctyp
         frappe.get_doc({"doctype":"Handling Unit Event","handling_unit":destination_hu,"event_type":"Packed","bin_after":storage_bin,"reference_doctype":reference_doctype,"reference_name":reference_name,"event_timestamp":now_datetime(),"performed_by":frappe.session.user}).insert(ignore_permissions=True)
 
 def complete_packing_order(packing_order_name):
+    require_role(*PACKING_ROLES)
     # Packing Order only records which HUs are involved, not a per-item/qty breakdown, so the
     # simple and common case this automates is "move everything out of the source HU into the
     # destination HU". Multi-HU consolidation needs an explicit item/qty plan, so it is left to
@@ -69,6 +75,7 @@ def complete_packing_order(packing_order_name):
     return {"packing_order": order.name, "status": "Completed"}
 
 def list_open_packing_orders(user=None):
+    require_role(*PACKING_ROLES)
     resource = my_resource(user)
     orders = frappe.get_list("Packing Order", filters={"status": ["in", ["Draft", "Open", "In Process"]]},
         fields=["name", "outbound_delivery", "work_center_bin", "status"], order_by="creation asc", limit=50)
