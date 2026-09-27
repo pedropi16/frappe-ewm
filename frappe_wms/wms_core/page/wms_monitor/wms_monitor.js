@@ -1291,6 +1291,13 @@ class WMSMonitor {
     await frappe.call("frappe_wms.api.handling_unit.nest_handling_unit", { hu_name: row.name, parent_hu: destHuName });
   }
 
+  // Dropping a Handling Unit row onto another HU nests it there; dropping it onto a bin
+  // relocates it there directly (SAP EWM's MOVE_HU) - both take any nested descendants along.
+  async repack_relocate_hu(row, targetKind, targetName) {
+    if (targetKind === "hu") await this.repack_nest_row(row, targetName);
+    else await frappe.call("frappe_wms.api.handling_unit.relocate_handling_unit", { hu_name: row.name, destination_bin: targetName });
+  }
+
   repack_idem() { return `MON-REPACK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
   // Same bin (whichever side, or both, is an HU) -> repack_loose, a direct ledger move with
@@ -1328,10 +1335,9 @@ class WMSMonitor {
     if (!drag) return;
     try {
       if (drag.kind === "hu") {
-        if (targetKind !== "hu") { frappe.show_alert({ message: __("Drop a Handling Unit onto another Handling Unit, not a bin"), indicator: "orange" }); return; }
-        if (drag.name === targetName) { frappe.show_alert({ message: __("Can't nest a Handling Unit into itself"), indicator: "orange" }); return; }
-        await this.repack_nest_row(drag, targetName);
-        frappe.show_alert({ message: __("Nested {0} into {1}", [drag.name, targetName]), indicator: "green" });
+        if (drag.name === targetName) { frappe.show_alert({ message: __("Can't move a Handling Unit into itself"), indicator: "orange" }); return; }
+        await this.repack_relocate_hu(drag, targetKind, targetName);
+        frappe.show_alert({ message: targetKind === "hu" ? __("Nested {0} into {1}", [drag.name, targetName]) : __("Moved {0} to {1}", [drag.name, targetName]), indicator: "green" });
       } else {
         const srcLoc = { bin: drag.srcBin, hu: drag.srcHu || null };
         const destOverview = await this.fetch_repack_overview(targetKind, targetName);
@@ -1360,14 +1366,8 @@ class WMSMonitor {
       let ok = 0, fail = 0;
       const rows = this.repack_rows(srcNode);
       const huRows = rows.filter((r) => r.kind === "hu");
-      if (huRows.length) {
-        if (!destLoc.hu) {
-          frappe.show_alert({ message: __("Skipped {0} Handling Unit(s): target must be a Handling Unit to nest into", [huRows.length]), indicator: "orange" });
-        } else {
-          for (const row of huRows) {
-            try { await this.repack_nest_row(row, destLoc.hu); ok++; } catch (e) { fail++; }
-          }
-        }
+      for (const row of huRows) {
+        try { await this.repack_relocate_hu(row, target.kind, target.name); ok++; } catch (e) { fail++; frappe.show_alert({ message: e.message || String(e), indicator: "red" }); }
       }
       const stockRows = rows.filter((r) => r.kind === "item");
       if (stockRows.length) {

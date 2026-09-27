@@ -3,6 +3,8 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.numbering import find_number_range
 from frappe_wms.services.task import my_resource
+from frappe_wms.services.stock import relocate_hu_balances
+from frappe_wms.services.bin_rules import validate_destination_bin
 from frappe_wms.utils import require_role
 
 HU_ROLES = ("WMS Operator", "WMS Receiver", "WMS Picker", "WMS Packer", "WMS Supervisor")
@@ -139,6 +141,15 @@ def full_hu_quantity(item, level_name=None):
         return cumulative
     return flt(frappe.db.get_value("WMS Product", {"item": item}, "full_hu_quantity")) or None
 
+def _cascade_current_bin(hu_name, new_bin):
+    # A relocated (or nested) HU carries its own nested children along physically, but only the
+    # HU actually being moved gets current_bin updated directly by the caller - without this, a
+    # grandchild HU's own current_bin field silently drifts from where it (and, separately,
+    # relocate_hu_balances' own recursion keeps its stock) now actually are.
+    for child in frappe.get_all("Handling Unit", filters={"parent_hu": hu_name}, pluck="name"):
+        frappe.db.set_value("Handling Unit", child, "current_bin", new_bin)
+        _cascade_current_bin(child, new_bin)
+
 def nest_handling_unit(hu_name, parent_hu):
     require_role(*HU_ROLES)
     if hu_name == parent_hu: frappe.throw(_("A Handling Unit cannot nest inside itself"))
@@ -147,10 +158,14 @@ def nest_handling_unit(hu_name, parent_hu):
     parent = frappe.get_doc("Handling Unit", parent_hu)
     if parent.warehouse != hu.warehouse: frappe.throw(_("Parent and child Handling Units must be in the same warehouse"))
     before = {"parent_hu_before": hu.parent_hu, "bin_before": hu.current_bin}
+    moved = hu.current_bin != parent.current_bin
     hu.parent_hu = parent_hu
     hu.current_bin = parent.current_bin
     hu.flags.wms_service_update = True
     hu.save(ignore_permissions=True)
+    if moved:
+        relocate_hu_balances(hu.name, hu.current_bin)
+        _cascade_current_bin(hu.name, hu.current_bin)
     _log_event(hu.name, "Nested", parent_hu_after=parent_hu, bin_after=hu.current_bin, **before)
     return hu.as_dict()
 
@@ -163,6 +178,27 @@ def unnest_handling_unit(hu_name):
     hu.flags.wms_service_update = True
     hu.save(ignore_permissions=True)
     _log_event(hu.name, "Unnested", parent_hu_after=None, bin_after=hu.current_bin, **before)
+    return hu.as_dict()
+
+def relocate_handling_unit(hu_name, destination_bin):
+    # A direct Handling Unit -> Storage Bin move, the SAP EWM MOVE_HU equivalent: takes the HU
+    # and everything nested inside it to a different bin in one step. No ledger postings - moving
+    # a sealed HU doesn't touch what's inside it, same as nest/unnest - but every balance row for
+    # the HU and its descendants has to move with it via relocate_hu_balances, or they go stale.
+    require_role(*HU_ROLES)
+    hu = frappe.get_doc("Handling Unit", hu_name)
+    if hu.current_bin == destination_bin: frappe.throw(_("{0} is already in {1}").format(hu_name, destination_bin))
+    destination = frappe.get_doc("Storage Bin", destination_bin)
+    if destination.warehouse != hu.warehouse: frappe.throw(_("Destination bin must be in the same warehouse"))
+    validate_destination_bin(destination_bin, hu_type=hu.hu_type, destination_hu=hu.name)
+    before = {"parent_hu_before": hu.parent_hu, "bin_before": hu.current_bin}
+    hu.parent_hu = None
+    hu.current_bin = destination_bin
+    hu.flags.wms_service_update = True
+    hu.save(ignore_permissions=True)
+    relocate_hu_balances(hu.name, destination_bin)
+    _cascade_current_bin(hu.name, destination_bin)
+    _log_event(hu.name, "Moved", parent_hu_after=None, bin_after=destination_bin, **before)
     return hu.as_dict()
 
 def set_handling_unit_blocked(hu_name, blocked, reason_code=None, remarks=None):

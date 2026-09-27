@@ -4,6 +4,7 @@ from frappe_wms.services.handling_unit import (
     create_handling_unit as _create_handling_unit,
     nest_handling_unit as _nest_handling_unit,
     unnest_handling_unit as _unnest_handling_unit,
+    relocate_handling_unit as _relocate_handling_unit,
     set_handling_unit_blocked as _set_handling_unit_blocked,
     handling_unit_detail as _handling_unit_detail,
     recycle_handling_unit as _recycle_handling_unit,
@@ -24,6 +25,10 @@ def nest_handling_unit(hu_name, parent_hu):
 @frappe.whitelist()
 def unnest_handling_unit(hu_name):
     return _unnest_handling_unit(hu_name)
+
+@frappe.whitelist()
+def relocate_handling_unit(hu_name, destination_bin):
+    return _relocate_handling_unit(hu_name, destination_bin)
 
 @frappe.whitelist()
 def block_handling_unit(hu_name, reason_code=None, remarks=None):

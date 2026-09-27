@@ -67,6 +67,52 @@ def post_entries(entries, reference_doctype, reference_name, idempotency_key, wa
         recompute_measurements(hu)
     return created
 
+def _hu_and_descendants(hu_name):
+    names = [hu_name]
+    for child in frappe.get_all("Handling Unit", filters={"parent_hu": hu_name}, pluck="name"):
+        names += _hu_and_descendants(child)
+    return names
+
+def relocate_hu_balances(hu_name, new_bin):
+    # storage_bin is baked into a WMS Stock Balance row's identity key even when the stock is
+    # HU-managed, so any operation that changes a Handling Unit's current_bin without posting a
+    # ledger movement (nest/unnest, a direct HU-to-bin move) must migrate its balance rows itself
+    # or they go stale at the old bin - reproduced in production: an HU nested at one bin, then
+    # given more stock at its new bin, left the same product split across two rows (70 at the new
+    # bin, 30 orphaned at the old one). Mirrors SAP EWM's own MOVE_HU, which "manages stock
+    # accordingly" when an HU is relocated. No ledger entries here, same as nest/unnest themselves
+    # - this only keeps the balance table's bookkeeping honest about where the HU actually is.
+    for hu in _hu_and_descendants(hu_name):
+        rows = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu, "storage_bin": ["!=", new_bin]}, fields=[
+            "name", "warehouse", "product", "batch_no", "serial_no", "stock_type",
+            "quantity", "allocated_quantity", "stock_uom", "first_receipt_date", "shelf_life_expiry_date",
+        ])
+        for row in rows:
+            new_values = {"warehouse": row.warehouse, "product": row.product, "batch_no": row.batch_no,
+                          "serial_no": row.serial_no, "handling_unit": hu, "storage_bin": new_bin, "stock_type": row.stock_type}
+            new_name = _balance_name(new_values)
+            for name in sorted({row.name, new_name}):
+                _lock_balance(name)
+            target = frappe.get_doc("WMS Stock Balance", new_name) if frappe.db.exists("WMS Stock Balance", new_name) else frappe.new_doc("WMS Stock Balance")
+            if target.is_new():
+                target.name = new_name
+                for key in DIMENSIONS: target.set(key, new_values.get(key))
+                target.stock_uom = row.stock_uom
+                target.quantity = 0
+                target.allocated_quantity = 0
+                target.first_receipt_date = None
+            target.quantity = flt(target.quantity) + flt(row.quantity)
+            target.allocated_quantity = flt(target.allocated_quantity) + flt(row.allocated_quantity)
+            target.available_quantity = flt(target.quantity) - flt(target.allocated_quantity)
+            if row.first_receipt_date and (not target.first_receipt_date or row.first_receipt_date < target.first_receipt_date):
+                target.first_receipt_date = row.first_receipt_date
+            target.shelf_life_expiry_date = target.shelf_life_expiry_date or row.shelf_life_expiry_date
+            target.last_movement_date = now_datetime()
+            target.version = (target.version or 0) + 1
+            target.flags.ignore_permissions = True
+            target.save()
+            frappe.delete_doc("WMS Stock Balance", row.name, ignore_permissions=True, force=True)
+
 def transfer_stock(*, source, destination, quantity, movement_type, reference_doctype, reference_name, idempotency_key, warehouse_task=None, device=None):
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Transfer quantity must be greater than zero"))
