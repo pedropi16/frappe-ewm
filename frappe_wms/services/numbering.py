@@ -62,7 +62,19 @@ def next_number(range_for, warehouse=None, hu_type=None):
         return pooled.hu_number
     doc = frappe.get_doc("WMS Number Range", range_name)
     next_value = max(doc.current_number or 0, doc.start_number - 1) + 1
-    if next_value > doc.end_number:
+    number = None
+    while next_value <= doc.end_number:
+        candidate = f"{doc.prefix or ''}{str(next_value).zfill(doc.number_length or 0)}"
+        # current_number can fall behind reality - a manually-entered document, an import, or (the
+        # bug this guards against) a document creation that failed *after* next_number() already
+        # incremented current_number in the same request, rolling that increment back along with
+        # everything else and leaving the counter pointed at a number that's already taken. Skip
+        # forward past anything already in use instead of retrying the same doomed number forever.
+        if not frappe.db.exists(range_for, candidate):
+            number = candidate
+            break
+        next_value += 1
+    if number is None:
         frappe.throw(_("Number Range {0} is exhausted").format(range_name))
     doc.db_set("current_number", next_value, update_modified=False)
-    return f"{doc.prefix or ''}{str(next_value).zfill(doc.number_length or 0)}"
+    return number
