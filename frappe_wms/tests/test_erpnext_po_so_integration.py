@@ -3,7 +3,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate, add_days
 
 from frappe_wms.api.inbound import create_putaway, create_inbound_delivery_from_purchase_order
-from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, create_outbound_delivery_from_sales_order
+from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, create_outbound_delivery_from_sales_order, release_delivery_for_picking
 from frappe_wms.api.scanner import confirm_task
 
 
@@ -191,3 +191,171 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         po.insert(ignore_permissions=True)
         with self.assertRaises(frappe.ValidationError):
             create_inbound_delivery_from_purchase_order(po.name, self.warehouse)
+
+
+class TestErpnextSyncAsFloorRoleUser(IntegrationTestCase):
+    # Every test above runs as Administrator (see setUpClass), who trivially passes any
+    # permission check - that's exactly why this bug shipped unnoticed: ERPNext's own
+    # make_purchase_receipt/make_delivery_note mappers check "create" permission on the
+    # native Purchase Receipt/Delivery Note doctype against frappe.session.user, and a real
+    # warehouse-floor role (WMS Operator/Receiver/Picker - no Stock User, no Purchase User,
+    # no System Manager) has none. Reproduced live in production before the fix in
+    # services/erpnext_sync.py::_as_system_user.
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.set_user("Administrator")
+        cls.warehouse = "PHASE5C-FLOOR-TEST-WH"
+        cls.recv_bin = f"{cls.warehouse}-RECV"
+        cls.stage_bin = f"{cls.warehouse}-STAGE"
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
+        cls.supplier = frappe.get_all("Supplier", limit=1, pluck="name")[0]
+        cls.customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
+        cls.company = frappe.get_all("Company", limit=1, pluck="name")[0]
+
+        if not frappe.db.exists("WMS Warehouse", cls.warehouse):
+            frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": cls.warehouse, "warehouse_name": cls.warehouse, "company": cls.company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
+        cls.wh = frappe.get_doc("WMS Warehouse", cls.warehouse)
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-GR"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-BULK"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "BULK", "storage_type_name": "BULK", "storage_role": "Storage", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-DOOR"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        cls.bulk_bin = f"{cls.warehouse}-BULK"
+        for bin_name, st in ((cls.recv_bin, f"{cls.warehouse}-GR"), (cls.stage_bin, f"{cls.warehouse}-GR"), (cls.bulk_bin, f"{cls.warehouse}-BULK")):
+            if not frappe.db.exists("Storage Bin", bin_name):
+                frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        if not cls.wh.default_receiving_bin:
+            cls.wh.default_receiving_bin = cls.recv_bin
+            cls.wh.default_shipping_bin = cls.stage_bin
+            cls.wh.default_difference_bin = cls.recv_bin
+            cls.wh.save(ignore_permissions=True)
+        if not frappe.db.exists("Bin Determination Rule", {"warehouse": cls.warehouse, "activity": "Putaway"}):
+            frappe.get_doc({"doctype": "Bin Determination Rule", "warehouse": cls.warehouse, "activity": "Putaway", "active": 1, "priority": 1, "destination_storage_type": f"{cls.warehouse}-BULK", "strategy": "Least Utilized Bin"}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Product", {"item": cls.item}):
+            frappe.get_doc({"doctype": "WMS Product", "item": cls.item, "stock_uom": cls.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Handling Unit Type", "PHASE5C-FLOOR-PALLET"):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "PHASE5C-FLOOR-PALLET", "hu_type_name": "Phase5c Floor Pallet"}).insert(ignore_permissions=True)
+        cls.receiver_user = cls._floor_user("floor-receiver@wms-sync-test.invalid", ["WMS Operator", "WMS Receiver"])
+        cls.picker_user = cls._floor_user("floor-picker@wms-sync-test.invalid", ["WMS Operator", "WMS Picker"])
+        cls.supervisor_user = cls._floor_user("floor-supervisor@wms-sync-test.invalid", ["WMS Operator", "WMS Supervisor"])
+
+    @classmethod
+    def _floor_user(cls, email, roles):
+        if not frappe.db.exists("User", email):
+            frappe.get_doc({"doctype": "User", "email": email, "first_name": email.split("@")[0],
+                "send_welcome_email": 0, "roles": [{"role": r} for r in roles]}).insert(ignore_permissions=True)
+        return email
+
+    def _make_hu(self, bin_name):
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "PHASE5C-FLOOR-PALLET", "warehouse": self.warehouse, "current_bin": bin_name, "status": "Open"})
+        hu.insert(ignore_permissions=True)
+        return hu
+
+    def test_receiving_clerk_role_can_post_a_po_linked_receipt(self):
+        po = frappe.get_doc({"doctype": "Purchase Order", "supplier": self.supplier, "company": self.company, "transaction_date": nowdate(), "schedule_date": nowdate(),
+            "items": [{"item_code": self.item, "qty": 6, "rate": 10, "schedule_date": nowdate()}]})
+        po.insert(ignore_permissions=True)
+        po.submit()
+        ind_name = create_inbound_delivery_from_purchase_order(po.name, self.warehouse)
+        ind = frappe.get_doc("Inbound Delivery", ind_name)
+        hu = self._make_hu(self.recv_bin)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 6, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+
+        # Both insert and submit run as the real operator, matching a single authenticated RF
+        # request end to end (services/receipt.py::create_and_submit_goods_receipt) - owner is
+        # set at insert time, so switching only before submit would silently mis-test this.
+        frappe.set_user(self.receiver_user)
+        try:
+            gr.insert(ignore_permissions=True)
+            gr.flags.ignore_permissions = True  # matches services/receipt.py::create_and_submit_goods_receipt exactly
+            gr.submit()
+        finally:
+            frappe.set_user("Administrator")
+
+        self.assertTrue(gr.erpnext_purchase_receipt, "WMS Receiver role must be able to post a PO-linked receipt without native Purchase Receipt permission")
+        pr = frappe.get_doc("Purchase Receipt", gr.erpnext_purchase_receipt)
+        self.assertEqual(pr.docstatus, 1)
+        self.assertEqual(gr.owner, self.receiver_user, "the WMS Goods Receipt itself (what the operator actually submitted) stays attributed to them")
+
+    def test_picker_role_can_post_an_so_linked_issue(self):
+        hu = self._make_hu(self.recv_bin)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 5, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 5, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.flags.ignore_permissions = True
+        gr.submit()
+        putaway = create_putaway(gr.name)
+        confirm_task(putaway["warehouse_tasks"][0], confirmed_quantity=5)
+
+        so = frappe.get_doc({"doctype": "Sales Order", "customer": self.customer, "company": self.company, "transaction_date": nowdate(), "delivery_date": add_days(nowdate(), 2),
+            "items": [{"item_code": self.item, "qty": 5, "rate": 20, "delivery_date": add_days(nowdate(), 2)}]})
+        so.insert(ignore_permissions=True)
+        so.submit()
+        obd_name = create_outbound_delivery_from_sales_order(so.name, self.warehouse)
+        obd = frappe.get_doc("Outbound Delivery", obd_name)
+        obd.submit()
+        allocate_delivery(obd.name)
+        pick_tasks = create_pick_tasks(obd.name)
+        picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")
+        confirm_task(pick_tasks[0], confirmed_quantity=5)
+        frappe.db.set_value("Storage Bin", self.stage_bin, "storage_type", f"{self.warehouse}-DOOR")
+        frappe.db.set_value("Handling Unit", picked_hu, "status", "Loaded")
+
+        gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": self.stage_bin,
+            "items": [{"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 5, "stock_uom": self.uom, "handling_unit": picked_hu, "stock_type": "AVAILABLE"}]})
+
+        frappe.set_user(self.picker_user)
+        try:
+            gi.insert(ignore_permissions=True)
+            gi.flags.ignore_permissions = True  # matches services/issue.py's own goods-issue submit path
+            gi.submit()
+        finally:
+            frappe.set_user("Administrator")
+
+        self.assertTrue(gi.erpnext_delivery_note, "WMS Picker role must be able to post an SO-linked issue without native Delivery Note permission")
+        dn = frappe.get_doc("Delivery Note", gi.erpnext_delivery_note)
+        self.assertEqual(dn.docstatus, 1)
+        self.assertEqual(gi.owner, self.picker_user, "the WMS Goods Issue itself (what the operator actually submitted) stays attributed to them")
+
+    def test_supervisor_role_can_submit_allocate_and_release_a_delivery(self):
+        # Reproduces the exact Stage 4 production failure: a WMS Supervisor persona (Elena, in
+        # the load test) with no System Manager/WMS Administrator role got a PermissionError
+        # calling release_delivery_for_picking - Outbound Delivery had no permission rows at all
+        # for WMS Supervisor. See outbound_delivery.json and
+        # patches/v0_2/grant_outbound_delivery_wms_role_permissions.py.
+        hu = self._make_hu(self.recv_bin)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 3, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 3, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.flags.ignore_permissions = True
+        gr.submit()
+        putaway = create_putaway(gr.name)
+        confirm_task(putaway["warehouse_tasks"][0], confirmed_quantity=3)
+
+        so = frappe.get_doc({"doctype": "Sales Order", "customer": self.customer, "company": self.company, "transaction_date": nowdate(), "delivery_date": add_days(nowdate(), 2),
+            "items": [{"item_code": self.item, "qty": 3, "rate": 20, "delivery_date": add_days(nowdate(), 2)}]})
+        so.insert(ignore_permissions=True)
+        so.submit()
+        obd_name = create_outbound_delivery_from_sales_order(so.name, self.warehouse)
+
+        frappe.set_user(self.supervisor_user)
+        try:
+            obd = frappe.get_doc("Outbound Delivery", obd_name)
+            obd.submit()
+            pick_tasks = release_delivery_for_picking(obd_name)
+        finally:
+            frappe.set_user("Administrator")
+
+        self.assertTrue(pick_tasks, "WMS Supervisor role must be able to submit, allocate and release a delivery for picking")
+        obd.reload()
+        self.assertEqual(obd.allocation_status, "Fully Allocated")

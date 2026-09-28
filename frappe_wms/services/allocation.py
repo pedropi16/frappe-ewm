@@ -100,7 +100,13 @@ def allocate_delivery(delivery_name):
             if not fresh or flt(fresh.available_quantity) <= 0: continue
             qty=min(needed,flt(fresh.available_quantity))
             allocation=frappe.get_doc({"doctype":"Stock Allocation","outbound_delivery":doc.name,"outbound_delivery_item":row.name,"product":row.item,"stock_balance":stock.name,"storage_bin":stock.storage_bin,"handling_unit":stock.handling_unit,"batch_no":stock.batch_no,"serial_no":stock.serial_no,"stock_type":stock.stock_type,"allocated_quantity":qty,"status":"Allocated"})
-            allocation.insert(); created.append(allocation.name)
+            # Stock Allocation is an internal bookkeeping record this function creates as a side
+            # effect of an already-role-gated action (require_role above) - same as every other
+            # WMS-internal doctype insert across the codebase (Warehouse Request, Warehouse Task,
+            # Goods Receipt, ...), it doesn't need its own separate doctype permission on top of
+            # that. Missing this was a real production bug: a WMS Supervisor/Picker with no
+            # System Manager/WMS Administrator role got a PermissionError here.
+            allocation.insert(ignore_permissions=True); created.append(allocation.name)
             frappe.db.set_value("WMS Stock Balance",stock.name,{"allocated_quantity":flt(fresh.allocated_quantity)+qty,"available_quantity":flt(fresh.available_quantity)-qty})
             needed-=qty
         row.db_set("allocated_quantity",flt(row.requested_quantity)-needed)

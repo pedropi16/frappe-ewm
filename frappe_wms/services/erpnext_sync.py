@@ -1,6 +1,27 @@
+from contextlib import contextmanager
+
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+@contextmanager
+def _as_system_user():
+    # ERPNext's make_purchase_receipt/make_delivery_note/make_sales_return/make_purchase_return
+    # mappers each call frappe.model.mapper.get_mapped_doc without passing ignore_permissions,
+    # which makes get_mapped_doc run target_doc.check_permission("create") against the CURRENT
+    # session user before we ever get the resulting doc back - setting .flags.ignore_permissions
+    # on it afterwards (already done below, for insert/submit) is too late to prevent that check.
+    # Reproduced live in production: a WMS Receiver role posting a real Goods Receipt got a
+    # PermissionError for "Purchase Receipt", a native ERPNext doctype no warehouse-floor role
+    # should need direct create/submit rights on - this mirror document is this call's own
+    # internal accounting side effect, not something the RF operator is creating themselves.
+    # Runs just the mapper call as Administrator and restores the real user immediately after.
+    current_user = frappe.session.user
+    frappe.set_user("Administrator")
+    try:
+        yield
+    finally:
+        frappe.set_user(current_user)
 
 def _erpnext_warehouse(wms_warehouse):
     return frappe.db.get_value("WMS Warehouse", wms_warehouse, "erpnext_warehouse")
@@ -167,37 +188,43 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
         key = (po_item, row.batch_no, row.serial_no, row.stock_type)
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
-    pr = make_purchase_receipt(po_names.pop())
-    template_by_po_item = {item.purchase_order_item: item for item in pr.items}
-    kept = []
-    for (po_item, batch_no, serial_no, stock_type), qty in groups.items():
-        template = template_by_po_item.get(po_item)
-        if not template: continue
-        row = pr.append("items", {})
-        for field in _PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
-        # qty here is already a stock-uom-derived sum (WMS row.quantity is always stock_uom).
-        # Setting row.qty = qty directly while leaving the PO row's own conversion_factor in
-        # place would make ERPNext double-apply it when deriving stock_qty - divide back down
-        # so stock_qty (the actual stock movement) recomputes to exactly qty.
-        row.qty = qty / flt(template.conversion_factor or 1)
-        row.stock_qty = qty
-        row.warehouse = erpnext_warehouse
-        row.batch_no = batch_no
-        row.serial_no = serial_no
-        row.use_serial_batch_fields = 1
-        # Purchase Receipt Item's dimension field for its primary "warehouse" (the
-        # receiving/target warehouse) is unprefixed, unlike Stock Entry's source/target split.
-        row.wms_stock_type = stock_type
-        kept.append(row)
-    if not kept: frappe.throw(_("No matching Purchase Order rows found for Goods Receipt {0}").format(doc.name))
-    # Drop whatever template rows make_purchase_receipt pre-filled from the PO itself (their
-    # qty reflects what was ordered, not what this specific receipt actually recorded) and keep
-    # only the grouped rows just built above.
-    pr.items = kept
-    pr.flags.ignore_permissions = True
-    pr.flags.wms_managed_posting = True
-    pr.insert(ignore_permissions=True)
-    pr.submit()
+    # Everything from here on - the mapping, row assembly, insert and submit - runs as the
+    # system user. It's not just the initial create-permission check that needs this: ERPNext's
+    # own Purchase Receipt controller does further permission-gated lookups of its own deep in
+    # validate() (e.g. get_item_details() re-reading the Item doctype), so patching only the
+    # first check left this still failing for a real floor role at insert() time.
+    with _as_system_user():
+        pr = make_purchase_receipt(po_names.pop())
+        template_by_po_item = {item.purchase_order_item: item for item in pr.items}
+        kept = []
+        for (po_item, batch_no, serial_no, stock_type), qty in groups.items():
+            template = template_by_po_item.get(po_item)
+            if not template: continue
+            row = pr.append("items", {})
+            for field in _PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
+            # qty here is already a stock-uom-derived sum (WMS row.quantity is always stock_uom).
+            # Setting row.qty = qty directly while leaving the PO row's own conversion_factor in
+            # place would make ERPNext double-apply it when deriving stock_qty - divide back down
+            # so stock_qty (the actual stock movement) recomputes to exactly qty.
+            row.qty = qty / flt(template.conversion_factor or 1)
+            row.stock_qty = qty
+            row.warehouse = erpnext_warehouse
+            row.batch_no = batch_no
+            row.serial_no = serial_no
+            row.use_serial_batch_fields = 1
+            # Purchase Receipt Item's dimension field for its primary "warehouse" (the
+            # receiving/target warehouse) is unprefixed, unlike Stock Entry's source/target split.
+            row.wms_stock_type = stock_type
+            kept.append(row)
+        if not kept: frappe.throw(_("No matching Purchase Order rows found for Goods Receipt {0}").format(doc.name))
+        # Drop whatever template rows make_purchase_receipt pre-filled from the PO itself (their
+        # qty reflects what was ordered, not what this specific receipt actually recorded) and keep
+        # only the grouped rows just built above.
+        pr.items = kept
+        pr.flags.ignore_permissions = True
+        pr.flags.wms_managed_posting = True
+        pr.insert(ignore_permissions=True)
+        pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
 
 _RETURN_DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "dn_detail")
@@ -217,32 +244,35 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
         key = (dn_item, row.batch_no, row.serial_no, row.stock_type)
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
-    ret = make_sales_return(dn_name)
-    template_by_dn_item = {item.dn_detail: item for item in ret.items}
-    kept = []
-    for (dn_item, batch_no, serial_no, stock_type), qty in groups.items():
-        template = template_by_dn_item.get(dn_item)
-        if not template: continue
-        row = ret.append("items", {})
-        for field in _RETURN_DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
-        # ERPNext's own return convention: qty/stock_qty are negative (this reverses the
-        # original outgoing movement). qty here is already stock-uom, so divide by the
-        # original row's own conversion_factor before assigning the transactional qty, same
-        # double-application guard as every other mirror above.
-        row.qty = -(qty / flt(template.conversion_factor or 1))
-        row.stock_qty = -qty
-        row.warehouse = erpnext_warehouse
-        row.batch_no = batch_no
-        row.serial_no = serial_no
-        row.use_serial_batch_fields = 1
-        row.wms_stock_type = stock_type
-        kept.append(row)
-    if not kept: frappe.throw(_("No matching Delivery Note rows found for Goods Receipt {0}").format(doc.name))
-    ret.items = kept
-    ret.flags.ignore_permissions = True
-    ret.flags.wms_managed_posting = True
-    ret.insert(ignore_permissions=True)
-    ret.submit()
+    # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
+    # sequence needs to run as the system user, not just the initial mapper call.
+    with _as_system_user():
+        ret = make_sales_return(dn_name)
+        template_by_dn_item = {item.dn_detail: item for item in ret.items}
+        kept = []
+        for (dn_item, batch_no, serial_no, stock_type), qty in groups.items():
+            template = template_by_dn_item.get(dn_item)
+            if not template: continue
+            row = ret.append("items", {})
+            for field in _RETURN_DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
+            # ERPNext's own return convention: qty/stock_qty are negative (this reverses the
+            # original outgoing movement). qty here is already stock-uom, so divide by the
+            # original row's own conversion_factor before assigning the transactional qty, same
+            # double-application guard as every other mirror above.
+            row.qty = -(qty / flt(template.conversion_factor or 1))
+            row.stock_qty = -qty
+            row.warehouse = erpnext_warehouse
+            row.batch_no = batch_no
+            row.serial_no = serial_no
+            row.use_serial_batch_fields = 1
+            row.wms_stock_type = stock_type
+            kept.append(row)
+        if not kept: frappe.throw(_("No matching Delivery Note rows found for Goods Receipt {0}").format(doc.name))
+        ret.items = kept
+        ret.flags.ignore_permissions = True
+        ret.flags.wms_managed_posting = True
+        ret.insert(ignore_permissions=True)
+        ret.submit()
     doc.db_set("erpnext_delivery_note", ret.name, update_modified=False)
 
 # --- Warehouse Request (Work Order material staging) -> Stock Entry ---
@@ -410,33 +440,36 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
         key = (so_item, row.batch_no, row.serial_no, row.stock_type)
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
-    dn = make_delivery_note(so_names.pop())
-    template_by_so_item = {item.so_detail: item for item in dn.items}
-    kept = []
-    for (so_item, batch_no, serial_no, stock_type), qty in groups.items():
-        template = template_by_so_item.get(so_item)
-        if not template: continue
-        row = dn.append("items", {})
-        for field in _DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
-        # Same double-application risk as the Purchase Receipt path above: qty is already
-        # stock-uom, so divide by the SO row's own conversion_factor before assigning it as
-        # the transactional qty, and let stock_qty carry the real (stock-uom) movement.
-        row.qty = qty / flt(template.conversion_factor or 1)
-        row.stock_qty = qty
-        row.warehouse = erpnext_warehouse
-        row.batch_no = batch_no
-        row.serial_no = serial_no
-        row.use_serial_batch_fields = 1
-        # Delivery Note Item's dimension field for its primary "warehouse" (the
-        # shipping-from/source warehouse) is unprefixed, matching Stock Entry's convention.
-        row.wms_stock_type = stock_type
-        kept.append(row)
-    if not kept: frappe.throw(_("No matching Sales Order rows found for Goods Issue {0}").format(doc.name))
-    dn.items = kept
-    dn.flags.ignore_permissions = True
-    dn.flags.wms_managed_posting = True
-    dn.insert(ignore_permissions=True)
-    dn.submit()
+    # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
+    # sequence needs to run as the system user, not just the initial mapper call.
+    with _as_system_user():
+        dn = make_delivery_note(so_names.pop())
+        template_by_so_item = {item.so_detail: item for item in dn.items}
+        kept = []
+        for (so_item, batch_no, serial_no, stock_type), qty in groups.items():
+            template = template_by_so_item.get(so_item)
+            if not template: continue
+            row = dn.append("items", {})
+            for field in _DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
+            # Same double-application risk as the Purchase Receipt path above: qty is already
+            # stock-uom, so divide by the SO row's own conversion_factor before assigning it as
+            # the transactional qty, and let stock_qty carry the real (stock-uom) movement.
+            row.qty = qty / flt(template.conversion_factor or 1)
+            row.stock_qty = qty
+            row.warehouse = erpnext_warehouse
+            row.batch_no = batch_no
+            row.serial_no = serial_no
+            row.use_serial_batch_fields = 1
+            # Delivery Note Item's dimension field for its primary "warehouse" (the
+            # shipping-from/source warehouse) is unprefixed, matching Stock Entry's convention.
+            row.wms_stock_type = stock_type
+            kept.append(row)
+        if not kept: frappe.throw(_("No matching Sales Order rows found for Goods Issue {0}").format(doc.name))
+        dn.items = kept
+        dn.flags.ignore_permissions = True
+        dn.flags.wms_managed_posting = True
+        dn.insert(ignore_permissions=True)
+        dn.submit()
     doc.db_set("erpnext_delivery_note", dn.name, update_modified=False)
 
 _RETURN_PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "purchase_receipt_item")
@@ -454,28 +487,31 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
         key = (pr_item, row.batch_no, row.serial_no, row.stock_type)
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
-    ret = make_purchase_return(pr_name)
-    template_by_pr_item = {item.purchase_receipt_item: item for item in ret.items}
-    kept = []
-    for (pr_item, batch_no, serial_no, stock_type), qty in groups.items():
-        template = template_by_pr_item.get(pr_item)
-        if not template: continue
-        row = ret.append("items", {})
-        for field in _RETURN_PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
-        row.qty = -(qty / flt(template.conversion_factor or 1))
-        row.stock_qty = -qty
-        row.warehouse = erpnext_warehouse
-        row.batch_no = batch_no
-        row.serial_no = serial_no
-        row.use_serial_batch_fields = 1
-        row.wms_stock_type = stock_type
-        kept.append(row)
-    if not kept: frappe.throw(_("No matching Purchase Receipt rows found for Goods Issue {0}").format(doc.name))
-    ret.items = kept
-    ret.flags.ignore_permissions = True
-    ret.flags.wms_managed_posting = True
-    ret.insert(ignore_permissions=True)
-    ret.submit()
+    # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
+    # sequence needs to run as the system user, not just the initial mapper call.
+    with _as_system_user():
+        ret = make_purchase_return(pr_name)
+        template_by_pr_item = {item.purchase_receipt_item: item for item in ret.items}
+        kept = []
+        for (pr_item, batch_no, serial_no, stock_type), qty in groups.items():
+            template = template_by_pr_item.get(pr_item)
+            if not template: continue
+            row = ret.append("items", {})
+            for field in _RETURN_PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
+            row.qty = -(qty / flt(template.conversion_factor or 1))
+            row.stock_qty = -qty
+            row.warehouse = erpnext_warehouse
+            row.batch_no = batch_no
+            row.serial_no = serial_no
+            row.use_serial_batch_fields = 1
+            row.wms_stock_type = stock_type
+            kept.append(row)
+        if not kept: frappe.throw(_("No matching Purchase Receipt rows found for Goods Issue {0}").format(doc.name))
+        ret.items = kept
+        ret.flags.ignore_permissions = True
+        ret.flags.wms_managed_posting = True
+        ret.insert(ignore_permissions=True)
+        ret.submit()
     doc.db_set("erpnext_purchase_receipt", ret.name, update_modified=False)
 
 def reverse_goods_issue(doc):
