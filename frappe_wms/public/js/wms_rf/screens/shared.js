@@ -9,7 +9,9 @@ export const TASK_TYPE_GROUPS = {
   // group with inbound (as do Unload/Deconsolidation).
   inbound: ["Unload", "Putaway", "Deconsolidation", "Cross Dock"],
   internal: ["Internal Move", "Posting Change", "Inventory Count", "Consolidation"],
-  outbound: ["Pick", "Stage", "Load"],
+  // Sort is Two-Step Picking's follow-up hop (picked to a shared staging area, then sorted on to
+  // the actual delivery) - same picker, same part of the flow as Pick itself.
+  outbound: ["Pick", "Sort", "Stage", "Load"],
 };
 
 export const SECTIONS = {

@@ -61,18 +61,42 @@ test("a scan that lands in the quantity box is not typed into it", async ({ page
   await expect(page).toHaveURL(/\/quantity$/);
 });
 
-test("quantity validation: zero, letters and over-remaining are rejected inline", async ({ page, request }) => {
+test("quantity validation: zero and letters are rejected inline; more than planned is allowed through", async ({ page, request }) => {
   const t = await makeTask(request, { planned_quantity: 5 });
   await openTask(page, t);
   await scan(page, "E2E-WH-A1");
   const qty = page.locator('[data-fk="qty"]');
-  for (const [text, msg] of [["0", /greater than zero/], ["abc", /number/], ["9", /Only 5/]]) {
+  for (const [text, msg] of [["0", /greater than zero/], ["abc", /number/]]) {
     await qty.fill(text); await enter(page);
     await expect(view(page).locator(".field-error")).toContainText(msg);
     await expect(page).toHaveURL(/\/quantity$/);
   }
-  await qty.fill("2,5"); await enter(page);   // decimal comma from a phone keypad
+  // More than planned (5) is a real find (Unload/Putaway) - accepted here, capped server-side, with the
+  // excess posted to the difference bin (see "over-confirmation" below), not rejected as invalid input.
+  await qty.fill("9"); await enter(page);
   await expect(page).toHaveURL(/\/destination$/);
+});
+
+test("quantity validation: a decimal comma from a phone keypad is accepted", async ({ page, request }) => {
+  const t = await makeTask(request, { planned_quantity: 5 });
+  await openTask(page, t);
+  await scan(page, "E2E-WH-A1");
+  await page.locator('[data-fk="qty"]').fill("2,5"); await enter(page);
+  await expect(page).toHaveURL(/\/destination$/);
+});
+
+test("over-confirmation: more than planned is capped on the task and the excess is called out before and after confirming", async ({ page, request }) => {
+  const t = await makeTask(request, { planned_quantity: 5 });
+  await openTask(page, t);
+  await scan(page, "E2E-WH-A1");
+  await page.locator('[data-fk="qty"]').fill("8"); await enter(page);
+  await scan(page, "E2E-WH-B1");
+  await expect(view(page)).toContainText(/3.*difference bin/i);
+  await page.getByRole("button", { name: /Confirm/ }).click();
+  await expect(notice(page)).toContainText(/extra sent to the difference bin/i);
+  const done = await getTask(request, t.name);
+  expect(done.status).toBe("Confirmed");
+  expect(done.confirmed_quantity).toBe(5); // capped at planned - the other 3 went to the difference bin, not this task
 });
 
 test("partial quantity leaves the task open for the rest", async ({ page, request }) => {

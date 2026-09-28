@@ -196,8 +196,10 @@ function stepView(wrap, step) {
           f.dst = m; f.dstOk = true; return advance("destination");
         } }));
   } else if (step === "review") {
-    box.append(KV([[_("Product"), t.product], [_("Quantity"), `${f.qty} ${t.stock_uom || ""}`], [_("From"), f.src || taskLocation(t, "src")], [_("To"), f.dst || taskLocation(t, "dst")]]),
-      h("div", { style: { height: "14px" } }),
+    const excess = round6(parseNum(f.qty) - remaining(t));
+    box.append(KV([[_("Product"), t.product], [_("Quantity"), `${f.qty} ${t.stock_uom || ""}`], [_("From"), f.src || taskLocation(t, "src")], [_("To"), f.dst || taskLocation(t, "dst")]]));
+    if (excess > 0) box.append(Hint(_("{0} more than planned ({1}) - the extra goes to the warehouse's difference bin, not here.", [fmtQty(excess), fmtQty(remaining(t))])));
+    box.append(h("div", { style: { height: "14px" } }),
       Field({ name: "hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan or leave as suggested"), value: f.hu,
         hint: _("Defaults to {0} if left as is.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
         onCommit: () => { persist(); } }));
@@ -218,9 +220,11 @@ function next(step) {
   const t = st.task, f = st.form;
   if (step === "quantity") {
     if (!isNumeric(f.qty)) return fail("qty", _("Enter a number."));
-    const qty = parseNum(f.qty), rem = remaining(t);
+    const qty = parseNum(f.qty);
     if (qty <= 0) return fail("qty", _("Enter a quantity greater than zero."));
-    if (round6(qty) > rem) return fail("qty", _("Only {0} {1} remaining on this task.", [fmtQty(rem), t.stock_uom || ""]));
+    // More than planned is allowed (a real find, e.g. Unload/Putaway) - it is capped at the task's
+    // own plan server-side and the excess is posted to the warehouse's difference bin instead of
+    // being silently absorbed or blocked outright; the review step below says so.
     f.qty = fmtQty(qty); f.qtyOk = true; return advance("quantity");
   }
   // A scan step advanced with the button instead of a scan: validate what is typed in the field.
@@ -231,7 +235,7 @@ function next(step) {
 async function confirmTask() {
   const t = st.task, f = st.form;
   const qty = parseNum(f.qty);
-  if (!(qty > 0) || round6(qty) > remaining(t)) { nav.go(href("task", st.name, "quantity")); return; }
+  if (!(qty > 0)) { nav.go(href("task", st.name, "quantity")); return; }
   // Based on what was confirmed when this draft began, not now: after a lost response + reload the task already shows the
   // new total, and a key derived from that would no longer match the first attempt's - defeating the server-side dedupe.
   const key = `${t.name}:${fmtQty(f.base != null ? f.base : t.confirmed_quantity || 0)}:${ensureKey(f, "TC")}`;
@@ -248,7 +252,10 @@ async function confirmTask() {
   await run(refreshSession, { busy: false, exclusive: false });
   const released = result.released_tasks || [];
   const nextTask = released.length ? S.tasks.find((x) => released.includes(x.name)) : null;
-  const msg = _("{0} {1} ({2})", [_(type), _(result.status || "Confirmed").toLowerCase(), fmtQty(result.quantity != null ? result.quantity : qty)]);
+  let msg = _("{0} {1} ({2})", [_(type), _(result.status || "Confirmed").toLowerCase(), fmtQty(result.quantity != null ? result.quantity : qty)]);
+  const excess = round6(qty - flt(result.quantity != null ? result.quantity : qty));
+  if (excess > 0) msg += ` — ${_("{0} extra sent to the difference bin", [fmtQty(excess)])}`;
+  if (result.sort_task) msg += ` — ${_("a Sort task was created to move it on")}`;
   const steps = Math.max(0, nav.depth - (Number.isInteger(w0) ? w0 : nav.depth - 1));
   if (nextTask) { notify.ok(`${msg} — ${_("next: {0} · {1}", [_(nextTask.task_type), taskLocation(nextTask, "src")])}`); nav.unwind(steps, href("task", nextTask.name)); }
   else { notify.ok(msg); nav.unwind(steps + 1, `#/tasks/${groupOfType(type)}`); }
