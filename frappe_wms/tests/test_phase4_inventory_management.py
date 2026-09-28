@@ -3,7 +3,7 @@ from frappe.tests import IntegrationTestCase
 
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.scanner import confirm_task
-from frappe_wms.api.inventory import snapshot_count, record_counts, post_count, complete_inspection, check_replenishment_needs
+from frappe_wms.api.inventory import snapshot_count, record_counts, post_count, cancel_count, complete_inspection, check_replenishment_needs
 from frappe_wms.services.inventory_count import list_open_counts
 from frappe_wms.services.stock import transfer_stock
 
@@ -118,12 +118,22 @@ class TestPhase4InventoryManagement(IntegrationTestCase):
         self.assertIn(count.name, [c["name"] for c in open_counts])
 
     def test_physical_inventory_count_requires_all_lines_counted_before_posting(self):
+        # snapshot_count blocks bulk_bin for removal (see services/inventory_count.py); the only
+        # release points are post_count reaching "Posted" or cancel_count - a deliberately-failed
+        # post_count here (by design: the count was never actually recorded) reaches neither, so
+        # this test must explicitly cancel the count or bulk_bin stays removal_blocked=1 for
+        # every other test in this class for the rest of the run (this project's own documented
+        # "a bin left blocked by an earlier test" gotcha - see the Phase 1 D9 fix for the exact
+        # same class of bug).
         self._receive_and_putaway(4)
         count = frappe.get_doc({"doctype": "WMS Physical Inventory Count", "warehouse": self.warehouse, "storage_bin": self.bulk_bin, "count_date": frappe.utils.nowdate()})
         count.insert(ignore_permissions=True)
         snapshot_count(count.name)
-        with self.assertRaises(frappe.ValidationError):
-            post_count(count.name)
+        try:
+            with self.assertRaises(frappe.ValidationError):
+                post_count(count.name)
+        finally:
+            cancel_count(count.name)
 
     def test_quality_inspection_splits_stock_between_pass_and_fail(self):
         hu = self._receive_and_putaway(20)

@@ -21,6 +21,7 @@
     "required_batch",
     "required_serial_no",
     "required_stock_type",
+    "required_characteristics",
     "partial_delivery_allowed",
     "sales_order",
     "sales_order_item",
@@ -121,6 +122,12 @@
       "fieldtype": "Link",
       "options": "WMS Stock Type",
       "reqd": 1
+    },
+    {
+      "fieldname": "required_characteristics",
+      "label": "Required Batch Characteristics",
+      "fieldtype": "Small Text",
+      "description": "SAP EWM batch determination: a JSON object of {characteristic: value} pairs, e.g. {\"Grade\": \"A\"} - only a batch whose own WMS Batch Characteristic Value rows satisfy every one of these (exact match) is eligible for allocation. Leave blank for no characteristic requirement (the normal case) - this narrows the removal-strategy-ordered candidate list further, it never replaces Required Batch/FEFO/Removal Rules. Not a Table field: Outbound Delivery Item is itself a child doctype, and Frappe does not reload a child row's own nested child table when its parent loads."
     },
     {
       "fieldname": "partial_delivery_allowed",

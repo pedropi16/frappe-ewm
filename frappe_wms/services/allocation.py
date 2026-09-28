@@ -1,3 +1,4 @@
+import json
 import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate, nowdate
@@ -22,10 +23,39 @@ NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Pa
 # here ever queried Handling Unit.status at all).
 NON_ALLOCATABLE_HU_STATUSES = ("Blocked", "Cancelled", "Shipped", "Loaded")
 
+def _matching_batches_for_characteristics(requirements):
+    # SAP EWM batch determination, scoped down: an exact-match filter, not a full classification
+    # system with value ranges/tolerances. A batch qualifies only if it has EVERY required
+    # characteristic at EXACTLY the required value - one query per requirement, intersected,
+    # since "has all of N (characteristic, value) pairs" isn't expressible as a single filter
+    # against a table keyed one row per (batch, characteristic).
+    matching = None
+    for characteristic, value in requirements.items():
+        batches = set(frappe.get_all("WMS Batch Characteristic Value",
+            filters={"characteristic": characteristic, "value": value}, pluck="batch_no"))
+        matching = batches if matching is None else (matching & batches)
+        if not matching: break
+    return matching or set()
+
+def _required_characteristics(row):
+    # A JSON string on the row, not a Table field - Outbound Delivery Item is itself a child
+    # doctype, and Frappe never reloads a child row's own nested child table once its parent
+    # (Outbound Delivery) is the thing being loaded (confirmed empirically: it round-trips fine
+    # in memory before the first save, but comes back empty after insert+reload).
+    raw = row.get("required_characteristics")
+    return json.loads(raw) if raw else {}
+
 def _candidate_balances(row, warehouse):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
-    if row.required_batch: filters["batch_no"]=row.required_batch
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
+    requirements = _required_characteristics(row)
+    if requirements:
+        matching_batches = _matching_batches_for_characteristics(requirements)
+        if row.required_batch: matching_batches &= {row.required_batch}
+        if not matching_batches: return []
+        filters["batch_no"] = ["in", list(matching_batches)]
+    elif row.required_batch:
+        filters["batch_no"] = row.required_batch
     balances = frappe.get_all("WMS Stock Balance",filters=filters,fields=["*"],order_by="first_receipt_date asc, name asc")
 
     item_group = frappe.db.get_value("Item", row.item, "item_group")

@@ -209,3 +209,58 @@ class TestAllocation(IntegrationTestCase):
             self.assertFalse(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name, "storage_bin": self.blocked_bin}))
         finally:
             frappe.db.set_value("Storage Bin", self.blocked_bin, "removal_blocked", 0)
+
+    def _set_characteristics(self, batch_id, values):
+        from frappe_wms.services.batch_characteristics import set_batch_characteristics
+        set_batch_characteristics(batch_id, values)
+
+    def test_allocation_only_uses_a_batch_matching_every_required_characteristic(self):
+        item = self._make_fefo_item("TEST-ALLOC-CHAR-1")
+        if not frappe.db.exists("WMS Product", {"item": item}):
+            frappe.get_doc({"doctype": "WMS Product", "item": item, "stock_uom": self.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        self._make_batch("CHAR-GRADE-A", item)
+        self._make_batch("CHAR-GRADE-B", item)
+        self._set_characteristics("CHAR-GRADE-A", {"Grade": "A", "Color": "Red"})
+        self._set_characteristics("CHAR-GRADE-B", {"Grade": "B", "Color": "Red"})
+        # Grade-B posted first (receipt order) so plain FIFO would prefer it - proves the
+        # characteristic filter, not receipt order, is what excludes it.
+        post_entries([{"warehouse": self.warehouse, "product": item, "storage_bin": self.bulk_bin, "batch_no": "CHAR-GRADE-B",
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 5, "movement_type": "701"}],
+            "Storage Bin", self.bulk_bin, f"test-alloc-char-b:{frappe.generate_hash(length=8)}")
+        post_entries([{"warehouse": self.warehouse, "product": item, "storage_bin": self.blocked_bin, "batch_no": "CHAR-GRADE-A",
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 5, "movement_type": "701"}],
+            "Storage Bin", self.blocked_bin, f"test-alloc-char-a:{frappe.generate_hash(length=8)}")
+
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse,
+            "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
+            "items": [{"line_number": 1, "item": item, "requested_quantity": 5, "stock_uom": self.uom, "required_stock_type": "AVAILABLE",
+                "required_characteristics": frappe.as_json({"Grade": "A"})}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+
+        allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}, fields=["batch_no"])
+        self.assertTrue(allocations)
+        self.assertTrue(all(a.batch_no == "CHAR-GRADE-A" for a in allocations))
+
+    def test_allocation_with_unmatched_characteristics_allocates_nothing(self):
+        item = self._make_fefo_item("TEST-ALLOC-CHAR-2")
+        if not frappe.db.exists("WMS Product", {"item": item}):
+            frappe.get_doc({"doctype": "WMS Product", "item": item, "stock_uom": self.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        self._make_batch("CHAR-NOMATCH", item)
+        self._set_characteristics("CHAR-NOMATCH", {"Grade": "C"})
+        post_entries([{"warehouse": self.warehouse, "product": item, "storage_bin": self.bulk_bin, "batch_no": "CHAR-NOMATCH",
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 5, "movement_type": "701"}],
+            "Storage Bin", self.bulk_bin, f"test-alloc-char-nomatch:{frappe.generate_hash(length=8)}")
+
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse,
+            "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
+            "items": [{"line_number": 1, "item": item, "requested_quantity": 5, "stock_uom": self.uom, "required_stock_type": "AVAILABLE",
+                "required_characteristics": frappe.as_json({"Grade": "Z"})}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+
+        obd.reload()
+        self.assertEqual(flt(obd.items[0].allocated_quantity), 0)
+        self.assertFalse(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}))

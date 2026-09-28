@@ -1,0 +1,17 @@
+import frappe
+from frappe_wms.services.batch_characteristics import (
+    set_batch_characteristics as _set_batch_characteristics,
+    get_batch_characteristics as _get_batch_characteristics,
+)
+
+
+@frappe.whitelist()
+def set_batch_characteristics(batch_no, values):
+    if isinstance(values, str):
+        values = frappe.parse_json(values)
+    return _set_batch_characteristics(batch_no, values)
+
+
+@frappe.whitelist()
+def get_batch_characteristics(batch_no):
+    return _get_batch_characteristics(batch_no)
