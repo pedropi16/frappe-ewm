@@ -107,3 +107,83 @@ class TestKPIDashboard(IntegrationTestCase):
 
         alerts = get_alerts(self.warehouse)
         self.assertIn(count.name, [r.name for r in alerts["pending_approval_counts"]])
+
+    def test_get_alerts_surfaces_aged_open_task_but_not_a_fresh_one(self):
+        fresh = self._make_task()
+        aged = self._make_task()
+        frappe.db.set_value("Warehouse Task", aged.name, "modified", add_to_date(now_datetime(), hours=-5), update_modified=False)
+
+        alerts = get_alerts(self.warehouse)
+        open_names = [r.name for r in alerts["aged_open_tasks"]]
+        self.assertIn(aged.name, open_names)
+        self.assertNotIn(fresh.name, open_names)
+
+    def test_get_alerts_surfaces_stock_sitting_in_an_interim_bin_past_the_alert_age(self):
+        from frappe_wms.services.stock import post_entries
+        staging_type = f"{self.warehouse}-STAGE-ALERT"
+        staging_bin = f"{self.warehouse}-STAGE-ALERT-BIN"
+        if not frappe.db.exists("Storage Type", staging_type):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": self.warehouse, "storage_type_code": "STAGE-ALERT", "storage_type_name": "Stage Alert",
+                "storage_role": "Staging", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Bin", staging_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": staging_bin, "warehouse": self.warehouse, "storage_type": staging_type, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        item_code = "TEST-KPI-ALERT-INTERIM"
+        if not frappe.db.exists("Item", item_code):
+            item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+            frappe.get_doc({"doctype": "Item", "item_code": item_code, "item_name": item_code, "item_group": item_group, "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        post_entries([{
+            "warehouse": self.warehouse, "product": item_code, "storage_bin": staging_bin,
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 7, "movement_type": "701",
+        }], "Storage Bin", staging_bin, f"test-kpi-alert-interim:{frappe.generate_hash(length=8)}")
+        balance_name = frappe.db.get_value("WMS Stock Balance", {"storage_bin": staging_bin, "product": item_code}, "name")
+        frappe.db.set_value("WMS Stock Balance", balance_name, "last_movement_date", add_to_date(now_datetime(), hours=-5))
+
+        alerts = get_alerts(self.warehouse)
+        self.assertIn(balance_name, [r.name for r in alerts["stock_in_interim_bins"]])
+        # A normal Storage-role bin's stock, however old, is not an interim-bin alert.
+        self.assertNotIn(balance_name, [r.name for r in alerts.get("negative_quants", [])])
+
+    def test_get_alerts_surfaces_negative_quants(self):
+        from frappe_wms.services.stock import post_entries
+        item_code = "TEST-KPI-ALERT-NEGATIVE"
+        if not frappe.db.exists("Item", item_code):
+            item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+            frappe.get_doc({"doctype": "Item", "item_code": item_code, "item_name": item_code, "item_group": item_group, "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        # self.warehouse has allow_negative_stock=1 (see setUpClass) - a straight negative entry
+        # against a bin with no existing balance is this app's own documented way to produce one.
+        post_entries([{
+            "warehouse": self.warehouse, "product": item_code, "storage_bin": self.bin_a,
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": -3, "movement_type": "702",
+        }], "Storage Bin", self.bin_a, f"test-kpi-alert-negative:{frappe.generate_hash(length=8)}")
+
+        alerts = get_alerts(self.warehouse)
+        negative_products = [r.product for r in alerts["negative_quants"]]
+        self.assertIn(item_code, negative_products)
+
+    def test_get_alerts_surfaces_open_task_differences(self):
+        from frappe_wms.services.stock import post_entries
+        diff_bin = f"{self.warehouse}-DIFFBIN-ALERT"
+        if not frappe.db.exists("Storage Bin", diff_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": diff_bin, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        wh = frappe.get_doc("WMS Warehouse", self.warehouse)
+        if not wh.default_difference_bin:
+            wh.default_difference_bin = diff_bin
+            wh.save(ignore_permissions=True)
+        item_code = "TEST-KPI-ALERT-DIFF"
+        if not frappe.db.exists("Item", item_code):
+            item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+            frappe.get_doc({"doctype": "Item", "item_code": item_code, "item_name": item_code, "item_group": item_group, "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        post_entries([{
+            "warehouse": self.warehouse, "product": item_code, "storage_bin": self.bin_a,
+            "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 20, "movement_type": "701",
+        }], "Storage Bin", self.bin_a, f"test-kpi-alert-diff-seed:{frappe.generate_hash(length=8)}")
+        task = frappe.get_doc({
+            "doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": self.warehouse, "product": item_code,
+            "planned_quantity": 10, "stock_uom": self.uom, "source_bin": self.bin_a, "destination_bin": self.bin_b,
+            "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "301", "priority": "Normal", "status": "Open",
+        })
+        task.insert(ignore_permissions=True)
+        result = confirm_task(task.name, confirmed_quantity=13)
+
+        alerts = get_alerts(self.warehouse)
+        self.assertIn(result["difference"], [r.name for r in alerts["open_differences"]])

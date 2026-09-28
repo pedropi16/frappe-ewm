@@ -7,6 +7,11 @@ from frappe_wms.utils import wildcard_filter, require_wms_access
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 ALERT_AGE_HOURS = 4
+# Bins meant to hold stock only in transit - a receiving dock, a staging lane, a difference bin,
+# a production supply face. Real stock still sitting in one of these past the alert age is a
+# process that stalled somewhere (an un-put-away receipt, a delivery that never loaded, an
+# unresolved difference), not normal long-term storage.
+INTERIM_STORAGE_ROLES = ("Receiving", "Staging", "Difference", "Production Supply")
 
 @frappe.whitelist()
 def get_delivery_execution_status(delivery_name):
@@ -320,6 +325,9 @@ def get_alerts(warehouse):
     require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     cutoff = add_to_date(now_datetime(), hours=-ALERT_AGE_HOURS)
+    interim_bins = frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": ["in",
+        frappe.get_all("Storage Type", filters={"warehouse": warehouse, "storage_role": ["in", INTERIM_STORAGE_ROLES]}, pluck="name")]},
+        pluck="name")
     return {
         "pending_approval_counts": frappe.get_list("WMS Physical Inventory Count",
             filters={"warehouse": warehouse, "status": "Under Review"},
@@ -333,6 +341,29 @@ def get_alerts(warehouse):
         "stalled_warehouse_orders": frappe.get_list("Warehouse Order",
             filters={"warehouse": warehouse, "status": "Open", "assigned_resource": ["in", ["", None]], "creation": ["<", cutoff]},
             fields=["name", "activity", "queue", "priority", "status", "task_count", "creation"],
+            order_by="creation asc", limit=50),
+        # Broader than aged_exceptions: any task still open at all (not just ones already flagged
+        # Exception) that has sat untouched past the alert age - a resource that stalled mid-task,
+        # or work nobody ever picked up.
+        "aged_open_tasks": frappe.get_list("Warehouse Task",
+            filters={"warehouse": warehouse, "status": ["in", OPEN_TASK_STATUSES], "modified": ["<", cutoff]},
+            fields=["name", "task_type", "status", "product", "assigned_resource", "warehouse_order", "modified"],
+            order_by="modified asc", limit=50),
+        "stock_in_interim_bins": frappe.get_list("WMS Stock Balance",
+            filters={"warehouse": warehouse, "storage_bin": ["in", interim_bins or [""]], "quantity": [">", 0], "last_movement_date": ["<", cutoff]},
+            fields=["name", "product", "storage_bin", "stock_type", "handling_unit", "quantity", "last_movement_date"],
+            order_by="last_movement_date asc", limit=50) if interim_bins else [],
+        # A negative quant is always a data-integrity signal (a reversal or transfer raced ahead
+        # of its own source deduction, a manual DB edit, ...) - never a state this app's own
+        # posting logic should ever produce, so any hit here is worth a supervisor's attention
+        # regardless of age.
+        "negative_quants": frappe.get_list("WMS Stock Balance",
+            filters={"warehouse": warehouse, "quantity": ["<", 0]},
+            fields=["name", "product", "storage_bin", "stock_type", "handling_unit", "quantity", "modified"],
+            order_by="quantity asc", limit=50),
+        "open_differences": frappe.get_list("WMS Task Difference",
+            filters={"warehouse": warehouse, "status": "Open"},
+            fields=["name", "warehouse_task", "task_type", "product", "direction", "difference_quantity", "storage_bin", "creation"],
             order_by="creation asc", limit=50),
     }
 
