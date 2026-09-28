@@ -18,6 +18,16 @@ def post_goods_issue(doc):
         # default_door, which are validated against the same role on save).
         if storage_bin_role(hu.current_bin) != "Door":
             frappe.throw(_("HU {0} is in bin {1}, which is not configured as a Door - Goods Issue can only be posted from a Door bin").format(hu.name, hu.current_bin))
+        # WMS Product.serial_control is a per-product setting, not a global switch - "None" (the
+        # default) means this item is never expected to carry a serial at all, and most items
+        # should stay that way. "Required at Receipt"/"Always" were already enforced on the way
+        # in (services/receipt.py); "Required at Issue" and the issue side of "Always" were
+        # declared in the doctype's own option list but never actually checked anywhere,
+        # confirmed by grep - a product configured to require a serial on the way OUT could ship
+        # with none at all.
+        product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
+        if product and product.warehouse_managed and product.serial_control in ("Required at Issue", "Always") and not row.serial_no:
+            frappe.throw(_("Row {0}: {1} requires a serial number at issue").format(row.idx, row.item))
         # The HU's actual current bin (the door it was loaded to), not the delivery's staging
         # bin - loading may have moved it on since staging, and the stock ledger only has a
         # balance wherever the HU physically is now.
