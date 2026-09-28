@@ -17,6 +17,9 @@
     "stock_required",
     "confirmation_mode",
     "movement_type",
+    "picking_section",
+    "picking_strategy",
+    "pick_pack_pass_hu_type",
     "active"
   ],
   "fields": [
@@ -40,7 +43,7 @@
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count\nSort",
       "reqd": 1
     },
     {
@@ -80,6 +83,29 @@
       "fieldtype": "Link",
       "options": "WMS Movement Type",
       "reqd": 1
+    },
+    {
+      "fieldname": "picking_section",
+      "label": "Picking Strategy",
+      "fieldtype": "Section Break",
+      "depends_on": "eval:doc.activity=='Pick'"
+    },
+    {
+      "fieldname": "picking_strategy",
+      "label": "Picking Strategy",
+      "fieldtype": "Select",
+      "options": "Single-Step\nTwo-Step\nPick-Pack-Pass",
+      "default": "Single-Step",
+      "depends_on": "eval:doc.activity=='Pick'",
+      "description": "Pick activity only. Single-Step (default, unchanged behavior): picks straight to the Outbound Delivery's own staging bin. Two-Step: picks to the warehouse's shared picking staging area first (WMS Warehouse.default_picking_staging_bin), then auto-creates a follow-up Sort task moving it on to the delivery. Pick-Pack-Pass: picks straight into one shared destination HU per delivery (Pick Pack Pass HU Type below), skipping a separate packing step."
+    },
+    {
+      "fieldname": "pick_pack_pass_hu_type",
+      "label": "Pick-Pack-Pass HU Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "depends_on": "eval:doc.picking_strategy=='Pick-Pack-Pass'",
+      "description": "The Handling Unit Type auto-created (once per delivery, reused across every pick line for it) as the final shipping container a picker packs straight into."
     },
     {
       "fieldname": "active",

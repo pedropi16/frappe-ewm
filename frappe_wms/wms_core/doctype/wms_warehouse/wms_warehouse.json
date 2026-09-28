@@ -15,6 +15,7 @@
     "default_receiving_bin",
     "default_shipping_bin",
     "default_difference_bin",
+    "default_picking_staging_bin",
     "default_stock_type",
     "allow_negative_stock",
     "active"
@@ -68,6 +69,13 @@
       "label": "Default Difference Bin",
       "fieldtype": "Link",
       "options": "Storage Bin"
+    },
+    {
+      "fieldname": "default_picking_staging_bin",
+      "label": "Default Picking Staging Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Two-Step Picking's shared, order-agnostic first stop (see Warehouse Process Type.picking_strategy) - a Pick task under a Two-Step process type lands here, not the delivery's own staging bin, and a follow-up Sort task moves it on from here once confirmed."
     },
     {
       "fieldname": "default_stock_type",

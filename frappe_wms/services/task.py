@@ -162,6 +162,42 @@ def _create_pick_tasks_from_allocations(allocations, strategy, wave=None):
         frappe.db.set_value("Stock Allocation", allocation.name, "status", "Released")
     return created
 
+def _pick_pack_pass_hu(outbound_delivery, warehouse, staging_bin, hu_type):
+    # One shared destination HU per delivery, reused across every pick line for it (a delivery
+    # with several lines/products calls this once per line, same as a Warehouse Order's own
+    # pick_handling_unit in attach_task - but scoped to ONE specific delivery, not a batch of
+    # tasks that might span several deliveries).
+    existing = frappe.db.get_value("Outbound Delivery", outbound_delivery, "pick_pack_pass_hu")
+    if existing: return existing
+    hu = frappe.get_doc({
+        "doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10),
+        "hu_type": hu_type, "current_bin": staging_bin, "warehouse": warehouse,
+    })
+    hu.flags.wms_service_update = True
+    hu.insert(ignore_permissions=True)
+    frappe.db.set_value("Outbound Delivery", outbound_delivery, "pick_pack_pass_hu", hu.name)
+    return hu.name
+
+def _pick_destination(process_type, first):
+    # (destination_bin, destination_hu, requires_sort_after_pick, unpack_at_destination) for a
+    # Pick task, branching on the matching Warehouse Process Type's picking_strategy.
+    # Single-Step (default) is exactly today's behavior, unchanged: pick straight to the
+    # delivery's own staging bin.
+    strategy = process_type.picking_strategy or "Single-Step"
+    if strategy == "Two-Step":
+        shared_bin = frappe.db.get_value("WMS Warehouse", first._warehouse, "default_picking_staging_bin")
+        if not shared_bin: frappe.throw(_("WMS Warehouse {0} has no Default Picking Staging Bin configured for Two-Step Picking").format(first._warehouse))
+        # Deliberately no HU, same as a Deconsolidation line splitting stock loose into a bin -
+        # unpack_at_destination=1 so confirm_task never falls back to the source HU (that source
+        # HU is a storage-side pallet/bin, not something that belongs sitting in a shared
+        # multi-order staging area).
+        return shared_bin, None, 1, 1
+    if strategy == "Pick-Pack-Pass":
+        if not process_type.pick_pack_pass_hu_type: frappe.throw(_("Warehouse Process Type {0} needs a Pick-Pack-Pass HU Type configured").format(process_type.name))
+        hu = _pick_pack_pass_hu(first.outbound_delivery, first._warehouse, first._staging_bin, process_type.pick_pack_pass_hu_type)
+        return first._staging_bin, hu, 0, 0
+    return first._staging_bin, None, 0, 0
+
 def _create_pick_task_for_group(allocations, wave, batch_key):
     first = allocations[0]
     process_type_name = determine_process_type(first._warehouse, "Pick", item=first.product, stock_type=first.stock_type, priority_level=first._priority, default="OB_PICK")
@@ -171,11 +207,13 @@ def _create_pick_task_for_group(allocations, wave, batch_key):
     sequence = frappe.db.get_value("Storage Bin", first.storage_bin, "sequence") or 0
     priority_order = ("Low", "Normal", "High", "Urgent")
     priority = max((a._priority or "Normal" for a in allocations), key=priority_order.index)
+    destination_bin, destination_hu, requires_sort_after_pick, unpack_at_destination = _pick_destination(process_type, first)
     task = frappe.get_doc({
         "doctype": "Warehouse Task", "stock_allocation": first.name, "task_type": "Pick",
         "warehouse": first._warehouse, "product": first.product, "planned_quantity": total_qty, "stock_uom": stock_uom,
         "batch_no": first.batch_no, "serial_no": first.serial_no, "source_bin": first.storage_bin,
-        "destination_bin": first._staging_bin, "source_hu": first.handling_unit,
+        "destination_bin": destination_bin, "source_hu": first.handling_unit, "destination_hu": destination_hu,
+        "requires_sort_after_pick": requires_sort_after_pick, "unpack_at_destination": unpack_at_destination,
         "stock_type_from": first.stock_type, "stock_type_to": first.stock_type,
         "movement_type": process_type.movement_type, "priority": priority or "Normal", "status": "Open",
         "sequence": sequence, "wave": wave,
@@ -431,12 +469,39 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         create_print_spool("Warehouse Task", task.name, "Putaway Confirmed", task.warehouse)
     if fully_confirmed and task.task_type == "Cross Dock":
         _apply_cross_dock_fulfillment(task)
+    sort_task = None
+    if fully_confirmed and task.task_type == "Pick" and task.requires_sort_after_pick:
+        sort_task = _create_sort_task_after_pick(task)
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
     if fully_confirmed: released_tasks += _release_predecessor_gated_tasks(task.name)
     result = {"task": task.name, "status": status, "quantity": posted_qty, "released_tasks": released_tasks}
     if difference_name: result["difference"] = difference_name
+    if sort_task: result["sort_task"] = sort_task
     return result
+
+def _create_sort_task_after_pick(task):
+    # Two-Step Picking's second hop: the Pick task's own destination was the warehouse's shared
+    # picking staging area (see _pick_destination), not the delivery this stock is actually for -
+    # a Sort task moves it on from there to the delivery's own staging bin. Not tied to the
+    # original Stock Allocation (that was already fulfilled the moment the Pick task confirmed;
+    # this is a pure physical relocation, no allocation/delivery-quantity bookkeeping to redo).
+    outbound_delivery = frappe.db.get_value("Stock Allocation", task.stock_allocation, "outbound_delivery") if task.stock_allocation else None
+    if not outbound_delivery: return None
+    delivery_staging_bin = frappe.db.get_value("Outbound Delivery", outbound_delivery, "staging_bin")
+    if not delivery_staging_bin: return None
+    process_type_name = determine_process_type(task.warehouse, "Sort", item=task.product, stock_type=task.stock_type_to or task.stock_type_from, default="OB_SORT")
+    process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
+    sort_task = frappe.get_doc({
+        "doctype": "Warehouse Task", "task_type": "Sort", "warehouse": task.warehouse, "product": task.product,
+        "planned_quantity": task.confirmed_quantity, "stock_uom": task.stock_uom, "batch_no": task.batch_no, "serial_no": task.serial_no,
+        "source_bin": task.destination_bin, "destination_bin": delivery_staging_bin,
+        "stock_type_from": task.stock_type_to or task.stock_type_from, "stock_type_to": task.stock_type_to or task.stock_type_from,
+        "movement_type": process_type.movement_type, "priority": task.priority or "Normal", "status": "Open",
+    })
+    attach_task(sort_task, frappe.generate_hash(length=10), reference_doctype="Outbound Delivery", reference_name=outbound_delivery)
+    sort_task.insert(ignore_permissions=True)
+    return sort_task.name
 
 def _apply_cross_dock_fulfillment(task):
     # Cross-docked stock is staged directly and never sits in an allocatable bin (Staging is

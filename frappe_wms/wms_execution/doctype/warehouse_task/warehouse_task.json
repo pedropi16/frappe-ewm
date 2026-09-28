@@ -89,7 +89,7 @@
       "fieldname": "task_type",
       "label": "Task Type",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nRepack",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nRepack\nSort",
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
@@ -175,6 +175,13 @@
       "label": "Move Top HU",
       "fieldtype": "Check",
       "default": 0
+    },
+    {
+      "fieldname": "requires_sort_after_pick",
+      "label": "Requires Sort After Pick",
+      "fieldtype": "Check",
+      "default": 0,
+      "description": "Set when this Pick task was created under a Two-Step Picking process type - it lands in the warehouse's shared picking staging area, not the delivery's own staging bin, and confirming it fully auto-creates a follow-up Sort task to move the picked quantity on to the actual delivery."
     },
     {
       "fieldname": "stock_type_from",

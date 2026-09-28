@@ -16,6 +16,7 @@
     "priority",
     "route",
     "staging_bin",
+    "pick_pack_pass_hu",
     "door",
     "status",
     "allocation_status",
@@ -86,6 +87,14 @@
       "label": "Staging Bin",
       "fieldtype": "Link",
       "options": "Storage Bin"
+    },
+    {
+      "fieldname": "pick_pack_pass_hu",
+      "label": "Pick-Pack-Pass HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "read_only": 1,
+      "description": "Auto-created once for this delivery under a Pick-Pack-Pass process type - every pick line for it lands directly in this one shared HU, skipping a separate packing step."
     },
     {
       "fieldname": "door",
