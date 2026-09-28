@@ -1,6 +1,17 @@
 import { _ } from "#wms/core/i18n.js";
 import { AppError, friendlyStatus, messageFromBody } from "#wms/core/errors.js";
 
+// A deploy of this app's public/ JS/CSS is invisible to a browser until BOTH frappe-frontend-1
+// and every backend-role container are updated (frontend serves /assets/ directly, bypassing the
+// backend entirely) - AND a reverse proxy in front of the site may itself cache .js/.css by URL
+// for up to 30 minutes independent of either, even once both containers are current. Confirmed
+// live: erp.pinohomelab.duckdns.org sits behind nginx-proxy-manager with "Cache Assets" on
+// (conf.d/include/assets.conf, proxy_cache_valid any 30m, keyed on the full request URI including
+// this app's own content-hash query string) - a stale hash gets cached there the moment it's
+// first requested and is then served back verbatim, including to a browser that only just loaded
+// a supposedly-fresh page. After any RF-app deploy, verify what a real request actually returns
+// (not just what both containers hold on disk) before treating the deploy as live.
+
 let config = { csrf: "", onSessionExpired: () => {}, fetch: (...a) => fetch(...a), timeoutMs: 25000 };
 export function configureApi(patch) { config = { ...config, ...patch }; }
 
