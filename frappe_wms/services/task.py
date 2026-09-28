@@ -17,6 +17,17 @@ TASK_TYPE_BY_REQUEST = {
     "Cross Dock": "Cross Dock",
 }
 
+def _split_by_full_pallet(remaining, full_qty):
+    # SAP EWM-style task splitting: a request for more than one full pallet's worth becomes one
+    # task per full pallet (plus a remainder task), each free to land in its own bin, rather than
+    # one task instructing a resource to move an unrealistically large quantity in one go.
+    if not full_qty or remaining <= full_qty: return [remaining]
+    chunks, left = [], remaining
+    while left > 0:
+        chunks.append(min(left, full_qty))
+        left -= full_qty
+    return chunks
+
 def create_tasks_for_request(request_name, batch_key=None):
     frappe.db.sql("select name from `tabWarehouse Request` where name=%s for update", request_name)
     request = frappe.get_doc("Warehouse Request", request_name)
@@ -28,18 +39,39 @@ def create_tasks_for_request(request_name, batch_key=None):
     process_type = frappe.get_cached_doc("Warehouse Process Type", request.process_type) if request.process_type else None
     movement_type = process_type.movement_type if process_type else None
     if not movement_type: frappe.throw(_("Warehouse Process Type must define a movement type before tasking"))
-    destination_bin = request.destination_bin
-    if not destination_bin and process_type and process_type.destination_required:
-        hu_type = frappe.db.get_value("Handling Unit", request.source_hu, "hu_type") if request.source_hu else None
-        source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
-        gross_weight_per_unit = frappe.db.get_value("WMS Product", request.product, "gross_weight_per_unit")
-        incoming_weight = flt(gross_weight_per_unit) * remaining if gross_weight_per_unit else None
-        destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product, "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type, "incoming_weight": incoming_weight, "destination_hu": request.destination_hu or request.source_hu})
-    task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": remaining, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": f"WT:{request.name}"})
-    attach_task(task, batch_key or frappe.generate_hash(length=10), reference_doctype="Warehouse Request", reference_name=request.name)
-    task.insert(ignore_permissions=True)
+
+    full_qty = None
+    # Splitting by full-pallet quantity only makes sense when the system still has to pick a
+    # destination bin (and, implicitly, a destination HU) per chunk - a request whose
+    # destination_bin/destination_hu is already fixed (the normal Replenish/direct-move case: a
+    # specific pick-face bin, or an existing HU to add into) can only ever become one task,
+    # however large, since there is nowhere else for a second chunk to go.
+    if process_type and process_type.destination_required and not request.destination_bin and not request.destination_hu:
+        from frappe_wms.services.handling_unit import full_hu_quantity  # local: handling_unit imports task.my_resource
+        full_qty = full_hu_quantity(request.product)
+    chunks = _split_by_full_pallet(remaining, full_qty)
+    batch_key = batch_key or frappe.generate_hash(length=10)
+    reserved_hu_counts = {}
+    created = []
+    for chunk_qty in chunks:
+        destination_bin = request.destination_bin
+        if not destination_bin and process_type and process_type.destination_required:
+            hu_type = frappe.db.get_value("Handling Unit", request.source_hu, "hu_type") if request.source_hu else None
+            source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
+            gross_weight_per_unit = frappe.db.get_value("WMS Product", request.product, "gross_weight_per_unit")
+            incoming_weight = flt(gross_weight_per_unit) * chunk_qty if gross_weight_per_unit else None
+            destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product,
+                "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type,
+                "incoming_weight": incoming_weight, "destination_hu": request.destination_hu or request.source_hu,
+                "reserved_hu_counts": reserved_hu_counts})
+            reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
+        idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
+        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": idempotency_key})
+        attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name)
+        task.insert(ignore_permissions=True)
+        created.append(task.name)
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
-    return task.name
+    return created[0] if len(created) == 1 else created
 
 # confirm_task's destination_hu resolution defaults an unspecified destination to "the same HU
 # it came from" - correct for a task confirmed later at the RF, where a resource is physically

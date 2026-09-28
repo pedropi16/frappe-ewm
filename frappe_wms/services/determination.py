@@ -59,13 +59,20 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context):
     if section: filters["storage_section"]=section
     bins=frappe.get_all("Storage Bin",filters=filters,
         fields=["name","maximum_hus","maximum_weight","sequence","aisle"],order_by="sequence asc")
+    # reserved_hu_counts: a same-call, not-yet-posted count of HUs already assigned to a bin by
+    # an earlier chunk of the same oversized request (task.py's full-pallet task splitting).
+    # live_hu_count only sees what's actually posted, so without this, splitting a large
+    # quantity into several full-pallet chunks within one call would rank (and pass capacity
+    # checks against) the very same "emptiest"/"first empty" bin for every chunk, ignoring the
+    # chunks it just handed that same bin moments earlier in this same loop.
+    reserved = context.get("reserved_hu_counts") or {}
     # Ranking strategies (Least Utilized Bin, Bulk, First Empty Bin) need each bin's real,
     # right-now fill level, not the hourly-stale cached field - two putaways within the same
     # hour used to both rank the same bin as "emptiest" (see bin_rules.live_hu_count).
-    for b in bins: b.current_hu_count = live_hu_count(b.name)
+    for b in bins: b.current_hu_count = live_hu_count(b.name) + reserved.get(b.name, 0)
     return [b for b in bins if not bin_violations(b.name, item=context.get("item"), stock_type=context.get("stock_type"),
         hu_type=context.get("hu_type"), batch_no=context.get("batch_no"), destination_hu=context.get("destination_hu"),
-        incoming_weight=context.get("incoming_weight"), incoming_hu_count=context.get("incoming_hu_count", 1))]
+        incoming_weight=context.get("incoming_weight"), incoming_hu_count=flt(context.get("incoming_hu_count", 1)) + reserved.get(b.name, 0))]
 
 def determine_destination_bin(context):
     rules=frappe.get_all("Bin Determination Rule",filters={"active":1,"warehouse":context["warehouse"],"activity":context["activity"]},fields=["*"],order_by="priority asc")
