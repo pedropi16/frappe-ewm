@@ -14,6 +14,14 @@
     "item_group",
     "stock_type",
     "maximum_tasks",
+    "limits_section",
+    "maximum_weight",
+    "maximum_volume",
+    "column_break_limits",
+    "standard_minutes_per_task",
+    "maximum_minutes",
+    "packing_profile_section",
+    "pick_hu_type",
     "active"
   ],
   "fields": [
@@ -60,6 +68,51 @@
       "fieldtype": "Int",
       "description": "Once an open Warehouse Order matching this rule reaches this many tasks, further tasks spill into a new Warehouse Order instead of joining it. Leave blank for no limit.",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "limits_section",
+      "label": "Additional Limits",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "maximum_weight",
+      "label": "Maximum Weight per Warehouse Order",
+      "fieldtype": "Float",
+      "description": "Optional - leave blank for no weight limit. Uses whatever unit WMS Product's Gross Weight per Unit is recorded in; once an open Warehouse Order's accumulated task weight would exceed this, further tasks spill into a new Warehouse Order."
+    },
+    {
+      "fieldname": "maximum_volume",
+      "label": "Maximum Volume per Warehouse Order",
+      "fieldtype": "Float",
+      "description": "Optional - leave blank for no volume limit. Uses whatever unit WMS Product's Volume per Unit is recorded in."
+    },
+    {
+      "fieldname": "column_break_limits",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "standard_minutes_per_task",
+      "label": "Standard Minutes per Task",
+      "fieldtype": "Float",
+      "description": "A rough per-task time estimate used only to cap a Warehouse Order against Maximum Minutes below - not a real time-and-motion measurement."
+    },
+    {
+      "fieldname": "maximum_minutes",
+      "label": "Maximum Estimated Minutes per Warehouse Order",
+      "fieldtype": "Float",
+      "description": "Optional - leave blank for no time limit. Only takes effect when Standard Minutes per Task is also set."
+    },
+    {
+      "fieldname": "packing_profile_section",
+      "label": "Packing Profile",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "pick_hu_type",
+      "label": "Pick HU Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "description": "Pick activity rules only: every task bundled into one Warehouse Order under this rule shares one auto-created Handling Unit of this type as its destination (mirrors SAP EWM's packing profile). Leave blank to keep today's behavior, where the picker's own scan decides the destination HU."
     },
     {
       "fieldname": "active",

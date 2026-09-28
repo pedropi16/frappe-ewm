@@ -19,6 +19,10 @@
     "blocking_reason",
     "task_count",
     "confirmed_count",
+    "total_weight",
+    "total_volume",
+    "estimated_minutes",
+    "pick_handling_unit",
     "reference_doctype",
     "reference_name",
     "started_at",
@@ -111,6 +115,37 @@
       "fieldtype": "Int",
       "read_only": 1,
       "default": 0
+    },
+    {
+      "fieldname": "total_weight",
+      "label": "Total Weight",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "default": 0,
+      "description": "Sum of every attached task's product weight, per WO Creation Rule's Maximum Weight (see warehouse_order.determine_queue / attach_task)."
+    },
+    {
+      "fieldname": "total_volume",
+      "label": "Total Volume",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "default": 0
+    },
+    {
+      "fieldname": "estimated_minutes",
+      "label": "Estimated Minutes",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "default": 0,
+      "description": "Sum of the matching WO Creation Rule's Standard Minutes per Task across every attached task - a rough estimate, not a real time-and-motion measurement."
+    },
+    {
+      "fieldname": "pick_handling_unit",
+      "label": "Pick Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "read_only": 1,
+      "description": "Auto-created shared destination HU for every Pick task bundled into this Warehouse Order, when its matching WO Creation Rule specifies a Pick HU Type (SAP EWM packing profile equivalent)."
     },
     {
       "fieldname": "reference_doctype",

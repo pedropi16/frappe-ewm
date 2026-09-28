@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import flt, now_datetime
 from frappe_wms.utils import require_role
 
 RESOURCE_ROLES = ("WMS Operator", "WMS Receiver", "WMS Picker", "WMS Packer", "WMS Loader", "WMS Supervisor")
@@ -25,31 +25,64 @@ def determine_queue(warehouse, activity, storage_type=None, activity_area=None):
 
 def _matching_wo_creation_rule(warehouse, activity, item_group=None, stock_type=None):
     for rule in frappe.get_all("WO Creation Rule", filters={"warehouse": warehouse, "activity": activity, "active": 1},
-            fields=["name", "item_group", "stock_type", "maximum_tasks"], order_by="priority asc"):
+            fields=["name", "item_group", "stock_type", "maximum_tasks", "maximum_weight", "maximum_volume",
+                "standard_minutes_per_task", "maximum_minutes", "pick_hu_type"], order_by="priority asc"):
         if rule.item_group and rule.item_group != item_group: continue
         if rule.stock_type and rule.stock_type != stock_type: continue
         return rule
     return None
 
-def _batch_key_with_room(queue, batch_key, maximum_tasks):
-    # A WO Creation Rule caps how many tasks one Warehouse Order can hold. batch_key alone
-    # normally guarantees reuse of the same WO; once a rule caps it, later tasks spill into
-    # a fresh WO under a derived batch_key instead of piling onto a full one.
+def _task_weight_and_volume(task_doc):
+    # Per SAP EWM's own weight/volume-capped Warehouse Order Creation Rules - WMS Product
+    # already carries gross_weight_per_unit/volume_per_unit (used for HU measurement rollups
+    # in services/handling_unit.py); this is simply that same per-unit data times a task's own
+    # planned_quantity, so a rule's Maximum Weight/Volume has something real to compare against.
+    if not task_doc.product: return 0, 0
+    per_unit = frappe.db.get_value("WMS Product", {"item": task_doc.product}, ["gross_weight_per_unit", "volume_per_unit"], as_dict=True)
+    if not per_unit: return 0, 0
+    qty = flt(task_doc.planned_quantity)
+    return flt(per_unit.gross_weight_per_unit) * qty, flt(per_unit.volume_per_unit) * qty
+
+def _batch_key_with_room(queue, batch_key, rule, weight_increment=0, volume_increment=0, minutes_increment=0):
+    # A WO Creation Rule caps how many tasks (and now, optionally, how much weight/volume/
+    # estimated time) one Warehouse Order can hold. batch_key alone normally guarantees reuse of
+    # the same WO; once a rule caps any of these, later tasks spill into a fresh WO under a
+    # derived batch_key instead of piling onto a full one. A brand-new candidate batch_key (no
+    # existing WO yet) always has room - a single task heavier than the limit itself must still
+    # go somewhere, so it gets its own WO rather than looping forever looking for space.
     suffix = 0
     while True:
         candidate = batch_key if suffix == 0 else f"{batch_key}#{suffix}"
-        existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": candidate, "status": ["in", OPEN_WO_STATUSES]}, ["task_count"], as_dict=True)
-        if not existing or (existing.task_count or 0) < maximum_tasks:
+        existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": candidate, "status": ["in", OPEN_WO_STATUSES]},
+            ["task_count", "total_weight", "total_volume", "estimated_minutes"], as_dict=True)
+        if not existing:
+            return candidate
+        over_tasks = rule.maximum_tasks and (existing.task_count or 0) >= rule.maximum_tasks
+        over_weight = rule.maximum_weight and (flt(existing.total_weight) + weight_increment) > rule.maximum_weight
+        over_volume = rule.maximum_volume and (flt(existing.total_volume) + volume_increment) > rule.maximum_volume
+        over_minutes = rule.maximum_minutes and (flt(existing.estimated_minutes) + minutes_increment) > rule.maximum_minutes
+        if not (over_tasks or over_weight or over_volume or over_minutes):
             return candidate
         suffix += 1
 
-def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priority="Normal", wave=None, reference_doctype=None, reference_name=None, item_group=None, stock_type=None):
+def _increment_wo_totals(wo_name, weight_increment, volume_increment, minutes_increment):
+    if not (weight_increment or volume_increment or minutes_increment): return
+    current = frappe.db.get_value("Warehouse Order", wo_name, ["total_weight", "total_volume", "estimated_minutes"], as_dict=True)
+    frappe.db.set_value("Warehouse Order", wo_name, {
+        "total_weight": flt(current.total_weight) + weight_increment,
+        "total_volume": flt(current.total_volume) + volume_increment,
+        "estimated_minutes": flt(current.estimated_minutes) + minutes_increment,
+    })
+
+def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priority="Normal", wave=None, reference_doctype=None, reference_name=None,
+        item_group=None, stock_type=None, rule=None, weight_increment=0, volume_increment=0, minutes_increment=0, destination_bin=None):
     # Never auto-assigns a resource at creation - a Warehouse Order sits Open, scoped only to
     # its queue, until a resource explicitly claims it (pulling the next one, or confirming a
     # task on it manually). Resources only execute things; assignment is never the default.
-    rule = _matching_wo_creation_rule(warehouse, activity, item_group, stock_type)
-    if rule and rule.maximum_tasks:
-        batch_key = _batch_key_with_room(queue, batch_key, rule.maximum_tasks)
+    if rule is None:
+        rule = _matching_wo_creation_rule(warehouse, activity, item_group, stock_type)
+    if rule and (rule.maximum_tasks or rule.maximum_weight or rule.maximum_volume or rule.maximum_minutes):
+        batch_key = _batch_key_with_room(queue, batch_key, rule, weight_increment, volume_increment, minutes_increment)
     existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": batch_key, "status": ["in", OPEN_WO_STATUSES]}, "name")
     if existing: return existing
     wo = frappe.get_doc({
@@ -59,6 +92,18 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
         "reference_doctype": reference_doctype, "reference_name": reference_name,
     })
     wo.insert(ignore_permissions=True)
+    if activity == "Pick" and rule and rule.pick_hu_type and destination_bin:
+        # SAP EWM's packing profile: every task this Warehouse Order ever bundles shares one
+        # destination HU, created once right here rather than left to whatever the first picker
+        # happens to scan. hu_number is a throwaway placeholder for an External-numbering HU
+        # Type - the controller's before_insert always replaces it for an Internal one.
+        pick_hu = frappe.get_doc({
+            "doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10),
+            "hu_type": rule.pick_hu_type, "current_bin": destination_bin, "warehouse": warehouse,
+        })
+        pick_hu.flags.wms_service_update = True
+        pick_hu.insert(ignore_permissions=True)
+        frappe.db.set_value("Warehouse Order", wo.name, "pick_handling_unit", pick_hu.name)
     return wo.name
 
 def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None):
@@ -73,11 +118,17 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
     queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area)
     if not queue: return
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
+    stock_type = task_doc.get("stock_type_from")
+    rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type)
+    weight_increment, volume_increment = _task_weight_and_volume(task_doc)
+    minutes_increment = flt(rule.standard_minutes_per_task) if rule and rule.standard_minutes_per_task else 0
     wo_name = get_or_create_warehouse_order(
         task_doc.warehouse, task_doc.task_type, queue, batch_key,
         priority=task_doc.priority or "Normal", wave=task_doc.get("wave"),
         reference_doctype=reference_doctype, reference_name=reference_name,
-        item_group=item_group, stock_type=task_doc.get("stock_type_from"),
+        item_group=item_group, stock_type=stock_type, rule=rule,
+        weight_increment=weight_increment, volume_increment=volume_increment, minutes_increment=minutes_increment,
+        destination_bin=task_doc.get("destination_bin"),
     )
     wo = frappe.get_cached_doc("Warehouse Order", wo_name)
     task_doc.warehouse_order = wo_name
@@ -86,6 +137,12 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
     if wo.assigned_resource: task_doc.status = "Assigned"
     task_count = frappe.db.get_value("Warehouse Order", wo_name, "task_count") or 0
     frappe.db.set_value("Warehouse Order", wo_name, "task_count", task_count + 1)
+    _increment_wo_totals(wo_name, weight_increment, volume_increment, minutes_increment)
+    if task_doc.task_type == "Pick" and not task_doc.destination_hu:
+        # A freshly read value, not the cached wo above - pick_handling_unit may have just been
+        # set by get_or_create_warehouse_order in this same call, on this same WO.
+        pick_hu = frappe.db.get_value("Warehouse Order", wo_name, "pick_handling_unit")
+        if pick_hu: task_doc.destination_hu = pick_hu
     _gate_on_sequence(task_doc, wo_name, task_count)
 
 NON_TERMINAL_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Exception")
