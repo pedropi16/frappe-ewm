@@ -35,7 +35,7 @@ function ensure_grid_styles() {
   if (_grid_styles_injected) return;
   _grid_styles_injected = true;
   $("<style>", { text: `
-    .wms-grid-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .wms-grid-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
     .wms-grid-toolbar .wms-grid-hint { font-size:12px; }
     .wms-grid-scroll { overflow:auto; max-height:65vh; border:1px solid var(--border-color); }
     .wms-grid-table { margin-bottom:0; user-select:none; }
@@ -45,6 +45,20 @@ function ensure_grid_styles() {
     .wms-grid-cell { cursor:cell; }
     .wms-grid-selected { background:rgba(59,130,246,.18) !important; }
     .wms-grid-anchor { outline:1px solid rgba(59,130,246,.7); outline-offset:-1px; }
+    .wms-grid-colhead-inner { display:flex; align-items:center; gap:4px; justify-content:space-between; }
+    .wms-grid-sort, .wms-grid-filter-btn { cursor:pointer; opacity:.45; font-size:11px; padding:0 2px; }
+    .wms-grid-sort:hover, .wms-grid-filter-btn:hover { opacity:1; }
+    .wms-grid-sort.active, .wms-grid-filter-btn.active { opacity:1; color:var(--blue-500,#3b82f6); }
+    .wms-grid-actionbar { display:flex; align-items:center; gap:6px; padding:4px 0; }
+    .wms-grid-actionbar .wms-grid-selcount { font-size:12px; font-weight:600; margin-right:2px; }
+    .wms-grid-filter-pop { position:fixed; z-index:2000; background:var(--card-bg,#fff); border:1px solid var(--border-color); border-radius:6px;
+      box-shadow:var(--shadow-lg,0 4px 16px rgba(0,0,0,.18)); padding:8px; width:220px; }
+    .wms-grid-filter-pop .wms-grid-filter-search { width:100%; margin-bottom:6px; }
+    .wms-grid-filter-pop .wms-grid-filter-list { max-height:220px; overflow:auto; border:1px solid var(--border-color); border-radius:4px; padding:4px 6px; margin-bottom:6px; }
+    .wms-grid-filter-pop .wms-grid-filter-list label { display:block; font-size:12px; font-weight:normal; margin:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .wms-grid-filter-pop .wms-grid-filter-links { display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px; }
+    .wms-grid-filter-pop .wms-grid-filter-links a { cursor:pointer; }
+    .wms-grid-filter-pop .wms-grid-filter-actions { display:flex; justify-content:flex-end; gap:6px; }
   ` }).appendTo("head");
 }
 
@@ -64,28 +78,85 @@ function ensure_repack_styles() {
 }
 
 // Excel-like grid: click a cell to select it, shift+click or drag to extend a rectangular
-// range, click a column/row header (or the corner) to select a whole column/row/everything.
+// range, Ctrl/Cmd+click (or Ctrl+drag) a cell, row header or column header to ADD or REMOVE it
+// from the selection instead of replacing it - so several non-adjacent rows or columns can be
+// selected at once, exactly like Excel or a SAP GUI ALV grid. Click a column/row header (or the
+// corner) without a modifier to select a whole column/row/everything, same as before.
 // Ctrl/Cmd+C or the Copy button copies the selection as tab-separated text - pastes straight
 // into a spreadsheet. Row/reference links still navigate normally; only the surrounding cell
 // area starts a drag-select. A quick-filter box narrows visible rows client-side (substring
-// match across every column), independent of whatever server-side filters a view also has.
+// match across every column, independent of whatever server-side filters a view also has); each
+// column header also gets a real per-column filter (an Excel-style checkbox list of that
+// column's distinct values) and a sort toggle (ascending / descending / none).
+// opts.actions: [{label, kind, confirm, appliesTo(row), run(selectedRows, grid)}] - SAP EWM-style
+// quick actions. Shown in the toolbar once at least one row is selected (any row touched by any
+// selected cell/row/column), each button enabled only when every selected row satisfies its
+// appliesTo (default: always applicable) - the action itself decides what "applicable" means.
 class DataGrid {
-  constructor(rows, columns, doctype) {
+  constructor(rows, columns, doctype, opts = {}) {
     this.rows = rows || [];
     this.columns = columns || [];
     this.doctype = doctype;
+    this.opts = opts || {};
     this.filterText = "";
-    this.sel = null; // {r0,r1,c0,c1} - r0 includes the header row (0); c0 excludes the gutter (starts at 1)
+    this.colFilters = {}; // {field: Set(allowedValues)} - absent/undefined = no filter on that column
+    this.sortField = null;
+    this.sortDir = 0; // 1 asc, -1 desc
+    this.sels = []; // [{r0,r1,c0,c1}, ...] - r0 includes the header row (0); c0 excludes the gutter (starts at 1)
     this.anchor = null;
     this.$el = $(`<div class="wms-grid"></div>`);
     ensure_grid_styles();
     this._build();
   }
 
+  _distinctValues(field) {
+    const seen = new Map();
+    for (const row of this.rows) {
+      const v = row[field];
+      const key = v === null || v === undefined || v === "" ? "" : String(v);
+      if (!seen.has(key)) seen.set(key, key === "" ? __("(blank)") : key);
+    }
+    return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }));
+  }
+
   _visibleRows() {
-    if (!this.filterText) return this.rows;
-    const needle = this.filterText.toLowerCase();
-    return this.rows.filter((row) => this.columns.some(([f]) => String(row[f] ?? "").toLowerCase().includes(needle)));
+    let rows = this.rows;
+    if (this.filterText) {
+      const needle = this.filterText.toLowerCase();
+      rows = rows.filter((row) => this.columns.some(([f]) => String(row[f] ?? "").toLowerCase().includes(needle)));
+    }
+    for (const [field, allowed] of Object.entries(this.colFilters)) {
+      if (!allowed) continue;
+      rows = rows.filter((row) => {
+        const v = row[field];
+        const key = v === null || v === undefined || v === "" ? "" : String(v);
+        return allowed.has(key);
+      });
+    }
+    if (this.sortField && this.sortDir) {
+      const field = this.sortField, dir = this.sortDir;
+      rows = rows.slice().sort((a, b) => {
+        const av = a[field], bv = b[field];
+        const aEmpty = av === null || av === undefined || av === "", bEmpty = bv === null || bv === undefined || bv === "";
+        if (aEmpty && bEmpty) return 0;
+        if (aEmpty) return 1; // blanks always sort last, in either direction
+        if (bEmpty) return -1;
+        const an = Number(av), bn = Number(bv);
+        const cmp = (!isNaN(an) && !isNaN(bn) && av !== "" && bv !== "") ? an - bn : String(av).localeCompare(String(bv), undefined, { numeric: true });
+        return cmp * dir;
+      });
+    }
+    return rows;
+  }
+
+  // Every row index (1-based, matching data-r) touched by any selected rectangle.
+  _selectedRowIndices() {
+    const out = new Set();
+    for (const s of this.sels) {
+      const lo = Math.max(1, Math.min(s.r0, s.r1)), hi = Math.max(s.r0, s.r1);
+      for (let r = lo; r <= hi; r++) out.add(r);
+    }
+    return out;
   }
 
   _build() {
@@ -93,18 +164,23 @@ class DataGrid {
       <div class="wms-grid-toolbar">
         <input type="text" class="form-control input-sm wms-grid-filter" style="width:220px;" placeholder="${__("Filter visible rows...")}">
         <button type="button" class="btn btn-default btn-xs wms-grid-copy">${__("Copy")}</button>
+        <button type="button" class="btn btn-default btn-xs wms-grid-clear-filters" style="display:none;">${__("Clear filters/sort")}</button>
         <span class="text-muted wms-grid-hint"></span>
+        <div class="wms-grid-actionbar"></div>
       </div>
     `);
     this.$scroll = $(`<div class="wms-grid-scroll"><table class="table table-bordered table-sm wms-grid-table"></table></div>`);
     this.$el.empty().append($toolbar, this.$scroll);
     this.$table = this.$scroll.find("table");
+    this.$actionbar = $toolbar.find(".wms-grid-actionbar");
     this.$el.attr("tabindex", 0).css("outline", "none");
-    $toolbar.find(".wms-grid-filter").on("input", (e) => { this.filterText = e.target.value; this.sel = null; this._render(); });
+    $toolbar.find(".wms-grid-filter").on("input", (e) => { this.filterText = e.target.value; this.sels = []; this._render(); });
     $toolbar.find(".wms-grid-copy").on("click", () => this._copy());
+    $toolbar.find(".wms-grid-clear-filters").on("click", () => { this.colFilters = {}; this.sortField = null; this.sortDir = 0; this.sels = []; this._render(); });
     this._bindSelection();
     this.$el.on("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) { e.preventDefault(); this._copy(); }
+      if (e.key === "Escape") { this.sels = []; this._applyHighlight(); this._renderActionBar(); }
     });
     this._render();
   }
@@ -114,7 +190,20 @@ class DataGrid {
     this._visRows = rows;
     const maxR = rows.length, maxC = this.columns.length;
     const head = [`<th class="wms-grid-corner" data-r="0" data-c="0"></th>`].concat(
-      this.columns.map(([, label], ci) => `<th class="wms-grid-colhead" data-r="0" data-c="${ci + 1}">${frappe.utils.escape_html(label)}</th>`)
+      this.columns.map(([field, label], ci) => {
+        const sortCls = this.sortField === field ? (this.sortDir === 1 ? "active" : this.sortDir === -1 ? "active" : "") : "";
+        const sortIcon = this.sortField === field && this.sortDir === -1 ? "▼" : this.sortField === field && this.sortDir === 1 ? "▲" : "⇅";
+        const filterActive = !!this.colFilters[field];
+        return `<th class="wms-grid-colhead" data-r="0" data-c="${ci + 1}" data-field="${frappe.utils.escape_html(field)}">
+          <div class="wms-grid-colhead-inner">
+            <span class="wms-grid-colhead-label">${frappe.utils.escape_html(label)}</span>
+            <span>
+              <span class="wms-grid-sort ${sortCls}" data-field="${frappe.utils.escape_html(field)}" title="${__("Sort")}">${sortIcon}</span>
+              <span class="wms-grid-filter-btn ${filterActive ? "active" : ""}" data-field="${frappe.utils.escape_html(field)}" title="${__("Filter")}">▾</span>
+            </span>
+          </div>
+        </th>`;
+      })
     ).join("");
     const body = rows.map((row, ri) => {
       const cells = [`<th class="wms-grid-rowhead" data-r="${ri + 1}" data-c="0">${ri + 1}</th>`].concat(
@@ -139,7 +228,82 @@ class DataGrid {
     this.$table.html(`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`);
     this._maxR = maxR; this._maxC = maxC;
     this.$el.find(".wms-grid-hint").text(rows.length === this.rows.length ? __("{0} row(s)", [rows.length]) : __("{0} of {1} row(s)", [rows.length, this.rows.length]));
+    this.$el.find(".wms-grid-clear-filters").toggle(!!(this.sortField || Object.keys(this.colFilters).length));
+    this._bindHeaderControls();
     this._applyHighlight();
+    this._renderActionBar();
+  }
+
+  _bindHeaderControls() {
+    this.$table.find(".wms-grid-sort").on("mousedown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const field = $(e.currentTarget).data("field");
+      if (this.sortField !== field) { this.sortField = field; this.sortDir = 1; }
+      else if (this.sortDir === 1) this.sortDir = -1;
+      else if (this.sortDir === -1) { this.sortField = null; this.sortDir = 0; }
+      else this.sortDir = 1;
+      this._render();
+    });
+    this.$table.find(".wms-grid-filter-btn").on("mousedown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      this._openColumnFilter($(e.currentTarget).data("field"), $(e.currentTarget));
+    });
+  }
+
+  _openColumnFilter(field, $btn) {
+    $(".wms-grid-filter-pop").remove();
+    const values = this._distinctValues(field);
+    const current = this.colFilters[field]; // Set of allowed keys, or undefined = all allowed
+    const $pop = $(`
+      <div class="wms-grid-filter-pop">
+        <input type="text" class="form-control input-sm wms-grid-filter-search" placeholder="${__("Search values...")}">
+        <div class="wms-grid-filter-links"><a class="wms-grid-filter-all">${__("Select all")}</a><a class="wms-grid-filter-none">${__("Clear")}</a></div>
+        <div class="wms-grid-filter-list"></div>
+        <div class="wms-grid-filter-actions">
+          <button type="button" class="btn btn-default btn-xs wms-grid-filter-cancel">${__("Cancel")}</button>
+          <button type="button" class="btn btn-primary btn-xs wms-grid-filter-apply">${__("Apply")}</button>
+        </div>
+      </div>
+    `);
+    const $list = $pop.find(".wms-grid-filter-list");
+    const renderList = (needle) => {
+      $list.empty();
+      const n = (needle || "").toLowerCase();
+      values.filter(([, label]) => !n || label.toLowerCase().includes(n)).forEach(([key, label]) => {
+        const checked = !current || current.has(key);
+        $list.append(`<label><input type="checkbox" class="wms-grid-filter-val" value="${frappe.utils.escape_html(key)}" ${checked ? "checked" : ""}> ${frappe.utils.escape_html(label)}</label>`);
+      });
+    };
+    renderList("");
+    $pop.find(".wms-grid-filter-search").on("input", (e) => renderList(e.target.value));
+    $pop.find(".wms-grid-filter-all").on("click", () => $list.find(".wms-grid-filter-val").prop("checked", true));
+    $pop.find(".wms-grid-filter-none").on("click", () => $list.find(".wms-grid-filter-val").prop("checked", false));
+    $pop.find(".wms-grid-filter-cancel").on("click", () => $pop.remove());
+    $pop.find(".wms-grid-filter-apply").on("click", () => {
+      // Applies against the FULL distinct-value list (values), not just what the search box narrowed
+      // to - unchecking after a search still only unchecks what was visible; anything the search box
+      // hid stays whatever it already was.
+      const checkedNow = new Set($pop.find(".wms-grid-filter-val:checked").map((_, el) => el.value).get());
+      const searched = (($pop.find(".wms-grid-filter-search").val() || "")).toLowerCase();
+      const allowed = new Set(current ? Array.from(current) : values.map(([k]) => k));
+      values.forEach(([key, label]) => {
+        if (searched && !label.toLowerCase().includes(searched)) return; // untouched by this pass
+        if (checkedNow.has(key)) allowed.add(key); else allowed.delete(key);
+      });
+      this.colFilters[field] = allowed.size === values.length ? undefined : allowed;
+      if (!this.colFilters[field]) delete this.colFilters[field];
+      this.sels = [];
+      $pop.remove();
+      this._render();
+    });
+    $("body").append($pop);
+    const rect = $btn[0].getBoundingClientRect();
+    const popW = 220;
+    $pop.css({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - popW - 12) });
+    setTimeout(() => $(document).on("mousedown.wmsgridfilter", (e) => {
+      if ($(e.target).closest(".wms-grid-filter-pop").length) return;
+      $pop.remove(); $(document).off("mousedown.wmsgridfilter");
+    }), 0);
   }
 
   _cellsInRange(r0, r1, c0, c1) {
@@ -152,44 +316,86 @@ class DataGrid {
 
   _applyHighlight() {
     this.$table.find(".wms-grid-selected, .wms-grid-anchor").removeClass("wms-grid-selected wms-grid-anchor");
-    if (!this.sel) return;
-    for (const [r, c] of this._cellsInRange(this.sel.r0, this.sel.r1, this.sel.c0, this.sel.c1)) {
-      this.$table.find(`[data-r="${r}"][data-c="${c}"]`).addClass("wms-grid-selected");
+    for (const s of this.sels) {
+      for (const [r, c] of this._cellsInRange(s.r0, s.r1, s.c0, s.c1)) {
+        this.$table.find(`[data-r="${r}"][data-c="${c}"]`).addClass("wms-grid-selected");
+      }
     }
     if (this.anchor) this.$table.find(`[data-r="${this.anchor.r}"][data-c="${this.anchor.c}"]`).addClass("wms-grid-anchor");
   }
 
+  _sameRect(a, b) { return a.r0 === b.r0 && a.r1 === b.r1 && a.c0 === b.c0 && a.c1 === b.c1; }
+
+  // Ctrl/Cmd+click (or +drag) a cell/row/column ADDS or REMOVES it from the selection instead of
+  // replacing it - the actual "non-adjacent rows/columns" behavior. A plain click/drag still
+  // replaces the whole selection with just what was clicked, matching the old single-range model.
   _bindSelection() {
-    let dragging = false;
+    let dragging = false, liveIndex = -1;
     this.$table.on("mousedown", "th, td", (e) => {
       if ($(e.target).is("a, button, input, select, textarea, label")) return; // let interactive controls work normally, don't hijack them into a selection
       const $cell = $(e.currentTarget);
       const r = Number($cell.data("r")), c = Number($cell.data("c"));
+      const toggling = e.ctrlKey || e.metaKey;
       this.$el.trigger("focus");
-      if (c === 0 && r === 0) { this.sel = { r0: 0, r1: this._maxR, c0: 1, c1: this._maxC }; this.anchor = { r: 0, c: 1 }; }
-      else if (c === 0) { this.sel = { r0: r, r1: r, c0: 1, c1: this._maxC }; this.anchor = { r, c: 1 }; }
-      else if (r === 0) { this.sel = { r0: 0, r1: this._maxR, c0: c, c1: c }; this.anchor = { r: 0, c }; }
-      else if (e.shiftKey && this.anchor) { this.sel = { r0: this.anchor.r, r1: r, c0: this.anchor.c, c1: c }; }
-      else { this.sel = { r0: r, r1: r, c0: c, c1: c }; this.anchor = { r, c }; dragging = true; }
+      let rect;
+      if (c === 0 && r === 0) { this.sels = [{ r0: 0, r1: this._maxR, c0: 1, c1: this._maxC }]; this.anchor = { r: 0, c: 1 }; this._applyHighlight(); this._renderActionBar(); e.preventDefault(); return; }
+      else if (c === 0) rect = { r0: r, r1: r, c0: 1, c1: this._maxC };
+      else if (r === 0) rect = { r0: 0, r1: this._maxR, c0: c, c1: c };
+      else if (e.shiftKey && this.anchor && !toggling) { this.sels = this.sels.length ? this.sels.slice(0, -1) : []; this.sels.push({ r0: this.anchor.r, r1: r, c0: this.anchor.c, c1: c }); this._applyHighlight(); this._renderActionBar(); e.preventDefault(); return; }
+      else rect = { r0: r, r1: r, c0: c, c1: c };
+      const anchorFor = (r === 0) ? { r: 0, c } : { r, c: c === 0 ? 1 : c };
+      if (toggling) {
+        const existingIdx = this.sels.findIndex((s) => this._sameRect(s, rect));
+        if (existingIdx >= 0) { this.sels.splice(existingIdx, 1); liveIndex = -1; }
+        else { this.sels.push(rect); liveIndex = this.sels.length - 1; this.anchor = anchorFor; }
+      } else {
+        this.sels = [rect]; liveIndex = 0; this.anchor = anchorFor;
+      }
+      if (r > 0 && c > 0) dragging = true;
       this._applyHighlight();
+      this._renderActionBar();
       e.preventDefault();
     });
     this.$table.on("mouseenter", "td.wms-grid-cell", (e) => {
-      if (!dragging || !this.anchor) return;
+      if (!dragging || !this.anchor || liveIndex < 0 || !this.sels[liveIndex]) return;
       const $cell = $(e.currentTarget);
-      this.sel = { r0: this.anchor.r, r1: Number($cell.data("r")), c0: this.anchor.c, c1: Number($cell.data("c")) };
+      this.sels[liveIndex] = { r0: this.anchor.r, r1: Number($cell.data("r")), c0: this.anchor.c, c1: Number($cell.data("c")) };
       this._applyHighlight();
+      this._renderActionBar();
     });
-    $(document).on("mouseup", () => { dragging = false; });
+    $(document).on("mouseup", () => { dragging = false; liveIndex = -1; });
+  }
+
+  _renderActionBar() {
+    if (!this.$actionbar) return;
+    const actions = this.opts.actions || [];
+    if (!actions.length) { this.$actionbar.empty(); return; }
+    const rowIdx = Array.from(this._selectedRowIndices()).filter((r) => r >= 1 && r <= this._visRows.length);
+    const selectedRows = rowIdx.map((r) => this._visRows[r - 1]);
+    if (!selectedRows.length) { this.$actionbar.empty(); return; }
+    this.$actionbar.empty().append(`<span class="wms-grid-selcount">${__("{0} selected", [selectedRows.length])}</span>`);
+    actions.forEach((action) => {
+      const enabled = selectedRows.every((row) => (action.appliesTo ? action.appliesTo(row) : true));
+      const $btn = $(`<button type="button" class="btn btn-${action.kind || "default"} btn-xs" ${enabled ? "" : "disabled"}>${frappe.utils.escape_html(action.label)}</button>`);
+      if (enabled) {
+        $btn.on("click", () => {
+          const go = () => Promise.resolve(action.run(selectedRows, this)).then(() => { this.sels = []; this._applyHighlight(); });
+          if (action.confirm) frappe.confirm(typeof action.confirm === "function" ? action.confirm(selectedRows) : action.confirm, go);
+          else go();
+        });
+      }
+      this.$actionbar.append($btn);
+    });
   }
 
   _copy() {
-    if (!this.sel) { frappe.show_alert({ message: __("Select a cell, row, or column first"), indicator: "orange" }); return; }
-    const cells = this._cellsInRange(this.sel.r0, this.sel.r1, this.sel.c0, this.sel.c1);
+    if (!this.sels.length) { frappe.show_alert({ message: __("Select a cell, row, or column first"), indicator: "orange" }); return; }
+    const cellSet = new Map(); // "r,c" -> [r,c], de-duplicated across overlapping/multiple rectangles
+    for (const s of this.sels) for (const [r, c] of this._cellsInRange(s.r0, s.r1, s.c0, s.c1)) cellSet.set(`${r},${c}`, [r, c]);
     const byRow = {};
-    for (const [r, c] of cells) (byRow[r] || (byRow[r] = [])).push(c);
+    for (const [r, c] of cellSet.values()) (byRow[r] || (byRow[r] = new Set())).add(c);
     const lines = Object.keys(byRow).map(Number).sort((a, b) => a - b).map((r) => {
-      const cs = byRow[r].sort((a, b) => a - b);
+      const cs = Array.from(byRow[r]).sort((a, b) => a - b);
       return cs.map((c) => {
         if (r === 0) return this.columns[c - 1][1];
         const row = this._visRows[r - 1];
@@ -198,7 +404,7 @@ class DataGrid {
       }).join("\t");
     });
     const text = lines.join("\n");
-    const done = () => frappe.show_alert({ message: __("Copied {0} cell(s)", [cells.length]), indicator: "green" });
+    const done = () => frappe.show_alert({ message: __("Copied {0} cell(s)", [cellSet.size]), indicator: "green" });
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(() => this._copy_fallback(text, done));
     } else {
@@ -235,7 +441,7 @@ function sap_unexecuted_html() {
   return `<div class="text-muted">${__("Not executed yet - set your criteria and click Execute.")}</div>`;
 }
 
-const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock", "Repack"];
+const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock", "Repack", "Sort"];
 const TASK_STATUSES = ["Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Confirmed", "Cancelled", "Exception"];
 const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
 const INBOUND_STATUSES = ["Draft", "Expected", "Arrived", "Receiving", "Partially Received", "Received", "Putaway In Process", "Completed", "Cancelled"];
@@ -750,8 +956,58 @@ class WMSMonitor {
       ["wave", __("Wave")], ["queue", __("Queue")], ["warehouse_order", __("Warehouse Order")], ["sequence", __("Sequence")],
       ["started_at", __("Started")], ["confirmed_at", __("Confirmed At")], ["confirmed_by", __("Confirmed By")],
       ["exception_code", __("Exception")], ["blocking_reason", __("Blocking Reason")], ["modified", __("Last Modified")],
-    ], "Warehouse Task"));
+    ], "Warehouse Task", { actions: this.task_quick_actions() }));
     $table.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
+  }
+
+  // Quick actions for the Warehouse Tasks grid - SAP EWM Monitor-style: act on whatever is
+  // currently selected without opening each task. Each server call runs one row at a time
+  // (never Promise.all) so one failure doesn't silently swallow the rest, and the final tally
+  // reflects exactly how many actually succeeded.
+  task_quick_actions() {
+    const TERMINAL = ["Confirmed", "Cancelled"];
+    return [
+      {
+        label: __("Raise Exception"), kind: "danger",
+        appliesTo: (row) => !TERMINAL.includes(row.status) && row.status !== "Exception",
+        run: async (rows) => {
+          const codes = await frappe.call("frappe_wms.api.scanner.list_exception_codes", {}).then((r) => r.message || []);
+          if (!codes.length) { frappe.show_alert({ message: __("No active Exception Codes configured"), indicator: "orange" }); return; }
+          const values = await new Promise((resolve) => frappe.prompt([
+            { fieldname: "exception_code", label: __("Exception Code"), fieldtype: "Select", reqd: 1,
+              options: codes.map((c) => ({ value: c.name, label: c.exception_name })) },
+            { fieldname: "remarks", label: __("Remarks"), fieldtype: "Small Text" },
+          ], (v) => resolve(v), __("Raise Exception on {0} task(s)", [rows.length])));
+          if (!values) return;
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.scanner.raise_exception", { task_name: row.name, exception_code: values.exception_code, remarks: values.remarks || undefined }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Raised exception on {0} of {1} task(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_tasks();
+        },
+      },
+      {
+        label: __("Reverse"), kind: "danger",
+        appliesTo: (row) => row.status === "Confirmed",
+        confirm: (rows) => __("Reverse {0} confirmed task(s)? This posts a compensating move back to source for each.", [rows.length]),
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.scanner.reverse_task", { task_name: row.name }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Reversed {0} of {1} task(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_tasks();
+        },
+      },
+      // Deliberately no "Unassign" here: a task's assigned_resource is driven by its parent
+      // Warehouse Order (attach_task), and there is no service function that unassigns one
+      // while keeping the Warehouse Order and its other tasks consistent - a raw field write
+      // from here would silently desync them. Add a real service function first if this is
+      // needed.
+    ];
   }
 
   // ---------- Handling Units ----------
@@ -807,8 +1063,58 @@ class WMSMonitor {
       ["shipment", __("Shipment")], ["closed", __("Closed")], ["loaded", __("Loaded")],
       ["gross_weight", __("Gross Weight")], ["net_weight", __("Net Weight")], ["seal_number", __("Seal")],
       ["external_reference", __("External Ref")], ["creation", __("Created")], ["modified", __("Last Modified")],
-    ], "Handling Unit"));
+    ], "Handling Unit", { actions: this.hu_quick_actions() }));
     $table.find(".wms-hu-open").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
+  }
+
+  hu_quick_actions() {
+    return [
+      {
+        label: __("Block"), kind: "danger",
+        appliesTo: (row) => row.status !== "Blocked",
+        run: async (rows) => {
+          const values = await new Promise((resolve) => frappe.prompt(
+            [{ fieldname: "remarks", label: __("Reason"), fieldtype: "Small Text" }],
+            (v) => resolve(v), __("Block {0} Handling Unit(s)", [rows.length]),
+          ));
+          if (!values) return;
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.handling_unit.block_handling_unit", { hu_name: row.name, remarks: values.remarks || undefined }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Blocked {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_handling_units();
+        },
+      },
+      {
+        label: __("Unblock"),
+        appliesTo: (row) => row.status === "Blocked",
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.handling_unit.unblock_handling_unit", { hu_name: row.name }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Unblocked {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_handling_units();
+        },
+      },
+      {
+        label: __("Recycle"), kind: "danger",
+        appliesTo: (row) => row.stock_status === "Empty" && !row.parent_hu,
+        confirm: (rows) => __("Recycle {0} Handling Unit(s)? Frees their numbers for reuse; cannot be undone.", [rows.length]),
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.handling_unit.recycle_handling_unit", { hu_name: row.name }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Recycled {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_handling_units();
+        },
+      },
+    ];
   }
 
   // ---------- Repack Center: full recursive HU detail ----------
@@ -2116,8 +2422,24 @@ class WMSMonitor {
         <div class="wms-mon-alert-approval"></div>
       </div>
       <div style="margin-bottom:24px;">
+        <h6>${__("Open Differences")}</h6>
+        <div class="wms-mon-alert-differences"></div>
+      </div>
+      <div style="margin-bottom:24px;">
         <h6>${__("Aged Exceptions")}</h6>
         <div class="wms-mon-alert-exceptions"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h6>${__("Aged Open Tasks")}</h6>
+        <div class="wms-mon-alert-aged-tasks"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h6>${__("Stock In Interim Bins")}</h6>
+        <div class="wms-mon-alert-interim"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h6>${__("Negative Quants")}</h6>
+        <div class="wms-mon-alert-negative"></div>
       </div>
       <div>
         <h6>${__("Stalled Warehouse Orders")}</h6>
@@ -2125,20 +2447,80 @@ class WMSMonitor {
       </div>
     `);
     this.render_pending_approval_alerts(alerts.pending_approval_counts || []);
+    this.render_differences_alerts(alerts.open_differences || []);
     this.render_alert_table($wrap.find(".wms-mon-alert-exceptions"), alerts.aged_exceptions || [],
       [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["source_bin", __("Source Bin")],
        ["destination_bin", __("Destination Bin")], ["assigned_resource", __("Resource")],
        ["exception_code", __("Exception")], ["blocking_reason", __("Reason")], ["modified", __("Since")]],
-      "Warehouse Task", __("No aged exceptions"));
+      "Warehouse Task", __("No aged exceptions"), { actions: this.task_quick_actions() });
+    this.render_alert_table($wrap.find(".wms-mon-alert-aged-tasks"), alerts.aged_open_tasks || [],
+      [["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
+       ["assigned_resource", __("Resource")], ["warehouse_order", __("Warehouse Order")], ["modified", __("Since")]],
+      "Warehouse Task", __("No aged open tasks"), { actions: this.task_quick_actions() });
+    this.render_alert_table($wrap.find(".wms-mon-alert-interim"), alerts.stock_in_interim_bins || [],
+      [["product", __("Product")], ["storage_bin", __("Bin")], ["stock_type", __("Stock Type")],
+       ["handling_unit", __("HU"), this.hu_link_cell("handling_unit")], ["quantity", __("Quantity")], ["last_movement_date", __("Since")]],
+      "WMS Stock Balance", __("No stock stuck in interim bins"));
+    this.render_alert_table($wrap.find(".wms-mon-alert-negative"), alerts.negative_quants || [],
+      [["product", __("Product")], ["storage_bin", __("Bin")], ["stock_type", __("Stock Type")],
+       ["handling_unit", __("HU"), this.hu_link_cell("handling_unit")], ["quantity", __("Quantity")], ["modified", __("Since")]],
+      "WMS Stock Balance", __("No negative quants"));
     this.render_alert_table($wrap.find(".wms-mon-alert-wos"), alerts.stalled_warehouse_orders || [],
       [["name", __("Warehouse Order")], ["activity", __("Activity")], ["queue", __("Queue")], ["priority", __("Priority")],
        ["status", __("Status")], ["task_count", __("Tasks")], ["creation", __("Created")]],
       "Warehouse Order", __("No stalled Warehouse Orders"));
   }
 
-  render_alert_table($container, rows, columns, doctype, empty_message) {
+  render_alert_table($container, rows, columns, doctype, empty_message, opts) {
     if (!rows.length) { $container.html(`<div class="text-muted">${empty_message}</div>`); return; }
-    $container.empty().append(this.render_table(rows, columns, doctype));
+    $container.empty().append(this.render_table(rows, columns, doctype, opts));
+  }
+
+  // Open over/short task-confirmation differences (services/difference.py), with the two
+  // clearing actions right there in the list instead of a separate screen. A Short difference
+  // just needs acknowledging (nothing to move - the shortfall never physically existed); an Over
+  // difference needs somewhere to put the real stock it found, so that one prompts once for a
+  // destination bin and applies it to every selected Over row.
+  render_differences_alerts(rows) {
+    const $container = this.body_for("alerts").find(".wms-mon-alert-differences");
+    const actions = [
+      {
+        label: __("Clear (Short)"),
+        appliesTo: (row) => row.direction === "Short",
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.difference.clear_short_difference", { name: row.name }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Cleared {0} of {1} difference(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        },
+      },
+      {
+        label: __("Clear (Over)"), kind: "primary",
+        appliesTo: (row) => row.direction === "Over",
+        run: async (rows) => {
+          const values = await new Promise((resolve) => frappe.prompt(
+            [{ fieldname: "destination_bin", label: __("Destination Bin"), fieldtype: "Link", options: "Storage Bin", reqd: 1 }],
+            (v) => resolve(v), __("Clear {0} Over difference(s) to a bin", [rows.length]),
+          ));
+          if (!values) return;
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.difference.clear_over_difference", { name: row.name, destination_bin: values.destination_bin }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Cleared {0} of {1} difference(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        },
+      },
+    ];
+    this.render_alert_table($container, rows,
+      [["name", __("Difference")], ["warehouse_task", __("Task")], ["task_type", __("Type")], ["product", __("Product")],
+       ["direction", __("Direction")], ["difference_quantity", __("Quantity")], ["storage_bin", __("Difference Bin")],
+       ["exception_code", __("Exception")], ["creation", __("Raised")]],
+      "WMS Task Difference", __("No open differences"), { actions });
   }
 
   // A supervisor's one bulk action in this page: select several Under Review counts and
@@ -2174,9 +2556,10 @@ class WMSMonitor {
   }
 
   // Returns a DataGrid's element (not an HTML string) - callers use .empty().append(...),
-  // not .html(...), since the grid carries live selection/copy event handlers.
-  render_table(rows, columns, doctype) {
-    return new DataGrid(rows, columns, doctype).$el;
+  // not .html(...), since the grid carries live selection/copy event handlers. opts.actions:
+  // see DataGrid's own doc comment - SAP EWM-style quick actions on the current selection.
+  render_table(rows, columns, doctype, opts) {
+    return new DataGrid(rows, columns, doctype, opts).$el;
   }
 }
 
