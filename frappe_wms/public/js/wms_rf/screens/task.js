@@ -9,6 +9,9 @@ import { href } from "#wms/core/routes.js";
 import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb } from "#wms/screens/shared.js";
 import { groupOfType } from "#wms/screens/tasks.js";
 
+// Generic Warehouse Task confirmation wizard - one step per history entry, shared by every task
+// type (Pick, Putaway, Sort, Stage, Load, Internal Move, ...).
+
 // Task confirmation: one history entry per step (#/task/WT-1/quantity), so hardware Back steps back, reload lands on the
 // same step with everything scanned so far, and a completed task can never be re-entered by pressing Back.
 const st = { name: null, task: null, loading: false, form: null, fetchedAt: 0, codes: null, exc: { remarks: "", revised: "" } };

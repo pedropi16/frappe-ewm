@@ -4,6 +4,8 @@ import { _ } from "#wms/core/i18n.js";
 import { uid, debounce } from "#wms/core/util.js";
 
 // Cross-screen data and helpers.
+// Task types are grouped by which section of the app an operator naturally works them from -
+// this mapping decides which #/tasks/:group a pulled or listed task shows up under.
 export const TASK_TYPE_GROUPS = {
   // Cross Dock tasks are created at the same point as Putaway and worked by the same receiving operator right after, so they
   // group with inbound (as do Unload/Deconsolidation).
