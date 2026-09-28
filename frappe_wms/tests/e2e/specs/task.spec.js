@@ -191,6 +191,28 @@ test("offline confirm: clear message with Retry, entries kept, one confirmation 
   expect(done.confirmed_quantity).toBe(4);
 });
 
+test("a stale CSRF token (session cookie rotated mid-shift) is refreshed and the confirm resent automatically", async ({ page, request }) => {
+  // Reproduced live against production: the session cookie can rotate under the operator
+  // (Frappe's own renewal) within seconds of a fresh page load, silently invalidating the CSRF
+  // token core/api.js embedded at boot - every mutating call then failed with a raw "Invalid
+  // Request" (CSRFTokenError), forever, since the operator IS still logged in and sessionIsDead()
+  // never catches it. Simulated here by corrupting the token directly rather than depending on a
+  // real server-side rotation (not reliably triggerable on demand) - the fix's own recovery path
+  // (refetch this page's HTML, pull the fresh token out, resend the exact same call once) doesn't
+  // care how the token went stale.
+  const t = await makeTask(request, { planned_quantity: 3 });
+  await openTask(page, t);
+  await scan(page, "E2E-WH-A1"); await enter(page);
+  await scan(page, "E2E-WH-B1");
+  await page.evaluate(() => { window.WMS.csrf = "deliberately-stale-token"; });
+  await page.getByRole("button", { name: /Confirm/ }).click();
+  await expect(page).toHaveURL(/#\/tasks\/internal$/, { timeout: 10000 });
+  await expect(notice(page)).not.toContainText(/Invalid Request|CSRFTokenError/i);
+  const done = await getTask(request, t.name);
+  expect(done.status).toBe("Confirmed");
+  expect(done.confirmed_quantity).toBe(3);
+});
+
 test("server error text is clean: no traceback, no exception class name", async ({ page, request }) => {
   const t = await makeTask(request, { planned_quantity: 4 });
   await openTask(page, t);
