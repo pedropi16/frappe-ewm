@@ -39,12 +39,12 @@ def after_install():
     if frappe.db.exists("WMS Exception Code", "OOS"):
         frappe.db.set_value("WMS Exception Code", "OOS", {"allows_quantity_change": 1, "follow_up_action": "Create Follow-up Task"})
 
-    for range_for, prefix in [("Handling Unit", "HU-"), ("WMS Shipment", "SHIP-")]:
+    for range_for, prefix, number_length, end_number in [("Handling Unit", "HU-", 8, 99999999), ("WMS Shipment", "SHIP-", 8, 99999999)]:
         if frappe.db.exists("WMS Number Range", {"range_for": range_for, "warehouse": ["in", ["", None]], "hu_type": ["in", ["", None]]}):
             continue
         frappe.get_doc({
             "doctype": "WMS Number Range", "range_for": range_for, "prefix": prefix,
-            "number_length": 8, "start_number": 1, "end_number": 99999999, "active": 1,
+            "number_length": number_length, "start_number": 1, "end_number": end_number, "active": 1,
         }).insert(ignore_permissions=True)
 
     from frappe_wms.setup.roles import ensure_roles

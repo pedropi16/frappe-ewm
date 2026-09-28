@@ -15,7 +15,10 @@
   "inventory_section",
   "blind_counting",
   "defaults_section",
-  "default_handling_unit_type"
+  "default_handling_unit_type",
+  "labeling_section",
+  "gs1_company_prefix",
+  "sscc_next_serial"
  ],
  "fields": [
   {
@@ -80,6 +83,26 @@
    "fieldtype": "Link",
    "label": "Default Handling Unit Type",
    "options": "Handling Unit Type"
+  },
+  {
+   "fieldname": "labeling_section",
+   "fieldtype": "Section Break",
+   "label": "Labeling"
+  },
+  {
+   "default": "0614141",
+   "description": "GS1 Company Prefix used to build SSCC-18 codes for Handling Unit labels (services/labeling.generate_sscc). Defaults to GS1's own reserved test prefix (0614141) - a label printed with this prefix scans and structurally validates correctly but is NOT a globally-unique real-world identifier. Replace with your organization's actual GS1-issued prefix before relying on printed labels outside this system - this is a config change only, no code change needed.",
+   "fieldname": "gs1_company_prefix",
+   "fieldtype": "Data",
+   "label": "GS1 Company Prefix"
+  },
+  {
+   "default": "0",
+   "description": "The last SSCC serial reference issued (services/labeling.generate_sscc). Advances by 1 per label; not a WMS Number Range like Handling Unit/Shipment numbering since SSCC has no backing DocType for that mechanism's own collision check to run against.",
+   "fieldname": "sscc_next_serial",
+   "fieldtype": "Int",
+   "label": "SSCC Next Serial",
+   "read_only": 1
   }
  ],
  "icon": "icon-cog",

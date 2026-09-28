@@ -27,7 +27,8 @@
     "seal_number",
     "closed",
     "loaded",
-    "external_reference"
+    "external_reference",
+    "sscc"
   ],
   "fields": [
     {
@@ -175,6 +176,14 @@
       "fieldname": "external_reference",
       "label": "External Reference",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "sscc",
+      "label": "SSCC",
+      "fieldtype": "Data",
+      "unique": 1,
+      "read_only": 1,
+      "description": "Serial Shipping Container Code (GS1 SSCC-18), assigned on demand via services/labeling.generate_sscc - printed on the HU label. Blank until generated."
     }
   ],
   "autoname": "field:hu_number",
