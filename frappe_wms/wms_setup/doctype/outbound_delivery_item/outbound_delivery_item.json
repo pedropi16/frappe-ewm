@@ -24,6 +24,9 @@
     "partial_delivery_allowed",
     "sales_order",
     "sales_order_item",
+    "source_document_type",
+    "source_document_number",
+    "source_document_line",
     "status"
   ],
   "fields": [
@@ -138,6 +141,23 @@
       "label": "Sales Order Item",
       "fieldtype": "Data",
       "read_only": 1
+    },
+    {
+      "fieldname": "source_document_type",
+      "label": "Source Document Type",
+      "fieldtype": "Data",
+      "description": "Set instead of Sales Order for a non-sales outbound movement, e.g. \"Purchase Receipt\" for a return to vendor."
+    },
+    {
+      "fieldname": "source_document_number",
+      "label": "Source Document Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "source_document_line",
+      "label": "Source Document Line",
+      "fieldtype": "Data",
+      "description": "The specific row on the source document this line traces back to - e.g. the original Purchase Receipt Item for a return to vendor, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone."
     },
     {
       "fieldname": "status",

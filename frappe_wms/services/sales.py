@@ -29,3 +29,39 @@ def create_outbound_delivery_from_sales_order(sales_order_name, warehouse):
     })
     doc.insert(ignore_permissions=True)
     return doc.name
+
+def _vendor_returns_customer():
+    # Outbound Delivery's customer field is mandatory (it's normally an external-shipping
+    # document), but a return to vendor has no customer at all - same fixed-placeholder idiom as
+    # _customer_returns_supplier/_production_supplier in services/receipt.py. The real party (the
+    # supplier) lives on the mirrored ERPNext return Purchase Receipt, derived from the original.
+    name = "WMS Vendor Returns (Internal)"
+    if not frappe.db.exists("Customer", name):
+        frappe.get_doc({"doctype": "Customer", "customer_name": name, "customer_type": "Company"}).insert(ignore_permissions=True)
+    return name
+
+def create_return_outbound_delivery(purchase_receipt, warehouse, stock_type="DAMAGED"):
+    # Return to vendor: stock ships out through the ordinary RF Ship flow
+    # (create_and_submit_goods_issue) like any other outbound movement, sourced from whichever
+    # stock type it actually landed in after inspection (DAMAGED by default - the common real
+    # reason to send something back rather than scrap it) instead of the warehouse's normal
+    # default. Carries source_document_type/number/line so the mirror
+    # (erpnext_sync._sync_goods_issue_to_return_purchase_receipt) can build a proper return
+    # Purchase Receipt against the original row-for-row.
+    pr = frappe.get_doc("Purchase Receipt", purchase_receipt)
+    if pr.docstatus != 1: frappe.throw(_("Purchase Receipt must be submitted before it can be returned"))
+    wh = frappe.get_doc("WMS Warehouse", warehouse)
+    if not wh.default_shipping_bin: frappe.throw(_("WMS Warehouse {0} has no default shipping bin configured").format(warehouse))
+    items = [{
+        "line_number": i, "item": row.item_code, "requested_quantity": row.qty, "stock_uom": row.stock_uom,
+        "required_stock_type": stock_type, "source_document_type": "Purchase Receipt",
+        "source_document_number": pr.name, "source_document_line": row.name,
+    } for i, row in enumerate(pr.items, 1)]
+    if not items: frappe.throw(_("Purchase Receipt {0} has no items to return").format(pr.name))
+    doc = frappe.get_doc({
+        "doctype": "Outbound Delivery", "outbound_delivery_number": f"{pr.name}-RET-{frappe.generate_hash(length=4)}",
+        "warehouse": warehouse, "customer": _vendor_returns_customer(), "delivery_date": nowdate(),
+        "staging_bin": wh.default_shipping_bin, "priority": "Normal", "items": items,
+    })
+    doc.insert(ignore_permissions=True)
+    return doc.name

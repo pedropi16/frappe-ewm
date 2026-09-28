@@ -17,7 +17,8 @@
     "reversed",
     "reversal_document",
     "erpnext_stock_entry",
-    "erpnext_purchase_receipt"
+    "erpnext_purchase_receipt",
+    "erpnext_delivery_note"
   ],
   "fields": [
     {
@@ -97,6 +98,14 @@
       "options": "Purchase Receipt",
       "read_only": 1,
       "description": "Set instead of ERPNext Stock Entry when this receipt's items are linked to a Purchase Order."
+    },
+    {
+      "fieldname": "erpnext_delivery_note",
+      "label": "ERPNext Delivery Note",
+      "fieldtype": "Link",
+      "options": "Delivery Note",
+      "read_only": 1,
+      "description": "Set instead of ERPNext Stock Entry/Purchase Receipt when this receipt is a customer return - a credit Delivery Note (is_return=1) against the original."
     }
   ],
   "autoname": "GR-.########",

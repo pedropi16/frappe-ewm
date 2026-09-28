@@ -1,0 +1,116 @@
+{
+  "name": "WMS Opening Stock Load",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 1,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "load_date",
+    "status",
+    "remarks",
+    "items",
+    "posted_by",
+    "posted_at",
+    "erpnext_stock_reconciliations"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "load_date",
+      "label": "Load Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "default": "Today",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nPosted\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Small Text",
+      "description": "e.g. \"Go-live cutover load\" or \"correction to opening load of 2026-10-01\"."
+    },
+    {
+      "fieldname": "items",
+      "label": "Items",
+      "fieldtype": "Table",
+      "options": "WMS Opening Stock Load Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "posted_by",
+      "label": "Posted By",
+      "fieldtype": "Link",
+      "options": "User",
+      "read_only": 1
+    },
+    {
+      "fieldname": "posted_at",
+      "label": "Posted At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_stock_reconciliations",
+      "label": "ERPNext Stock Reconciliations",
+      "fieldtype": "Small Text",
+      "read_only": 1,
+      "description": "Comma-separated names of the ERPNext opening Stock Reconciliation(s) this load posted, one per (product, batch, serial, stock type) group."
+    }
+  ],
+  "autoname": "OSL-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ]
+}

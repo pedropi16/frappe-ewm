@@ -27,8 +27,14 @@ def post_goods_receipt(doc):
         # A matching Inspection Rule routes the receipt into QUALITY instead of its normal
         # stock type - persisted onto the row itself (not just this posting's ledger entry) so
         # every downstream reader (putaway, ERPNext dimension mirroring) sees the same thing.
+        # A row already landing in QUALITY some other way (e.g. a customer return, which always
+        # receives into QUALITY regardless of whether any Inspection Rule is configured for that
+        # item/warehouse - see create_return_inbound_delivery) gets the same inspection record;
+        # previously only a rule match ever created one, silently leaving a manually-QUALITY'd
+        # receipt with no inspection to act on.
         if matches_inspection_rule(doc.warehouse, row.item, frappe.db.get_value("Item", row.item, "item_group")):
             row.db_set("stock_type", "QUALITY", update_modified=False)
+        if row.stock_type == "QUALITY":
             inspection_rows.append(row)
         entry = {"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.receiving_bin,"stock_type":row.stock_type,"quantity":row.quantity,"stock_uom":row.stock_uom,"movement_type":"101","reference_line":row.name}
         if product and product.shelf_life_days:
@@ -142,6 +148,43 @@ def _production_supplier():
     if not frappe.db.exists("Supplier", name):
         frappe.get_doc({"doctype": "Supplier", "supplier_name": name, "supplier_type": "Company"}).insert(ignore_permissions=True)
     return name
+
+def _customer_returns_supplier():
+    # Same shape as _production_supplier above: Inbound Delivery's supplier field is mandatory,
+    # but a customer return has no supplier at all - a fixed placeholder stands in; the real
+    # party (the customer) lives on the mirrored ERPNext return Delivery Note, derived from the
+    # original Delivery Note it returns against.
+    name = "WMS Customer Returns (Internal)"
+    if not frappe.db.exists("Supplier", name):
+        frappe.get_doc({"doctype": "Supplier", "supplier_name": name, "supplier_type": "Company"}).insert(ignore_permissions=True)
+    return name
+
+def create_return_inbound_delivery(delivery_note, warehouse):
+    # Customer return: physically received like any other delivery via the ordinary RF Receive
+    # flow (create_and_submit_goods_receipt) against this Inbound Delivery - the only difference
+    # is every line is forced into QUALITY so it always gets inspected before restock/scrap
+    # (matching SAP EWM's own returns process: a returns delivery's GR always creates a Quality
+    # Inspection), and it carries source_document_type/number/line so the mirror
+    # (erpnext_sync._sync_goods_receipt_to_return_delivery_note) can build a proper Sales Return
+    # against the original Delivery Note row-for-row, instead of an unlinked standalone receipt.
+    require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
+    dn = frappe.get_doc("Delivery Note", delivery_note)
+    if dn.docstatus != 1: frappe.throw(_("Delivery Note must be submitted before it can be returned"))
+    wh = frappe.get_doc("WMS Warehouse", warehouse)
+    if not wh.default_receiving_bin: frappe.throw(_("WMS Warehouse {0} has no default receiving bin configured").format(warehouse))
+    items = [{
+        "line_number": i, "item": row.item_code, "expected_quantity": row.qty, "stock_uom": row.stock_uom,
+        "expected_stock_type": "QUALITY", "source_document_type": "Delivery Note",
+        "source_document_number": dn.name, "source_document_line": row.name,
+    } for i, row in enumerate(dn.items, 1)]
+    if not items: frappe.throw(_("Delivery Note {0} has no items to return").format(dn.name))
+    ind = frappe.get_doc({
+        "doctype": "Inbound Delivery", "inbound_delivery_number": f"{dn.name}-RET-{frappe.generate_hash(length=4)}",
+        "warehouse": warehouse, "company": dn.company, "supplier": _customer_returns_supplier(),
+        "receiving_bin": wh.default_receiving_bin, "items": items,
+    })
+    ind.insert(ignore_permissions=True)
+    return ind.name
 
 def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, handling_unit, hu_type=None,
         batch_no=None, serial_no=None, stock_type="AVAILABLE"):

@@ -22,6 +22,7 @@
     "preferred_storage_type",
     "source_document_type",
     "source_document_number",
+    "source_document_line",
     "purchase_order",
     "purchase_order_item",
     "status"
@@ -121,6 +122,12 @@
       "fieldname": "source_document_number",
       "label": "Source Document Number",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "source_document_line",
+      "label": "Source Document Line",
+      "fieldtype": "Data",
+      "description": "The specific row on the source document this line traces back to - e.g. the original Delivery Note Item for a customer return, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone."
     },
     {
       "fieldname": "purchase_order",

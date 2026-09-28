@@ -1,0 +1,104 @@
+{
+  "name": "WMS Opening Stock Load Item",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "item",
+    "storage_bin",
+    "handling_unit",
+    "hu_type",
+    "batch_no",
+    "serial_no",
+    "stock_type",
+    "quantity",
+    "stock_uom",
+    "shelf_life_expiry_date",
+    "valuation_rate"
+  ],
+  "fields": [
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Storage Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "handling_unit",
+      "label": "Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "description": "Leave blank for loose stock. If set and it doesn't exist yet, it's auto-registered here (needs HU Type)."
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "Handling Unit Type",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "description": "Only needed when Handling Unit doesn't already exist."
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "shelf_life_expiry_date",
+      "label": "Shelf Life Expiry Date",
+      "fieldtype": "Date"
+    },
+    {
+      "fieldname": "valuation_rate",
+      "label": "Valuation Rate",
+      "fieldtype": "Currency",
+      "description": "Used for the mirrored ERPNext opening Stock Reconciliation. Falls back to the item's own valuation/last purchase rate when left blank."
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

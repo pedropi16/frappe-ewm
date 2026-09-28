@@ -70,8 +70,15 @@ def _work_order_link_for_gr_row(row):
     source_type, source_number = frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["source_document_type", "source_document_number"]) or (None, None)
     return source_number if source_type == "Work Order" else None
 
+def _return_link_for_gr_row(row):
+    if not row.inbound_delivery_item: return None, None
+    source_type, source_number, source_line = frappe.db.get_value(
+        "Inbound Delivery Item", row.inbound_delivery_item, ["source_document_type", "source_document_number", "source_document_line"]
+    ) or (None, None, None)
+    return (source_number, source_line) if source_type == "Delivery Note" else (None, None)
+
 def sync_goods_receipt(doc):
-    if doc.get("erpnext_stock_entry") or doc.get("erpnext_purchase_receipt"): return
+    if doc.get("erpnext_stock_entry") or doc.get("erpnext_purchase_receipt") or doc.get("erpnext_delivery_note"): return
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
     if not erpnext_warehouse: return
     po_links = [_po_link_for_gr_row(row) for row in doc.items]
@@ -80,6 +87,19 @@ def sync_goods_receipt(doc):
         frappe.throw(_("Goods Receipt {0} mixes Purchase-Order-linked and standalone lines; post them as separate receipts").format(doc.name))
     if linked:
         _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links)
+        return
+    # Customer return: a receipt whose Inbound Delivery Item rows were all created from
+    # create_return_inbound_delivery (source_document_type "Delivery Note") mirrors to a proper
+    # Sales Return (a credit Delivery Note, is_return=1) against the original, instead of an
+    # unlinked standalone receipt that would double-count the customer's stock as newly bought in.
+    return_links = [_return_link_for_gr_row(row) for row in doc.items]
+    linked_returns = [l for l in return_links if l[0]]
+    if linked_returns and len(linked_returns) != len(doc.items):
+        frappe.throw(_("Goods Receipt {0} mixes return and standalone lines; post them as separate receipts").format(doc.name))
+    if linked_returns:
+        if len({l[0] for l in linked_returns}) != 1:
+            frappe.throw(_("Goods Receipt {0} references more than one Delivery Note; post them separately").format(doc.name))
+        _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_links)
         return
     # Production supply, FG receipt: a receipt whose Inbound Delivery Item rows were all
     # created from create_fg_receipt_from_work_order (source_document_type "Work Order")
@@ -180,6 +200,51 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
     pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
 
+_RETURN_DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "dn_detail")
+
+def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_links):
+    # Customer return: erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return
+    # builds a correctly-configured return document (is_return=1, return_against, negative
+    # qty convention, party/accounts from the original) - reused here purely as a template,
+    # the same way the Purchase Order/Sales Order paths above reuse make_purchase_receipt/
+    # make_delivery_note, then rebuilt row-for-row from what this receipt actually recorded
+    # (which may be a partial or split-by-batch subset of the original delivery, not
+    # necessarily the whole thing back at once).
+    from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_return
+    dn_name = return_links[0][0]
+    groups = {}
+    for row, (_dn, dn_item) in zip(doc.items, return_links):
+        key = (dn_item, row.batch_no, row.serial_no, row.stock_type)
+        groups[key] = groups.get(key, 0) + flt(row.quantity)
+
+    ret = make_sales_return(dn_name)
+    template_by_dn_item = {item.dn_detail: item for item in ret.items}
+    kept = []
+    for (dn_item, batch_no, serial_no, stock_type), qty in groups.items():
+        template = template_by_dn_item.get(dn_item)
+        if not template: continue
+        row = ret.append("items", {})
+        for field in _RETURN_DN_TEMPLATE_FIELDS: row.set(field, template.get(field))
+        # ERPNext's own return convention: qty/stock_qty are negative (this reverses the
+        # original outgoing movement). qty here is already stock-uom, so divide by the
+        # original row's own conversion_factor before assigning the transactional qty, same
+        # double-application guard as every other mirror above.
+        row.qty = -(qty / flt(template.conversion_factor or 1))
+        row.stock_qty = -qty
+        row.warehouse = erpnext_warehouse
+        row.batch_no = batch_no
+        row.serial_no = serial_no
+        row.use_serial_batch_fields = 1
+        row.wms_stock_type = stock_type
+        kept.append(row)
+    if not kept: frappe.throw(_("No matching Delivery Note rows found for Goods Receipt {0}").format(doc.name))
+    ret.items = kept
+    ret.flags.ignore_permissions = True
+    ret.flags.wms_managed_posting = True
+    ret.insert(ignore_permissions=True)
+    ret.submit()
+    doc.db_set("erpnext_delivery_note", ret.name, update_modified=False)
+
 # --- Warehouse Request (Work Order material staging) -> Stock Entry ---
 
 def sync_work_order_material_transfer(request):
@@ -231,8 +296,38 @@ def sync_quality_inspection(doc, passed, failed):
             "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
             "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
             "wms_stock_type": doc.from_stock_type, "to_wms_stock_type": to_stock_type,
+            # Normally derived from the source warehouse's own existing valuation (a same-
+            # warehouse transfer creates no new value) - but that only works once ERPNext has
+            # ever actually valued this item in this warehouse. A product whose stock has only
+            # ever moved through WMS's own ledger (never yet mirrored through a valued GR/PR)
+            # has nothing for ERPNext to derive a rate from at all; this is the same fallback
+            # _append_row already uses for exactly that gap on the receiving side.
+            "allow_zero_valuation_rate": 1,
         })
     if not se.items: return None
+    se.flags.wms_managed_posting = True
+    se.insert(ignore_permissions=True)
+    se.submit()
+    return se.name
+
+# --- WMS Posting Change -> Stock Entry (same-warehouse stock-type change, generic) ---
+#
+# Same mechanism as sync_quality_inspection above, generalized: any stock-type-only change
+# (not just a QI pass/fail decision) needs the same same-warehouse Material Transfer so
+# ERPNext's own stock ledger and reports don't keep showing stock under its old status forever.
+
+def sync_posting_change(doc):
+    erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
+    if not erpnext_warehouse: return None
+    company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
+    se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Posting Change {doc.name}")
+    se.append("items", {
+        "item_code": doc.product, "qty": flt(doc.quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
+        "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
+        "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
+        "wms_stock_type": doc.from_stock_type, "to_wms_stock_type": doc.to_stock_type,
+        "allow_zero_valuation_rate": 1,  # see sync_quality_inspection above for why
+    })
     se.flags.wms_managed_posting = True
     se.insert(ignore_permissions=True)
     se.submit()
@@ -241,6 +336,8 @@ def sync_quality_inspection(doc, passed, failed):
 def reverse_goods_receipt(doc):
     if doc.get("erpnext_purchase_receipt"):
         _cancel_doc("Purchase Receipt", doc.erpnext_purchase_receipt)
+    elif doc.get("erpnext_delivery_note"):
+        _cancel_doc("Delivery Note", doc.erpnext_delivery_note)
     else:
         _cancel_doc("Stock Entry", doc.get("erpnext_stock_entry"))
 
@@ -250,8 +347,15 @@ def _so_link_for_gi_row(row):
     if not row.outbound_delivery_item: return None, None
     return frappe.db.get_value("Outbound Delivery Item", row.outbound_delivery_item, ["sales_order", "sales_order_item"]) or (None, None)
 
+def _return_link_for_gi_row(row):
+    if not row.outbound_delivery_item: return None, None
+    source_type, source_number, source_line = frappe.db.get_value(
+        "Outbound Delivery Item", row.outbound_delivery_item, ["source_document_type", "source_document_number", "source_document_line"]
+    ) or (None, None, None)
+    return (source_number, source_line) if source_type == "Purchase Receipt" else (None, None)
+
 def sync_goods_issue(doc):
-    if doc.get("erpnext_stock_entry") or doc.get("erpnext_delivery_note"): return
+    if doc.get("erpnext_stock_entry") or doc.get("erpnext_delivery_note") or doc.get("erpnext_purchase_receipt"): return
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
     if not erpnext_warehouse: return
     so_links = [_so_link_for_gi_row(row) for row in doc.items]
@@ -260,8 +364,21 @@ def sync_goods_issue(doc):
         frappe.throw(_("Goods Issue {0} mixes Sales-Order-linked and standalone lines; post them as separate issues").format(doc.name))
     if linked:
         _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links)
-    else:
-        _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse)
+        return
+    # Return to vendor: a Goods Issue whose Outbound Delivery Item rows were all created from
+    # create_return_outbound_delivery (source_document_type "Purchase Receipt") mirrors to a
+    # proper return Purchase Receipt (is_return=1) against the original, instead of an unlinked
+    # standalone issue that would just look like ordinary consumption.
+    return_links = [_return_link_for_gi_row(row) for row in doc.items]
+    linked_returns = [l for l in return_links if l[0]]
+    if linked_returns and len(linked_returns) != len(doc.items):
+        frappe.throw(_("Goods Issue {0} mixes return and standalone lines; post them as separate issues").format(doc.name))
+    if linked_returns:
+        if len({l[0] for l in linked_returns}) != 1:
+            frappe.throw(_("Goods Issue {0} references more than one Purchase Receipt; post them separately").format(doc.name))
+        _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_links)
+        return
+    _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse)
 
 def _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse):
     company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
@@ -322,9 +439,50 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
     dn.submit()
     doc.db_set("erpnext_delivery_note", dn.name, update_modified=False)
 
+_RETURN_PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "purchase_receipt_item")
+
+def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_links):
+    # Return to vendor: erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return
+    # builds a correctly-configured return document (is_return=1, return_against, negative qty
+    # convention, party/accounts from the original) - reused purely as a template and rebuilt
+    # row-for-row from what this issue actually shipped, same shape as the customer-return mirror
+    # above.
+    from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_return
+    pr_name = return_links[0][0]
+    groups = {}
+    for row, (_pr, pr_item) in zip(doc.items, return_links):
+        key = (pr_item, row.batch_no, row.serial_no, row.stock_type)
+        groups[key] = groups.get(key, 0) + flt(row.quantity)
+
+    ret = make_purchase_return(pr_name)
+    template_by_pr_item = {item.purchase_receipt_item: item for item in ret.items}
+    kept = []
+    for (pr_item, batch_no, serial_no, stock_type), qty in groups.items():
+        template = template_by_pr_item.get(pr_item)
+        if not template: continue
+        row = ret.append("items", {})
+        for field in _RETURN_PR_TEMPLATE_FIELDS: row.set(field, template.get(field))
+        row.qty = -(qty / flt(template.conversion_factor or 1))
+        row.stock_qty = -qty
+        row.warehouse = erpnext_warehouse
+        row.batch_no = batch_no
+        row.serial_no = serial_no
+        row.use_serial_batch_fields = 1
+        row.wms_stock_type = stock_type
+        kept.append(row)
+    if not kept: frappe.throw(_("No matching Purchase Receipt rows found for Goods Issue {0}").format(doc.name))
+    ret.items = kept
+    ret.flags.ignore_permissions = True
+    ret.flags.wms_managed_posting = True
+    ret.insert(ignore_permissions=True)
+    ret.submit()
+    doc.db_set("erpnext_purchase_receipt", ret.name, update_modified=False)
+
 def reverse_goods_issue(doc):
     if doc.get("erpnext_delivery_note"):
         _cancel_doc("Delivery Note", doc.erpnext_delivery_note)
+    elif doc.get("erpnext_purchase_receipt"):
+        _cancel_doc("Purchase Receipt", doc.erpnext_purchase_receipt)
     else:
         _cancel_doc("Stock Entry", doc.get("erpnext_stock_entry"))
 

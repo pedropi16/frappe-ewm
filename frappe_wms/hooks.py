@@ -74,6 +74,8 @@ doc_events = {
     "WMS Wave": {"autoname": _NUMBER_RANGE_AUTONAME},
     "WMS Physical Inventory Count": {"autoname": _NUMBER_RANGE_AUTONAME},
     "WMS Quality Inspection": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "WMS Opening Stock Load": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "WMS Posting Change": {"autoname": _NUMBER_RANGE_AUTONAME},
     "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Delivery Note": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Purchase Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},

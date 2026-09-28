@@ -7,7 +7,7 @@ from frappe_wms.services.picking import (
     release_delivery_for_picking as _release_delivery_for_picking,
     find_pick_tasks as _find_pick_tasks,
 )
-from frappe_wms.services.sales import create_outbound_delivery_from_sales_order as _create_outbound_delivery_from_sales_order
+from frappe_wms.services.sales import create_outbound_delivery_from_sales_order as _create_outbound_delivery_from_sales_order, create_return_outbound_delivery as _create_return_outbound_delivery
 from frappe_wms.services.issue import (
     list_ready_to_ship as _list_ready_to_ship,
     create_and_submit_goods_issue as _create_and_submit_goods_issue,
@@ -59,3 +59,8 @@ def create_and_submit_goods_issue(outbound_delivery, items, idempotency_key=None
 @frappe.whitelist()
 def post_goods_issue_for_delivery(delivery_name):
     return _post_goods_issue_for_delivery(delivery_name)
+
+@frappe.whitelist()
+def create_return_outbound_delivery(purchase_receipt, warehouse, stock_type="DAMAGED"):
+    require_role(*OUTBOUND_ROLES)
+    return _create_return_outbound_delivery(purchase_receipt, warehouse, stock_type)

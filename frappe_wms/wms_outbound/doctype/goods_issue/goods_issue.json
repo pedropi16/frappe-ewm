@@ -18,7 +18,8 @@
     "reversed",
     "reversal_document",
     "erpnext_stock_entry",
-    "erpnext_delivery_note"
+    "erpnext_delivery_note",
+    "erpnext_purchase_receipt"
   ],
   "fields": [
     {
@@ -103,6 +104,14 @@
       "options": "Delivery Note",
       "read_only": 1,
       "description": "Set instead of ERPNext Stock Entry when this issue's items are linked to a Sales Order."
+    },
+    {
+      "fieldname": "erpnext_purchase_receipt",
+      "label": "ERPNext Purchase Receipt",
+      "fieldtype": "Link",
+      "options": "Purchase Receipt",
+      "read_only": 1,
+      "description": "Set instead of ERPNext Stock Entry/Delivery Note when this issue is a return to vendor - a return Purchase Receipt (is_return=1) against the original."
     }
   ],
   "autoname": "GI-.########",
