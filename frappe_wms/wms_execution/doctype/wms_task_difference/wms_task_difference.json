@@ -1,0 +1,227 @@
+{
+  "name": "WMS Task Difference",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "description": "A logged over- or short-confirmation on a Warehouse Task, cleared explicitly rather than silently absorbed - SAP EWM's Difference Analyzer equivalent. An Over difference is real stock a resource actually found beyond a task's planned_quantity, parked in the warehouse's Default Difference Bin (WMS Warehouse.default_difference_bin) until a supervisor decides where it belongs (clear_over_difference). A Short difference is logged whenever raise_exception closes a task below its original planned_quantity - nothing to move (the shortfall never physically existed to post), just a record needing acknowledgment (clear_short_difference).",
+  "field_order": [
+    "warehouse",
+    "warehouse_task",
+    "task_type",
+    "direction",
+    "status",
+    "column_break_header",
+    "product",
+    "stock_uom",
+    "batch_no",
+    "serial_no",
+    "quantities_section",
+    "planned_quantity",
+    "difference_quantity",
+    "column_break_quantities",
+    "stock_type",
+    "storage_bin",
+    "exception_code",
+    "clearance_section",
+    "cleared_by",
+    "cleared_at",
+    "cleared_to_bin",
+    "clearance_remarks"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "warehouse_task",
+      "label": "Warehouse Task",
+      "fieldtype": "Link",
+      "options": "Warehouse Task",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "task_type",
+      "label": "Task Type",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "direction",
+      "label": "Direction",
+      "fieldtype": "Select",
+      "options": "Over\nShort",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nCleared",
+      "default": "Open",
+      "reqd": 1,
+      "read_only": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "column_break_header",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "Stock UOM",
+      "fieldtype": "Link",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch No",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial No",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "quantities_section",
+      "fieldtype": "Section Break",
+      "label": "Quantities"
+    },
+    {
+      "fieldname": "planned_quantity",
+      "label": "Planned Quantity",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "description": "The task's own planned_quantity at the time this difference was recorded (its ORIGINAL value for a Short difference, since raise_exception revises it downward as part of closing the task)."
+    },
+    {
+      "fieldname": "difference_quantity",
+      "label": "Difference Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Always a positive magnitude - Direction says whether it was an excess (Over) or a shortfall (Short)."
+    },
+    {
+      "fieldname": "column_break_quantities",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Difference Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "description": "Over only - the warehouse's Default Difference Bin, where the excess physically sits until cleared."
+    },
+    {
+      "fieldname": "exception_code",
+      "label": "Exception Code",
+      "fieldtype": "Link",
+      "options": "WMS Exception Code",
+      "read_only": 1,
+      "description": "Short only - the exception code raise_exception was called with when the task closed below its original planned_quantity."
+    },
+    {
+      "fieldname": "clearance_section",
+      "fieldtype": "Section Break",
+      "label": "Clearance"
+    },
+    {
+      "fieldname": "cleared_by",
+      "label": "Cleared By",
+      "fieldtype": "Link",
+      "options": "User",
+      "read_only": 1
+    },
+    {
+      "fieldname": "cleared_at",
+      "label": "Cleared At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "cleared_to_bin",
+      "label": "Cleared To Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "description": "Over only - where the excess was actually moved to when cleared."
+    },
+    {
+      "fieldname": "clearance_remarks",
+      "label": "Clearance Remarks",
+      "fieldtype": "Small Text"
+    }
+  ],
+  "autoname": "TDIFF-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

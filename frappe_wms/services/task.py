@@ -313,6 +313,14 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
             sync_warehouse_order(task.warehouse_order)
             released_tasks = release_next_in_sequence(task.warehouse_order) + _release_predecessor_gated_tasks(task.name)
             result = {"task": task.name, "status": "Confirmed", "released_tasks": released_tasks}
+            shortfall = original_planned - revised_quantity
+            if shortfall > 0:
+                # A logged SAP EWM Difference Analyzer-style record of what never got confirmed -
+                # previously this just vanished into a lowered planned_quantity with no trace.
+                # Nothing to post (the shortfall never physically existed to move); a supervisor
+                # acknowledges it later via services/difference.clear_short_difference.
+                from frappe_wms.services.difference import record_short_difference
+                result["difference"] = record_short_difference(task, shortfall, original_planned, exception_code, remarks)
     if result is None:
         task.db_set({"status": "Exception", "exception_code": exception_code, "blocking_reason": remarks}, update_modified=True)
         sync_warehouse_order(task.warehouse_order)
@@ -359,8 +367,20 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if scanned_product and scanned_product != task.product: frappe.throw(_("Scanned product does not match the task"))
     already_confirmed = flt(task.confirmed_quantity)
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed
-    new_confirmed = already_confirmed + qty
-    if qty <= 0 or round(new_confirmed, 6) > round(flt(task.planned_quantity), 6): frappe.throw(_("Invalid confirmed quantity"))
+    if qty <= 0: frappe.throw(_("Invalid confirmed quantity"))
+    # A resource confirming more than what's left on the plan (Unload/Putaway/Internal Move
+    # finding genuinely more physical stock than expected) used to be a flat ValidationError -
+    # there was no way to record what was actually found. The task itself can only ever
+    # complete at its own planned_quantity; any excess is real stock that must be accounted for
+    # right now, so it's posted straight to the warehouse's Difference Bin instead
+    # (services/difference.record_over_difference), pending a supervisor deciding where it
+    # actually belongs (clear_over_difference).
+    excess = max(round(qty - (flt(task.planned_quantity) - already_confirmed), 6), 0)
+    posted_qty = qty - excess
+    new_confirmed = already_confirmed + posted_qty
+    if excess > 0:
+        from frappe_wms.services.difference import difference_bin_for_warehouse
+        difference_bin_for_warehouse(task.warehouse)  # fail loud before anything posts, not after
     if destination_hu == _UNPACK:
         resolved_destination_hu = None
     elif destination_hu:
@@ -381,7 +401,12 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         # Same request retried after a lost response (flaky WiFi, reload mid-submit): it already posted and updated
         # the task, so answer with the current state instead of counting the quantity a second time.
         return {"task": task.name, "status": task.status, "quantity": qty, "released_tasks": [], "replayed": True}
-    transfer_stock(source=source, destination=destination, quantity=qty, movement_type=task.movement_type, reference_doctype=task.doctype, reference_name=task.name, idempotency_key=key, warehouse_task=task.name, device=device)
+    if posted_qty > 0:
+        transfer_stock(source=source, destination=destination, quantity=posted_qty, movement_type=task.movement_type, reference_doctype=task.doctype, reference_name=task.name, idempotency_key=key, warehouse_task=task.name, device=device)
+    difference_name = None
+    if excess > 0:
+        from frappe_wms.services.difference import record_over_difference
+        difference_name = record_over_difference(task, excess, f"{key}:diff")
     fully_confirmed = round(new_confirmed, 6) >= round(flt(task.planned_quantity), 6)
     status = "Confirmed" if fully_confirmed else "Partially Confirmed"
     updates = {"confirmed_quantity": new_confirmed, "status": status, "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "confirmation_device": device, "idempotency_key": key, "destination_hu": resolved_destination_hu}
@@ -389,10 +414,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     task.db_set(updates, update_modified=True)
     if fully_confirmed: advance_to_next_step(task)
     _update_request(task.warehouse_request)
-    _update_allocations(task, qty)
+    _update_allocations(task, posted_qty)
     if task.consolidation_group_line:
         from frappe_wms.services.consolidation import update_consolidation_progress
-        update_consolidation_progress(task, qty)
+        update_consolidation_progress(task, posted_qty)
     # Not gated on fully_confirmed: transfer_stock above already moved this confirmation's
     # quantity in the ledger regardless of whether the task itself is done, so leaving the HU
     # record pointing at the old bin until the very last partial confirmation catches up would
@@ -409,7 +434,9 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
     if fully_confirmed: released_tasks += _release_predecessor_gated_tasks(task.name)
-    return {"task": task.name, "status": status, "quantity": qty, "released_tasks": released_tasks}
+    result = {"task": task.name, "status": status, "quantity": posted_qty, "released_tasks": released_tasks}
+    if difference_name: result["difference"] = difference_name
+    return result
 
 def _apply_cross_dock_fulfillment(task):
     # Cross-docked stock is staged directly and never sits in an allocatable bin (Staging is
