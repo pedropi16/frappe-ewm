@@ -25,22 +25,24 @@ def execute():
         if not received_by_row: continue
 
         try:
-            doc = frappe.get_doc("Inbound Delivery", name)
-            for item in doc.items:
-                if item.name in received_by_row:
-                    item.received_quantity = received_by_row[item.name]
-                if flt(item.received_quantity) >= flt(item.expected_quantity):
-                    item.status = "Received"
-                elif flt(item.received_quantity) > 0:
-                    item.status = "Partially Received"
-            if all(flt(r.received_quantity) >= flt(r.expected_quantity) for r in doc.items):
-                doc.receipt_status, doc.status = "Fully Received", "Received"
-            elif any(flt(r.received_quantity) > 0 for r in doc.items):
-                doc.receipt_status, doc.status = "Partially Received", "Partially Received"
-            doc.save(ignore_permissions=True)
+            # frappe.db.set_value throughout, never doc.save(): Inbound Delivery is itself
+            # submittable, and a receipt against an already-submitted one (rare, but confirmed to
+            # exist in production - INB-00000001) hits Frappe's own "not allowed to change Status
+            # after submission" guard on a plain .save() - these are tracking-only fields.
+            all_received, any_received = True, False
+            for row in frappe.get_all("Inbound Delivery Item", filters={"parent": name}, fields=["name", "expected_quantity", "received_quantity"]):
+                new_received = received_by_row.get(row.name, flt(row.received_quantity))
+                if row.name in received_by_row:
+                    new_status = "Received" if new_received >= flt(row.expected_quantity) else ("Partially Received" if new_received > 0 else "Open")
+                    frappe.db.set_value("Inbound Delivery Item", row.name, {"received_quantity": new_received, "status": new_status}, update_modified=False)
+                all_received = all_received and new_received >= flt(row.expected_quantity)
+                any_received = any_received or new_received > 0
+            if all_received:
+                frappe.db.set_value("Inbound Delivery", name, {"receipt_status": "Fully Received", "status": "Received"}, update_modified=False)
+            elif any_received:
+                frappe.db.set_value("Inbound Delivery", name, {"receipt_status": "Partially Received", "status": "Partially Received"}, update_modified=False)
         except Exception:
-            # One delivery's unrelated data problem (e.g. a stale link to a since-deleted Item -
-            # seen on the dev site from old e2e debris) must not abort the backfill for every
-            # other delivery - this patch only needs to be best-effort across historical records.
+            # One delivery's unrelated data problem must not abort the backfill for every other
+            # delivery - this patch only needs to be best-effort across historical records.
             frappe.db.rollback()
             frappe.log_error(title="backfill_inbound_delivery_receipt_progress", message=frappe.get_traceback())

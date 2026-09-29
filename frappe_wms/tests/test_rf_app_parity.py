@@ -125,6 +125,25 @@ class TestRfAppParity(IntegrationTestCase):
         self.assertEqual(ind.status, "Received")
         self.assertNotIn(ind.status, OPEN_INBOUND_STATUSES)
 
+    def test_create_and_submit_goods_receipt_updates_progress_even_when_delivery_itself_is_submitted(self):
+        # Reproduces a second-order production bug directly: Inbound Delivery is itself
+        # submittable, and a receipt against one that's already docstatus=1 (confirmed live in
+        # production - INB-00000001) made the fix above's first version throw
+        # UpdateAfterSubmitError on a plain doc.save() ("not allowed to change Status after
+        # submission") - these are tracking-only fields, not something submission should lock.
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 5, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+        ind.submit()
+
+        create_and_submit_goods_receipt(ind.name, [
+            {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 5, "stock_uom": self.uom, "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE", "hu_type": "RFPARITY-PALLET"},
+        ])
+        ind.reload()
+        self.assertEqual(ind.items[0].received_quantity, 5)
+        self.assertEqual(ind.receipt_status, "Fully Received")
+        self.assertEqual(ind.status, "Received")
+
     def test_create_and_submit_goods_receipt_requires_hu_type_for_new_hu(self):
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
             "items": [{"line_number": 1, "item": self.item, "expected_quantity": 2, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})

@@ -145,19 +145,22 @@ def _update_inbound_delivery_receipt_progress(delivery_name, items):
         row_name = item.get("inbound_delivery_item")
         if row_name: received_by_row[row_name] = received_by_row.get(row_name, 0) + flt(item.get("quantity"))
     if not received_by_row: return
-    doc = frappe.get_doc("Inbound Delivery", delivery_name)
-    for row in doc.items:
+    # frappe.db.set_value throughout, never doc.save(): Inbound Delivery is itself submittable,
+    # and a receipt against an already-submitted one (rare, but confirmed to exist in production -
+    # INB-00000001) hit Frappe's own "not allowed to change Status after submission" guard on a
+    # plain .save() - these are tracking-only fields, not something submission should ever lock.
+    all_received, any_received = True, False
+    for row in frappe.get_all("Inbound Delivery Item", filters={"parent": delivery_name}, fields=["name", "expected_quantity", "received_quantity"]):
+        new_received = flt(row.received_quantity) + received_by_row.get(row.name, 0)
         if row.name in received_by_row:
-            row.received_quantity = flt(row.received_quantity) + received_by_row[row.name]
-        if flt(row.received_quantity) >= flt(row.expected_quantity):
-            row.status = "Received"
-        elif flt(row.received_quantity) > 0:
-            row.status = "Partially Received"
-    if all(flt(r.received_quantity) >= flt(r.expected_quantity) for r in doc.items):
-        doc.receipt_status, doc.status = "Fully Received", "Received"
-    elif any(flt(r.received_quantity) > 0 for r in doc.items):
-        doc.receipt_status, doc.status = "Partially Received", "Partially Received"
-    doc.save(ignore_permissions=True)
+            new_status = "Received" if new_received >= flt(row.expected_quantity) else ("Partially Received" if new_received > 0 else "Open")
+            frappe.db.set_value("Inbound Delivery Item", row.name, {"received_quantity": new_received, "status": new_status}, update_modified=False)
+        all_received = all_received and new_received >= flt(row.expected_quantity)
+        any_received = any_received or new_received > 0
+    if all_received:
+        frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Fully Received", "status": "Received"}, update_modified=False)
+    elif any_received:
+        frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Partially Received", "status": "Partially Received"}, update_modified=False)
 
 def create_and_submit_goods_receipt(inbound_delivery, items):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
