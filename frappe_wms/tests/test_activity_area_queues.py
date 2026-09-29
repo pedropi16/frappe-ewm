@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
@@ -167,6 +169,43 @@ class TestActivityAreaQueues(IntegrationTestCase):
         wo2 = frappe.get_doc({"doctype": "Warehouse Order", "warehouse": self.warehouse, "activity": "Internal Move",
             "queue": queue_a2, "batch_key": frappe.generate_hash(length=10), "priority": "Normal", "status": "Open"}).insert(ignore_permissions=True)
         self.assertIsNone(pull_next_warehouse_order(user=user))
+        leave_queue(user=user)
+
+    def test_pull_falls_through_to_next_candidate_on_query_deadlock(self):
+        # Reproduces the production bug directly: under real concurrent load, the claim's own
+        # conditional UPDATE can raise a genuine QueryDeadlockError (MySQL/MariaDB error 1020)
+        # instead of cleanly returning 0 rows - the database detecting the same race the
+        # compare-and-set already exists to handle, just via an exception. Before the fix this
+        # propagated straight to the operator as a raw HTTP 500 instead of falling through to
+        # the next open Warehouse Order the way an ordinary lost race already does.
+        queue = f"AAQ-DL-{frappe.generate_hash(length=6)}"
+        frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": queue, "queue_name": queue,
+            "warehouse": self.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
+        user = frappe.session.user
+        resource_code = f"AAQ-DLRES-{frappe.generate_hash(length=6)}"
+        frappe.get_doc({"doctype": "WMS Resource", "resource_code": resource_code, "warehouse": self.warehouse,
+            "resource_type": "Operator", "user": user, "active": 1}).insert(ignore_permissions=True)
+        join_queue(queue, user=user)
+
+        # Urgent vs Normal (not creation order, which can tie at test speed) guarantees
+        # wo_deadlocked is always the first candidate _by_priority_then_age tries.
+        wo_deadlocked = frappe.get_doc({"doctype": "Warehouse Order", "warehouse": self.warehouse, "activity": "Internal Move",
+            "queue": queue, "batch_key": frappe.generate_hash(length=10), "priority": "Urgent", "status": "Open"}).insert(ignore_permissions=True)
+        wo_next = frappe.get_doc({"doctype": "Warehouse Order", "warehouse": self.warehouse, "activity": "Internal Move",
+            "queue": queue, "batch_key": frappe.generate_hash(length=10), "priority": "Normal", "status": "Open"}).insert(ignore_permissions=True)
+
+        real_sql = frappe.db.sql
+        def sql_that_deadlocks_once(query, *args, **kwargs):
+            if "update `tabWarehouse Order`" in query and wo_deadlocked.name in (args[0] if args else ()):
+                raise frappe.QueryDeadlockError("simulated deadlock")
+            return real_sql(query, *args, **kwargs)
+
+        with patch.object(frappe.db, "sql", side_effect=sql_that_deadlocks_once):
+            pulled = pull_next_warehouse_order(user=user)
+
+        self.assertEqual(pulled, wo_next.name, "a deadlock on one candidate must fall through to the next, not raise")
+        wo_deadlocked.reload()
+        self.assertEqual(wo_deadlocked.status, "Open", "the deadlocked candidate must be left untouched, not half-claimed")
         leave_queue(user=user)
 
     def test_mass_assign_activity_area_updates_selected_bins(self):

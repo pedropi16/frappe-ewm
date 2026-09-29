@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.database import savepoint
 from frappe.utils import flt, now_datetime
 from frappe_wms.utils import require_role
 
@@ -334,12 +335,24 @@ def pull_next_warehouse_order(user=None):
         # away believing they own the same Warehouse Order - the read above is just a candidate
         # list, not a reservation. A 0-row UPDATE means someone else claimed this one between
         # that read and this write; fall through to the next candidate instead of trusting it.
-        frappe.db.sql(
-            "update `tabWarehouse Order` set assigned_resource=%s, status='Assigned', modified=%s, modified_by=%s "
-            "where name=%s and status='Open' and (assigned_resource is null or assigned_resource='')",
-            (resource.name, now_datetime(), frappe.session.user, candidate.name),
-        )
-        if frappe.db.sql("select row_count()")[0][0]:
+        #
+        # Under real concurrent load this conditional UPDATE can also raise a genuine
+        # QueryDeadlockError (MySQL/MariaDB error 1020, "Record has changed since last read")
+        # rather than cleanly returning 0 rows - reproduced live with two resources pulling at
+        # the same instant. That's the database detecting the exact same race this compare-and-set
+        # already exists to handle, just via an exception instead of a row count; previously this
+        # propagated straight to the operator as a raw HTTP 500 with no retry. The savepoint
+        # rolls back only this one claim attempt (not anything earlier in the request) and falls
+        # through to the next candidate, the same as an ordinary lost race.
+        claimed = False
+        with savepoint(catch=frappe.QueryDeadlockError):
+            frappe.db.sql(
+                "update `tabWarehouse Order` set assigned_resource=%s, status='Assigned', modified=%s, modified_by=%s "
+                "where name=%s and status='Open' and (assigned_resource is null or assigned_resource='')",
+                (resource.name, now_datetime(), frappe.session.user, candidate.name),
+            )
+            claimed = bool(frappe.db.sql("select row_count()")[0][0])
+        if claimed:
             frappe.db.set_value("Warehouse Task", {"warehouse_order": candidate.name}, "assigned_resource", resource.name)
             return candidate.name
     return None

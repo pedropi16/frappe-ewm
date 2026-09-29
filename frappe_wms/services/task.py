@@ -591,11 +591,22 @@ def _relocate_hu_for_task(task, destination_hu=None):
 
 def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
     doc = frappe.get_doc("Handling Unit", hu)
-    if doc.current_bin == destination_bin: return
+    if doc.current_bin == destination_bin and not (top_level and doc.parent_hu): return
     bin_before = doc.current_bin
     doc.flags.wms_service_update = True
     doc.current_bin = destination_bin
     if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick") else doc.status
+    if top_level and doc.parent_hu:
+        # The HU this task is relocating was nested inside a parent (e.g. Repacked into a tote)
+        # that isn't part of this move - relocating it while it stays a child would leave parent
+        # and child in different bins, which validate_hu correctly rejects. move_top_hu (handled
+        # by the caller, _relocate_hu_for_task) already resolves up to the real top-level
+        # ancestor first when the whole container is meant to travel together; reaching here with
+        # a parent still set means this HU is being extracted from that container, not moved
+        # along with it, so it leaves the hierarchy the same way a real picker physically lifting
+        # it out of the tote would. Reproduced live: picking stock out of a Repacked HU threw
+        # "Parent and child handling units must be in the same warehouse and bin".
+        doc.parent_hu = None
     doc.save(ignore_permissions=True)
     frappe.get_doc({"doctype": "Handling Unit Event", "handling_unit": hu, "event_type": "Moved", "bin_before": bin_before or source_bin, "bin_after": destination_bin, "warehouse_task": task.name, "event_timestamp": now_datetime(), "performed_by": frappe.session.user}).insert(ignore_permissions=True)
     for child in frappe.get_all("Handling Unit", filters={"parent_hu": hu}, pluck="name"):
