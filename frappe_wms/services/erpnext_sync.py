@@ -16,12 +16,44 @@ def _as_system_user():
     # should need direct create/submit rights on - this mirror document is this call's own
     # internal accounting side effect, not something the RF operator is creating themselves.
     # Runs just the mapper call as Administrator and restores the real user immediately after.
-    current_user = frappe.session.user
+    #
+    # frappe.set_user() is designed for background/script contexts, not for impersonating
+    # mid-request and switching back - besides session.user, it also overwrites session.sid with
+    # the plain username string and wipes session.data (which holds, among other things, the
+    # CSRF token) to an empty dict. Request teardown writes session.sid straight into the
+    # response's `sid` cookie AND persists session.data as-is into the Sessions table row for
+    # that sid (frappe/sessions.py Session.update) - restoring only .user/.sid after calling
+    # set_user() a second time still leaves that row's stored data blanked out, which reads back
+    # as a broken session on the very next request. Reproduced live via the e2e suite: a second
+    # "Post receipt" click right after a successful one bounced straight to /login. Swapping the
+    # whole session object back (not just individual fields) is what actually undoes every part
+    # of what set_user() touched. Restoring by mutating the SAME dict object back to its original
+    # key/value snapshot (rather than pointing frappe.local.session at a new object) matters too:
+    # frappe.sessions.Session keeps its own reference to this exact object (self.data), read
+    # directly at request teardown - replacing frappe.local.session with a different object would
+    # leave that reference still holding the corrupted one.
+    current_session = dict(frappe.local.session)
     frappe.set_user("Administrator")
     try:
         yield
     finally:
-        frappe.set_user(current_user)
+        frappe.local.session.update(current_session)
+        frappe.local.role_permissions = {}
+        frappe.local.user_perms = None
+
+def _insert_and_submit_as_system(doc):
+    # Same reasoning as _as_system_user's own docstring, but for the plain Stock Entry mirrors
+    # (built directly via frappe.new_doc, not one of ERPNext's get_mapped_doc-based mappers):
+    # insert(ignore_permissions=True) only covers checks on THIS doc. Its own on_submit -
+    # specifically make_bundle_using_old_serial_batch_fields, for any batch/serial-tracked row -
+    # creates a separate Serial and Batch Bundle document with no ignore_permissions of its own,
+    # checked against frappe.session.user. Reproduced live: a WMS-role floor user posting a
+    # perfectly ordinary batch-controlled Move/Count/etc. got a PermissionError for "Serial and
+    # Batch Bundle" - another native ERPNext doctype no warehouse-floor role should need direct
+    # access to just to post a WMS movement that happens to touch a batch/serial item.
+    with _as_system_user():
+        doc.insert(ignore_permissions=True)
+        doc.submit()
 
 def _erpnext_warehouse(wms_warehouse):
     return frappe.db.get_value("WMS Warehouse", wms_warehouse, "erpnext_warehouse")
@@ -153,8 +185,7 @@ def _sync_goods_receipt_to_manufacture_stock_entry(doc, erpnext_warehouse, work_
     for row in doc.items:
         _append_row(se, row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
 def _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse):
@@ -166,8 +197,7 @@ def _sync_goods_receipt_to_stock_entry(doc, erpnext_warehouse):
             uom, conversion_factor = frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["uom", "conversion_factor"]) or (None, None)
         _append_row(se, row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse, uom=uom, conversion_factor=conversion_factor)
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
 _PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate",
@@ -299,8 +329,7 @@ def sync_work_order_material_transfer(request):
         "wms_stock_type": request.stock_type, "to_wms_stock_type": request.stock_type, "use_serial_batch_fields": 1,
     })
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     frappe.db.set_value("Warehouse Request", request.name, "erpnext_stock_entry", se.name)
     return se.name
 
@@ -336,8 +365,7 @@ def sync_quality_inspection(doc, passed, failed):
         })
     if not se.items: return None
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     return se.name
 
 # --- WMS Posting Change -> Stock Entry (same-warehouse stock-type change, generic) ---
@@ -359,8 +387,7 @@ def sync_posting_change(doc):
         "allow_zero_valuation_rate": 1,  # see sync_quality_inspection above for why
     })
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     return se.name
 
 def reverse_goods_receipt(doc):
@@ -419,8 +446,7 @@ def _sync_goods_issue_to_stock_entry(doc, erpnext_warehouse):
             uom, conversion_factor = frappe.db.get_value("Outbound Delivery Item", row.outbound_delivery_item, ["uom", "conversion_factor"]) or (None, None)
         _append_row(se, row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse, uom=uom, conversion_factor=conversion_factor)
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
 
 _DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate",
@@ -562,8 +588,7 @@ def sync_physical_inventory_count(doc):
             else: values["allow_zero_valuation_rate"] = 1
             se.append("items", values)
         se.flags.wms_managed_posting = True
-        se.insert(ignore_permissions=True)
-        se.submit()
+        _insert_and_submit_as_system(se)
         gain_entry = se.name
 
     if losses:
@@ -575,8 +600,7 @@ def sync_physical_inventory_count(doc):
                 "s_warehouse": erpnext_warehouse, "wms_stock_type": stock_type,
             })
         se.flags.wms_managed_posting = True
-        se.insert(ignore_permissions=True)
-        se.submit()
+        _insert_and_submit_as_system(se)
         loss_entry = se.name
 
     return gain_entry, loss_entry
@@ -615,6 +639,5 @@ def sync_kitting_order(order):
     for row in se.items:
         if row.t_warehouse: row.set_basic_rate_manually = 1
     se.flags.wms_managed_posting = True
-    se.insert(ignore_permissions=True)
-    se.submit()
+    _insert_and_submit_as_system(se)
     return se.name
