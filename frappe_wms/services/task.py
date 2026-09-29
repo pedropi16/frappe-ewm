@@ -238,7 +238,14 @@ def task_names_for_allocations(allocation_names):
 
 def my_resource(user=None):
     user = user or frappe.session.user
-    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group", "current_work_center"], as_dict=True)
+    # Ordered on purpose: a user bound to more than one active WMS Resource (a test-setup-only
+    # scenario in practice, but not one the doctype itself prevents) previously resolved to
+    # whichever row MySQL happened to return first for an unordered filter - unspecified, and
+    # reproduced as flakiness across this app's own test suite once enough test classes had
+    # bound resources to the same user. Most-recently-modified is the same idea as "whichever
+    # device I most recently picked" (services/scanner.py's pick_device flow touches modified via
+    # a plain save), so it's the sensible tiebreak when this can happen at all.
+    resource = frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group", "current_work_center"], as_dict=True, order_by="modified desc")
     if resource and resource.current_work_center:
         # Resolved here rather than making the RF app do a second round trip - actions that
         # want to default to "my work center's bin" (VAS generation today) just read this.

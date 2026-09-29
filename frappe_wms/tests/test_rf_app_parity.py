@@ -3,6 +3,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
 
 from frappe_wms.api.inbound import list_open_inbound_deliveries, create_and_submit_goods_receipt
+from frappe_wms.services.receipt import OPEN_INBOUND_STATUSES
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_ready_to_ship
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, list_open_packing_orders, complete_packing_order
 from frappe_wms.api.inventory import list_open_counts, list_open_inspections
@@ -88,6 +89,41 @@ class TestRfAppParity(IntegrationTestCase):
         self.assertTrue(frappe.db.exists("Handling Unit", new_hu))
         balance = frappe.get_all("WMS Stock Balance", filters={"storage_bin": self.bulk_bin, "handling_unit": new_hu}, fields=["quantity"])
         self.assertEqual(balance[0].quantity, 9)
+
+    def test_create_and_submit_goods_receipt_updates_delivery_received_quantity_and_status(self):
+        # Reproduces the production bug directly: without this, an Inbound Delivery's own
+        # received_quantity/status never move off their initial values no matter how many Goods
+        # Receipts post against it - the RF Receive screen's own line filter (receive.js:
+        # remaining = expected_quantity - received_quantity) then keeps re-offering an
+        # already-fully-received line as open work forever, and a repeat receipt attempt
+        # eventually throws a confusing "No matching Purchase Order rows found" once the
+        # underlying PO is actually exhausted - the one place this was ever visible in practice.
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 10, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+
+        create_and_submit_goods_receipt(ind.name, [
+            {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 4, "stock_uom": self.uom, "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE", "hu_type": "RFPARITY-PALLET"},
+        ])
+        ind.reload()
+        self.assertEqual(ind.items[0].received_quantity, 4)
+        self.assertEqual(ind.items[0].status, "Partially Received")
+        self.assertEqual(ind.receipt_status, "Partially Received")
+        self.assertEqual(ind.status, "Partially Received")
+        # Not asserted via list_open_inbound_deliveries() here: that function's own resource-based
+        # warehouse scoping (my_resource()) is a separate, pre-existing concern - status is the
+        # thing this test is actually about, and "Partially Received"/"Received" are already
+        # exactly what list_open_inbound_deliveries()'s own OPEN_INBOUND_STATUSES filter keys off.
+
+        create_and_submit_goods_receipt(ind.name, [
+            {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 6, "stock_uom": self.uom, "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE", "hu_type": "RFPARITY-PALLET"},
+        ])
+        ind.reload()
+        self.assertEqual(ind.items[0].received_quantity, 10)
+        self.assertEqual(ind.items[0].status, "Received")
+        self.assertEqual(ind.receipt_status, "Fully Received")
+        self.assertEqual(ind.status, "Received")
+        self.assertNotIn(ind.status, OPEN_INBOUND_STATUSES)
 
     def test_create_and_submit_goods_receipt_requires_hu_type_for_new_hu(self):
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,

@@ -132,6 +132,33 @@ def _get_or_create_serial_no(item_code, serial_no):
     frappe.get_doc({"doctype": "Serial No", "item_code": item_code, "serial_no": serial_no}).insert(ignore_permissions=True)
     return serial_no
 
+def _update_inbound_delivery_receipt_progress(delivery_name, items):
+    # Confirmed live in production: without this, an Inbound Delivery's own received_quantity/
+    # status never move off their initial values no matter how many Goods Receipts post against
+    # it - the RF Receive screen's own line filter (remaining = expected_quantity -
+    # received_quantity, see receive.js) then keeps re-offering an already-fully-received line as
+    # open work forever, and a repeat attempt eventually fails deep inside the ERPNext mirror with
+    # a confusing "No matching Purchase Order rows found" once the underlying PO is actually
+    # exhausted - the one place this bug was ever visible, and only long after the real cause.
+    received_by_row = {}
+    for item in items:
+        row_name = item.get("inbound_delivery_item")
+        if row_name: received_by_row[row_name] = received_by_row.get(row_name, 0) + flt(item.get("quantity"))
+    if not received_by_row: return
+    doc = frappe.get_doc("Inbound Delivery", delivery_name)
+    for row in doc.items:
+        if row.name in received_by_row:
+            row.received_quantity = flt(row.received_quantity) + received_by_row[row.name]
+        if flt(row.received_quantity) >= flt(row.expected_quantity):
+            row.status = "Received"
+        elif flt(row.received_quantity) > 0:
+            row.status = "Partially Received"
+    if all(flt(r.received_quantity) >= flt(r.expected_quantity) for r in doc.items):
+        doc.receipt_status, doc.status = "Fully Received", "Received"
+    elif any(flt(r.received_quantity) > 0 for r in doc.items):
+        doc.receipt_status, doc.status = "Partially Received", "Partially Received"
+    doc.save(ignore_permissions=True)
+
 def create_and_submit_goods_receipt(inbound_delivery, items):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
     # hu_type is optional when handling_unit doesn't already exist - it falls back to
@@ -153,6 +180,7 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
+    _update_inbound_delivery_receipt_progress(delivery.name, items)
     request_names = create_putaway_requests(gr.name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
@@ -236,6 +264,7 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
+    _update_inbound_delivery_receipt_progress(ind.name, gr.items)
     request_names = create_putaway_requests(gr.name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
