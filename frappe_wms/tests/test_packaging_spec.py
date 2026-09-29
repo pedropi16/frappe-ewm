@@ -9,7 +9,7 @@ class TestPackagingSpec(IntegrationTestCase):
     def setUpClass(cls):
         super().setUpClass()
         frappe.set_user("Administrator")
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
 
         if not frappe.db.exists("WMS Product", {"item": cls.item}):
             frappe.get_doc({"doctype": "WMS Product", "item": cls.item, "stock_uom": frappe.db.get_value("Item", cls.item, "stock_uom"),

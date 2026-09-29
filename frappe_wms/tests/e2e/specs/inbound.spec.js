@@ -42,6 +42,45 @@ test("Receive: quantity above what is expected is rejected inline before anythin
   await expect(page).toHaveURL(new RegExp(`#/receive/${d.name}$`));
 });
 
+// A fixed, idempotently-created item (same idiom as seed.py's own fixtures) rather than a fresh
+// one per run: this item's item_code shows up in other test files' own unordered "pick any stock
+// item" setUpClass queries (frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, ...)),
+// so a new one on every run would keep outranking the real baseline item there and eventually
+// break unrelated tests across the whole suite - one stable, unchanging item never does.
+async function makeBatchItem(request) {
+  const code = "E2E-BATCH-FIXED";
+  const a = admin(request);
+  if (!(await a.get(`/api/resource/Item/${code}`).catch(() => null))) {
+    const itemGroup = (await a.get("/api/resource/Item Group?limit_page_length=1")).data[0].name;
+    await a.post("/api/resource/Item", { doctype: "Item", item_code: code, item_name: code, item_group: itemGroup, stock_uom: "Nos", is_stock_item: 1, has_batch_no: 1 });
+    await a.post("/api/resource/WMS Product", { doctype: "WMS Product", item: code, stock_uom: "Nos", warehouse_managed: 1, active: 1, batch_control: 1 });
+  }
+  const batchId = `${code}-B1`;
+  if (!(await a.get(`/api/resource/Batch/${encodeURIComponent(batchId)}`).catch(() => null))) {
+    await a.post("/api/resource/Batch", { doctype: "Batch", item: code, batch_id: batchId });
+  }
+  return { item: code, batchId };
+}
+
+test("Receive: a batch-controlled item is rejected without a batch, and succeeds once one is entered", async ({ page, request }) => {
+  const s = seed();
+  const { item, batchId } = await makeBatchItem(request);
+  const number = `E2E-INB-${Date.now().toString().slice(-8)}`;
+  const doc = { doctype: "Inbound Delivery", inbound_delivery_number: number, warehouse: s.warehouse, receiving_bin: "E2E-WH-RECV",
+    supplier: (await admin(request).get("/api/resource/Supplier?limit_page_length=1")).data[0].name,
+    items: [{ line_number: 1, item, expected_quantity: 4, stock_uom: "Nos", expected_stock_type: "AVAILABLE" }] };
+  const r = await admin(request).post("/api/resource/Inbound Delivery", doc);
+  await openApp(page, `#/receive/${r.data.name}`);
+  const hu = `E2EBT${Date.now().toString().slice(-7)}`;
+  await scan(page, hu);
+  await page.locator('[data-fk="type0"]').selectOption("E2E-PALLET");
+  await page.getByRole("button", { name: /Post receipt/ }).click();
+  await expect(notice(page)).toContainText(/requires a batch number/i);
+  await page.locator('[data-fk="batch0"]').fill(batchId);
+  await page.getByRole("button", { name: /Post receipt/ }).click();
+  await expect(notice(page)).toContainText(/Goods Receipt .* posted/);
+});
+
 test("Receive: entries survive a reload (draft), and Post is refused with no HU", async ({ page, request }) => {
   const d = await makeDelivery(request, 4);
   await openApp(page, `#/receive/${d.name}`);

@@ -18,7 +18,7 @@ class TestMonitorApi(IntegrationTestCase):
         cls.warehouse = "MONITOR-TEST-WH"
         cls.recv_bin = f"{cls.warehouse}-RECV"
         cls.bulk_bin = f"{cls.warehouse}-BULK"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         cls.supplier = frappe.get_all("Supplier", limit=1, pluck="name")[0]
         company = frappe.get_all("Company", limit=1, pluck="name")[0]

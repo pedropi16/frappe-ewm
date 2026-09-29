@@ -35,7 +35,10 @@ def _user(email, password, roles):
 def run():
     frappe.set_user("Administrator")
     company = frappe.get_all("Company", limit=1, pluck="name")[0]
-    item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+    # order_by="creation asc": with no explicit order this defaults to newest-first, which any
+    # ad-hoc test-created stock item (even a throwaway one from a spec elsewhere) would then keep
+    # winning over the long-standing baseline item every future run - oldest-first is stable.
+    item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
 
     _user(*OPERATOR, roles=["WMS Operator", "Desk User"])
     _user(*ADMIN, roles=["System Manager", "WMS Administrator", "WMS Supervisor", "WMS Operator", "Stock Manager", "Item Manager"])

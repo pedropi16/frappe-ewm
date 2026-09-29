@@ -50,7 +50,7 @@ class TestNumbering(IntegrationTestCase):
         # Packing Order has no warehouse field of its own - the range lookup must derive it from
         # the delivery being packed (see numbering.py's _warehouse_of).
         customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
-        item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         uom = frappe.db.get_value("Item", item, "stock_uom")
         obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8),
             "warehouse": self.warehouse, "customer": customer, "delivery_date": frappe.utils.nowdate(),

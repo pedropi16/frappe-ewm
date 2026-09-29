@@ -16,7 +16,7 @@ class TestCloseMovement(IntegrationTestCase):
         cls.bulk_bin = f"{cls.warehouse}-BULK"
         cls.stage_bin = f"{cls.warehouse}-STAGE"
         cls.final_bin = f"{cls.warehouse}-FINAL"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
         cls.item2 = "TEST-CLOSE-ITEM-2"

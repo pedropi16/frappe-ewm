@@ -11,7 +11,7 @@ class TestBinRules(IntegrationTestCase):
         super().setUpClass()
         frappe.set_user("Administrator")
         cls.warehouse = "BINRULES-TEST-WH"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         company = frappe.get_all("Company", limit=1, pluck="name")[0]
 

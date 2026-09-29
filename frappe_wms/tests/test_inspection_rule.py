@@ -12,7 +12,7 @@ class TestInspectionRule(IntegrationTestCase):
         frappe.set_user("Administrator")
         cls.warehouse = "WMS-TEST-INSP-WH"
         cls.recv_bin = "WMS-TEST-INSP-WH-RECV"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         cls.supplier = frappe.get_all("Supplier", limit=1, pluck="name")[0]
         company = frappe.get_all("Company", limit=1, pluck="name")[0]

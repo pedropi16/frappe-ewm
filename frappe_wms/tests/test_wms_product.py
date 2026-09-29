@@ -17,7 +17,7 @@ class TestWmsProduct(IntegrationTestCase):
             frappe.get_doc({"doctype": "WMS Product", "item": item, "stock_uom": "Nos", "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
 
     def test_stock_uom_is_defaulted_from_item(self):
-        item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         item_stock_uom = frappe.db.get_value("Item", item, "stock_uom")
         if frappe.db.exists("WMS Product", {"item": item}):
             self.skipTest("item already has a WMS Product")

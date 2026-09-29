@@ -15,7 +15,7 @@ class TestReplenishment(IntegrationTestCase):
         cls.pick_bin = "WMS-TEST-REPLEN-WH-PICK"
         cls.bulk_bin = "WMS-TEST-REPLEN-WH-BULK"
         cls.no_rule_pick_bin = "WMS-TEST-REPLEN-WH-PICK2"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         cls.uom = frappe.db.get_value("Item", cls.item, "stock_uom")
         company = frappe.get_all("Company", limit=1, pluck="name")[0]
 

@@ -10,7 +10,7 @@ class TestStorageStructure(IntegrationTestCase):
         super().setUpClass()
         frappe.set_user("Administrator")
         cls.warehouse = "STORSTRUCT-TEST-WH"
-        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        cls.item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
         company = frappe.get_all("Company", limit=1, pluck="name")[0]
 
         if not frappe.db.exists("WMS Warehouse", cls.warehouse):
