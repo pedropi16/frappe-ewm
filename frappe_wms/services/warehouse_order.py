@@ -106,11 +106,23 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
         frappe.db.set_value("Warehouse Order", wo.name, "pick_handling_unit", pick_hu.name)
     return wo.name
 
+# Which bin actually drives queue routing depends on where the physical work happens for that
+# task type, not a single order that fits every activity: Internal Move's own test suite already
+# documents (and relies on) source_bin winning - the source zone is the meaningful one when a
+# picker just needs to know where to go get something. Putaway is the opposite: source_bin is
+# always some generic receiving dock, never the zone a putaway worker actually cares about, which
+# is wherever the item is going TO. Reproduced live in production: every Putaway task landed with
+# no warehouse_order/queue at all, because source_bin (the dock, always non-blank, always has a
+# storage_type) resolved first and destination_bin (the real storage zone DC1-PUTAWAY-Q was
+# actually scoped to) never got a look in.
+DESTINATION_DRIVEN_TASK_TYPES = {"Putaway"}
+
 def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None):
     # Called on an unsaved Warehouse Task before insert; sets warehouse_order/queue/assigned_resource
     # in place. No-op (task stays unqueued, back-compat) if no queue is configured for this activity.
     storage_type, activity_area = None, None
-    for bin_field in ("source_bin", "destination_bin"):
+    bin_fields = ("destination_bin", "source_bin") if task_doc.task_type in DESTINATION_DRIVEN_TASK_TYPES else ("source_bin", "destination_bin")
+    for bin_field in bin_fields:
         bin_name = task_doc.get(bin_field)
         if bin_name:
             storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])

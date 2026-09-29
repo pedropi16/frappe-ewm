@@ -54,6 +54,33 @@ class TestActivityAreaQueues(IntegrationTestCase):
         task.insert(ignore_permissions=True)
         return task
 
+    def test_putaway_task_routes_by_destination_bin_not_source(self):
+        # Reproduces the production bug directly: a Putaway task's source_bin is always some
+        # generic receiving dock, never the zone a queue is actually scoped to - source_bin must
+        # NOT win here the way it correctly does for Internal Move (see _make_task's own comment
+        # and the test right below this one).
+        dock_code = f"DOCK{frappe.generate_hash(length=6)}"
+        dock_storage_type = f"{self.warehouse}-{dock_code}"
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": self.warehouse, "storage_type_code": dock_code, "storage_type_name": dock_code,
+            "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        dock_bin = f"{self.warehouse}-DOCKBIN-{frappe.generate_hash(length=6)}"
+        frappe.get_doc({"doctype": "Storage Bin", "bin_code": dock_bin, "warehouse": self.warehouse, "storage_type": dock_storage_type, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        putaway_queue = f"AAQ-PUTAWAY-Q-{frappe.generate_hash(length=6)}"
+        frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": putaway_queue, "queue_name": putaway_queue,
+            "warehouse": self.warehouse, "activity": "Putaway", "storage_type": f"{self.warehouse}-A", "active": 1}).insert(ignore_permissions=True)
+
+        task = frappe.get_doc({
+            "doctype": "Warehouse Task", "task_type": "Putaway", "warehouse": self.warehouse,
+            "product": self.item, "planned_quantity": 1, "stock_uom": self.uom,
+            "source_bin": dock_bin, "destination_bin": self.bin_plain,
+            "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE",
+            "movement_type": "101", "priority": "Normal", "status": "Open",
+        })
+        attach_task(task, frappe.generate_hash(length=10))
+        task.insert(ignore_permissions=True)
+        self.assertEqual(task.queue, putaway_queue, "Putaway must route by destination_bin's storage type, not the source dock's")
+        self.assertIsNotNone(task.warehouse_order, "a Putaway task with a matching queue must not be left unqueued")
+
     def test_queue_matching_activity_area_wins_over_storage_type_only(self):
         queue_storage = f"AAQ-Q-STORAGE-{frappe.generate_hash(length=6)}"
         queue_area = f"AAQ-Q-AREA-{frappe.generate_hash(length=6)}"
