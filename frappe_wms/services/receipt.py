@@ -115,6 +115,23 @@ def list_open_inbound_deliveries(user=None):
         fields=["name", "inbound_delivery_number", "warehouse", "supplier", "receiving_bin", "status", "posting_date"],
         order_by="posting_date asc, creation asc", limit=50)
 
+def _get_or_create_batch(item_code, batch_no):
+    # Same "a scan of something new registers it in place" idiom as get_or_create_handling_unit -
+    # a real incoming batch is, by definition, usually one nobody has entered into the system
+    # before. Without this, the RF Receive screen's batch field could only ever accept an
+    # already-registered Batch (reproduced live: a freshly-typed batch number threw
+    # LinkValidationError deep inside the ERPNext Purchase Receipt mirror, with no way for the
+    # operator to register it from this screen at all - the same gap the HU field doesn't have).
+    if not batch_no or frappe.db.exists("Batch", batch_no): return batch_no
+    frappe.get_doc({"doctype": "Batch", "item": item_code, "batch_id": batch_no}).insert(ignore_permissions=True)
+    return batch_no
+
+def _get_or_create_serial_no(item_code, serial_no):
+    # Same reasoning as _get_or_create_batch, for serial-controlled items.
+    if not serial_no or frappe.db.exists("Serial No", serial_no): return serial_no
+    frappe.get_doc({"doctype": "Serial No", "item_code": item_code, "serial_no": serial_no}).insert(ignore_permissions=True)
+    return serial_no
+
 def create_and_submit_goods_receipt(inbound_delivery, items):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
     # hu_type is optional when handling_unit doesn't already exist - it falls back to
@@ -127,6 +144,8 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
         item["handling_unit"] = get_or_create_handling_unit(
             item.get("handling_unit"), item.get("hu_type"), delivery.receiving_bin, delivery.warehouse,
         )
+        item["batch_no"] = _get_or_create_batch(item["item"], item.get("batch_no"))
+        item["serial_no"] = _get_or_create_serial_no(item["item"], item.get("serial_no"))
     gr = frappe.get_doc({
         "doctype": "Goods Receipt", "inbound_delivery": delivery.name, "warehouse": delivery.warehouse,
         "receiving_bin": delivery.receiving_bin, "items": items,

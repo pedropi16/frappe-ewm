@@ -37,10 +37,10 @@ export const receiveDetail = {
     const saved = loadDraft(key(name));
     const fresh = (doc.items || []).map((row) => ({
       inbound_delivery_item: row.name, item: row.item, remaining: round6(flt(row.expected_quantity) - flt(row.received_quantity)),
-      stock_uom: row.stock_uom, stock_type: row.expected_stock_type, handling_unit: "", hu_type: "", quantity: "", batch_no: "",
+      stock_uom: row.stock_uom, stock_type: row.expected_stock_type, handling_unit: "", hu_type: "", quantity: "", batch_no: "", serial_no: "",
     })).filter((l) => l.remaining > 0).map((l) => ({ ...l, quantity: fmtQty(l.remaining) }));
     // A saved draft only applies to lines that still exist with the same remaining quantity.
-    st.lines = fresh.map((l) => { const d = saved && saved.lines.find((x) => x.inbound_delivery_item === l.inbound_delivery_item && x.remaining === l.remaining); return d ? { ...l, handling_unit: d.handling_unit, hu_type: d.hu_type, quantity: d.quantity, batch_no: d.batch_no || "" } : l; });
+    st.lines = fresh.map((l) => { const d = saved && saved.lines.find((x) => x.inbound_delivery_item === l.inbound_delivery_item && x.remaining === l.remaining); return d ? { ...l, handling_unit: d.handling_unit, hu_type: d.hu_type, quantity: d.quantity, batch_no: d.batch_no || "", serial_no: d.serial_no || "" } : l; });
     st.form.idem = (saved && saved.idem) || "";
     update();
   },
@@ -61,6 +61,9 @@ export const receiveDetail = {
       // create_and_submit_goods_receipt itself throws a clear per-row error if an item that
       // needs one was left blank, and the operator can fill this in and resubmit.
       Field({ name: `batch${i}`, kind: "scan", label: _("Batch number (if required)"), placeholder: _("Scan or type the batch"), value: l.batch_no, onInput: (v) => { l.batch_no = v; persist(); }, onCommit: (v) => { l.batch_no = v; persist(); } }),
+      // Same reasoning as the batch field above, for serial-controlled items - one serial per
+      // line (this screen doesn't support entering several for a multi-unit serialized line).
+      Field({ name: `serial${i}`, kind: "scan", label: _("Serial number (if required)"), placeholder: _("Scan or type the serial"), value: l.serial_no, onInput: (v) => { l.serial_no = v; persist(); }, onCommit: (v) => { l.serial_no = v; persist(); } }),
       Field({ name: `qty${i}`, kind: "qty", label: _("Quantity"), value: l.quantity, unit: l.stock_uom, enterNext: true, onInput: (v) => { l.quantity = v; persist(); } }))));
     return wrap;
   },
@@ -78,7 +81,7 @@ async function submit() {
     if (!isNumeric(l.quantity) || parseNum(l.quantity) <= 0) { S.fieldErrors[`qty${i}`] = _("Enter a quantity greater than zero."); feedback.error(); S.focusRequest = `qty${i}`; update(); return; }
     if (round6(parseNum(l.quantity)) > l.remaining) { S.fieldErrors[`qty${i}`] = _("Only {0} {1} remaining on this line.", [fmtQty(l.remaining), l.stock_uom]); feedback.error(); S.focusRequest = `qty${i}`; update(); return; }
   }
-  const items = lines.map(({ l }) => ({ inbound_delivery_item: l.inbound_delivery_item, item: l.item, quantity: parseNum(l.quantity), stock_uom: l.stock_uom, handling_unit: l.handling_unit.trim(), stock_type: l.stock_type, hu_type: l.hu_type || undefined, batch_no: (l.batch_no || "").trim() || undefined }));
+  const items = lines.map(({ l }) => ({ inbound_delivery_item: l.inbound_delivery_item, item: l.item, quantity: parseNum(l.quantity), stock_uom: l.stock_uom, handling_unit: l.handling_unit.trim(), stock_type: l.stock_type, hu_type: l.hu_type || undefined, batch_no: (l.batch_no || "").trim() || undefined, serial_no: (l.serial_no || "").trim() || undefined }));
   const idem = ensureKey(st.form, "GR");
   persist();
   const result = await run(() => api("frappe_wms.api.inbound.create_and_submit_goods_receipt", { inbound_delivery: st.name, items: JSON.stringify(items), idempotency_key: idem }), { label: _("Posting receipt…"), again: submit });

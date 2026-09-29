@@ -62,6 +62,37 @@ async function makeBatchItem(request) {
   return { item: code, batchId };
 }
 
+// Same fixed-item idiom as makeBatchItem above - see its own comment for why.
+async function makeSerialItem(request) {
+  const code = "E2E-SERIAL-FIXED";
+  const a = admin(request);
+  if (!(await a.get(`/api/resource/Item/${code}`).catch(() => null))) {
+    const itemGroup = (await a.get("/api/resource/Item Group?limit_page_length=1")).data[0].name;
+    await a.post("/api/resource/Item", { doctype: "Item", item_code: code, item_name: code, item_group: itemGroup, stock_uom: "Nos", is_stock_item: 1, has_serial_no: 1 });
+    await a.post("/api/resource/WMS Product", { doctype: "WMS Product", item: code, stock_uom: "Nos", warehouse_managed: 1, active: 1, serial_control: "Required at Receipt" });
+  }
+  return code;
+}
+
+test("Receive: a serial-controlled item is rejected without a serial, and succeeds once one is entered", async ({ page, request }) => {
+  const s = seed();
+  const item = await makeSerialItem(request);
+  const number = `E2E-INS-${Date.now().toString().slice(-8)}`;
+  const doc = { doctype: "Inbound Delivery", inbound_delivery_number: number, warehouse: s.warehouse, receiving_bin: "E2E-WH-RECV",
+    supplier: (await admin(request).get("/api/resource/Supplier?limit_page_length=1")).data[0].name,
+    items: [{ line_number: 1, item, expected_quantity: 1, stock_uom: "Nos", expected_stock_type: "AVAILABLE" }] };
+  const r = await admin(request).post("/api/resource/Inbound Delivery", doc);
+  await openApp(page, `#/receive/${r.data.name}`);
+  const hu = `E2ESN${Date.now().toString().slice(-7)}`;
+  await scan(page, hu);
+  await page.locator('[data-fk="type0"]').selectOption("E2E-PALLET");
+  await page.getByRole("button", { name: /Post receipt/ }).click();
+  await expect(notice(page)).toContainText(/requires a serial number/i);
+  await page.locator('[data-fk="serial0"]').fill(`SN-${Date.now().toString().slice(-8)}`);
+  await page.getByRole("button", { name: /Post receipt/ }).click();
+  await expect(notice(page)).toContainText(/Goods Receipt .* posted/);
+});
+
 test("Receive: a batch-controlled item is rejected without a batch, and succeeds once one is entered", async ({ page, request }) => {
   const s = seed();
   const { item, batchId } = await makeBatchItem(request);

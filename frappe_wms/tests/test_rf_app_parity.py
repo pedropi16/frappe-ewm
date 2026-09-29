@@ -98,6 +98,52 @@ class TestRfAppParity(IntegrationTestCase):
                 {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 2, "stock_uom": self.uom, "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE"},
             ])
 
+    def test_create_and_submit_goods_receipt_auto_creates_new_batch_and_serial_no(self):
+        # Reproduces the production bug directly: a genuinely new incoming batch/serial (the
+        # normal case - nobody registers these ahead of time) used to throw a raw
+        # LinkValidationError deep inside the ERPNext Purchase Receipt/Delivery Note mirror,
+        # with no way to register it from the Receive screen at all - unlike the Handling Unit
+        # field, which already auto-creates (see the test above).
+        if not frappe.db.exists("Item", "RFPARITY-BATCH-ITEM"):
+            item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+            frappe.get_doc({"doctype": "Item", "item_code": "RFPARITY-BATCH-ITEM", "item_name": "RFPARITY-BATCH-ITEM",
+                "item_group": item_group, "stock_uom": self.uom, "is_stock_item": 1, "has_batch_no": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Product", {"item": "RFPARITY-BATCH-ITEM"}):
+            frappe.get_doc({"doctype": "WMS Product", "item": "RFPARITY-BATCH-ITEM", "stock_uom": self.uom, "warehouse_managed": 1, "active": 1, "batch_control": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Item", "RFPARITY-SERIAL-ITEM"):
+            item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
+            frappe.get_doc({"doctype": "Item", "item_code": "RFPARITY-SERIAL-ITEM", "item_name": "RFPARITY-SERIAL-ITEM",
+                "item_group": item_group, "stock_uom": self.uom, "is_stock_item": 1, "has_serial_no": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Product", {"item": "RFPARITY-SERIAL-ITEM"}):
+            frappe.get_doc({"doctype": "WMS Product", "item": "RFPARITY-SERIAL-ITEM", "stock_uom": self.uom, "warehouse_managed": 1, "active": 1, "serial_control": "Required at Receipt"}).insert(ignore_permissions=True)
+        frappe.db.set_single_value("Stock Settings", "enable_serial_and_batch_no_for_item", 1)
+
+        new_batch = f"RFPARITY-LOT-{frappe.generate_hash(length=6)}"
+        new_serial = f"RFPARITY-SN-{frappe.generate_hash(length=6)}"
+        self.assertFalse(frappe.db.exists("Batch", new_batch))
+        self.assertFalse(frappe.db.exists("Serial No", new_serial))
+
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [
+                {"line_number": 1, "item": "RFPARITY-BATCH-ITEM", "expected_quantity": 5, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"},
+                {"line_number": 2, "item": "RFPARITY-SERIAL-ITEM", "expected_quantity": 1, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"},
+            ]})
+        ind.insert(ignore_permissions=True)
+        result = create_and_submit_goods_receipt(ind.name, [
+            {"inbound_delivery_item": ind.items[0].name, "item": "RFPARITY-BATCH-ITEM", "quantity": 5, "stock_uom": self.uom,
+                "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE", "hu_type": "RFPARITY-PALLET", "batch_no": new_batch},
+            {"inbound_delivery_item": ind.items[1].name, "item": "RFPARITY-SERIAL-ITEM", "quantity": 1, "stock_uom": self.uom,
+                "handling_unit": frappe.generate_hash(length=10), "stock_type": "AVAILABLE", "hu_type": "RFPARITY-PALLET", "serial_no": new_serial},
+        ])
+        self.assertTrue(frappe.db.exists("Batch", new_batch), "a genuinely new batch number must be registered, not rejected")
+        self.assertTrue(frappe.db.exists("Serial No", new_serial), "a genuinely new serial number must be registered, not rejected")
+        gr = frappe.get_doc("Goods Receipt", result["goods_receipt"])
+        self.assertEqual(gr.docstatus, 1)
+        # No purchase_order on this Inbound Delivery, so this goes through the Stock Entry mirror
+        # (not Purchase Receipt) - which is exactly the path whose Serial and Batch Bundle
+        # creation the earlier _insert_and_submit_as_system fix covers.
+        self.assertTrue(gr.erpnext_stock_entry)
+
     def test_move_transfers_stock_and_can_be_confirmed_from_scanner_api(self):
         _ind, hu = self._receive_and_putaway(12)
         result = create_and_confirm_move(warehouse=self.warehouse, product=self.item, quantity=4, stock_uom=self.uom, stock_type="AVAILABLE",
