@@ -171,18 +171,60 @@ class TestActivityAreaQueues(IntegrationTestCase):
         self.assertIsNone(pull_next_warehouse_order(user=user))
         leave_queue(user=user)
 
-    def test_pull_falls_through_to_next_candidate_on_query_deadlock(self):
+    def test_mass_assign_activity_area_updates_selected_bins(self):
+        area = f"{self.warehouse}-AA1"
+        bin1 = f"{self.warehouse}-MASS-1"
+        bin2 = f"{self.warehouse}-MASS-2"
+        for b in (bin1, bin2):
+            if not frappe.db.exists("Storage Bin", b):
+                frappe.get_doc({"doctype": "Storage Bin", "bin_code": b, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+
+        found = search_bins_for_assignment(self.warehouse, storage_type=f"{self.warehouse}-A")
+        self.assertTrue(any(b.name == bin1 for b in found))
+
+        result = mass_assign_activity_area([bin1, bin2], area)
+        self.assertEqual(result["updated"], 2)
+        self.assertEqual(frappe.db.get_value("Storage Bin", bin1, "activity_area"), area)
+        self.assertEqual(frappe.db.get_value("Storage Bin", bin2, "activity_area"), area)
+
+
+class TestPullDeadlockRecovery(IntegrationTestCase):
+    # A dedicated, single-test class - not a method on TestActivityAreaQueues above - on purpose:
+    # the fix under test calls frappe.db.rollback(), which is correct for the real standalone
+    # request pull_next_warehouse_order always runs as, but IntegrationTestCase only isolates
+    # *between* classes (one commit at setUpClass, one rollback at teardown), not between test
+    # methods within the same class. A mid-test rollback() here would otherwise wipe out whatever
+    # a sibling test method in the same class had already set up earlier in the same run -
+    # reproduced live (it took out this file's own shared setUpClass warehouse). Being the only
+    # test in its class means there is no sibling left to damage, and no need to paper over it
+    # with a manual commit() of its own (which introduced a *worse* problem: committing this
+    # class's fixtures early bled into other, unrelated test classes' isolation too when run as
+    # part of the full suite).
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        frappe.set_user("Administrator")
+        cls.warehouse = "PDLR-TEST-WH"
+        company = frappe.get_all("Company", limit=1, pluck="name")[0]
+        if not frappe.db.exists("WMS Warehouse", cls.warehouse):
+            frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": cls.warehouse, "warehouse_name": cls.warehouse, "company": company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
+
+    def test_pull_returns_no_work_instead_of_raising_on_query_deadlock(self):
         # Reproduces the production bug directly: under real concurrent load, the claim's own
-        # conditional UPDATE can raise a genuine QueryDeadlockError (MySQL/MariaDB error 1020)
-        # instead of cleanly returning 0 rows - the database detecting the same race the
-        # compare-and-set already exists to handle, just via an exception. Before the fix this
-        # propagated straight to the operator as a raw HTTP 500 instead of falling through to
-        # the next open Warehouse Order the way an ordinary lost race already does.
-        queue = f"AAQ-DL-{frappe.generate_hash(length=6)}"
+        # conditional UPDATE can raise a genuine QueryDeadlockError (MySQL/MariaDB error
+        # 1020/1213) instead of cleanly returning 0 rows - the database detecting the same race
+        # the compare-and-set already exists to handle, just via an exception. An earlier fix
+        # tried to recover with a per-candidate savepoint and fall through to the next one, but
+        # that introduced a second bug: when MySQL picks this transaction as the deadlock
+        # *victim* it can discard every savepoint in it, so the savepoint's own cleanup then
+        # threw an unrelated "SAVEPOINT ... does not exist" (1305) - also reproduced live. The
+        # real fix gives up on the whole pull attempt (not just this one candidate) and returns
+        # None, the same outcome as "no work waiting right now" - instead of either raw 500.
+        queue = f"PDLR-Q-{frappe.generate_hash(length=6)}"
         frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": queue, "queue_name": queue,
             "warehouse": self.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
         user = frappe.session.user
-        resource_code = f"AAQ-DLRES-{frappe.generate_hash(length=6)}"
+        resource_code = f"PDLR-RES-{frappe.generate_hash(length=6)}"
         frappe.get_doc({"doctype": "WMS Resource", "resource_code": resource_code, "warehouse": self.warehouse,
             "resource_type": "Operator", "user": user, "active": 1}).insert(ignore_permissions=True)
         join_queue(queue, user=user)
@@ -203,23 +245,8 @@ class TestActivityAreaQueues(IntegrationTestCase):
         with patch.object(frappe.db, "sql", side_effect=sql_that_deadlocks_once):
             pulled = pull_next_warehouse_order(user=user)
 
-        self.assertEqual(pulled, wo_next.name, "a deadlock on one candidate must fall through to the next, not raise")
-        wo_deadlocked.reload()
-        self.assertEqual(wo_deadlocked.status, "Open", "the deadlocked candidate must be left untouched, not half-claimed")
-        leave_queue(user=user)
-
-    def test_mass_assign_activity_area_updates_selected_bins(self):
-        area = f"{self.warehouse}-AA1"
-        bin1 = f"{self.warehouse}-MASS-1"
-        bin2 = f"{self.warehouse}-MASS-2"
-        for b in (bin1, bin2):
-            if not frappe.db.exists("Storage Bin", b):
-                frappe.get_doc({"doctype": "Storage Bin", "bin_code": b, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
-
-        found = search_bins_for_assignment(self.warehouse, storage_type=f"{self.warehouse}-A")
-        self.assertTrue(any(b.name == bin1 for b in found))
-
-        result = mass_assign_activity_area([bin1, bin2], area)
-        self.assertEqual(result["updated"], 2)
-        self.assertEqual(frappe.db.get_value("Storage Bin", bin1, "activity_area"), area)
-        self.assertEqual(frappe.db.get_value("Storage Bin", bin2, "activity_area"), area)
+        # No reload()/state assertions on wo_deadlocked or wo_next here on purpose: the fix's own
+        # rollback() means their post-call state in *this* test's shared transaction is exactly
+        # as uncertain as a real request's would be after a genuine deadlock-victim rollback -
+        # the one thing actually guaranteed, in both cases, is the function's own return value.
+        self.assertIsNone(pulled, "a deadlock must be reported as no work available, not raise or hand back a different candidate")

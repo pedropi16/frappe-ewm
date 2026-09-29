@@ -1,6 +1,5 @@
 import frappe
 from frappe import _
-from frappe.database import savepoint
 from frappe.utils import flt, now_datetime
 from frappe_wms.utils import require_role
 
@@ -337,21 +336,27 @@ def pull_next_warehouse_order(user=None):
         # that read and this write; fall through to the next candidate instead of trusting it.
         #
         # Under real concurrent load this conditional UPDATE can also raise a genuine
-        # QueryDeadlockError (MySQL/MariaDB error 1020, "Record has changed since last read")
-        # rather than cleanly returning 0 rows - reproduced live with two resources pulling at
-        # the same instant. That's the database detecting the exact same race this compare-and-set
-        # already exists to handle, just via an exception instead of a row count; previously this
-        # propagated straight to the operator as a raw HTTP 500 with no retry. The savepoint
-        # rolls back only this one claim attempt (not anything earlier in the request) and falls
-        # through to the next candidate, the same as an ordinary lost race.
-        claimed = False
-        with savepoint(catch=frappe.QueryDeadlockError):
+        # QueryDeadlockError (MySQL/MariaDB error 1020/1213) instead of cleanly returning 0 rows -
+        # reproduced live with two resources pulling at the same instant. Worse, when MySQL picks
+        # this transaction as the deadlock *victim* it can discard every savepoint in it as part
+        # of that resolution - a savepoint-scoped catch around just this UPDATE isn't safe here,
+        # because the *next* statement (release/rollback to that now-gone savepoint) then throws
+        # its own unrelated "SAVEPOINT ... does not exist" (error 1305), reproduced live right
+        # after fixing the first error this same way. Whatever the exact failure, by the time any
+        # exception reaches here the connection's transaction state is no longer trustworthy
+        # enough to keep trying more candidates in it - roll the whole thing back (nothing else
+        # was written earlier in this call) and tell the caller no work is available right now,
+        # the same outcome as an ordinary lost race, instead of a raw 500.
+        try:
             frappe.db.sql(
                 "update `tabWarehouse Order` set assigned_resource=%s, status='Assigned', modified=%s, modified_by=%s "
                 "where name=%s and status='Open' and (assigned_resource is null or assigned_resource='')",
                 (resource.name, now_datetime(), frappe.session.user, candidate.name),
             )
             claimed = bool(frappe.db.sql("select row_count()")[0][0])
+        except Exception:
+            frappe.db.rollback()
+            return None
         if claimed:
             frappe.db.set_value("Warehouse Task", {"warehouse_order": candidate.name}, "assigned_resource", resource.name)
             return candidate.name

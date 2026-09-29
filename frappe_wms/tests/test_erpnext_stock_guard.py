@@ -20,7 +20,13 @@ class TestErpnextStockGuard(IntegrationTestCase):
             frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": cls.warehouse, "warehouse_name": cls.warehouse, "company": cls.company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
         cls.wh = frappe.get_doc("WMS Warehouse", cls.warehouse)
 
-        cls.unmanaged_warehouse = frappe.db.get_value("Warehouse", {"company": cls.company, "name": ["not in", [cls.wh.erpnext_warehouse]]})
+        # Excluding only this test's own warehouse isn't enough once other WMS Warehouse records
+        # exist (any dev site with more than one test class's fixtures in it) - this must pick a
+        # warehouse no *other* WMS Warehouse manages either, or it can hand back one the guard
+        # correctly treats as managed, making "is allowed" assertions below fail for the wrong
+        # reason entirely.
+        managed = frappe.get_all("WMS Warehouse", pluck="erpnext_warehouse") or [""]
+        cls.unmanaged_warehouse = frappe.db.get_value("Warehouse", {"company": cls.company, "name": ["not in", managed]})
         if not cls.unmanaged_warehouse:
             unmanaged = frappe.get_doc({"doctype": "Warehouse", "warehouse_name": "GUARD-TEST-UNMANAGED", "company": cls.company})
             unmanaged.insert(ignore_permissions=True)
