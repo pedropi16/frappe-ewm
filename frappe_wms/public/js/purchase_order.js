@@ -1,4 +1,5 @@
 frappe.ui.form.on("Purchase Order", { refresh(frm) {
+  if (window.frappe_wms_erp_status) frappe_wms_erp_status(frm);
   if (frm.doc.docstatus !== 1 || flt(frm.doc.per_received) >= 100) return;
   frm.add_custom_button(__("Inbound Delivery"), () => {
     frappe.prompt(

@@ -1,4 +1,5 @@
 frappe.ui.form.on("Sales Order", { refresh(frm) {
+  if (window.frappe_wms_erp_status) frappe_wms_erp_status(frm);
   if (frm.doc.docstatus !== 1 || frm.doc.status === "Closed" || flt(frm.doc.per_delivered) >= 100) return;
   frm.add_custom_button(__("Outbound Delivery"), () => {
     frappe.prompt(

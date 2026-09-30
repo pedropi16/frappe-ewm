@@ -20,7 +20,7 @@ add_to_apps_screen = [
     }
 ]
 
-app_include_js = ["/assets/frappe_wms/js/frappe_wms.js"]
+app_include_js = ["/assets/frappe_wms/js/frappe_wms.js", "/assets/frappe_wms/js/erp_wms_status.js"]
 app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
 
 doctype_js = {
@@ -30,7 +30,7 @@ doctype_js = {
 }
 
 after_install = "frappe_wms.install.after_install"
-after_migrate = "frappe_wms.db_maintenance.ensure_indexes"
+after_migrate = ["frappe_wms.db_maintenance.ensure_indexes", "frappe_wms.setup.custom_fields.ensure_custom_fields"]
 before_tests = "frappe_wms.tests.bootstrap.before_tests"
 
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
@@ -52,6 +52,8 @@ doc_events = {
     "Inbound Delivery": {
         "autoname": _NUMBER_RANGE_AUTONAME,
         "validate": "frappe_wms.events.deliveries.validate_inbound_delivery",
+        "before_cancel": "frappe_wms.events.deliveries.before_cancel_inbound_delivery",
+        "on_cancel": "frappe_wms.events.deliveries.on_cancel_inbound_delivery",
     },
     "Outbound Delivery": {
         "autoname": _NUMBER_RANGE_AUTONAME,
@@ -77,10 +79,22 @@ doc_events = {
     "WMS Quality Inspection": {"autoname": _NUMBER_RANGE_AUTONAME},
     "WMS Opening Stock Load": {"autoname": _NUMBER_RANGE_AUTONAME},
     "WMS Posting Change": {"autoname": _NUMBER_RANGE_AUTONAME},
-    "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
-    "Delivery Note": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
-    "Purchase Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
-    "Stock Reconciliation": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate", "before_cancel": "frappe_wms.events.erpnext_stock_guard.before_cancel"},
+    "Delivery Note": {
+        "validate": "frappe_wms.events.erpnext_stock_guard.validate",
+        "on_update": "frappe_wms.services.erp_integration.on_draft_document_update",
+        "before_submit": "frappe_wms.services.erp_integration.before_draft_document_submit",
+        "on_trash": "frappe_wms.services.erp_integration.on_order_cancel",
+        "before_cancel": "frappe_wms.events.erpnext_stock_guard.before_cancel",
+    },
+    "Purchase Receipt": {
+        "validate": "frappe_wms.events.erpnext_stock_guard.validate",
+        "on_update": "frappe_wms.services.erp_integration.on_draft_document_update",
+        "before_submit": "frappe_wms.services.erp_integration.before_draft_document_submit",
+        "on_trash": "frappe_wms.services.erp_integration.on_order_cancel",
+        "before_cancel": "frappe_wms.events.erpnext_stock_guard.before_cancel",
+    },
+    "Stock Reconciliation": {"validate": "frappe_wms.events.erpnext_stock_guard.validate", "before_cancel": "frappe_wms.events.erpnext_stock_guard.before_cancel"},
     "Sales Invoice": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Purchase Invoice": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Subcontracting Receipt": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
@@ -90,6 +104,17 @@ doc_events = {
         "on_submit": "frappe_wms.events.work_order.on_submit",
     },
     "Job Card": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    # ERPNext -> WMS replication and change propagation (WMS Warehouse "ERP Integration").
+    "Sales Order": {
+        "on_submit": "frappe_wms.services.erp_integration.on_order_submit",
+        "before_cancel": "frappe_wms.services.erp_integration.on_order_cancel",
+        "on_update_after_submit": "frappe_wms.services.erp_integration.on_order_update_after_submit",
+    },
+    "Purchase Order": {
+        "on_submit": "frappe_wms.services.erp_integration.on_order_submit",
+        "before_cancel": "frappe_wms.services.erp_integration.on_order_cancel",
+        "on_update_after_submit": "frappe_wms.services.erp_integration.on_order_update_after_submit",
+    },
 }
 
 scheduler_events = {

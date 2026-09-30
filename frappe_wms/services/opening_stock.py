@@ -133,6 +133,7 @@ def cancel_opening_stock_load(name):
             sr = frappe.get_doc("Stock Reconciliation", sr_name)
             if sr.docstatus == 1:
                 sr.flags.ignore_permissions = True
+                sr.flags.wms_managed_posting = True
                 sr.cancel()
     doc.db_set({"status": "Cancelled"}, update_modified=True)
     return {"opening_stock_load": doc.name, "status": "Cancelled"}

@@ -32,6 +32,13 @@ def _apply_route_defaults(doc):
         if not doc.door and route.default_door: doc.door = route.default_door
     if doc.door: require_storage_role(doc.door, "Door", label=_("Door"))
 
+def before_cancel_inbound_delivery(doc, method=None):
+    if frappe.db.exists("Goods Receipt", {"inbound_delivery": doc.name, "docstatus": 1}):
+        frappe.throw(_("Cannot cancel: goods have been received against this delivery. Reverse the Goods Receipt(s) first, or complete the delivery short."))
+
+def on_cancel_inbound_delivery(doc, method=None):
+    doc.db_set("status", "Cancelled")
+
 def before_cancel_outbound_delivery(doc, method=None):
     if frappe.db.exists("Goods Issue", {"outbound_delivery": doc.name, "docstatus": 1}):
         frappe.throw(_("Cannot cancel: a Goods Issue is posted against this delivery. Reverse it first."))

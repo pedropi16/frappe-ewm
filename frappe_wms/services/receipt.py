@@ -14,6 +14,13 @@ OPEN_INBOUND_STATUSES = ("Draft", "Expected", "Arrived", "Receiving", "Partially
 
 def post_goods_receipt(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype": doc.doctype, "reference_name": doc.name}): return
+    # Receipt progress moves on submit for every Goods Receipt - API, RF or a plain desk
+    # submit - exactly as reverse_goods_receipt moves it back on cancel; it used to move only on
+    # the API path, so a desk-submitted receipt was never counted against its delivery.
+    if doc.inbound_delivery:
+        delivery = _lock_inbound_delivery(doc.inbound_delivery)
+        if delivery.docstatus == 2: frappe.throw(_("Inbound Delivery {0} is cancelled").format(delivery.name))
+        _validate_receipt_quantities(delivery, doc.items)
     entries=[]
     inspection_rows=[]
     for row in doc.items:
@@ -42,6 +49,8 @@ def post_goods_receipt(doc):
         entries.append(entry)
     # A receipt is an external increase, so post each row independently.
     for i, entry in enumerate(entries,1): post_entries([entry],doc.doctype,doc.name,f"GR:{doc.name}:{i}")
+    if doc.inbound_delivery:
+        _update_inbound_delivery_receipt_progress(doc.inbound_delivery, doc.items)
     for row in inspection_rows:
         frappe.get_doc({
             "doctype": "WMS Quality Inspection", "warehouse": doc.warehouse, "product": row.item,
@@ -263,7 +272,6 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
-    _update_inbound_delivery_receipt_progress(delivery.name, items)
     request_names = create_putaway_requests(gr.name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
@@ -369,7 +377,6 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
-    _update_inbound_delivery_receipt_progress(ind.name, gr.items)
     request_names = create_putaway_requests(gr.name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]

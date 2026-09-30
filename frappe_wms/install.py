@@ -49,6 +49,8 @@ def after_install():
 
     from frappe_wms.setup.roles import ensure_roles
     ensure_roles()
+    from frappe_wms.setup.custom_fields import ensure_custom_fields
+    ensure_custom_fields()
 
     # Deliberately not creating our own Desktop Icon here. frappe.hooks.after_app_install ->
     # auto_generate_icons_and_sidebar() -> create_desktop_icons() always runs right after this

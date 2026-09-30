@@ -60,6 +60,7 @@ def cancel_posting_change(name):
         se = frappe.get_doc("Stock Entry", doc.erpnext_stock_entry)
         if se.docstatus == 1:
             se.flags.ignore_permissions = True
+            se.flags.wms_managed_posting = True
             se.cancel()
     doc.db_set({"status": "Cancelled"}, update_modified=True)
     return {"posting_change": doc.name, "status": "Cancelled"}

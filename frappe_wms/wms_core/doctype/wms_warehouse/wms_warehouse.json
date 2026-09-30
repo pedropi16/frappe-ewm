@@ -18,7 +18,16 @@
     "default_picking_staging_bin",
     "default_stock_type",
     "allow_negative_stock",
-    "active"
+    "active",
+    "erp_integration_section",
+    "inbound_replication",
+    "outbound_replication",
+    "release_replicated_deliveries",
+    "outbound_follow_up",
+    "column_break_erp1",
+    "erp_change_policy",
+    "close_short_orders",
+    "erp_sync_mode"
   ],
   "fields": [
     {
@@ -97,6 +106,72 @@
       "default": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "erp_integration_section",
+      "label": "ERP Integration (ERPNext)",
+      "fieldtype": "Section Break",
+      "collapsible": 1,
+      "description": "How ERPNext documents reach this warehouse and how the warehouse reports back - the SAP ECC -> EWM delivery replication model. ERPNext keeps orders, valuation and accounting; this warehouse executes."
+    },
+    {
+      "fieldname": "inbound_replication",
+      "label": "Inbound Replication",
+      "fieldtype": "Select",
+      "options": "Manual\nPurchase Order Submitted\nPurchase Receipt Draft",
+      "default": "Manual",
+      "description": "Manual: a user creates the Inbound Delivery (button on the Purchase Order). Purchase Order Submitted: every submitted PO line for this warehouse becomes an Inbound Delivery automatically. Purchase Receipt Draft: a draft Purchase Receipt (an ASN) becomes the Inbound Delivery and the Goods Receipt later submits that same Purchase Receipt."
+    },
+    {
+      "fieldname": "outbound_replication",
+      "label": "Outbound Replication",
+      "fieldtype": "Select",
+      "options": "Manual\nSales Order Submitted\nDelivery Note Draft",
+      "default": "Manual",
+      "description": "Manual: a user creates the Outbound Delivery (button on the Sales Order). Sales Order Submitted: every submitted SO line for this warehouse becomes an Outbound Delivery automatically. Delivery Note Draft: a draft Delivery Note (the ECC delivery) becomes the Outbound Delivery and the Goods Issue later submits that same Delivery Note."
+    },
+    {
+      "fieldname": "release_replicated_deliveries",
+      "label": "Release Replicated Deliveries",
+      "fieldtype": "Check",
+      "default": "1",
+      "description": "Submit deliveries created by replication so they are ready for execution straight away."
+    },
+    {
+      "fieldname": "outbound_follow_up",
+      "label": "Outbound Follow-up on Release",
+      "fieldtype": "Select",
+      "options": "None\nAllocate\nAllocate and Create Pick Tasks",
+      "default": "None",
+      "description": "What happens to a released Outbound Delivery without a wave: nothing (a planner allocates later), allocate stock, or allocate and create pick tasks."
+    },
+    {
+      "fieldname": "column_break_erp1",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "erp_change_policy",
+      "label": "Order Change Policy",
+      "fieldtype": "Select",
+      "options": "Adapt Until Execution Starts\nBlock Changes After Replication",
+      "default": "Adapt Until Execution Starts",
+      "description": "What an edit or cancellation of the ERPNext order does once it has been replicated: follow it into the WMS delivery while nothing has been allocated/received yet, or refuse it."
+    },
+    {
+      "fieldname": "close_short_orders",
+      "label": "Close Order Remainder on Short Completion",
+      "fieldtype": "Check",
+      "default": "0",
+      "description": "When a delivery is completed short (supplier under-delivered, or the warehouse closed it short), close the ERPNext Purchase/Sales Order so the remainder is not delivered again."
+    },
+    {
+      "fieldname": "erp_sync_mode",
+      "label": "ERPNext Posting Mode",
+      "fieldtype": "Select",
+      "options": "Synchronous\nQueued with Retry",
+      "default": "Synchronous",
+      "description": "Synchronous: the ERPNext document posts inside the warehouse transaction, and an ERPNext error stops the warehouse posting. Queued with Retry: the warehouse posts first and the ERPNext document follows in the background, retried automatically and listed in WMS ERP Sync Log if it keeps failing."
     }
   ],
   "autoname": "field:warehouse_code",

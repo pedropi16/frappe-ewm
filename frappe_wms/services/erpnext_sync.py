@@ -110,7 +110,54 @@ def _cancel_doc(doctype, name):
     doc = frappe.get_doc(doctype, name)
     if doc.docstatus == 1:
         doc.flags.ignore_permissions = True
+        doc.flags.wms_managed_posting = True  # the warehouse's own reversal (see erpnext_stock_guard.before_cancel)
         doc.cancel()
+
+# --- Replicated drafts: the warehouse posts the ERPNext delivery document itself ---
+
+def _replicated_draft(delivery_name, delivery_doctype, source_doctype):
+    """The still-draft Purchase Receipt / Delivery Note a WMS delivery was replicated from."""
+    if not delivery_name: return None
+    src = frappe.db.get_value(delivery_doctype, delivery_name, ["erp_source_doctype", "erp_source_name"], as_dict=True)
+    if not src or src.erp_source_doctype != source_doctype or not src.erp_source_name: return None
+    return src.erp_source_name if frappe.db.get_value(source_doctype, src.erp_source_name, "docstatus") == 0 else None
+
+_DRAFT_ROW_SKIP = {"name", "idx", "parent", "parentfield", "parenttype", "doctype", "creation", "modified", "modified_by", "owner",
+    "docstatus", "qty", "stock_qty", "received_qty", "received_stock_qty", "rejected_qty", "batch_no", "serial_no",
+    "serial_and_batch_bundle", "rejected_serial_and_batch_bundle", "amount", "base_amount", "net_amount", "base_net_amount"}
+
+def _post_replicated_draft(doc, erpnext_warehouse, source_doctype, source_name, link_field, line_field, line_doctype):
+    """SAP ECC <- EWM: the goods receipt / goods issue posts the very Purchase Receipt / Delivery
+    Note the warehouse was working on - rows cut to what was actually received / shipped, split
+    per batch and serial - instead of creating a second ERPNext document next to it."""
+    groups = {}
+    for row in doc.items:
+        source_line = frappe.db.get_value(line_doctype, row.get(line_field), "source_document_line") if row.get(line_field) else None
+        key = (source_line, row.batch_no, row.serial_no, row.stock_type)
+        groups[key] = groups.get(key, 0) + flt(row.quantity)
+    with _as_system_user():
+        previous, frappe.flags.wms_posting = frappe.flags.get("wms_posting"), True
+        try:
+            src = frappe.get_doc(source_doctype, source_name)
+            templates = {r.name: r for r in src.items}
+            kept = []
+            for (source_line, batch_no, serial_no, stock_type), qty in groups.items():
+                template = templates.get(source_line)
+                if not template:
+                    frappe.throw(_("{0} line for {1} {2} was not found on {3}").format(doc.doctype, doc.name, source_line, source_name))
+                values = {k: v for k, v in template.as_dict().items() if k not in _DRAFT_ROW_SKIP}
+                values.update(qty=qty / flt(template.conversion_factor or 1), stock_qty=qty, warehouse=erpnext_warehouse,
+                              batch_no=batch_no, serial_no=serial_no, use_serial_batch_fields=1, wms_stock_type=stock_type)
+                if source_doctype == "Purchase Receipt": values["received_qty"] = values["qty"]
+                kept.append(values)
+            src.set("items", kept)
+            src.flags.ignore_permissions = True
+            src.flags.wms_managed_posting = True
+            src.save()
+            src.submit()
+        finally:
+            frappe.flags.wms_posting = previous
+    doc.db_set(link_field, source_name, update_modified=False)
 
 # --- Goods Receipt -> Stock Entry (no PO) or Purchase Receipt (PO-linked) ---
 
@@ -134,6 +181,10 @@ def sync_goods_receipt(doc):
     if doc.get("erpnext_stock_entry") or doc.get("erpnext_purchase_receipt") or doc.get("erpnext_delivery_note"): return
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
     if not erpnext_warehouse: return
+    source = _replicated_draft(doc.get("inbound_delivery"), "Inbound Delivery", "Purchase Receipt")
+    if source:
+        _post_replicated_draft(doc, erpnext_warehouse, "Purchase Receipt", source, "erpnext_purchase_receipt", "inbound_delivery_item", "Inbound Delivery Item")
+        return
     po_links = [_po_link_for_gr_row(row) for row in doc.items]
     linked = [l for l in po_links if l[0]]
     if linked and len(linked) != len(doc.items):
@@ -432,6 +483,10 @@ def sync_goods_issue(doc):
     if doc.get("erpnext_stock_entry") or doc.get("erpnext_delivery_note") or doc.get("erpnext_purchase_receipt"): return
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
     if not erpnext_warehouse: return
+    source = _replicated_draft(doc.get("outbound_delivery"), "Outbound Delivery", "Delivery Note")
+    if source:
+        _post_replicated_draft(doc, erpnext_warehouse, "Delivery Note", source, "erpnext_delivery_note", "outbound_delivery_item", "Outbound Delivery Item")
+        return
     so_links = [_so_link_for_gi_row(row) for row in doc.items]
     linked = [l for l in so_links if l[0]]
     if linked and len(linked) != len(doc.items):

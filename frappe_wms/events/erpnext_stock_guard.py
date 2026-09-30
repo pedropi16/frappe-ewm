@@ -39,8 +39,18 @@ def _wms_managed_warehouses(erpnext_warehouses):
 
 
 def validate(doc, method=None):
-    if doc.flags.get("wms_managed_posting"):
+    if doc.flags.get("wms_managed_posting") or frappe.flags.get("wms_posting"):
         return
+    # A draft Delivery Note / Purchase Receipt on a warehouse that replicates from drafts IS the
+    # warehouse delivery (the ECC delivery / ASN): it may exist, and is submitted only by the
+    # warehouse's own goods issue / goods receipt (erp_integration.before_draft_document_submit).
+    if doc.doctype in ("Delivery Note", "Purchase Receipt") and doc.docstatus == 0 and not doc.get("is_return"):
+        from frappe_wms.services.erp_integration import draft_document_is_replicated
+        if draft_document_is_replicated(doc):
+            return
+    if doc.doctype in ("Delivery Note", "Purchase Receipt") and doc.docstatus == 1:
+        from frappe_wms.services.erp_integration import before_draft_document_submit
+        before_draft_document_submit(doc)
     if not _enforcement_enabled():
         return
     config = _WAREHOUSE_FIELDS.get(doc.doctype)
@@ -71,3 +81,40 @@ def validate(doc, method=None):
             ).format(frappe.bold(", ".join(sorted(managed))), doc.doctype, config["alt"]),
             title=_("WMS-Managed Warehouse"),
         )
+
+
+# Where the WMS stores the ERPNext documents it posted: (WMS doctype, field, holds a comma list).
+_MIRROR_REFERENCES = {
+    "Stock Entry": [("Goods Receipt", "erpnext_stock_entry", False), ("Goods Issue", "erpnext_stock_entry", False),
+                    ("WMS Quality Inspection", "erpnext_stock_entry", False), ("WMS Posting Change", "erpnext_stock_entry", False),
+                    ("Kitting Order", "erpnext_stock_entry", False), ("Warehouse Request", "erpnext_stock_entry", False),
+                    ("WMS Task Difference", "erpnext_stock_entry", False),
+                    ("WMS Physical Inventory Count", "erpnext_gain_stock_entry", True), ("WMS Physical Inventory Count", "erpnext_loss_stock_entry", True)],
+    "Delivery Note": [("Goods Issue", "erpnext_delivery_note", False), ("Goods Receipt", "erpnext_delivery_note", False)],
+    "Purchase Receipt": [("Goods Receipt", "erpnext_purchase_receipt", False), ("Goods Issue", "erpnext_purchase_receipt", False)],
+    "Stock Reconciliation": [("WMS Opening Stock Load", "erpnext_stock_reconciliations", True)],
+}
+
+
+def wms_owner_of(doctype, name):
+    """(WMS doctype, WMS document) that posted this ERPNext document, if any."""
+    for wms_doctype, field, is_list in _MIRROR_REFERENCES.get(doctype, []):
+        if is_list:
+            hit = frappe.db.sql(f"select name from `tab{wms_doctype}` where concat(',', replace(ifnull(`{field}`,''), ' ', ''), ',') like %s limit 1",
+                                (f"%,{name},%",))
+            hit = hit[0][0] if hit else None
+        else:
+            hit = frappe.db.get_value(wms_doctype, {field: name})
+        if hit: return wms_doctype, hit
+    return None
+
+
+def before_cancel(doc, method=None):
+    """A document the warehouse posted is reversed from the warehouse side, never cancelled here:
+    cancelling it directly would leave the WMS stock ledger and ERPNext's disagreeing."""
+    if doc.flags.get("wms_managed_posting") or frappe.flags.get("wms_posting"):
+        return
+    owner = wms_owner_of(doc.doctype, doc.name)
+    if owner:
+        frappe.throw(_("{0} {1} was posted by the warehouse for {2} {3}. Reverse it there (the reversal cancels this document too).")
+                     .format(doc.doctype, doc.name, _(owner[0]), frappe.bold(owner[1])), title=_("Warehouse-Managed Document"))

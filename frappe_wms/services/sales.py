@@ -3,32 +3,18 @@ from frappe import _
 from frappe.utils import flt, nowdate
 
 def create_outbound_delivery_from_sales_order(sales_order_name, warehouse):
+    # The manual "Create > Outbound Delivery" button. Automatic replication (WMS Warehouse
+    # outbound_replication) goes through the same builder - services/erp_integration.py - which
+    # only takes lines whose ERPNext warehouse belongs to this WMS warehouse and only what is not
+    # already delivered or sitting on another open WMS delivery.
+    from frappe_wms.services.erp_integration import create_deliveries_for_order
     so = frappe.get_doc("Sales Order", sales_order_name)
     if so.docstatus != 1: frappe.throw(_("Sales Order must be submitted"))
     wh = frappe.get_doc("WMS Warehouse", warehouse)
     if not wh.default_stock_type: frappe.throw(_("WMS Warehouse {0} has no default stock type configured").format(warehouse))
-
-    items = []
-    for row in so.items:
-        # delivered_qty accumulates in the SO row's own transactional UOM (same as qty), but
-        # the WMS side always tracks stock_uom - convert before handing it to the Outbound
-        # Delivery, or a non-1 conversion_factor would silently under/over-state what's left.
-        outstanding = (flt(row.qty) - flt(row.delivered_qty)) * flt(row.conversion_factor or 1)
-        if outstanding <= 0: continue
-        items.append({
-            "line_number": len(items) + 1, "item": row.item_code, "requested_quantity": outstanding,
-            "stock_uom": row.stock_uom, "required_stock_type": wh.default_stock_type,
-            "sales_order": so.name, "sales_order_item": row.name,
-        })
-    if not items: frappe.throw(_("Sales Order {0} has no outstanding quantity to deliver").format(so.name))
-
-    doc = frappe.get_doc({
-        "doctype": "Outbound Delivery", "outbound_delivery_number": f"{so.name}-{frappe.generate_hash(length=4)}", "warehouse": warehouse,
-        "customer": so.customer, "delivery_date": so.delivery_date or nowdate(), "staging_bin": wh.default_shipping_bin,
-        "priority": "Normal", "items": items,
-    })
-    doc.insert(ignore_permissions=True)
-    return doc.name
+    names = create_deliveries_for_order(so, wms_warehouse=warehouse, trigger_only=False, release=False)
+    if not names: frappe.throw(_("Sales Order {0} has no outstanding quantity to deliver").format(so.name))
+    return names[0]
 
 def _vendor_returns_customer():
     # Outbound Delivery's customer field is mandatory (it's normally an external-shipping
