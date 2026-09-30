@@ -914,7 +914,7 @@ proceed. Only then does the home menu appear, leading to:
 
 | Section | Action | What it does |
 |---|---|---|
-| Inbound | Receive | Pick an open Inbound Delivery, scan an HU per line (unknown barcodes auto-register using `default_handling_unit_type`), post the Goods Receipt — which immediately raises Putaway (and, where matched, [P4] Cross Dock) tasks |
+| Inbound | Receive | Pick an open Inbound Delivery, then scan what is in front of you: a product barcode (EAN/GTIN or item code) or a GS1-128/DataMatrix label selects its line; the HU (unknown labels auto-register with the chosen/default HU type) carries over to the next line; batch and serial fields appear only when posting requires them — serials are scanned one after another, and a GS1 label fills GTIN, batch, expiry, serial, count and SSCC by itself. Lines collect into one Goods Receipt, posted in one go — which immediately raises Putaway (and, where matched, [P4] Cross Dock) tasks |
 | Inbound | Putaway Tasks | Confirm any open Putaway, Unload, Deconsolidation, or [P4] Cross Dock task, or report an exception — every task type shares the same generic confirm wizard (source scan → quantity → destination scan → HU), so nothing here is task-type-specific |
 | Inbound | Deconsolidate | Split a received HU's contents across multiple destination bins in one flow |
 | Inbound | Quality | Complete an inspection's pass/fail split |
@@ -926,10 +926,10 @@ proceed. Only then does the home menu appear, leading to:
 | Internal | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
 | Internal | Kitting [P4] | List open Kitting Orders for the logged-on operator's warehouse; tap one to complete it (Assemble/Disassemble) |
 | Internal | Consolidation | Scan an Outbound Delivery/Work Order/Stock Allocation/Warehouse Request barcode to find and add joinable lines to a [Consolidation Group](#consolidation-group), set a target HU, Gather, then Split to Destinations |
-| Outbound | Picking | Auto/Manual submenu (`renderSubmenu`, a deliberately reusable tile-list pattern meant for other RF menus too): **Auto** pulls the next task off the operator's eligible queues (same as the Queue bar's Get Work); **Manual** offers six labeled quick-picks — HU, Warehouse Task, Warehouse Order, Warehouse Request, Queue, Outbound Delivery — all funnelling into the same auto-detect-by-existence `find_pick_tasks` lookup |
+| Outbound | Picking | Auto/Manual submenu (`renderSubmenu`, a deliberately reusable tile-list pattern meant for other RF menus too): **Auto** pulls the next task off the operator's eligible queues (same as the Queue bar's Get Work); **Manual** is one scan field for any reference — HU, Warehouse Task, Warehouse Order, Warehouse Request, Queue or Outbound Delivery, told apart by `find_pick_tasks` itself — with per-kind searches underneath |
 | Outbound | Pick Tasks | Confirm any open Pick, Stage, or Load task |
 | Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
-| Outbound | Pack | Complete an open Packing Order in one tap |
+| Outbound | Pack | Log on to a packing work center, then scan source HU → product → quantity → destination HU to pack; create a new carton/pallet, pack a whole HU into another, close an HU with its weight (it moves on to the delivery's staging bin); open Packing Orders at the table can still be completed in one tap |
 | Outbound | VAS | Complete open VAS activity steps, or tap "+ Generate from Packaging Spec" [P4] to build a new VAS Order's steps from a scanned HU's item's Packaging Spec instead of typing them in by hand |
 | Outbound | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
 | — | Lookup | HU/bin contents by barcode |
@@ -1065,7 +1065,31 @@ deadlock should never surface as an HTTP 500.
   the normal putaway flow from it (`create_fg_receipt_from_work_order`).
 - **WMS Monitor** (`/app/wms-monitor`) — pick a warehouse, then a node from
   the left-hand list, SAP EWM Warehouse Management Monitor-style, instead of
-  one long scrolling page:
+  one long scrolling page. Every search node (inbound, outbound, waves, stock,
+  tasks, HUs, movements) has an **SAP selection screen**
+  (`public/js/wms_selection.js`, compiled server-side by
+  `services/selection.py`):
+  - each field takes a single value, a `from`/`to` range, or opens
+    **multiple selection** with *Include* and *Exclude* tabs and the SAP
+    operators (=, ≠, >, ≥, <, ≤, between, not between, pattern, not pattern);
+  - shortcut syntax in the field: `A*` pattern (`+` = one character),
+    `>=10`, `<>X`, `10..20`, `a;b;c`, `!X` to exclude, `=` for blank;
+  - paste a column copied from Excel into any field (or the dialog) and every
+    line becomes one value — large lists run as one `IN (...)`;
+  - **Fields…** adds any field of the DocType, plus related ones (product
+    group, a bin's storage type, a product on a delivery line, a Sales/
+    Purchase Order, the HU's work center, ...);
+  - **Max. hits**, Execute on **F8** or Enter, and a clear warning when the
+    hit limit cut the result;
+  - **Save as Variant** (personal or, for supervisors, global; one default per
+    user and view) and **layouts**: drag a column header's grip to move it,
+    **Columns…** to show/hide/order any field, sort, and a Σ totals row — all
+    saved in `WMS Monitor Variant`; **Export** downloads the visible grid as
+    CSV.
+
+  Criteria are compiled into SQL only from fieldnames validated against the
+  DocType meta and escaped values, and appended to Frappe's own
+  `DatabaseQuery`, so role and User Permissions still apply. Nodes:
   - **Overview** — summary counts (open tasks by type, exceptions, pending
     replenishment, deliveries in progress, open counts/inspections, open
     waves, active resources), each linking to its filtered list view.
@@ -1084,6 +1108,9 @@ deadlock should never surface as an HTTP 500.
     allocated/available per product/bin/HU/stock type), with a per-stock-type
     summary strip — the current-state counterpart to Stock Movements' history.
   - **Warehouse Tasks**, **Handling Units** — searchable, each its own node.
+  - **Packing Station** — the packing work center below, inside the Monitor.
+  - **Repack Center** — free repacking anywhere in the warehouse: a bin/HU/
+    stock-line tree with drag and drop.
   - **Stock Movements** — searchable `WMS Stock Ledger Entry` history.
   - **Resources & Queues** — resource workload and warehouse queues.
   - **Difference Analyzer** [P3] — posted count variance aggregated by
@@ -1108,6 +1135,29 @@ deadlock should never surface as an HTTP 500.
 
   Roles: WMS Supervisor / Administrator / Inventory Controller / Auditor,
   System Manager.
+- **Packing Station** (`/app/wms-packing-station`, also a Monitor node) —
+  SAP EWM's packing work center (`/SCWM/PACK`). The packer logs on to a
+  **Work Center** (a packing table = one Storage Bin) and gets the three
+  /SCWM/PACK areas: the HU tree of everything on the table, the selected HU's
+  detail (contents, weights, delivery, label), and a scanner area with
+  *Pack Product*, *Pack HU*, *Create HU* and *Close HU* tabs where Enter moves
+  field to field and runs the action on the last one. Rules
+  (`services/packing_station.py`):
+  - one HU never mixes outbound deliveries; a tote picked for several
+    deliveries asks which delivery a pack step is for; packing into an empty
+    HU stamps it with the delivery (`Handling Unit.outbound_delivery`);
+  - **Close HU** records the weighed gross weight (warns when it is below the
+    products' net weight), locks the HU and everything nested in it, queues
+    its label (print event *HU Closed*) and can move it straight to the
+    delivery's staging bin; **Reopen** undoes it;
+  - the delivery's packing status moves to *In Process*, then *Packed* once
+    every HU holding its stock is closed;
+  - shipping and goods issue follow the stock: a shipment loads the
+    top-level HUs that still hold the delivery's stock (an emptied pick tote
+    drops out, a carton packed onto a pallet ships as the pallet), and goods
+    issue finds packed and nested HUs.
+
+  Roles: WMS Packer / Operator / Supervisor / Administrator, System Manager.
 
 ## Install
 
