@@ -61,10 +61,9 @@ export function scanWithCamera({ hint } = {}) {
     }
 
     function accept(text) {
-      const code = normalizeScan(text);
-      if (!code) return;
+      if (!normalizeScan(text)) return;
       feedback.ok();
-      finish(code);
+      finish(text); // unnormalized: the field normalizes it, and a GS1 DataMatrix keeps its separators for core/gs1.js
     }
 
     function showFailure(message) {

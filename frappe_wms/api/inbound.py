@@ -31,6 +31,13 @@ def list_open_inbound_deliveries():
 
 @frappe.whitelist()
 @retry_on_deadlock
+def receiving_worklist(inbound_delivery):
+    require_role(*RECEIVING_ROLES)
+    from frappe_wms.services.receipt import receiving_worklist as _receiving_worklist
+    return _receiving_worklist(inbound_delivery)
+
+@frappe.whitelist()
+@retry_on_deadlock
 def create_and_submit_goods_receipt(inbound_delivery, items, idempotency_key=None):
     return run_once(idempotency_key, lambda: _create_and_submit_goods_receipt(inbound_delivery, parse_json(items, "items")))
 

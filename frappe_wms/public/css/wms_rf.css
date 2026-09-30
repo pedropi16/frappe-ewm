@@ -182,3 +182,8 @@ body.flash-ok::before { border-color: var(--ok); } body.flash-warn::before { bor
 
 @media (min-width: 720px) { main#view, footer#actions { width: 100%; max-width: 640px; margin: 0 auto; } footer#actions { border-radius: 14px 14px 0 0; } }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.seg { display: flex; gap: 4px; margin: 8px 0 10px; overflow-x: auto; }
+.seg button { flex: 1 0 auto; min-height: 44px; padding: 6px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: inherit; font-size: 14px; font-weight: 600; }
+.seg button.on { background: var(--accent, #2563eb); border-color: transparent; color: #fff; }
+.linkbtn { background: none; border: 0; padding: 4px 6px; color: var(--accent, #2563eb); font-weight: 600; text-decoration: underline; min-height: 32px; }

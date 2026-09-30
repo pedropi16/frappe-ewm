@@ -17,27 +17,38 @@ async function makeDelivery(request, qty = 6) {
   return { name: r.data.name, number };
 }
 
-test("Receive: open a delivery, scan a new HU, post - putaway task appears; nothing left afterwards", async ({ page, request }) => {
+// Scan-first receiving: the product scan picks the delivery line, then HU, then quantity.
+async function receiveLine(page, item, hu) {
+  await scan(page, item);                                          // product -> selects its line, focus moves to the HU field
+  await expect(page.locator('[data-fk="hu"]')).toBeFocused();
+  await scan(page, hu);                                            // new HU label
+  await page.locator('[data-fk="hutype"]').selectOption("E2E-PALLET");
+}
+
+test("Receive: scan product, HU and quantity, add, post - putaway task appears", async ({ page, request }) => {
   const d = await makeDelivery(request, 6);
   await openApp(page, "#/receive");
   await view(page).getByText(d.number).click();
   await expect(page).toHaveURL(new RegExp(`#/receive/${d.name}$`));
-  const hu = `E2EGR${Date.now().toString().slice(-7)}`;
-  await scan(page, hu);                                            // HU barcode -> lands in the first HU field
-  await page.locator('[data-fk="type0"]').selectOption("E2E-PALLET");
-  await expect(page.locator('[data-fk="qty0"]')).toHaveValue("6");
+  await receiveLine(page, seed().item, `E2EGR${Date.now().toString().slice(-7)}`);
+  await expect(page.locator('[data-fk="qty"]')).toHaveValue("6");
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
+  await expect(view(page).getByText(/In this receipt \(1 rows\)/)).toBeVisible();
   await page.getByRole("button", { name: /Post receipt/ }).click();
   await expect(notice(page)).toContainText(/Goods Receipt .* posted/);
   await expect(page).toHaveURL(/#\/tasks\/inbound$/);
   await expect(view(page).getByText(/Putaway/).first()).toBeVisible();
 });
 
-test("Receive: quantity above what is expected is rejected inline before anything is sent", async ({ page, request }) => {
+test("Receive: quantity above what is open is rejected inline, and a product not on the delivery is refused", async ({ page, request }) => {
   const d = await makeDelivery(request, 3);
   await openApp(page, `#/receive/${d.name}`);
-  await scan(page, `E2EGX${Date.now().toString().slice(-7)}`);
-  await page.locator('[data-fk="qty0"]').fill("9");
-  await page.getByRole("button", { name: /Post receipt/ }).click();
+  await scan(page, "NOT-ON-THIS-DELIVERY");
+  await expect(view(page).locator(".field-error")).toContainText(/Scan the product first|not a product/);
+  await page.locator('[data-fk="code"]').fill("");
+  await receiveLine(page, seed().item, `E2EGX${Date.now().toString().slice(-7)}`);
+  await page.locator('[data-fk="qty"]').fill("9");
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
   await expect(view(page).locator(".field-error")).toContainText(/Only 3/);
   await expect(page).toHaveURL(new RegExp(`#/receive/${d.name}$`));
 });
@@ -74,26 +85,31 @@ async function makeSerialItem(request) {
   return code;
 }
 
-test("Receive: a serial-controlled item is rejected without a serial, and succeeds once one is entered", async ({ page, request }) => {
+test("Receive: a serial-controlled item asks for serials, one scan each, duplicates refused", async ({ page, request }) => {
   const s = seed();
   const item = await makeSerialItem(request);
   const number = `E2E-INS-${Date.now().toString().slice(-8)}`;
   const doc = { doctype: "Inbound Delivery", inbound_delivery_number: number, warehouse: s.warehouse, receiving_bin: "E2E-WH-RECV",
     supplier: (await admin(request).get("/api/resource/Supplier?limit_page_length=1")).data[0].name,
-    items: [{ line_number: 1, item, expected_quantity: 1, stock_uom: "Nos", expected_stock_type: "AVAILABLE" }] };
+    items: [{ line_number: 1, item, expected_quantity: 2, stock_uom: "Nos", expected_stock_type: "AVAILABLE" }] };
   const r = await admin(request).post("/api/resource/Inbound Delivery", doc);
   await openApp(page, `#/receive/${r.data.name}`);
-  const hu = `E2ESN${Date.now().toString().slice(-7)}`;
-  await scan(page, hu);
-  await page.locator('[data-fk="type0"]').selectOption("E2E-PALLET");
-  await page.getByRole("button", { name: /Post receipt/ }).click();
-  await expect(notice(page)).toContainText(/requires a serial number/i);
-  await page.locator('[data-fk="serial0"]').fill(`SN-${Date.now().toString().slice(-8)}`);
+  await receiveLine(page, item, `E2ESN${Date.now().toString().slice(-7)}`);
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
+  await expect(view(page).locator(".field-error")).toContainText(/at least one serial/);
+  const sn = `SN-${Date.now().toString().slice(-8)}`;
+  await page.locator('[data-fk="serial"]').focus();
+  await scan(page, `${sn}-1`);
+  await scan(page, `${sn}-1`);
+  await expect(view(page).locator(".field-error")).toContainText(/already scanned/);
+  await scan(page, `${sn}-2`);
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
+  await expect(view(page).getByText(/In this receipt \(2 rows\)/)).toBeVisible();
   await page.getByRole("button", { name: /Post receipt/ }).click();
   await expect(notice(page)).toContainText(/Goods Receipt .* posted/);
 });
 
-test("Receive: a batch-controlled item is rejected without a batch, and succeeds once one is entered", async ({ page, request }) => {
+test("Receive: a batch-controlled item asks for the batch before it can be added", async ({ page, request }) => {
   const s = seed();
   const { item, batchId } = await makeBatchItem(request);
   const number = `E2E-INB-${Date.now().toString().slice(-8)}`;
@@ -102,28 +118,26 @@ test("Receive: a batch-controlled item is rejected without a batch, and succeeds
     items: [{ line_number: 1, item, expected_quantity: 4, stock_uom: "Nos", expected_stock_type: "AVAILABLE" }] };
   const r = await admin(request).post("/api/resource/Inbound Delivery", doc);
   await openApp(page, `#/receive/${r.data.name}`);
-  const hu = `E2EBT${Date.now().toString().slice(-7)}`;
-  await scan(page, hu);
-  await page.locator('[data-fk="type0"]').selectOption("E2E-PALLET");
-  await page.getByRole("button", { name: /Post receipt/ }).click();
-  await expect(notice(page)).toContainText(/requires a batch number/i);
-  await page.locator('[data-fk="batch0"]').fill(batchId);
+  await receiveLine(page, item, `E2EBT${Date.now().toString().slice(-7)}`);
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
+  await expect(view(page).locator(".field-error")).toContainText(/needs a batch/);
+  await page.locator('[data-fk="batch"]').fill(batchId);
+  await page.getByRole("button", { name: /Add to receipt/ }).click();
   await page.getByRole("button", { name: /Post receipt/ }).click();
   await expect(notice(page)).toContainText(/Goods Receipt .* posted/);
 });
 
-test("Receive: entries survive a reload (draft), and Post is refused with no HU", async ({ page, request }) => {
+test("Receive: the line being entered survives a reload (draft); nothing to post until a line is added", async ({ page, request }) => {
   const d = await makeDelivery(request, 4);
   await openApp(page, `#/receive/${d.name}`);
-  await page.getByRole("button", { name: /Post receipt/ }).click();
-  await expect(notice(page)).toContainText(/Scan at least one Handling Unit/);
+  await expect(page.getByRole("button", { name: /Post receipt/ })).toHaveCount(0);
   const hu = `E2EGD${Date.now().toString().slice(-7)}`;
-  await scan(page, hu);
-  await page.locator('[data-fk="qty0"]').fill("2");
+  await receiveLine(page, seed().item, hu);
+  await page.locator('[data-fk="qty"]').fill("2");
   await page.waitForTimeout(400);
   await page.reload(); await page.waitForFunction(() => window.WMS_BOOTED === true);
-  await expect(page.locator('[data-fk="hu0"]')).toHaveValue(hu);
-  await expect(page.locator('[data-fk="qty0"]')).toHaveValue("2");
+  await expect(page.locator('[data-fk="hu"]')).toHaveValue(hu);
+  await expect(page.locator('[data-fk="qty"]')).toHaveValue("2");
 });
 
 test("Count: start a count, enter quantities, Save posts it", async ({ page, request }) => {

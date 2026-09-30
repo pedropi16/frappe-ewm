@@ -52,7 +52,7 @@ export function Expect(label, values) {
 
 // ---------- fields ----------
 // spec: { name, label, value, kind: "scan"|"text"|"qty"|"select", placeholder, hint, unit, options, autofocus, disabled,
-//         onInput(value), onCommit(value, via) -> undefined | "error text" | Promise<...> }
+//         onInput(value), onCommit(value, via, raw) -> undefined | "error text" | false | {focus: "field"} | Promise<...> }
 // A field with onCommit is validated when the operator presses Enter / a scanner ends a scan / the camera returns a code.
 export function Field(spec) {
   const kind = spec.kind || "text";
@@ -116,9 +116,15 @@ async function commitFieldInner(rec, raw, via) {
   let error;
   if (rec.spec.onCommit) {
     if (rec.kind === "qty" && value && !isNumeric(value)) error = _("Enter a number.");
-    else error = await rec.spec.onCommit(value, via);
+    else error = await rec.spec.onCommit(value, via, raw); // raw keeps GS1 separators (core/gs1.js)
   }
   if (token !== S.routeToken) return !error; // the commit itself navigated (e.g. advanced a wizard step)
+  if (error && typeof error === "object" && error.focus) { // accepted, and the handler knows which field comes next
+    delete S.fieldErrors[rec.name];
+    if (rec.kind === "scan" || via === "scan" || via === "camera") feedback.ok();
+    S.focusRequest = error.focus; update();
+    return true;
+  }
   if (error === false) { S.focusRequest = rec.name; update(); return false; } // failed and already reported (e.g. by run())
   if (error) {
     S.fieldErrors[rec.name] = error;

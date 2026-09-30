@@ -42,7 +42,9 @@ export const countDetail = {
     if (!st.count) return Loading();
     const wrap = h("div", Hint(_("Count what is physically there. Lines you leave blank stay open for later.")));
     st.items.forEach((r, i) => wrap.append(Section({},
-      h("div.line-head", r.product), h("div.line-sub", `${r.storage_bin}${r.handling_unit ? " / " + r.handling_unit : ""} · ${_("book {0} {1}", [fmtQty(r.book_quantity), r.stock_uom])}`),
+      h("div.line-head", r.product), // Blind counting (WMS Settings, on by default) withholds book_quantity from the server - showing
+      // "book 0" in its place would tell the counter the system expects nothing there.
+      h("div.line-sub", `${r.storage_bin}${r.handling_unit ? " / " + r.handling_unit : ""}${r.book_quantity != null ? " · " + _("book {0} {1}", [fmtQty(r.book_quantity), r.stock_uom]) : ""}`),
       Field({ name: `c${i}`, kind: "qty", label: _("Counted quantity"), value: r.counted_quantity, unit: r.stock_uom, autofocus: i === 0, enterNext: true, onInput: (v) => { r.counted_quantity = v; persist(); } }))));
     if (!st.items.length) wrap.append(Empty(_("Nothing left to count."), "✅"));
     return wrap;

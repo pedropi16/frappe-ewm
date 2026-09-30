@@ -35,10 +35,21 @@ const KINDS = () => [
   { icon: "\u{1F69A}", key: "delivery", label: _("By Outbound Delivery"), field: _("Outbound Delivery"), ph: _("Scan or type an Outbound Delivery") },
 ];
 
+// One scan field for every entry point - the server tells a Warehouse Order from a delivery, a
+// queue, a task or an HU by itself (services/picking.find_pick_tasks), so there is no "search by"
+// choice to make first. The per-kind screens stay reachable for typed searches.
+const manual = { ref: "" };
 export const pickingManual = {
   id: "picking-manual", pattern: "picking-manual",
   title: () => _("Find pick task"), crumb: () => sectionCrumb("outbound"), parent: () => "#/picking",
-  render: () => menu(KINDS().map((k) => ({ icon: k.icon, label: k.label, run: () => nav.go(href("picking-find", k.key)) }))),
+  enter() { manual.ref = ""; },
+  render: () => h("div", Section({ hint: _("Scan a Warehouse Order, Outbound Delivery, Warehouse Task, Queue or Handling Unit.") },
+      Field({ name: "ref", kind: "scan", label: _("Reference"), placeholder: _("Scan or type"), value: manual.ref, autofocus: true,
+        onInput: (v) => { manual.ref = v; }, onCommit: (v) => find(v) })),
+    Btn({ label: _("Browse all pick tasks instead"), onClick: () => nav.go("#/tasks/outbound") }),
+    h("div.hint", { style: { marginTop: "14px" } }, _("Search by a specific kind:")),
+    menu(KINDS().map((k) => ({ icon: k.icon, label: k.label, run: () => nav.go(href("picking-find", k.key)) })))),
+  actions: () => ({ primary: { label: _("Find pick task"), run: () => manual.ref.trim() && find(manual.ref.trim()) } }),
 };
 
 const st = { ref: "" };

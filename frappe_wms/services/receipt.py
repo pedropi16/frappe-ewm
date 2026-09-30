@@ -120,6 +120,33 @@ def list_open_inbound_deliveries(user=None):
         fields=["name", "inbound_delivery_number", "warehouse", "supplier", "external_reference", "receiving_bin", "status", "posting_date"],
         order_by="posting_date asc, creation asc", limit=50)
 
+def receiving_worklist(inbound_delivery):
+    """Everything the RF scan-first Receive screen needs in one call: each open line with what is
+    left to receive, the item's barcodes (so a scan resolves on the device, no round trip), and
+    whether posting will demand a batch or serial - the same rules post_goods_receipt enforces."""
+    doc = frappe.get_doc("Inbound Delivery", inbound_delivery)
+    doc.check_permission("read")
+    lines = []
+    for row in doc.items:
+        remaining = flt(row.expected_quantity) - flt(row.received_quantity)
+        if remaining <= 0.000001: continue
+        product = frappe.db.get_value("WMS Product", row.item, ["warehouse_managed", "batch_control", "serial_control"], as_dict=True) or {}
+        managed = bool(product.get("warehouse_managed"))
+        lines.append({
+            "inbound_delivery_item": row.name, "line_number": row.line_number, "item": row.item,
+            "item_name": row.item_name or frappe.db.get_value("Item", row.item, "item_name"),
+            "remaining": remaining, "stock_uom": row.stock_uom, "stock_type": row.expected_stock_type,
+            "barcodes": frappe.get_all("Item Barcode", filters={"parent": row.item}, pluck="barcode"),
+            "batch_required": bool(managed and product.get("batch_control")),
+            "serial_required": bool(managed and product.get("serial_control") in ("Required at Receipt", "Always")),
+        })
+    return {
+        "name": doc.name, "inbound_delivery_number": doc.inbound_delivery_number, "supplier": doc.supplier,
+        "external_reference": doc.external_reference, "receiving_bin": doc.receiving_bin, "status": doc.status, "lines": lines,
+        "hu_types": frappe.get_all("Handling Unit Type", filters={"active": 1}, fields=["name", "numbering_mode"]),
+        "default_hu_type": frappe.db.get_single_value("WMS Settings", "default_handling_unit_type"),
+    }
+
 def _get_or_create_batch(item_code, batch_no):
     # Same "a scan of something new registers it in place" idiom as get_or_create_handling_unit -
     # a real incoming batch is, by definition, usually one nobody has entered into the system
