@@ -281,9 +281,10 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.flags.ignore_permissions = True
     gr.submit()
     request_names = create_putaway_requests(gr.name)
-    batch_key = frappe.generate_hash(length=10)
-    task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
-    return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names}
+    # The goods are received either way; a putaway with no free bin waits in the Monitor.
+    from frappe_wms.services.task import plan_requests
+    task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
+    return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names, "unplanned_requests": unplanned}
 
 def _production_supplier():
     # Inbound Delivery's supplier field is mandatory (it's normally an external-receiving

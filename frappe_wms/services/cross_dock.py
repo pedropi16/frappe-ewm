@@ -57,7 +57,7 @@ def redirect_cross_dock_to_putaway(delivery_name):
     its open Cross Dock work is cancelled and whatever has not moved yet is put away normally
     instead of travelling to a staging lane for a delivery that no longer needs it."""
     from frappe_wms.services.determination import determine_process_type
-    from frappe_wms.services.task import create_tasks_for_request
+    from frappe_wms.services.task import plan_requests
     from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
     requests = frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery",
         "reference_name": delivery_name, "status": ["not in", ["Completed", "Cancelled"]]}, pluck="name")
@@ -84,6 +84,6 @@ def redirect_cross_dock_to_putaway(delivery_name):
             "reference_doctype": "Warehouse Request", "reference_name": req.name,
             "process_type": determine_process_type(req.warehouse, "Putaway", item=req.product, stock_type=req.stock_type, default="GR_PUTAWAY"),
             "priority": "High", "status": "Open"}).insert(ignore_permissions=True)
-        create_tasks_for_request(putaway.name)
+        plan_requests([putaway.name])
         created.append(putaway.name)
     return created

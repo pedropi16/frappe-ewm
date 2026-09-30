@@ -49,3 +49,29 @@ class TestReceivingWorklist(IntegrationTestCase):
             self.assertTrue(line["batch_required"] and line["serial_required"])
         finally:
             product.db_set({"batch_control": before[0], "serial_control": before[1]})
+
+    def test_receipt_posts_when_no_putaway_bin_is_free(self):
+        # A full warehouse (here: no putaway rule at all) must not stop the dock: the goods are
+        # received, and the putaway waits as an open request for the Monitor.
+        from frappe_wms.services.receipt import create_and_submit_goods_receipt
+        frappe.set_user("Administrator")
+        company = frappe.get_all("Company", limit=1, pluck="name")[0]
+        wh = f"WMS-TEST-FULL-{frappe.generate_hash(length=5).upper()}"
+        frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": wh, "warehouse_name": wh, "company": company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": wh, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving",
+                        "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        recv = frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{wh}-RECV", "warehouse": wh, "storage_type": f"{wh}-GR", "active": 1, "sequence": 1}).insert(ignore_permissions=True).name
+        uom = frappe.db.get_value("Item", TEST_ITEM, "stock_uom")
+        if not frappe.db.exists("Handling Unit Type", "FULL-PAL"):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "FULL-PAL", "hu_type_name": "Full Pallet"}).insert(ignore_permissions=True)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": wh, "supplier": TEST_SUPPLIER, "receiving_bin": recv,
+            "items": [{"line_number": 1, "item": TEST_ITEM, "expected_quantity": 4, "stock_uom": uom, "expected_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+        batch = frappe.db.get_value("WMS Product", TEST_ITEM, "batch_control")
+        result = create_and_submit_goods_receipt(ind.name, [{"inbound_delivery_item": ind.items[0].name, "item": TEST_ITEM, "quantity": 4, "stock_uom": uom,
+            "handling_unit": frappe.generate_hash(length=10), "hu_type": "FULL-PAL", "stock_type": "AVAILABLE",
+            "batch_no": f"B-{frappe.generate_hash(length=6)}" if batch else None}])
+        self.assertTrue(result["goods_receipt"])
+        self.assertEqual(result["warehouse_tasks"], [])
+        self.assertEqual(result["unplanned_requests"], result["warehouse_requests"])
+        self.assertEqual(frappe.db.get_value("Warehouse Request", result["unplanned_requests"][0], "status"), "Open")
+        self.assertEqual(frappe.db.get_value("Goods Receipt", result["goods_receipt"], "docstatus"), 1)

@@ -27,6 +27,26 @@ def _split_by_full_pallet(remaining, full_qty):
         left -= full_qty
     return chunks
 
+def plan_requests(request_names, batch_key=None):
+    """Creates the tasks of each request. One that cannot be planned now (no free destination
+    bin - a full storage type, a missing rule) stays an open request instead of undoing the
+    goods receipt / kit / delivery change that raised it: the Monitor lists it under Warehouse
+    Requests Without Tasks and plans it again with "Create tasks" (SAP: the warehouse request
+    stays open with its error log). -> (task names, unplanned request names)"""
+    tasks, unplanned = [], []
+    for name in request_names:
+        frappe.db.savepoint("wms_plan_request")
+        try:
+            created = create_tasks_for_request(name, batch_key=batch_key) if batch_key else create_tasks_for_request(name)
+        except frappe.ValidationError as e:
+            frappe.db.rollback(save_point="wms_plan_request")
+            frappe.clear_messages()
+            frappe.get_doc("Warehouse Request", name).add_comment("Comment", _("Tasks could not be created yet: {0}").format(e))
+            unplanned.append(name)
+            continue
+        tasks += created if isinstance(created, list) else [created] if created else []
+    return tasks, unplanned
+
 def create_tasks_for_request(request_name, batch_key=None):
     request = frappe.get_doc("Warehouse Request", request_name, for_update=True)
     if request.status not in {"Draft", "Open", "Partially Tasked"}: frappe.throw(_("Warehouse Request is not open for tasking"))

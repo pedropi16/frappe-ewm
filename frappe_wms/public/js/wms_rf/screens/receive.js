@@ -231,5 +231,8 @@ async function submit() {
   feedback.done();
   clearDraft(key(st.name));
   const w0 = st.w0; st.name = null; st.wl = null;
-  finishFlow(w0, "#/tasks/inbound", _("Goods Receipt {0} posted, {1} putaway task(s) created", [result.goods_receipt, (result.warehouse_tasks || []).length]));
+  const waiting = (result.unplanned_requests || []).length;
+  finishFlow(w0, "#/tasks/inbound", waiting
+    ? _("Goods Receipt {0} posted. {1} putaway(s) found no free bin - leave the goods in receiving; the supervisor plans them from the Monitor.", [result.goods_receipt, waiting])
+    : _("Goods Receipt {0} posted, {1} putaway task(s) created", [result.goods_receipt, (result.warehouse_tasks || []).length]));
 }

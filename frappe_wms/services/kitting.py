@@ -202,7 +202,7 @@ def complete_kitting_order(kitting_order_name, destination_hu=None):
 
 def _putaway_output(order, destination_hu):
     from frappe_wms.services.determination import determine_process_type
-    from frappe_wms.services.task import create_tasks_for_request
+    from frappe_wms.services.task import plan_requests
     created = []
     for item, qty, uom in _outputs(order):
         request = frappe.get_doc({
@@ -214,13 +214,7 @@ def _putaway_output(order, destination_hu):
         }).insert(ignore_permissions=True)
         # The kit is built either way: a putaway that cannot be planned now (no destination
         # found) stays an open request for the Monitor rather than undoing the completion.
-        frappe.db.savepoint("kit_putaway")
-        try:
-            create_tasks_for_request(request.name)
-        except frappe.ValidationError as e:
-            frappe.db.rollback(save_point="kit_putaway")
-            frappe.clear_messages()
-            request.add_comment("Comment", _("Putaway could not be planned yet: {0}").format(e))
+        plan_requests([request.name])
         created.append(request.name)
     return created
 
