@@ -420,6 +420,8 @@ def complete_short(doctype, delivery_name, reason=None):
                 frappe.throw(_("Line {0} ({1}): {2} is picked but not issued yet. Ship or reverse it before completing short.")
                              .format(i.line_number, i.item, flt(i.picked_quantity) - flt(i.issued_quantity)))
         cancel_allocations_for_delivery(d.name)
+        from frappe_wms.services.cross_dock import redirect_cross_dock_to_putaway
+        redirect_cross_dock_to_putaway(d.name)
     else:
         if frappe.db.exists("Goods Receipt", {"inbound_delivery": d.name, "docstatus": 0}):
             frappe.throw(_("A draft Goods Receipt exists for {0}; post or delete it first").format(d.name))

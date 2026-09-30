@@ -31,6 +31,14 @@ class TestReceivingWorklist(IntegrationTestCase):
         self.assertEqual((line["item"], line["remaining"]), (TEST_ITEM, 5))
         self.assertIn(barcode, line["barcodes"])
         self.assertFalse(line["batch_required"] or line["serial_required"])
+        self.assertEqual(line["uoms"][0], {"uom": uom, "factor": 1}, "the stock unit is always offered first")
+
+        # The order line's unit (cases of 12) is offered to count in, with its factor.
+        if not frappe.db.exists("UOM", "WMS Test Case"):
+            frappe.get_doc({"doctype": "UOM", "uom_name": "WMS Test Case"}).insert(ignore_permissions=True)
+        frappe.db.set_value("Inbound Delivery Item", ind.items[0].name, {"uom": "WMS Test Case", "conversion_factor": 12})
+        line = receiving_worklist(ind.name)["lines"][0]
+        self.assertIn({"uom": "WMS Test Case", "factor": 12}, line["uoms"])
 
         product = frappe.get_doc("WMS Product", TEST_ITEM)
         before = (product.batch_control, product.serial_control)

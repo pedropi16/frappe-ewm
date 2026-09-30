@@ -165,3 +165,20 @@ class TestCrossDock(IntegrationTestCase):
         request = frappe.get_doc("Warehouse Request", request_names[0])
         self.assertEqual(request.request_type, "Putaway")
         self.assertEqual(request.requested_quantity, 8)
+
+    def test_cancelled_delivery_sends_open_cross_dock_stock_to_putaway(self):
+        item = self._make_item("TEST-XDOCK-ITEM-CANCEL")
+        obd = self._make_delivery(item, 5)
+        gr = self._submit_gr(self._make_hu(), item, 5)
+        [cd] = create_putaway_requests(gr.name)
+        self.assertEqual(frappe.db.get_value("Warehouse Request", cd, "request_type"), "Cross Dock")
+        from frappe_wms.services.task import create_tasks_for_request
+        create_tasks_for_request(cd)
+        obd.reload()
+        obd.cancel()
+        self.assertEqual(frappe.db.get_value("Warehouse Request", cd, "status"), "Cancelled")
+        self.assertFalse(frappe.db.exists("Warehouse Task", {"warehouse_request": cd, "docstatus": 0}), "open cross-dock tasks are cancelled")
+        putaway = frappe.get_all("Warehouse Request", filters={"request_type": "Putaway", "reference_name": cd},
+                                 fields=["name", "requested_quantity", "source_bin"])
+        self.assertEqual([(p.requested_quantity, p.source_bin) for p in putaway], [(5, self.recv_bin)])
+        self.assertTrue(frappe.db.exists("Warehouse Task", {"warehouse_request": putaway[0].name, "task_type": "Putaway"}))

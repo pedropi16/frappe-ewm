@@ -54,5 +54,7 @@ def before_cancel_outbound_delivery(doc, method=None):
         frappe.throw(_("Cannot cancel: picking has already started on this delivery. Reverse the confirmed task(s) first."))
 
 def on_cancel_outbound_delivery(doc, method=None):
+    from frappe_wms.services.cross_dock import redirect_cross_dock_to_putaway
     cancel_allocations_for_delivery(doc.name)
+    redirect_cross_dock_to_putaway(doc.name)
     doc.db_set("status", "Cancelled")

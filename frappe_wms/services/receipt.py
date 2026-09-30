@@ -146,6 +146,9 @@ def receiving_worklist(inbound_delivery):
             "item_name": row.item_name or frappe.db.get_value("Item", row.item, "item_name"),
             "remaining": remaining, "stock_uom": row.stock_uom, "stock_type": row.expected_stock_type,
             "barcodes": frappe.get_all("Item Barcode", filters={"parent": row.item}, pluck="barcode"),
+            # Units the operator may count in (cases, pallets...), each with its factor to the
+            # stock UOM - the ERPNext Item's UOM conversions, the order line's UOM first.
+            "uoms": _receiving_uoms(row),
             "batch_required": bool(managed and product.get("batch_control")),
             "serial_required": bool(managed and product.get("serial_control") in ("Required at Receipt", "Always")),
         })
@@ -155,6 +158,16 @@ def receiving_worklist(inbound_delivery):
         "hu_types": frappe.get_all("Handling Unit Type", filters={"active": 1}, fields=["name", "numbering_mode"]),
         "default_hu_type": frappe.db.get_single_value("WMS Settings", "default_handling_unit_type"),
     }
+
+def _receiving_uoms(row):
+    uoms = [{"uom": row.stock_uom, "factor": 1}]
+    conversions = frappe.get_all("UOM Conversion Detail", filters={"parent": row.item, "parenttype": "Item"}, fields=["uom", "conversion_factor"])
+    if row.get("uom") and row.uom != row.stock_uom and flt(row.get("conversion_factor")) > 0:
+        conversions.insert(0, frappe._dict(uom=row.uom, conversion_factor=row.conversion_factor))
+    for c in conversions:
+        if c.uom != row.stock_uom and flt(c.conversion_factor) > 0 and not any(u["uom"] == c.uom for u in uoms):
+            uoms.append({"uom": c.uom, "factor": flt(c.conversion_factor)})
+    return uoms
 
 def _get_or_create_batch(item_code, batch_no):
     # Same "a scan of something new registers it in place" idiom as get_or_create_handling_unit -

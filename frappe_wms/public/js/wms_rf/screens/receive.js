@@ -28,7 +28,7 @@ const pendingQty = (id) => round6(st.pending.filter((p) => p.inbound_delivery_it
 const openQty = (l) => round6(flt(l.remaining) - pendingQty(l.inbound_delivery_item));
 
 function newEntry(l) {
-  return { hu: st.lastHu || "", huType: st.lastHuType || (st.wl && st.wl.default_hu_type) || "", batch: "", serials: [], qty: fmtQty(openQty(l)), expiry: "" };
+  return { hu: st.lastHu || "", huType: st.lastHuType || (st.wl && st.wl.default_hu_type) || "", batch: "", serials: [], qty: fmtQty(openQty(l)), expiry: "", uom: l.stock_uom };
 }
 
 function select(l, gs) {
@@ -171,7 +171,16 @@ function entryView(l) {
       } }),
       e.serials.length ? h("div.chips", e.serials.map((sn, i) => h("button.chip", { type: "button", title: _("Remove"), onclick: () => { e.serials.splice(i, 1); persist(); update(); } }, `${sn} ✕`))) : null);
   } else {
-    box.append(Field({ name: "qty", kind: "qty", label: _("Quantity"), value: e.qty, unit: l.stock_uom, onInput: (v) => { e.qty = v; persist(); }, onCommit: () => addEntry() }));
+    const uoms = l.uoms || [{ uom: l.stock_uom, factor: 1 }];
+    const unit = uoms.find((u) => u.uom === (e.uom || l.stock_uom)) || uoms[0];
+    if (uoms.length > 1) {
+      box.append(Field({ name: "uom", kind: "select", label: _("Counting unit"), value: unit.uom,
+        options: uoms.map((u) => ({ value: u.uom, label: u.factor === 1 ? u.uom : `${u.uom} (${fmtQty(u.factor)} ${l.stock_uom})` })),
+        onInput: (v) => { const was = (uoms.find((u) => u.uom === e.uom) || uoms[0]).factor; const now = (uoms.find((u) => u.uom === v) || uoms[0]).factor;
+          if (isNumeric(e.qty)) e.qty = fmtQty(round6(parseNum(e.qty) * was / now)); e.uom = v; persist(); update(); } }));
+    }
+    box.append(Field({ name: "qty", kind: "qty", label: _("Quantity"), value: e.qty, unit: unit.uom, onInput: (v) => { e.qty = v; persist(); update(); }, onCommit: () => addEntry(),
+      hint: unit.factor !== 1 && isNumeric(e.qty) ? _("= {0} {1}", [fmtQty(round6(parseNum(e.qty) * unit.factor)), l.stock_uom]) : null }));
   }
   box.append(Btn({ label: _("Cancel this line"), small: true, onClick: () => { st.active = null; st.entry = null; persist(); S.focusRequest = "code"; update(); } }));
   return box;
@@ -200,8 +209,10 @@ function addEntry() {
     e.serials.forEach((sn) => st.pending.push({ ...base, quantity: 1, serial_no: sn }));
   } else {
     if (!isNumeric(e.qty) || parseNum(e.qty) <= 0) return fail("qty", _("Enter a quantity greater than zero."));
-    if (round6(parseNum(e.qty)) > openQty(l)) return fail("qty", _("Only {0} {1} left on this line.", [fmtQty(openQty(l)), l.stock_uom]));
-    st.pending.push({ ...base, quantity: round6(parseNum(e.qty)) });
+    const factor = ((l.uoms || []).find((u) => u.uom === e.uom) || { factor: 1 }).factor;
+    const stockQty = round6(parseNum(e.qty) * factor);  // the receipt always posts in the stock UOM
+    if (stockQty > openQty(l)) return fail("qty", _("Only {0} {1} left on this line.", [fmtQty(openQty(l)), l.stock_uom]));
+    st.pending.push({ ...base, quantity: stockQty });
   }
   st.lastHu = hu; st.lastHuType = e.huType || st.lastHuType;
   st.active = null; st.entry = null;
