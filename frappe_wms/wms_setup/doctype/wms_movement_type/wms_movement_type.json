@@ -39,7 +39,7 @@
       "fieldname": "movement_category",
       "label": "Movement Category",
       "fieldtype": "Select",
-      "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack",
+      "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack\nArchive Carry-Forward",
       "reqd": 1
     },
     {

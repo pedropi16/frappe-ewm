@@ -46,6 +46,7 @@ MASTER_DATA = ["Storage Bin", "Storage Section", "Activity Area", "Bin Type", "W
 RESTRICTED = {
     "WMS Settings": {"WMS Process Engineer": MAINTAIN, "WMS Supervisor": READ, "WMS Auditor": READ},
     "WMS ERP Sync Log": {"WMS Supervisor": READ, "WMS Auditor": READ, "WMS Process Engineer": READ},
+    "WMS Ledger Archive Run": {"WMS Supervisor": READ, "WMS Auditor": READ, "WMS Process Engineer": READ},
 }
 
 

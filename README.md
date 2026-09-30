@@ -952,6 +952,7 @@ Registered in `hooks.py` under `scheduler_events`:
 | Hourly | `run_replenishment_check` | Evaluates every active Replenishment Rule, raises a Warehouse Request+Task for pick bins at/below minimum (skips if one's already pending) |
 | Hourly | `generate_scheduled_waves` | [P4] Sweeps matching submitted Outbound Deliveries into a new Draft `WMS Wave` per active Wave Template |
 | Hourly | `release_due_waves` | [P4] Releases any template-generated Draft wave whose cut-off time has passed |
+| Monthly | `archiving.monthly_archive` | Archives stock ledger entries older than *WMS Settings > Keep Stock Ledger Entries (Months)* — see [Ledger archiving](#ledger-archiving) |
 | Daily | `verify_stock_balance_integrity` | Logs any negative `WMS Stock Balance` rows as an error for review |
 | Daily | `verify_erpnext_stock_reconciliation` | Logs WMS vs ERPNext quantity drift per warehouse/product |
 | Daily | `generate_scheduled_counts` | [P3] Generates `WMS Physical Inventory Count` documents per active Cycle Count Rule (ABC/Low Stock/Zero Stock/Putaway PI/Bin Check/Annual) |
@@ -959,6 +960,22 @@ Registered in `hooks.py` under `scheduler_events`:
 None of these post anything automatically except replenishment/wave/count
 generation — the integrity/reconciliation checks are report-only
 (`frappe.log_error`), by design, so they never silently correct the ledger.
+
+## Ledger archiving
+
+The stock ledger only grows. With *WMS Settings > Keep Stock Ledger Entries
+(Months)* set (0 = forever, otherwise at least 12), a monthly **WMS Ledger
+Archive Run** moves every entry older than that into a gzipped JSON-lines
+file attached to the run, and posts one carry-forward entry (movement type
+`999`) per stock position that still holds stock. The carry-forward is dated
+at the position's first receipt, so ledger totals still equal WMS Stock
+Balance, FIFO/FEFO keep their order, and `rebuild_balances` gives the same
+result. A supervisor can also start a run with `api/monitor.start_ledger_archive`.
+Reversing a document whose ledger lines were archived is refused; post a
+correcting movement instead.
+
+Monitor selections return one page at a time (*Max. hits* per page); when
+there are more, **Load next** appends the next page in the same order.
 
 ## RF / scanner app
 

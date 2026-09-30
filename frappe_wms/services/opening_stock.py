@@ -120,6 +120,8 @@ def cancel_opening_stock_load(name):
     doc = frappe.get_doc("WMS Opening Stock Load", name, for_update=True)
     if doc.status != "Posted":
         frappe.throw(_("Only a posted load can be cancelled"))
+    from frappe_wms.services.archiving import ensure_reversible
+    ensure_reversible(doc)
     original = frappe.get_all("WMS Stock Ledger Entry", filters={"reference_doctype": doc.doctype, "reference_name": doc.name}, fields=["*"])
     for i, row in enumerate(original, 1):
         values = {k: row.get(k) for k in ("warehouse", "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "stock_uom")}

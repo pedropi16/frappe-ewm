@@ -132,6 +132,7 @@ scheduler_events = {
         "frappe_wms.tasks.release_due_waves",
         "frappe_wms.services.alerts.send_alert_digest",
     ],
+    "monthly": ["frappe_wms.services.archiving.monthly_archive"],
     "daily": [
         "frappe_wms.tasks.verify_stock_balance_integrity",
         "frappe_wms.tasks.verify_erpnext_stock_reconciliation",

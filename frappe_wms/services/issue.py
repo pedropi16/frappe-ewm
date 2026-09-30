@@ -42,6 +42,7 @@ def post_goods_issue(doc):
     create_print_spool("Goods Issue", doc.name, "Goods Issue Posted", doc.warehouse)
 
 def reverse_goods_issue(doc):
+    from frappe_wms.services.archiving import ensure_reversible; ensure_reversible(doc)
     original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
     if not original: return
     hus=set()

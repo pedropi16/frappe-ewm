@@ -613,7 +613,8 @@
  "WMS Settings": {
   "fields": {
    "alert_notifications": "Hourly digest of what needs a person (failed ERPNext postings, negative quants, aged exceptions, requests without tasks, stalled orders): off, a desk bell notification, or that plus e-mail. Sent only when something changed.",
-   "alert_recipients": "Users or e-mail addresses, one per line. Empty: every WMS Supervisor, for the warehouses their User Permissions allow."
+   "alert_recipients": "Users or e-mail addresses, one per line. Empty: every WMS Supervisor, for the warehouses their User Permissions allow.",
+   "ledger_retention_months": "0 keeps every stock ledger entry forever. Otherwise (at least 12), older entries move monthly to an archive file and each stock position keeps one carry-forward entry, so balances stay exact."
   }
  }
 }

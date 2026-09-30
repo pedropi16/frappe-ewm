@@ -221,10 +221,15 @@ class _SelectionQuery(DatabaseQuery):
             self.conditions.append(f"({self._extra_condition})")
 
 
-def run_selection(doctype, criteria, fields, *, base_filters=None, virtual=None, order_by=None, max_hits=500):
+def run_selection(doctype, criteria, fields, *, base_filters=None, virtual=None, order_by=None, max_hits=500, start=0):
+    """One page of hits: max_hits rows from row `start` on (the Monitor's "Load more")."""
     condition = compile_selection(doctype, criteria, virtual)
     max_hits = min(cint(max_hits) or 500, HARD_MAX_HITS)
+    order_by = order_by or f"`tab{doctype}`.`modified` desc"
+    # a unique tiebreaker keeps page boundaries stable when many rows share the sort value
+    if "`name`" not in order_by and ".name" not in order_by:
+        order_by += f", `tab{doctype}`.`name` desc"
     return _SelectionQuery(doctype, condition).execute(
-        fields=fields, filters=base_filters or {}, order_by=order_by or f"`tab{doctype}`.`modified` desc",
-        limit_page_length=max_hits,
+        fields=fields, filters=base_filters or {}, order_by=order_by,
+        limit_start=max(cint(start), 0), limit_page_length=max_hits,
     )

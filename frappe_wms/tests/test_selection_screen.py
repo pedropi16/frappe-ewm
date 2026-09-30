@@ -113,6 +113,15 @@ class TestSelectionScreen(IntegrationTestCase):
         res = execute_selection("hu", WH, {"storage_type": {"exclude": [{"op": "eq", "low": f"{WH}-BULK"}]}}, None, max_hits=1)
         self.assertEqual(len(res["rows"]), 1)
         self.assertTrue(res["truncated"])
+        # Paging: page by page gives every hit exactly once, in the same order as one big page.
+        everything = [r["name"] for r in execute_selection("hu", WH, {}, ["hu_number"], max_hits=500)["rows"]]
+        paged, start = [], 0
+        while True:
+            page = execute_selection("hu", WH, {}, ["hu_number"], max_hits=2, start=start)
+            paged += [r["name"] for r in page["rows"]]
+            start += len(page["rows"])
+            if not page["truncated"]: break
+        self.assertEqual(paged, everything)
 
     def test_variants_default_and_global_visibility(self):
         view = "hu"

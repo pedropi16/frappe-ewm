@@ -117,6 +117,13 @@
      "label": "Alert Recipients",
      "fieldtype": "Small Text",
      "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
+    },
+    {
+     "fieldname": "ledger_retention_months",
+     "label": "Keep Stock Ledger Entries (Months)",
+     "fieldtype": "Int",
+     "default": "0",
+     "description": "0 keeps every entry forever. Otherwise, on the 1st of each month, entries older than this many months (at least 12) move to an archive file (WMS Ledger Archive Run) and each stock position keeps one carry-forward entry."
     }
    ],
    "key": {
@@ -950,7 +957,7 @@
      "fieldname": "movement_category",
      "label": "Movement Category",
      "fieldtype": "Select",
-     "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack",
+     "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack\nArchive Carry-Forward",
      "reqd": 1
     },
     {

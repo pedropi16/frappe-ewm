@@ -61,6 +61,7 @@ def post_goods_receipt(doc):
     doc.db_set("status","Posted")
 
 def reverse_goods_receipt(doc):
+    from frappe_wms.services.archiving import ensure_reversible; ensure_reversible(doc)
     original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
     if not original: return
     for i,row in enumerate(original,1):

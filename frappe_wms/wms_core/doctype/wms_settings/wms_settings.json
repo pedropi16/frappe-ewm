@@ -21,7 +21,9 @@
   "sscc_next_serial",
   "alerts_section",
   "alert_notifications",
-  "alert_recipients"
+  "alert_recipients",
+  "archiving_section",
+  "ledger_retention_months"
  ],
  "fields": [
   {
@@ -126,6 +128,20 @@
    "fieldtype": "Small Text",
    "label": "Alert Recipients",
    "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
+  },
+  {
+   "fieldname": "archiving_section",
+   "fieldtype": "Section Break",
+   "label": "Ledger Archiving",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "ledger_retention_months",
+   "fieldtype": "Int",
+   "label": "Keep Stock Ledger Entries (Months)",
+   "default": "0",
+   "non_negative": 1,
+   "description": "0 keeps every entry forever. Otherwise, on the 1st of each month, entries older than this many months (at least 12) move to an archive file (WMS Ledger Archive Run) and each stock position keeps one carry-forward entry."
   }
  ],
  "icon": "icon-cog",

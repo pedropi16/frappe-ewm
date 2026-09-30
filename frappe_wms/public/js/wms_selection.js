@@ -478,6 +478,21 @@ if (typeof frappe !== "undefined") (function () {
       this.lastRows = res.rows;
       this.fetchedColumns = columns;
       this.truncated = res.truncated;
+      this.lastQuery = { wh, criteria, columns };
+      this.drawResults();
+    }
+
+    // The next page of the same selection, appended to what is shown.
+    async loadMore() {
+      const q = this.lastQuery;
+      if (!q) return;
+      let r;
+      try {
+        r = await frappe.call({ method: `${API}.execute_selection`, args: { view: this.view, warehouse: q.wh, criteria: q.criteria, columns: q.columns,
+          max_hits: this.maxHits, start: (this.lastRows || []).length } });
+      } catch (e) { return; }
+      this.lastRows = (this.lastRows || []).concat(r.message.rows);
+      this.truncated = r.message.truncated;
       this.drawResults();
     }
 
@@ -485,10 +500,11 @@ if (typeof frappe !== "undefined") (function () {
       const $res = this.opts.$results.empty();
       const rows = this.lastRows || [];
       const status = rows.length
-        ? (this.truncated ? `<div class="wms-sel-status text-warning">${__("{0} hits - the maximum number of hits was reached. Narrow the selection or raise Max. hits.", [rows.length])}</div>`
+        ? (this.truncated ? `<div class="wms-sel-status text-warning">${__("{0} hits so far - there are more.", [rows.length])} <button class="btn btn-xs btn-default wms-sel-more">${__("Load next {0}", [this.maxHits])}</button></div>`
           : `<div class="wms-sel-status text-muted">${__("{0} hit(s)", [rows.length])}</div>`)
         : `<div class="wms-sel-status text-muted">${__("No data found for this selection.")}</div>`;
       $res.append(status);
+      $res.find(".wms-sel-more").on("click", () => this.loadMore());
       if (!rows.length) return;
       const dec = this.opts.decorate || {};
       const renderers = dec.renderers || {};

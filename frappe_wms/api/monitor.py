@@ -397,6 +397,12 @@ def get_alerts(warehouse):
     }
 
 @frappe.whitelist()
+def start_ledger_archive(cutoff_date, warehouse=None):
+    """Monitor / desk action: archive stock ledger entries posted before cutoff_date."""
+    from frappe_wms.services.archiving import start_run
+    return start_run(cutoff_date, warehouse or None)
+
+@frappe.whitelist()
 @retry_on_deadlock
 def plan_warehouse_requests(names):
     """Monitor action: create the tasks of requests that could not be planned when they were made."""

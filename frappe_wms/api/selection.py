@@ -135,7 +135,7 @@ def _valid_columns(spec, columns):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def execute_selection(view, warehouse, criteria=None, columns=None, max_hits=500):
+def execute_selection(view, warehouse, criteria=None, columns=None, max_hits=500, start=0):
     require_wms_access()
     spec = _view(view)
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
@@ -143,8 +143,8 @@ def execute_selection(view, warehouse, criteria=None, columns=None, max_hits=500
         columns = json.loads(columns or "[]")
     fields = _valid_columns(spec, columns)
     rows = run_selection(spec["doctype"], criteria or {}, fields, base_filters={"warehouse": warehouse},
-                         virtual=spec.get("virtual"), order_by=spec.get("order_by"), max_hits=max_hits)
-    return {"rows": rows, "max_hits": cint(max_hits) or 500, "truncated": len(rows) >= (cint(max_hits) or 500)}
+                         virtual=spec.get("virtual"), order_by=spec.get("order_by"), max_hits=max_hits, start=start)
+    return {"rows": rows, "start": cint(start), "max_hits": cint(max_hits) or 500, "truncated": len(rows) >= (cint(max_hits) or 500)}
 
 
 # ---- variants and layouts ----
