@@ -260,6 +260,14 @@
      "fieldtype": "Check",
      "default": "0",
      "description": "The operator must scan a Handling Unit to put the output on when completing a kitting order."
+    },
+    {
+     "fieldname": "load_sequence_check",
+     "label": "Load Sequence Check",
+     "fieldtype": "Select",
+     "options": "Off\nWarn\nBlock",
+     "default": "Off",
+     "description": "Loading a Handling Unit for an earlier stop while HUs for a later stop are still waiting (they belong deeper in the truck): Warn asks the loader to confirm, Block refuses it."
     }
    ],
    "key": {
@@ -3854,6 +3862,10 @@
     {
      "target": "Handling Unit",
      "label": "Handling Units \u2192 Handling Unit"
+    },
+    {
+     "target": "Outbound Delivery",
+     "label": "Handling Units \u2192 Outbound Delivery"
     }
    ]
   },

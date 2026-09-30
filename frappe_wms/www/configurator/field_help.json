@@ -21,7 +21,8 @@
    "erp_sync_mode": "Synchronous: ERPNext documents post inside the warehouse transaction. Queued with Retry: the warehouse posts first and ERPNext follows from a retried queue (Monitor > ERPNext Postings Not Yet Done).",
    "kitting_stage_components": "When kitting inputs get their staging tasks from storage to the work center: from the RF Kitting screen, or as soon as the Kitting Order is created.",
    "kitting_putaway_output": "Default for new Kitting Orders: the produced output gets putaway tasks from the work center.",
-   "kitting_output_hu_required": "The operator must scan a Handling Unit for the kitting output."
+   "kitting_output_hu_required": "The operator must scan a Handling Unit for the kitting output.",
+   "load_sequence_check": "Shipments load the last stop first. Off: any order. Warn: loading an earlier stop's HU while a later stop's HUs are still waiting asks the loader to confirm. Block: refused."
   }
  },
  "Storage Type": {

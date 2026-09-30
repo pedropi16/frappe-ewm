@@ -32,7 +32,9 @@
     "kitting_stage_components",
     "kitting_putaway_output",
     "column_break_kit1",
-    "kitting_output_hu_required"
+    "kitting_output_hu_required",
+    "loading_section",
+    "load_sequence_check"
   ],
   "fields": [
     {
@@ -209,6 +211,20 @@
       "label": "Kitting Output HU Required",
       "default": "0",
       "description": "The operator must scan a Handling Unit to put the output on when completing a kitting order."
+    },
+    {
+      "fieldname": "loading_section",
+      "fieldtype": "Section Break",
+      "label": "Loading",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "load_sequence_check",
+      "fieldtype": "Select",
+      "label": "Load Sequence Check",
+      "options": "Off\nWarn\nBlock",
+      "default": "Off",
+      "description": "Loading a Handling Unit for an earlier stop while HUs for a later stop are still waiting (they belong deeper in the truck): Warn asks the loader to confirm, Block refuses it."
     }
   ],
   "autoname": "field:warehouse_code",

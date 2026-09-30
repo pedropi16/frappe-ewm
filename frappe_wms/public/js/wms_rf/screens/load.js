@@ -16,9 +16,15 @@ export const loadList = listScreen({
 
 const st = { s: null, w0: 0, scan: "" };
 
-async function loaded(hu) {
-  const r = await run(() => api("frappe_wms.api.shipping.confirm_hu_loaded", { shipment_name: st.s.name, hu_name: hu }), { label: _("Confirming…"), again: () => loaded(hu) });
+async function loaded(hu, confirmOutOfSequence = 0) {
+  const r = await run(() => api("frappe_wms.api.shipping.confirm_hu_loaded", { shipment_name: st.s.name, hu_name: hu, confirm_out_of_sequence: confirmOutOfSequence }),
+    { label: _("Confirming…"), again: () => loaded(hu, confirmOutOfSequence) });
   if (!r) return _("Could not confirm {0}.", [hu]);
+  if (r.needs_confirmation) {
+    feedback.warn();
+    if (!confirm(`${r.needs_confirmation}\n\n${_("Load it anyway?")}`)) return _("Not loaded - load the later stop first.");
+    return loaded(hu, 1);
+  }
   feedback.ok();
   const row = st.s.handling_units.find((x) => x.handling_unit === hu);
   if (row && !row.loaded) { row.loaded = 1; st.s.loaded_count += 1; }
@@ -40,16 +46,18 @@ export const loadDetail = {
     const s = st.s;
     if (!s) return Loading();
     const pending = s.handling_units.filter((x) => !x.loaded);
+    const next = pending[0];
+    const stop = (x) => (x.stop_sequence ? `${_("Stop {0}", [x.stop_sequence])}${x.outbound_delivery ? " · " + x.outbound_delivery : ""}` : x.outbound_delivery || "");
     return h("div",
       Section({ title: `${s.shipment_number} · ${_(s.status)}` }, KV([[_("Route"), s.route], [_("Door"), s.door || s.staging_bin], [_("Loaded"), `${s.loaded_count} / ${s.total_count}`]])),
-      pending.length ? Section({ hint: _("Scan each Handling Unit as it goes on the truck, or tap it below.") },
+      pending.length ? Section({ hint: next && next.stop_sequence ? _("Last stop first: next is {0} ({1}).", [next.handling_unit, stop(next)]) : _("Scan each Handling Unit as it goes on the truck, or tap it below.") },
         Field({ name: "hu", kind: "scan", label: _("Handling Unit"), placeholder: _("Scan HU barcode"), value: st.scan, autofocus: true, onInput: (v) => { st.scan = v; },
           onCommit: async (v) => {
             const m = await matchScan(v, pending.map((x) => x.handling_unit));
             if (!m) return s.handling_units.some((x) => matchExpected(v, [x.handling_unit])) ? _("{0} is already loaded.", [v]) : _("{0} is not on this shipment.", [v]);
             return loaded(m);
           } })) : null,
-      Section({ title: _("Handling Units") }, s.handling_units.map((x) => Card({ title: x.handling_unit, right: Badge(x.loaded ? _("Loaded") : _("Pending"), x.loaded ? "Loaded" : "High"), onClick: x.loaded ? null : () => loaded(x.handling_unit) }))));
+      Section({ title: _("Handling Units") }, s.handling_units.map((x) => Card({ title: x.handling_unit, meta: stop(x), dim: !!x.loaded, right: Badge(x.loaded ? _("Loaded") : _("Pending"), x.loaded ? "Loaded" : "High"), onClick: x.loaded ? null : () => loaded(x.handling_unit) }))));
   },
   actions() {
     const s = st.s;

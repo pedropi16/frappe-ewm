@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import cint, flt, now_datetime
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.determination import determine_route
 from frappe_wms.services.numbering import next_number
@@ -81,6 +81,13 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
 
     hus = delivery_handling_units(outbound_deliveries)
     if not hus: frappe.throw(_("None of these deliveries have a staged Handling Unit yet"))
+    # The deliveries come in stop order (1 = first consignee). The truck is loaded in reverse -
+    # the last stop's HUs go in first, deepest - so every stop unloads from the back.
+    stop_of = {name: i for i, name in enumerate(outbound_deliveries, 1)}
+    delivery_of = {}
+    for name in outbound_deliveries:
+        for hu in delivery_handling_units([name]): delivery_of.setdefault(hu, name)
+    hus = sorted(hus, key=lambda hu: (-stop_of.get(delivery_of.get(hu), 0), hus.index(hu)))
     delivery_set = set(outbound_deliveries)
     for hu in hus:
         others = _other_deliveries_sharing_hu(hu, delivery_set)
@@ -93,8 +100,9 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
         "doctype": "WMS Shipment", "shipment_number": next_number("WMS Shipment", warehouse=warehouse),
         "warehouse": warehouse, "route": route, "carrier": carrier,
         "vehicle_registration": vehicle_registration, "driver_name": driver_name, "status": "Ready to Load",
-        "deliveries": [{"outbound_delivery": d.name} for d in deliveries],
-        "handling_units": [{"handling_unit": hu, "load_sequence": i, "loaded": 0} for i, hu in enumerate(hus, 1)],
+        "deliveries": [{"outbound_delivery": name, "stop_sequence": stop_of[name]} for name in outbound_deliveries],
+        "handling_units": [{"handling_unit": hu, "load_sequence": i, "loaded": 0, "outbound_delivery": delivery_of.get(hu),
+                            "stop_sequence": stop_of.get(delivery_of.get(hu))} for i, hu in enumerate(hus, 1)],
     })
     shipment.insert(ignore_permissions=True)
     frappe.db.set_value("Outbound Delivery", {"name": ["in", outbound_deliveries]}, {"status": "Loading", "loading_status": "In Process"})
@@ -108,7 +116,8 @@ def list_loadable_shipments(user=None):
     shipments = frappe.get_list("WMS Shipment", filters=filters,
         fields=["name", "shipment_number", "warehouse", "route", "door", "staging_bin", "status"], order_by="creation asc", limit=50)
     for s in shipments:
-        rows = frappe.get_all("Shipment Handling Unit", filters={"parent": s.name}, fields=["handling_unit", "loaded", "load_sequence"], order_by="load_sequence asc")
+        rows = frappe.get_all("Shipment Handling Unit", filters={"parent": s.name}, fields=["handling_unit", "loaded", "load_sequence", "outbound_delivery", "stop_sequence"],
+                              order_by="load_sequence asc")
         s["handling_units"] = rows
         s["loaded_count"] = sum(1 for r in rows if r.loaded)
         s["total_count"] = len(rows)
@@ -124,13 +133,21 @@ def _route_hops(route_name, door_bin):
     hops.append(door_bin)
     return hops
 
-def confirm_hu_loaded(shipment_name, hu_name):
+def confirm_hu_loaded(shipment_name, hu_name, confirm_out_of_sequence=0):
     require_role(*LOAD_ROLES)
     shipment = frappe.get_doc("WMS Shipment", shipment_name, for_update=True)
     if shipment.status not in ("Ready to Load", "Loading"): frappe.throw(_("Shipment is not open for loading"))
     row = next((r for r in shipment.handling_units if r.handling_unit == hu_name), None)
     if not row: frappe.throw(_("Handling Unit {0} is not on this shipment").format(hu_name))
     if row.loaded: frappe.throw(_("Handling Unit {0} is already loaded").format(hu_name))
+    check = frappe.db.get_value("WMS Warehouse", shipment.warehouse, "load_sequence_check") or "Off"
+    if check != "Off" and row.stop_sequence:
+        deeper = [r for r in shipment.handling_units if not r.loaded and cint(r.stop_sequence) > cint(row.stop_sequence)]
+        if deeper:
+            message = _("{0} is for stop {1}, but {2} HU(s) for a later stop must go into the truck first (next: {3}, stop {4})").format(
+                hu_name, row.stop_sequence, len(deeper), deeper[0].handling_unit, deeper[0].stop_sequence)
+            if check == "Block": frappe.throw(message)
+            if not cint(confirm_out_of_sequence): return {"needs_confirmation": message}
     door_bin = shipment.door or shipment.staging_bin
     if not door_bin: frappe.throw(_("Shipment has no door or staging bin configured"))
     hops = _route_hops(shipment.route, door_bin) if shipment.route else [door_bin]
