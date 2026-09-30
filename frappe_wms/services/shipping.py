@@ -238,6 +238,8 @@ def depart_shipment(shipment_name):
     shipment = frappe.get_doc("WMS Shipment", shipment_name)
     if shipment.status != "Loaded": frappe.throw(_("Shipment must be fully loaded before it can depart"))
     shipment.db_set({"status": "Departed", "actual_departure": now_datetime()}, update_modified=True)
+    from frappe_wms.services.yard import on_shipment_departed
+    on_shipment_departed(shipment.name)
     return {"shipment": shipment.name, "status": "Departed"}
 
 def complete_shipment(shipment_name):

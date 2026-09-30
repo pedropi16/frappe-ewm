@@ -34,7 +34,13 @@
     "column_break_kit1",
     "kitting_output_hu_required",
     "loading_section",
-    "load_sequence_check"
+    "load_sequence_check",
+    "yard_section",
+    "dock_slot_minutes",
+    "dock_changeover_minutes",
+    "column_break_yard1",
+    "appointment_check",
+    "no_show_after_minutes"
   ],
   "fields": [
     {
@@ -225,6 +231,48 @@
       "options": "Off\nWarn\nBlock",
       "default": "Off",
       "description": "Loading a Handling Unit for an earlier stop while HUs for a later stop are still waiting (they belong deeper in the truck): Warn asks the loader to confirm, Block refuses it."
+    },
+    {
+      "fieldname": "yard_section",
+      "fieldtype": "Section Break",
+      "label": "Yard and Dock Appointments",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "dock_slot_minutes",
+      "fieldtype": "Int",
+      "label": "Default Slot (Minutes)",
+      "default": "60",
+      "non_negative": 1,
+      "description": "Length of a dock appointment when no end time is given."
+    },
+    {
+      "fieldname": "dock_changeover_minutes",
+      "fieldtype": "Int",
+      "label": "Door Changeover (Minutes)",
+      "default": "0",
+      "non_negative": 1,
+      "description": "Kept free between two appointments at the same door."
+    },
+    {
+      "fieldname": "column_break_yard1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "appointment_check",
+      "fieldtype": "Select",
+      "label": "Trucks Without Appointment",
+      "options": "Allow\nWarn\nBlock",
+      "default": "Allow",
+      "description": "At the gate: Allow checks a walk-in truck in, Warn asks to confirm, Block sends it away."
+    },
+    {
+      "fieldname": "no_show_after_minutes",
+      "fieldtype": "Int",
+      "label": "No Show After (Minutes)",
+      "default": "120",
+      "non_negative": 1,
+      "description": "A planned appointment not checked in this long after its start becomes No Show and frees its door. 0: never."
     }
   ],
   "autoname": "field:warehouse_code",

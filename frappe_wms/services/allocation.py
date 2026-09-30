@@ -13,7 +13,7 @@ from frappe_wms.utils import require_role
 # mid-repack. None of that should be up for grabs by a delivery's FIFO allocation just because
 # the ledger still shows it as "available" there - nothing else marks staged/received stock as
 # reserved or in-transit once it physically arrives at that bin.
-NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing")
+NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing", "Yard")
 
 # A balance row's own storage-role/bin-flag exclusion above says nothing about the Handling
 # Unit it's tied to - a Blocked HU (an operator's own "don't touch this" flag, e.g. Repack

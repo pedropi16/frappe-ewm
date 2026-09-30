@@ -22,7 +22,11 @@
    "kitting_stage_components": "When kitting inputs get their staging tasks from storage to the work center: from the RF Kitting screen, or as soon as the Kitting Order is created.",
    "kitting_putaway_output": "Default for new Kitting Orders: the produced output gets putaway tasks from the work center.",
    "kitting_output_hu_required": "The operator must scan a Handling Unit for the kitting output.",
-   "load_sequence_check": "Shipments load the last stop first. Off: any order. Warn: loading an earlier stop's HU while a later stop's HUs are still waiting asks the loader to confirm. Block: refused."
+   "load_sequence_check": "Shipments load the last stop first. Off: any order. Warn: loading an earlier stop's HU while a later stop's HUs are still waiting asks the loader to confirm. Block: refused.",
+   "dock_slot_minutes": "Length of a dock appointment when no end time is given.",
+   "dock_changeover_minutes": "Minutes kept free at a door between two appointments.",
+   "appointment_check": "A truck at the gate with no appointment: Allow (checked in as a walk-in), Warn (the gate confirms) or Block.",
+   "no_show_after_minutes": "A planned appointment not checked in this many minutes after its start becomes No Show and frees its door. 0: never."
   }
  },
  "Storage Type": {

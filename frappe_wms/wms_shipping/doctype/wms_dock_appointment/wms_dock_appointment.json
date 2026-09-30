@@ -1,0 +1,314 @@
+{
+ "name": "WMS Dock Appointment",
+ "doctype": "DocType",
+ "module": "WMS Shipping",
+ "custom": 0,
+ "is_submittable": 0,
+ "istable": 0,
+ "track_changes": 1,
+ "engine": "InnoDB",
+ "autoname": "format:DAP-{#####}",
+ "naming_rule": "Expression",
+ "sort_field": "planned_start",
+ "sort_order": "DESC",
+ "title_field": "vehicle_registration",
+ "search_fields": "vehicle_registration,carrier,door",
+ "description": "A truck's slot at a door (SAP EWM dock appointment) and its way through the yard: planned, checked in at the gate, at the door, done, checked out.",
+ "field_order": [
+  "warehouse",
+  "direction",
+  "status",
+  "column_break_1",
+  "planned_start",
+  "planned_end",
+  "door",
+  "section_vehicle",
+  "carrier",
+  "vehicle_registration",
+  "column_break_2",
+  "trailer_number",
+  "driver_name",
+  "section_refs",
+  "inbound_delivery",
+  "shipment",
+  "column_break_3",
+  "walk_in",
+  "remarks",
+  "section_times",
+  "yard_bin",
+  "checked_in_at",
+  "docked_at",
+  "column_break_4",
+  "completed_at",
+  "checked_out_at",
+  "arrival_delay_minutes"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse",
+   "label": "Warehouse",
+   "fieldtype": "Link",
+   "options": "WMS Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "direction",
+   "label": "Direction",
+   "fieldtype": "Select",
+   "options": "Inbound\nOutbound",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "Planned\nChecked In\nAt Door\nCompleted\nChecked Out\nNo Show\nCancelled",
+   "default": "Planned",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "planned_start",
+   "label": "Planned Start",
+   "fieldtype": "Datetime",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "planned_end",
+   "label": "Planned End",
+   "fieldtype": "Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "door",
+   "label": "Door",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "in_list_view": 1,
+   "description": "A bin whose storage type has the Door role. Empty: the first free door is assigned."
+  },
+  {
+   "fieldname": "section_vehicle",
+   "fieldtype": "Section Break",
+   "label": "Vehicle"
+  },
+  {
+   "fieldname": "carrier",
+   "label": "Carrier",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "vehicle_registration",
+   "label": "Vehicle Registration",
+   "fieldtype": "Data",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "trailer_number",
+   "label": "Trailer / Container",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "driver_name",
+   "label": "Driver",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "What It Carries"
+  },
+  {
+   "fieldname": "inbound_delivery",
+   "label": "Inbound Delivery",
+   "fieldtype": "Link",
+   "options": "Inbound Delivery",
+   "depends_on": "eval:doc.direction=='Inbound'"
+  },
+  {
+   "fieldname": "shipment",
+   "label": "Shipment",
+   "fieldtype": "Link",
+   "options": "WMS Shipment",
+   "depends_on": "eval:doc.direction=='Outbound'"
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "walk_in",
+   "label": "Arrived Without Appointment",
+   "fieldtype": "Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "label": "Remarks",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "section_times",
+   "fieldtype": "Section Break",
+   "label": "Yard Times"
+  },
+  {
+   "fieldname": "yard_bin",
+   "label": "Yard Spot",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_in_at",
+   "label": "Checked In At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "docked_at",
+   "label": "At Door Since",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "completed_at",
+   "label": "Completed At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_out_at",
+   "label": "Checked Out At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "arrival_delay_minutes",
+   "label": "Arrival vs Plan (Minutes)",
+   "fieldtype": "Int",
+   "read_only": 1,
+   "description": "Positive: late."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Operator",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Receiver",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Picker",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Packer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Loader",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Inventory Controller",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Master Data",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Integration User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ]
+}

@@ -947,6 +947,7 @@ Registered in `hooks.py` under `scheduler_events`:
 |---|---|---|
 | Every 10 min | `erp_sync_queue.retry_due` | Retries queued/failed ERPNext postings (Queued with Retry warehouses) |
 | Every 10 min | `printing.retry_print_jobs` | Resends failed network print jobs; requeues agent jobs never confirmed |
+| Hourly | `yard.mark_no_shows` | Planned dock appointments not checked in in time become No Show and free their door |
 | Hourly | `alerts.send_alert_digest` | Desk notification (and e-mail) to supervisors when a warehouse's alerts change — see WMS Settings > Alerts |
 | Hourly | `recalculate_stale_bin_capacity` | Recomputes `current_hu_count`/`current_weight` per active bin from live HU data |
 | Hourly | `run_replenishment_check` | Evaluates every active Replenishment Rule, raises a Warehouse Request+Task for pick bins at/below minimum (skips if one's already pending) |
@@ -960,6 +961,33 @@ Registered in `hooks.py` under `scheduler_events`:
 None of these post anything automatically except replenishment/wave/count
 generation — the integrity/reconciliation checks are report-only
 (`frappe.log_error`), by design, so they never silently correct the ledger.
+
+## Yard and dock appointments
+
+SAP EWM's dock appointment scheduling plus the core of yard management.
+Doors are bins of a storage type with the **Door** role, yard parking spots
+bins with the **Yard** role. A **WMS Dock Appointment** books a door for a
+time slot (inbound, optionally for an Inbound Delivery; outbound, optionally
+for a WMS Shipment) and follows the truck:
+
+`Planned → Checked In (gate, yard spot) → At Door → Completed → Checked Out`,
+or `No Show` / `Cancelled`.
+
+- Two active appointments never overlap at a door (plus *Door Changeover*);
+  without a door, the first free one is assigned. `free_slots` lists what is
+  still open per door for a day.
+- An outbound truck at a door becomes its shipment's loading door, and
+  departing the shipment completes the appointment.
+- At the gate, *Trucks Without Appointment* decides: Allow (checked in as a
+  walk-in), Warn (confirm) or Block.
+- An appointment not checked in *No Show After (Minutes)* past its start
+  becomes No Show and frees its door (hourly job).
+- The arrival is recorded against the plan (minutes early or late).
+
+Settings: *WMS Warehouse > Yard and Dock Appointments*. Screens: the Monitor's
+**Yard & Doors** (door board, the day's schedule with Check in / To door /
+Complete / Check out / Cancel, booking and walk-in dialogs) and the RF **Yard**
+screen (Inbound and Outbound menus) for the gate and dock.
 
 ## Ledger archiving
 
@@ -1009,6 +1037,7 @@ proceed. Only then does the home menu appear, leading to:
 | Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
 | Outbound | Pack | Log on to a work center, then scan source HU → product → quantity → destination HU to pack; create a new carton/pallet, pack a whole HU into another, close an HU with its weight. The work center's customizing decides which of these the packer gets (see Repack Center); open Packing Orders at the table can still be completed in one tap |
 | Outbound | VAS | Complete open VAS activity steps, or tap "+ Generate from Packaging Spec" [P4] to build a new VAS Order's steps from a scanned HU's item's Packaging Spec instead of typing them in by hand |
+| Inbound / Outbound | Yard | The day's trucks by door, yard and expected; check a truck in (scan its yard spot), send it to a door (scan the door, or its booked one), mark it done and check it out; take in a truck without appointment |
 | Outbound | Load | Pick a `Ready to Load`/`Loading` Shipment and load it last stop first (the screen names the next HU and each HU's stop); scan each HU to walk it through the Route's Stops (if any) to the door, then depart the Shipment once full. *WMS Warehouse > Loading > Load Sequence Check* makes an out-of-order HU a warning (confirm) or a block |
 | — | Lookup | HU/bin contents by barcode |
 

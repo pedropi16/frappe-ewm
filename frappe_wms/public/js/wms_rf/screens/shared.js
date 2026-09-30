@@ -22,6 +22,7 @@ export const SECTIONS = {
     { icon: "\u{1F4CB}", label: "Putaway Tasks", href: "#/tasks/inbound", taskGroup: "inbound" },
     { icon: "\u{1F4E6}", label: "Deconsolidate", href: "#/decon" },
     { icon: "✅", label: "Quality", href: "#/quality" },
+    { icon: "\u{1F69A}", label: "Yard", href: "#/yard" },
   ] },
   internal: { label: "Internal", icon: "↔️", items: [
     { icon: "↔️", label: "Move", href: "#/move" },
@@ -40,6 +41,7 @@ export const SECTIONS = {
     { icon: "\u{1F4E6}", label: "Pack", href: "#/pack" },
     { icon: "\u{1F9F0}", label: "VAS", href: "#/vas" },
     { icon: "\u{1F69B}", label: "Load", href: "#/load" },
+    { icon: "\u{1F69A}", label: "Yard", href: "#/yard" },
   ] },
 };
 

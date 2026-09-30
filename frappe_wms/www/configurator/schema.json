@@ -289,6 +289,35 @@
      "options": "Off\nWarn\nBlock",
      "default": "Off",
      "description": "Loading a Handling Unit for an earlier stop while HUs for a later stop are still waiting (they belong deeper in the truck): Warn asks the loader to confirm, Block refuses it."
+    },
+    {
+     "fieldname": "dock_slot_minutes",
+     "label": "Default Slot (Minutes)",
+     "fieldtype": "Int",
+     "default": "60",
+     "description": "Length of a dock appointment when no end time is given."
+    },
+    {
+     "fieldname": "dock_changeover_minutes",
+     "label": "Door Changeover (Minutes)",
+     "fieldtype": "Int",
+     "default": "0",
+     "description": "Kept free between two appointments at the same door."
+    },
+    {
+     "fieldname": "appointment_check",
+     "label": "Trucks Without Appointment",
+     "fieldtype": "Select",
+     "options": "Allow\nWarn\nBlock",
+     "default": "Allow",
+     "description": "At the gate: Allow checks a walk-in truck in, Warn asks to confirm, Block sends it away."
+    },
+    {
+     "fieldname": "no_show_after_minutes",
+     "label": "No Show After (Minutes)",
+     "fieldtype": "Int",
+     "default": "120",
+     "description": "A planned appointment not checked in this long after its start becomes No Show and frees its door. 0: never."
     }
    ],
    "key": {
@@ -328,7 +357,7 @@
      "fieldname": "storage_role",
      "label": "Storage Role",
      "fieldtype": "Select",
-     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply",
+     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard",
      "reqd": 1
     },
     {

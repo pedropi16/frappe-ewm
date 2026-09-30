@@ -131,6 +131,7 @@ scheduler_events = {
         "frappe_wms.tasks.generate_scheduled_waves",
         "frappe_wms.tasks.release_due_waves",
         "frappe_wms.services.alerts.send_alert_digest",
+        "frappe_wms.services.yard.mark_no_shows",
     ],
     "monthly": ["frappe_wms.services.archiving.monthly_archive"],
     "daily": [

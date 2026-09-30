@@ -1,0 +1,77 @@
+import frappe
+from frappe.tests import IntegrationTestCase
+from frappe.utils import add_to_date, now_datetime
+
+from frappe_wms.services import yard
+
+
+class TestYardAndDockAppointments(IntegrationTestCase):
+    def setUp(self):
+        frappe.set_user("Administrator")
+        company = frappe.get_all("Company", limit=1, pluck="name")[0]
+        self.wh = f"WMS-TEST-YRD-{frappe.generate_hash(length=5).upper()}"
+        frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": self.wh, "warehouse_name": self.wh, "company": company,
+                        "default_stock_type": "AVAILABLE", "dock_slot_minutes": 60, "dock_changeover_minutes": 15}).insert(ignore_permissions=True)
+        for code, role in (("DOOR", "Door"), ("YARD", "Yard")):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": self.wh, "storage_type_code": code, "storage_type_name": code, "storage_role": role,
+                            "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        self.doors = [frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{self.wh}-D{n}", "warehouse": self.wh, "storage_type": f"{self.wh}-DOOR",
+                                      "active": 1, "sequence": n}).insert(ignore_permissions=True).name for n in (1, 2)]
+        self.spot = frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{self.wh}-Y1", "warehouse": self.wh, "storage_type": f"{self.wh}-YARD",
+                                    "active": 1, "sequence": 1}).insert(ignore_permissions=True).name
+        self.t0 = add_to_date(now_datetime(), hours=2).replace(minute=0, second=0, microsecond=0)
+
+    def _book(self, start, door=None, **kw):
+        return yard.create_appointment(self.wh, kw.pop("direction", "Inbound"), start, door=door, **kw)
+
+    def test_booking_assigns_free_doors_and_refuses_overlaps(self):
+        a = self._book(self.t0, vehicle_registration="1234-ABC")
+        b = self._book(self.t0, vehicle_registration="5678-DEF")
+        self.assertEqual([frappe.db.get_value("WMS Dock Appointment", n, "door") for n in (a, b)], self.doors, "first free door, then the next")
+        with self.assertRaises(frappe.ValidationError):
+            self._book(self.t0, vehicle_registration="9999-XYZ")          # both doors taken
+        with self.assertRaises(frappe.ValidationError):
+            self._book(add_to_date(self.t0, minutes=65), door=self.doors[0])   # inside the 15-minute changeover
+        self.assertTrue(self._book(add_to_date(self.t0, minutes=75), door=self.doors[0]))
+        slots = {s["door"]: s["free_starts"] for s in yard.free_slots(self.wh, self.t0.date(), 60)}
+        self.assertNotIn(str(self.t0), slots[self.doors[0]])
+
+    def test_gate_door_and_departure(self):
+        from frappe_wms.services.shipping import depart_shipment
+        a = self._book(self.t0, vehicle_registration="1234-ABC", direction="Outbound")
+        r = yard.check_in(self.wh, vehicle_registration="1234-ABC", yard_bin=self.spot)
+        self.assertEqual((r["appointment"], r["status"], r["yard_bin"]), (a, "Checked In", self.spot))
+        self.assertLess(frappe.db.get_value("WMS Dock Appointment", a, "arrival_delay_minutes"), 0, "arrived early")
+        # a walk-in with the door already occupied cannot take it
+        self.assertEqual(yard.to_door(a)["door"], self.doors[0])
+        w = yard.check_in(self.wh, vehicle_registration="WALK-IN", direction="Inbound")["appointment"]
+        self.assertTrue(frappe.db.get_value("WMS Dock Appointment", w, "walk_in"))
+        with self.assertRaises(frappe.ValidationError):
+            yard.to_door(w, self.doors[0])
+        self.assertEqual(yard.to_door(w)["door"], self.doors[1])
+        yard.complete(w)
+        self.assertEqual(yard.check_out(w)["status"], "Checked Out")
+
+        # departing a shipment completes the appointment that carries it
+        shipment = frappe.get_doc({"doctype": "WMS Shipment", "shipment_number": frappe.generate_hash(length=8), "warehouse": self.wh,
+                                   "status": "Loaded"}).insert(ignore_permissions=True, ignore_mandatory=True)
+        frappe.db.set_value("WMS Dock Appointment", a, "shipment", shipment.name)
+        depart_shipment(shipment.name)
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", a, "status"), "Completed")
+
+    def test_walk_in_rule_and_no_shows(self):
+        frappe.db.set_value("WMS Warehouse", self.wh, "appointment_check", "Block")
+        with self.assertRaises(frappe.ValidationError):
+            yard.check_in(self.wh, vehicle_registration="NOBODY", direction="Inbound")
+        frappe.db.set_value("WMS Warehouse", self.wh, "appointment_check", "Warn")
+        self.assertIn("needs_confirmation", yard.check_in(self.wh, vehicle_registration="NOBODY", direction="Inbound"))
+        self.assertEqual(yard.check_in(self.wh, vehicle_registration="NOBODY", direction="Inbound", confirm_without_appointment=1)["status"], "Checked In")
+
+        late = self._book(add_to_date(now_datetime(), hours=-5), vehicle_registration="LATE-1")
+        frappe.db.set_value("WMS Warehouse", self.wh, "no_show_after_minutes", 60)
+        yard.mark_no_shows()
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", late, "status"), "No Show")
+        self.assertTrue(self._book(add_to_date(now_datetime(), hours=-5), door=frappe.db.get_value("WMS Dock Appointment", late, "door")),
+                        "a no-show frees its door")
+        board = yard.yard_board(self.wh)
+        self.assertIn("NOBODY", [r.vehicle_registration for r in board["appointments"]])

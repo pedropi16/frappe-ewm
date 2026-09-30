@@ -122,19 +122,22 @@
    "role": "WMS Supervisor",
    "read": 1,
    "report": 1,
-   "export": 1
+   "export": 1,
+   "print": 1
   },
   {
    "role": "WMS Auditor",
    "read": 1,
    "report": 1,
-   "export": 1
+   "export": 1,
+   "print": 1
   },
   {
    "role": "WMS Process Engineer",
    "read": 1,
    "report": 1,
-   "export": 1
+   "export": 1,
+   "print": 1
   }
  ]
 }
