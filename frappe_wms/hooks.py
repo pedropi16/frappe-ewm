@@ -106,6 +106,9 @@ doc_events = {
         "on_submit": "frappe_wms.events.work_order.on_submit",
     },
     "Job Card": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "POS Invoice": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Asset Capitalization": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
+    "Asset Repair": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     # ERPNext -> WMS replication and change propagation (WMS Warehouse "ERP Integration").
     "Sales Order": {
         "on_submit": "frappe_wms.services.erp_integration.on_order_submit",

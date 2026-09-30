@@ -7,19 +7,26 @@ from frappe import _
 # "condition_field" (Sales/Purchase Invoice) only guards stock when it's truthy.
 _WAREHOUSE_FIELDS = {
     "Stock Entry": {"fields": ("s_warehouse", "t_warehouse"), "level": "item", "alt": "a Goods Receipt / Goods Issue / Move in the WMS app"},
-    "Delivery Note": {"fields": ("warehouse", "target_warehouse"), "level": "item", "alt": "a Goods Issue in the WMS app"},
+    # packed_items: a product bundle's components carry their own warehouse.
+    "Delivery Note": {"fields": ("warehouse", "target_warehouse"), "level": "item", "tables": ("items", "packed_items"), "alt": "a Goods Issue in the WMS app"},
     "Purchase Receipt": {"fields": ("warehouse", "rejected_warehouse", "from_warehouse"), "level": "item", "alt": "a Goods Receipt in the WMS app"},
     "Stock Reconciliation": {"fields": ("warehouse",), "level": "item", "alt": "a WMS Physical Inventory Count"},
-    "Sales Invoice": {"fields": ("warehouse",), "level": "item", "condition_field": "update_stock", "alt": "a Goods Issue in the WMS app"},
-    "Purchase Invoice": {"fields": ("warehouse", "rejected_warehouse"), "level": "item", "condition_field": "update_stock", "alt": "a Goods Receipt in the WMS app"},
-    "Subcontracting Receipt": {"fields": ("warehouse",), "level": "item", "alt": "a Goods Receipt in the WMS app"},
+    "Sales Invoice": {"fields": ("warehouse", "target_warehouse"), "level": "item", "tables": ("items", "packed_items"), "condition_field": "update_stock", "alt": "a Goods Issue in the WMS app"},
+    "POS Invoice": {"fields": ("warehouse",), "level": "item", "tables": ("items", "packed_items"), "condition_field": "update_stock", "alt": "a Goods Issue in the WMS app (sell from a warehouse the WMS does not manage)"},
+    "Purchase Invoice": {"fields": ("warehouse", "rejected_warehouse", "from_warehouse"), "level": "item", "condition_field": "update_stock", "alt": "a Goods Receipt in the WMS app"},
+    "Subcontracting Receipt": {"fields": ("warehouse", "rejected_warehouse"), "level": "item", "alt": "a Goods Receipt in the WMS app"},
     "Subcontracting Order": {"fields": ("warehouse",), "level": "item", "alt": "a Goods Receipt in the WMS app"},
+    # Assets consume stock: Asset Capitalization posts its own stock ledger entries, Asset Repair
+    # a Stock Entry on submit - refused here, up front, with a message about the asset document.
+    "Asset Capitalization": {"fields": ("warehouse",), "level": "item", "tables": ("stock_items",), "alt": "a Goods Issue in the WMS app first, then capitalize from a non-WMS warehouse"},
+    "Asset Repair": {"fields": ("warehouse",), "level": "item", "tables": ("stock_items",), "alt": "a Goods Issue in the WMS app first, then consume from a non-WMS warehouse"},
     # Work Order/Job Card themselves are deliberately NOT guarded (P2: production supply
     # legitimately plans a WMS-managed warehouse as a Work Order's source/wip/fg warehouse -
     # that's the whole point of frappe_wms.events.work_order.on_submit staging material for
     # it). Neither doctype posts stock directly anyway - the Stock Entries they spawn
     # (Material Transfer for Manufacture, Manufacture) are still fully guarded above via
-    # s_warehouse/t_warehouse, same as every other stock posting.
+    # s_warehouse/t_warehouse, same as every other stock posting. Subcontracting Inward Order
+    # likewise moves stock only through Stock Entries.
 }
 
 
@@ -61,11 +68,12 @@ def validate(doc, method=None):
 
     warehouses = set()
     if config["level"] == "item":
-        for row in doc.get("items") or []:
-            for field in config["fields"]:
-                value = row.get(field)
-                if value:
-                    warehouses.add(value)
+        for table in config.get("tables", ("items",)):
+            for row in doc.get(table) or []:
+                for field in config["fields"]:
+                    value = row.get(field)
+                    if value:
+                        warehouses.add(value)
     else:
         for field in config["fields"]:
             value = doc.get(field)

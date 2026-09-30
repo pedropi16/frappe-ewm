@@ -920,15 +920,16 @@ Alerts view lists what has not reached ERPNext, with *Retry now*.
   **A Goods Receipt/Issue must be either fully order-linked or fully
   standalone** — mixed lines are rejected rather than mis-posted.
 - **Stock enforcement**: once a warehouse is WMS-linked, `events/
-  erpnext_stock_guard.py` blocks direct Stock Entry / Delivery Note /
-  Purchase Receipt / Stock Reconciliation postings against it from ERPNext's
-  own desk, pointing the user at the matching WMS document instead. Warehouses
-  *not* linked to a WMS Warehouse are completely unaffected — other ERPNext
-  flows (manufacturing, subcontracting, etc.) keep working normally elsewhere.
-  Toggle off via `WMS Settings.enforce_wms_only_stock_movements`.
-  **Known gap**: this doesn't cover every ERPNext path that can move stock
-  (Purchase/Sales Invoice with "Update Stock", Subcontracting, Asset
-  scrapping, Job Card) — only the four primary stock documents.
+  erpnext_stock_guard.py` refuses every ERPNext document that would move its
+  stock outside the WMS: Stock Entry, Delivery Note, Purchase Receipt, Stock
+  Reconciliation, Sales / Purchase / POS Invoice with *Update Stock*,
+  Subcontracting Order and Receipt, Asset Capitalization and Asset Repair,
+  including product-bundle components (`packed_items`). Work Orders, Job
+  Cards and Subcontracting Inward Orders move stock only through Stock
+  Entries, which are refused the same way. The warehouse's own postings and
+  its replicated draft Delivery Notes / Purchase Receipts pass. Warehouses
+  *not* linked to a WMS Warehouse are unaffected. Toggle off via
+  `WMS Settings.enforce_wms_only_stock_movements`.
 - A daily job (`verify_erpnext_stock_reconciliation`) flags any drift between
   WMS and ERPNext quantities per warehouse/product via `frappe.log_error`. It
   compares against ERPNext's stock *ledger*, not its `Bin` cache: ERPNext core
