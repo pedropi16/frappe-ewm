@@ -79,6 +79,31 @@ class TestCountTolerance(IntegrationTestCase):
         self.assertFalse(count.erpnext_gain_stock_entry)
         self.assertFalse(count.erpnext_loss_stock_entry)
 
+    def test_lines_posted_before_the_count_resolves_reach_erpnext_immediately(self):
+        # One line within tolerance posts to the WMS ledger now; another is held for recount. The
+        # posted line used to wait for the whole count before reaching ERPNext - forever, if the
+        # count was never resolved.
+        near = self._make_item("TEST-CTG-ITEM-MIX-1")
+        far = self._make_item("TEST-CTG-ITEM-MIX-2")
+        self._receive(near, 100)
+        self._receive(far, 100)
+        count = frappe.get_doc({"doctype": "WMS Physical Inventory Count", "warehouse": self.warehouse,
+            "storage_bin": self.bin_a, "status": "Draft"}).insert(ignore_permissions=True)
+        snapshot_count(count.name)
+        count.reload()
+        counted = {r.name: flt(r.book_quantity) for r in count.items}
+        counted.update({r.name: 101 for r in count.items if r.product == near})
+        counted.update({r.name: 80 for r in count.items if r.product == far})
+        record_counts(count.name, counted)
+        erpnext_warehouse = frappe.db.get_value("WMS Warehouse", self.warehouse, "erpnext_warehouse")
+        ledger = lambda item: flt(frappe.db.sql("select sum(actual_qty) from `tabStock Ledger Entry` where item_code=%s and warehouse=%s and is_cancelled=0", (item, erpnext_warehouse))[0][0])
+        before = ledger(near)
+        self.assertEqual(post_count(count.name)["status"], "Under Review")
+        count.reload()
+        self.assertTrue(count.erpnext_gain_stock_entry)
+        self.assertEqual(ledger(near) - before, 1)
+        self.assertEqual({r.status for r in count.items if r.product == far}, {"Pending Recount"})
+
     def test_no_matching_tolerance_group_posts_unconditionally(self):
         other_item_group = frappe.get_all("Item Group", filters={"name": ["!=", self.item_group]}, limit=1, pluck="name")
         if not other_item_group:

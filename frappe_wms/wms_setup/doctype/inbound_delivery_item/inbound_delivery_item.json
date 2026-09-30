@@ -10,6 +10,7 @@
   "field_order": [
     "line_number",
     "item",
+    "item_name",
     "expected_quantity",
     "received_quantity",
     "putaway_quantity",
@@ -42,6 +43,14 @@
       "options": "Item",
       "reqd": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "item_name",
+      "label": "Item Name",
+      "fieldtype": "Data",
+      "fetch_from": "item.item_name",
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "expected_quantity",

@@ -7,6 +7,7 @@ from frappe_wms.services.stock import post_entries
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
 from frappe_wms.api.scanner import confirm_task
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestAllocation(IntegrationTestCase):
@@ -80,7 +81,7 @@ class TestAllocation(IntegrationTestCase):
         first = self._make_and_submit_delivery(6)
         allocate_delivery(first.name)
         pick_tasks = create_pick_tasks(first.name)
-        confirm_task(pick_tasks[0], confirmed_quantity=6)
+        pick_into_new_hu(pick_tasks[0], confirmed_quantity=6)  # 6 of the pallet's 10, into a carton
         # The confirmed pick moved 6 units into self.stage_bin - a fresh, unreserved WMS Stock
         # Balance row there, which previously looked like ordinary available inventory to FIFO.
         self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"storage_bin": self.stage_bin, "product": self.item}, "quantity"), 6)

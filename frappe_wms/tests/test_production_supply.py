@@ -6,6 +6,7 @@ from frappe_wms.api.scanner import confirm_task
 from frappe_wms.api.inbound import create_fg_receipt_from_work_order
 from frappe_wms.services.receipt import create_putaway_requests
 from frappe_wms.services.task import create_tasks_for_request
+from frappe_wms.tests.bootstrap import company_warehouse, pick_into_new_hu
 
 
 class TestProductionSupply(IntegrationTestCase):
@@ -19,8 +20,8 @@ class TestProductionSupply(IntegrationTestCase):
         cls.recv_bin = "WMS-TEST-PSUP-WH-RECV"
         cls.company = frappe.get_all("Company", limit=1, pluck="name")[0]
         cls.uom = "Nos"
-        cls.wip_warehouse = "Work In Progress - TC"
-        cls.fg_erpnext_warehouse = "Finished Goods - TC"
+        cls.wip_warehouse = company_warehouse(cls.company, "Work In Progress")
+        cls.fg_erpnext_warehouse = company_warehouse(cls.company, "Finished Goods")
 
         if not frappe.db.exists("Item", "WMS-TEST-PSUP-RM"):
             item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
@@ -114,7 +115,7 @@ class TestProductionSupply(IntegrationTestCase):
 
         request_name = frappe.get_all("Warehouse Request", filters={"reference_doctype": "Work Order", "reference_name": wo.name}, pluck="name")[0]
         task_name = frappe.get_all("Warehouse Task", filters={"warehouse_request": request_name}, pluck="name")[0]
-        confirm_task(task_name, confirmed_quantity=20)
+        pick_into_new_hu(task_name, confirmed_quantity=20)  # 20 of the 50 on the source pallet
 
         request = frappe.get_doc("Warehouse Request", request_name)
         self.assertEqual(request.status, "Completed")

@@ -82,14 +82,17 @@ def _loaded_handling_units_for_line(outbound_delivery_item):
     # A line's picked quantity can legitimately span more than one physical HU - a normal
     # allocation outcome whenever one delivery's need is filled from more than one source
     # pallet/bin - so this returns every loaded one, not just the first.
+    # Cross-docked stock reaches the line through a Cross Dock task instead (see
+    # shipping.cross_dock_handling_units).
+    from frappe_wms.services.shipping import cross_dock_handling_units
+    destination_hus = set(cross_dock_handling_units(outbound_delivery_item=outbound_delivery_item))
     allocation_names = frappe.get_all("Stock Allocation",
         filters={"outbound_delivery_item": outbound_delivery_item, "status": ["in", ["Picked", "Partially Picked"]]}, pluck="name")
-    if not allocation_names: return []
-    task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
-    if not task_names: return []
-    destination_hus = frappe.get_all("Warehouse Task",
-        filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
-        pluck="destination_hu", distinct=True)
+    task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent") if allocation_names else []
+    if task_names:
+        destination_hus |= set(frappe.get_all("Warehouse Task",
+            filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
+            pluck="destination_hu", distinct=True))
     return sorted({hu for hu in destination_hus if frappe.db.get_value("Handling Unit", hu, "status") == "Loaded"})
 
 def _ready_lines_for_delivery(delivery_name):

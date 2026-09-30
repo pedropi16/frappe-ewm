@@ -6,6 +6,7 @@ from frappe_wms.api.scanner import confirm_task
 from frappe_wms.api.inventory import snapshot_count, record_counts, post_count, cancel_count, complete_inspection, check_replenishment_needs
 from frappe_wms.services.inventory_count import list_open_counts
 from frappe_wms.services.stock import transfer_stock
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestPhase4InventoryManagement(IntegrationTestCase):
@@ -185,7 +186,7 @@ class TestPhase4InventoryManagement(IntegrationTestCase):
         self.assertEqual(task.destination_bin, self.pick_bin)
         self.assertEqual(task.planned_quantity, 12)
 
-        confirm_task(task.name, confirmed_quantity=12)
+        pick_into_new_hu(task.name, confirmed_quantity=12)  # 12 off a 25-unit pallet into the (HU-managed) pick bin
         pick_qty = frappe.get_all("WMS Stock Balance", filters={"storage_bin": self.pick_bin, "product": self.item}, fields=["quantity"])[0].quantity
         self.assertEqual(pick_qty, 12)
 

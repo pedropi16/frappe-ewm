@@ -48,8 +48,7 @@ def find_pick_tasks(reference):
 
 def release_wave(wave_name):
     require_role("WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Wave` where name=%s for update", wave_name)
-    wave = frappe.get_doc("WMS Wave", wave_name)
+    wave = frappe.get_doc("WMS Wave", wave_name, for_update=True)
     if wave.status != "Draft": frappe.throw(_("Wave is not in Draft status"))
     if not wave.deliveries: frappe.throw(_("Wave has no deliveries to release"))
     delivery_names = [row.outbound_delivery for row in wave.deliveries]
@@ -85,12 +84,14 @@ def release_delivery_for_picking(delivery_name, strategy="Single Order"):
     # (Outbound Delivery's "Allocate Stock" / "Create Pick Tasks" buttons) - allocates whatever
     # isn't already allocated, then raises pick tasks for it.
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
-    frappe.db.sql("select name from `tabOutbound Delivery` where name=%s for update", delivery_name)
-    delivery = frappe.get_doc("Outbound Delivery", delivery_name)
+    delivery = frappe.get_doc("Outbound Delivery", delivery_name, for_update=True)
     if delivery.picking_status == "Picked": frappe.throw(_("Delivery is already fully picked"))
     if delivery.allocation_status != "Fully Allocated":
         allocate_delivery(delivery_name)
         delivery.reload()
     if delivery.allocation_status == "Not Allocated":
         frappe.throw(_("No stock could be allocated for this delivery - check available balances"))
+    if delivery.allocation_status == "Fully Allocated" and not frappe.db.exists("Stock Allocation", {"outbound_delivery": delivery_name, "status": "Allocated"}):
+        # Everything is already tasked, or reserved by cross-docking (which needs no pick at all).
+        return []
     return create_pick_tasks(delivery_name, strategy)

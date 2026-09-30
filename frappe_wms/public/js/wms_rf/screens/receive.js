@@ -11,7 +11,7 @@ import { listScreen } from "#wms/screens/lists.js";
 
 export const receiveList = listScreen({
   id: "receive", pattern: "receive", title: _("Receive"), section: "inbound", method: "frappe_wms.api.inbound.list_open_inbound_deliveries", empty: _("No open inbound deliveries."),
-  card: (d) => Card({ title: d.inbound_delivery_number || d.name, right: StatusBadge(d.status), meta: [d.supplier || "", h("br"), d.receiving_bin || ""], onClick: () => nav.go(href("receive", d.name)) }),
+  card: (d) => Card({ title: d.inbound_delivery_number || d.name, right: StatusBadge(d.status), meta: [d.external_reference ? `${d.supplier || ""} · ${d.external_reference}` : d.supplier || "", h("br"), d.receiving_bin || ""], onClick: () => nav.go(href("receive", d.name)) }),
 });
 
 const st = { name: null, doc: null, lines: [], huTypes: null, form: null, loading: false, w0: 0 };
@@ -36,7 +36,7 @@ export const receiveDetail = {
     st.doc = doc;
     const saved = loadDraft(key(name));
     const fresh = (doc.items || []).map((row) => ({
-      inbound_delivery_item: row.name, item: row.item, remaining: round6(flt(row.expected_quantity) - flt(row.received_quantity)),
+      inbound_delivery_item: row.name, item: row.item, item_name: row.item_name || "", remaining: round6(flt(row.expected_quantity) - flt(row.received_quantity)),
       stock_uom: row.stock_uom, stock_type: row.expected_stock_type, handling_unit: "", hu_type: "", quantity: "", batch_no: "", serial_no: "",
     })).filter((l) => l.remaining > 0).map((l) => ({ ...l, quantity: fmtQty(l.remaining) }));
     // A saved draft only applies to lines that still exist with the same remaining quantity.
@@ -52,7 +52,7 @@ export const receiveDetail = {
     if (!st.lines.length) { wrap.append(Empty(_("Nothing left to receive on this delivery."), "✅")); return wrap; }
     const typeOptions = [{ value: "", label: "—" }, ...(st.huTypes || []).map((t) => ({ value: t.name, label: t.name }))];
     st.lines.forEach((l, i) => wrap.append(Section({},
-      h("div.line-head", l.item), h("div.line-sub", `${_("Remaining: {0} {1}", [fmtQty(l.remaining), l.stock_uom])} · ${_(l.stock_type)}`),
+      h("div.line-head", l.item), h("div.line-sub", `${l.item_name && l.item_name !== l.item ? `${l.item_name} · ` : ""}${_("Remaining: {0} {1}", [fmtQty(l.remaining), l.stock_uom])} · ${_(l.stock_type)}`),
       Field({ name: `hu${i}`, kind: "scan", label: _("Handling Unit"), placeholder: _("Scan HU barcode"), value: l.handling_unit, autofocus: i === 0,
         onInput: (v) => { l.handling_unit = v; persist(); }, onCommit: (v) => { l.handling_unit = v; persist(); } }),
       Field({ name: `type${i}`, kind: "select", label: _("If new HU, type"), value: l.hu_type, options: typeOptions, onInput: (v) => { l.hu_type = v; persist(); } }),

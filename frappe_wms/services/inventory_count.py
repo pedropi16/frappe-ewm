@@ -32,8 +32,7 @@ def _release_blocked_bins(doc):
 
 def snapshot_count(count_name):
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Draft": frappe.throw(_("Count has already been started"))
     filters = {"warehouse": doc.warehouse, "quantity": [">", 0]}
     if doc.storage_bin: filters["storage_bin"] = doc.storage_bin
@@ -72,8 +71,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
     # noise). A found line has no book quantity to compare against, so its full quantity IS the
     # variance and it's immediately "Counted" - there's nothing left to count against.
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status not in ("Counting", "Counted"): frappe.throw(_("Count is not open for recording"))
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Found quantity must be greater than zero"))
@@ -94,8 +92,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
 
 def cancel_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status in ("Posted", "Cancelled"): frappe.throw(_("A posted or already-cancelled count cannot be cancelled"))
     _release_blocked_bins(doc)
     doc.status = "Cancelled"
@@ -105,8 +102,7 @@ def cancel_count(count_name):
 def record_counts(count_name, counted_quantities):
     # counted_quantities: {row_name: counted_quantity}
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status not in {"Counting", "Counted"}: frappe.throw(_("Count is not open for recording"))
     for row in doc.items:
         if row.name not in counted_quantities: continue
@@ -155,11 +151,25 @@ def _recompute_pic_status(doc):
     if any(r.status in ("Pending Recount", "Pending Approval") for r in doc.items): return "Under Review"
     return doc.status
 
+def _mirror_posted_rows(doc, rows):
+    # Mirror to ERPNext exactly the lines _post_row just posted to the WMS ledger, as they post -
+    # not once at the very end. A count can post in several passes (within-tolerance lines
+    # immediately, the rest after a recount or a supervisor's approval), and waiting for the last
+    # pass meant lines already in the WMS ledger never reached ERPNext while the count sat Under
+    # Review, or at all if it was then cancelled (reproduced in a simulated shift: a 1-unit loss
+    # posted in WMS, the count left pending recount, ERPNext still showing the old quantity).
+    # Each line posts once (its status moves to Posted), so mirroring per pass can't double up.
+    if not rows: return
+    gain_entry, loss_entry = sync_physical_inventory_count(doc, rows=rows)
+    join = lambda current, new: ", ".join(x for x in (current, new) if x)
+    if gain_entry: doc.erpnext_gain_stock_entry = join(doc.erpnext_gain_stock_entry, gain_entry)
+    if loss_entry: doc.erpnext_loss_stock_entry = join(doc.erpnext_loss_stock_entry, loss_entry)
+
 def post_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Counted": frappe.throw(_("All lines must be counted before posting"))
+    posted_now = []
     for i, row in enumerate(doc.items, 1):
         if row.status in ("Posted", "Pending Approval"): continue
         variance = flt(row.variance)
@@ -168,7 +178,7 @@ def post_count(count_name):
             continue
         group = _matching_tolerance_group(doc.warehouse, row.product)
         if not group or _within_tolerance(group, variance, row.book_quantity):
-            _post_row(doc, row, i)
+            _post_row(doc, row, i); posted_now.append(row)
             continue
         row.tolerance_group = group.name
         if group.requires_recount and not row.recount_count:
@@ -176,16 +186,10 @@ def post_count(count_name):
         elif group.requires_approval:
             row.status = "Pending Approval"
         else:
-            _post_row(doc, row, i)
-    # sync_physical_inventory_count aggregates variance across every row in doc.items, not
-    # just the ones this call touched - it's a one-shot design, so it must only ever fire
-    # once the count is fully resolved (no row still Pending Recount/Approval), or a later
-    # recount/approval pass would double-post the rows this pass already covered.
+            _post_row(doc, row, i); posted_now.append(row)
+    _mirror_posted_rows(doc, posted_now)
     doc.status = _recompute_pic_status(doc)
     if doc.status == "Posted":
-        gain_entry, loss_entry = sync_physical_inventory_count(doc)
-        if gain_entry: doc.erpnext_gain_stock_entry = gain_entry
-        if loss_entry: doc.erpnext_loss_stock_entry = loss_entry
         doc.posted_by = frappe.session.user
         doc.posted_at = now_datetime()
         _release_blocked_bins(doc)
@@ -194,8 +198,7 @@ def post_count(count_name):
 
 def request_recount(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     for row in doc.items:
         if row.status != "Pending Recount": continue
         row.recount_count = (row.recount_count or 0) + 1
@@ -208,20 +211,18 @@ def request_recount(count_name):
 
 def approve_variance(count_name, remarks=None):
     require_role("WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Under Review": frappe.throw(_("Count is not awaiting approval"))
+    posted_now = []
     for i, row in enumerate(doc.items, 1):
         if row.status != "Pending Approval": continue
-        _post_row(doc, row, i)
+        _post_row(doc, row, i); posted_now.append(row)
+    _mirror_posted_rows(doc, posted_now)
     doc.approved_by = frappe.session.user
     doc.approved_at = now_datetime()
     doc.review_remarks = remarks
     doc.status = _recompute_pic_status(doc)
     if doc.status == "Posted":
-        gain_entry, loss_entry = sync_physical_inventory_count(doc)
-        if gain_entry: doc.erpnext_gain_stock_entry = gain_entry
-        if loss_entry: doc.erpnext_loss_stock_entry = loss_entry
         doc.posted_by = frappe.session.user
         doc.posted_at = now_datetime()
         _release_blocked_bins(doc)

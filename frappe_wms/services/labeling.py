@@ -21,8 +21,10 @@ def _next_sscc_serial():
     # against, and its Select field's option list is exactly (and only) those real,
     # autoname-hooked doctypes; SSCC has neither. Row-locked the same way every other counter
     # in this app is, via a plain SELECT ... FOR UPDATE on the row about to be incremented.
-    frappe.db.sql("select value from `tabSingles` where doctype='WMS Settings' and field='sscc_next_serial' for update")
-    next_value = cint(frappe.db.get_single_value("WMS Settings", "sscc_next_serial") or 0) + 1
+    # Take the value from the locking read itself - a separate get_single_value afterwards is a
+    # REPEATABLE READ snapshot read and could hand two concurrent labels the same serial.
+    locked = frappe.db.sql("select value from `tabSingles` where doctype='WMS Settings' and field='sscc_next_serial' for update")
+    next_value = cint(locked[0][0] if locked else 0) + 1
     frappe.db.set_single_value("WMS Settings", "sscc_next_serial", next_value)
     return next_value
 

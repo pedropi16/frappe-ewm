@@ -430,6 +430,16 @@ steps, and what the WMS Monitor's Outbound Monitor drill-down (below) offers
 in one tap, alongside a manual "Post Goods Issue" fallback for whenever
 auto-posting hasn't (or can't yet) run.
 
+**Partial quantities out of a Handling Unit:** when a task moves only part of
+an HU's stock (a partial pick off a pallet, a split putaway, a replenishment
+into a pick face) and no destination HU is scanned, the stock can't simply
+travel "inside" the source HU - that would leave one HU with stock in two
+bins. `services/task.confirm_task` therefore moves the whole HU when it is
+being emptied, puts the quantity loose when the destination bin's Storage
+Type isn't HU-managed, and otherwise asks the operator to scan the tote,
+carton or new pallet it goes into ("Destination Handling Unit required"). A
+WO Creation Rule with a `pick_hu_type` supplies that pick HU automatically.
+
 **Cancelling an Outbound Delivery** is validated, not just a bare docstatus
 flip (`events/deliveries.py`): blocked outright if a submitted `Goods Issue`
 already references it (reverse that first), and blocked if any of its Pick
@@ -864,7 +874,13 @@ in this app overrides those except two custom, warehouse-scoped checks:
   (Purchase/Sales Invoice with "Update Stock", Subcontracting, Asset
   scrapping, Job Card) — only the four primary stock documents.
 - A daily job (`verify_erpnext_stock_reconciliation`) flags any drift between
-  WMS and ERPNext quantities per warehouse/product via `frappe.log_error`.
+  WMS and ERPNext quantities per warehouse/product via `frappe.log_error`. It
+  compares against ERPNext's stock *ledger*, not its `Bin` cache: ERPNext core
+  can leave `Bin.actual_qty` stale on its own under concurrency
+  (`bin.update_qty` rewrites it from a non-locking read, e.g. when a Sales
+  Order reserves stock while a Purchase Receipt posts the same item). When the
+  ledgers agree and only the Bin is off, the job repairs the Bin with ERPNext's
+  own `update_bin_qty`.
 
 ## Background jobs
 
@@ -997,6 +1013,38 @@ real iPhone with the Bluetooth scanner:
 5. Put the phone in airplane mode, Confirm: "No connection" with Retry; turn it back on, Retry: one confirmation.
 6. Tap the camera button beside a scan field, allow the camera, scan a Code 128 label.
 7. Add to Home Screen; launch it from there and repeat 2.
+
+### Load and concurrency testing
+
+`frappe_wms/tests/load/` drives a realistic, concurrent warehouse shift
+through the real HTTP API - the same endpoints the RF app and desk buttons
+call, each actor logged in as its own user with its own RF Resource - and
+then checks the resulting data for consistency. Use a dev/test site only.
+
+```bash
+# 1. a fully configured DC "MAD1": ~340 bins, rules, routes, queues, 27 RF
+#    resources, 27 users across every role, 200 products (batch/serial/ABC),
+#    suppliers, customers and an opening-stock cutover (idempotent)
+bench --site <site> execute frappe_wms.tests.load.seed_dc.run
+
+# 2. a shift: buyer, sales clerk, supervisors, 4 receivers, 8 pickers,
+#    3 packers, 3 loaders, 3 inventory controllers and a "chaos" actor that
+#    races receipts and task confirmations. Run the site with several
+#    gunicorn workers (not `bench serve`), and in developer mode if you want
+#    server tracebacks in the report.
+python3 frappe_wms/tests/load/simulate.py --url http://<site>:8000 --minutes 10 --report shift.json
+
+# 3. consistency checks (ledger vs balances, allocations, WMS vs ERPNext
+#    ledger, receipt/outbound progress, HU locations, double postings, ...)
+bench --site <site> execute frappe_wms.tests.load.invariants.run --kwargs "{'warehouse': 'MAD1'}"
+```
+
+Every non-2xx response is grouped in the report by endpoint and exception;
+rejections a real operator can legitimately hit (e.g. "only N left to
+receive" when two receivers race for the same line) are counted separately
+as expected. Every whitelisted endpoint retries a database deadlock by
+re-running the whole call (`services/concurrency.retry_on_deadlock`), so a
+deadlock should never surface as an HTTP 500.
 
 ## Desk surfaces
 

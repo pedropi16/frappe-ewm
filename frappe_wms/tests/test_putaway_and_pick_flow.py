@@ -5,6 +5,7 @@ from frappe.utils import nowdate
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
 from frappe_wms.api.scanner import confirm_task
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestPutawayAndPickFlow(IntegrationTestCase):
@@ -84,14 +85,18 @@ class TestPutawayAndPickFlow(IntegrationTestCase):
 
         pick_tasks = create_pick_tasks(obd.name)
         self.assertEqual(len(pick_tasks), 1)
-        confirm_task(pick_tasks[0], confirmed_quantity=5)
+        # 5 of the pallet's 20: picked into a carton, not "into" the pallet itself (see
+        # services/task._resolve_partial_hu_move) - the pallet stays in the rack with the other 15.
+        _result, pick_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=5)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bulk_bin)
+        self.assertEqual(frappe.db.get_value("Handling Unit", pick_hu, "current_bin"), self.stage_bin)
 
         bulk_balance_after_pick = frappe.get_all("WMS Stock Balance", filters={"product": self.item, "storage_bin": self.bulk_bin, "handling_unit": hu}, fields=["quantity", "allocated_quantity", "available_quantity"])[0]
         self.assertEqual(bulk_balance_after_pick.quantity, 15)
         self.assertEqual(bulk_balance_after_pick.allocated_quantity, 0, "picking must release the reservation on the source balance")
         self.assertEqual(bulk_balance_after_pick.available_quantity, 15)
 
-        stage_balance = frappe.get_all("WMS Stock Balance", filters={"product": self.item, "storage_bin": self.stage_bin, "handling_unit": hu}, fields=["quantity"])[0]
+        stage_balance = frappe.get_all("WMS Stock Balance", filters={"product": self.item, "storage_bin": self.stage_bin, "handling_unit": pick_hu}, fields=["quantity"])[0]
         self.assertEqual(stage_balance.quantity, 5)
 
         allocation = frappe.get_doc("Stock Allocation", allocations[0])

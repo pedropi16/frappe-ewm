@@ -166,7 +166,7 @@
       "read_only": 1
     }
   ],
-  "autoname": "WSLE-.##########",
+  "autoname": "hash",
   "sort_field": "posting_datetime",
   "sort_order": "DESC",
   "doctype": "DocType",

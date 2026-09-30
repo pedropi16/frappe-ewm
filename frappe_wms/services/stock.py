@@ -1,32 +1,7 @@
 import hashlib
-import time
 import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
-
-def _retrying_on_deadlock(fn):
-    # Two concurrent transfers moving stock in opposite directions between the same two
-    # locations lock their balance rows in whatever order their entries happen to list them -
-    # A->B locks A then wants B while B->A locks B then wants A, a textbook deadlock pair.
-    # post_entries now pre-locks every balance row it will touch in one globally-consistent
-    # sorted order (below) so that specific pattern can't happen at all, but InnoDB can still
-    # deadlock a write against unrelated lock interleavings (e.g. a concurrent allocation's own
-    # FOR UPDATE). MySQL always resolves a deadlock by killing one side and rolling its
-    # transaction back completely, so retrying the same call from scratch (safe: the
-    # idempotency-key dedup check at the top of post_entries sees nothing committed from the
-    # rolled-back attempt) is the correct recovery, not a client-visible failure.
-    def wrapper(*args, **kwargs):
-        attempts = 3
-        for attempt in range(attempts):
-            try:
-                return fn(*args, **kwargs)
-            except Exception as e:
-                if attempt < attempts - 1 and frappe.db.is_deadlocked(e):
-                    frappe.db.rollback()
-                    time.sleep(0.1 * (attempt + 1))
-                    continue
-                raise
-    return wrapper
 
 DIMENSIONS = ("warehouse", "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type")
 
@@ -37,10 +12,20 @@ def _balance_name(values):
 def _lock_balance(name):
     frappe.db.sql("select name from `tabWMS Stock Balance` where name=%s for update", name)
 
+def _get_balance_for_update(name):
+    # A locking read of the row itself (get_doc for_update), never "lock, then plain get_doc":
+    # Frappe runs MariaDB at REPEATABLE READ, where a plain read after waiting on a row lock
+    # returns the transaction's older snapshot - quantity as it was before whichever concurrent
+    # posting just released the lock. Reproduced under concurrent picking as a
+    # TimestampMismatchError on WMS Stock Balance (Frappe's own modified-check caught the stale
+    # read); anything without that safety net would have silently lost the other posting.
+    if frappe.db.sql("select name from `tabWMS Stock Balance` where name=%s for update", name):
+        return frappe.get_doc("WMS Stock Balance", name, for_update=True)
+    return None
+
 def _upsert_balance(values, delta):
     name = _balance_name(values)
-    _lock_balance(name)
-    doc = frappe.get_doc("WMS Stock Balance", name) if frappe.db.exists("WMS Stock Balance", name) else frappe.new_doc("WMS Stock Balance")
+    doc = _get_balance_for_update(name) or frappe.new_doc("WMS Stock Balance")
     if doc.is_new():
         doc.name = name
         for key in DIMENSIONS: doc.set(key, values.get(key))
@@ -77,7 +62,6 @@ def _upsert_balance(values, delta):
     doc.save()
     return doc
 
-@_retrying_on_deadlock
 def post_entries(entries, reference_doctype, reference_name, idempotency_key, warehouse_task=None, device=None):
     # Entries are stored as "<key>:<seq>", so a replay is detected by the first entry's key - matching the bare
     # key never hit, and a retried request fell through to the unique index as a raw duplicate-entry error.
@@ -87,8 +71,11 @@ def post_entries(entries, reference_doctype, reference_name, idempotency_key, wa
         frappe.throw(_("Transfer postings must balance to zero"))
     # Lock every balance row this batch will touch up front, in one globally-consistent sorted
     # order - not the order entries happen to be listed in - so opposite-direction transfers
-    # between the same two rows can never deadlock waiting on each other (see
-    # _retrying_on_deadlock above for the remaining, unavoidable case).
+    # between the same two rows can never deadlock waiting on each other. Any remaining,
+    # unavoidable deadlock aborts the whole request's transaction, so it's retried at the request
+    # level (services/concurrency.retry_on_deadlock on every API endpoint), never from here: an
+    # in-place retry of just this function would re-post these entries on top of a transaction
+    # whose earlier writes (the Goods Receipt, the task update...) InnoDB already rolled back.
     for name in sorted({_balance_name(e) for e in entries}):
         _lock_balance(name)
     for entry in entries:
@@ -150,7 +137,11 @@ def relocate_hu_balances(hu_name, new_bin):
             new_name = _balance_name(new_values)
             for name in sorted({row.name, new_name}):
                 _lock_balance(name)
-            target = frappe.get_doc("WMS Stock Balance", new_name) if frappe.db.exists("WMS Stock Balance", new_name) else frappe.new_doc("WMS Stock Balance")
+            # Re-read the source row under the lock: the get_all above is a snapshot read.
+            source_row = _get_balance_for_update(row.name)
+            if not source_row: continue
+            row.quantity, row.allocated_quantity = source_row.quantity, source_row.allocated_quantity
+            target = _get_balance_for_update(new_name) or frappe.new_doc("WMS Stock Balance")
             if target.is_new():
                 target.name = new_name
                 for key in DIMENSIONS: target.set(key, new_values.get(key))
@@ -190,9 +181,8 @@ def transfer_stock(*, source, destination, quantity, movement_type, reference_do
 
 def release_allocation(values, quantity):
     name = _balance_name(values)
-    _lock_balance(name)
-    if not frappe.db.exists("WMS Stock Balance", name): return
-    doc = frappe.get_doc("WMS Stock Balance", name)
+    doc = _get_balance_for_update(name)
+    if not doc: return
     doc.allocated_quantity = max(flt(doc.allocated_quantity) - flt(quantity), 0)
     doc.available_quantity = flt(doc.quantity) - doc.allocated_quantity
     doc.flags.ignore_permissions = True
@@ -219,8 +209,7 @@ def rebuild_balances(warehouse=None, product=None):
     for row in rows:
         name = _balance_name(row)
         touched.add(name)
-        _lock_balance(name)
-        doc = frappe.get_doc("WMS Stock Balance", name) if frappe.db.exists("WMS Stock Balance", name) else frappe.new_doc("WMS Stock Balance")
+        doc = _get_balance_for_update(name) or frappe.new_doc("WMS Stock Balance")
         if doc.is_new():
             doc.name = name
             for key in DIMENSIONS: doc.set(key, row.get(key))

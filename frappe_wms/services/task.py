@@ -29,8 +29,7 @@ def _split_by_full_pallet(remaining, full_qty):
     return chunks
 
 def create_tasks_for_request(request_name, batch_key=None):
-    frappe.db.sql("select name from `tabWarehouse Request` where name=%s for update", request_name)
-    request = frappe.get_doc("Warehouse Request", request_name)
+    request = frappe.get_doc("Warehouse Request", request_name, for_update=True)
     if request.status not in {"Draft", "Open", "Partially Tasked"}: frappe.throw(_("Warehouse Request is not open for tasking"))
     remaining = flt(request.requested_quantity) - flt(request.created_quantity)
     if remaining <= 0: frappe.throw(_("Warehouse Request is already fully tasked"))
@@ -66,7 +65,7 @@ def create_tasks_for_request(request_name, batch_key=None):
                 "reserved_hu_counts": reserved_hu_counts})
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
-        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": idempotency_key})
+        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": idempotency_key})
         attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name)
         task.insert(ignore_permissions=True)
         created.append(task.name)
@@ -328,8 +327,7 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
     if not code.active: frappe.throw(_("Exception code {0} is not active").format(exception_code))
     if code.requires_supervisor: require_role("WMS Supervisor")
     if code.requires_comment and not (remarks or "").strip(): frappe.throw(_("This exception requires a comment"))
-    frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
-    task = frappe.get_doc("Warehouse Task", task_name)
+    task = frappe.get_doc("Warehouse Task", task_name, for_update=True)
     if task.docstatus == 1: frappe.throw(_("Task is already confirmed"))
     result = None
     if code.allows_quantity_change and revised_quantity is not None:
@@ -392,8 +390,12 @@ def _claim_warehouse_order_if_unassigned(task, user=None):
 
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
     require_role("WMS Operator", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
-    task = frappe.get_doc("Warehouse Task", task_name)
+    # Locking read (for_update), not "select ... for update" then a plain get_doc: at Frappe's
+    # REPEATABLE READ isolation that plain read returns the transaction's older snapshot, so a
+    # second confirm arriving while the first holds the lock would read the task as it was
+    # before the first one committed (status, confirmed_quantity and all). Same idiom at every
+    # lock site in services/.
+    task = frappe.get_doc("Warehouse Task", task_name, for_update=True)
     if task.status == "Confirmed": return {"task": task.name, "status": task.status, "already_confirmed": True}
     if task.docstatus == 2 or task.status in {"Cancelled", "Exception"}: frappe.throw(_("Task is not confirmable"))
     if task.status == "On Hold": frappe.throw(task.blocking_reason or _("Task is on hold behind an earlier task in its Warehouse Order"))
@@ -421,6 +423,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     # (services/difference.record_over_difference), pending a supervisor deciding where it
     # actually belongs (clear_over_difference).
     excess = max(round(qty - (flt(task.planned_quantity) - already_confirmed), 6), 0)
+    if excess > 0 and task.serial_no:
+        # A serial number is exactly one unit - "extra" units found alongside it are different
+        # serials that have to be received under their own numbers, not booked as more of this one.
+        frappe.throw(_("Task {0} is for serial number {1} (1 unit) - receive any extra units with their own serial numbers").format(task.name, task.serial_no))
     posted_qty = qty - excess
     new_confirmed = already_confirmed + posted_qty
     if excess > 0:
@@ -446,6 +452,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         # Same request retried after a lost response (flaky WiFi, reload mid-submit): it already posted and updated
         # the task, so answer with the current state instead of counting the quantity a second time.
         return {"task": task.name, "status": task.status, "quantity": qty, "released_tasks": [], "replayed": True}
+    if posted_qty > 0 and resolved_destination_hu and resolved_destination_hu == task.source_hu and task.destination_bin != task.source_bin:
+        resolved_destination_hu = _resolve_partial_hu_move(task, posted_qty)
+        destination["handling_unit"] = resolved_destination_hu
+        if resolved_destination_hu is None: destination_hu = _UNPACK
     if posted_qty > 0:
         transfer_stock(source=source, destination=destination, quantity=posted_qty, movement_type=task.movement_type, reference_doctype=task.doctype, reference_name=task.name, idempotency_key=key, warehouse_task=task.name, device=device)
     difference_name = None
@@ -487,6 +497,29 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if sort_task: result["sort_task"] = sort_task
     return result
 
+def _resolve_partial_hu_move(task, qty):
+    # The destination fell back to "the same HU it came from" - right when the whole HU travels
+    # (a full-pallet putaway, a whole-HU pick), but not when only part of its stock does: the
+    # posting would tag the moved quantity to the source HU at the destination bin and
+    # _relocate_hu_for_task would then move the HU record there too, while the rest of its stock
+    # is still physically in the source bin - one HU "in" two bins. Reproduced under concurrent
+    # picking: pallets picked from without a pick carton ended up with current_bin at the staging
+    # lane and most of their stock still in the rack, invisible to anyone looking at the rack.
+    # Returns the HU to post to: the source HU if it's being emptied, None (move the quantity
+    # loose) if the destination bin doesn't manage HUs anyway; otherwise the operator has to say
+    # which HU the partial quantity goes into.
+    held = frappe.db.sql("select quantity from `tabWMS Stock Balance` where handling_unit=%s and storage_bin=%s for update",
+        (task.source_hu, task.source_bin))
+    remaining = sum(flt(r[0]) for r in held) - flt(qty)
+    if remaining <= 0.000001:
+        return task.source_hu
+    storage_type = frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type")
+    if not frappe.db.get_value("Storage Type", storage_type, "hu_managed"):
+        return None
+    frappe.throw(_("Handling Unit {0} still holds {1} {2} in {3} after this - scan the Handling Unit (tote, carton or new pallet) you are putting these {4} into, or move the whole Handling Unit.").format(
+        task.source_hu, frappe.format(remaining, "Float"), task.stock_uom or "", task.source_bin, frappe.format(qty, "Float")),
+        title=_("Destination Handling Unit required"))
+
 def _create_sort_task_after_pick(task):
     # Two-Step Picking's second hop: the Pick task's own destination was the warehouse's shared
     # picking staging area (see _pick_destination), not the delivery this stock is actually for -
@@ -518,10 +551,14 @@ def _apply_cross_dock_fulfillment(task):
     if not task.warehouse_request: return
     request = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
     if not request or request.reference_doctype != "Outbound Delivery" or not request.reference_line: return
-    current = flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "picked_quantity"))
+    # The line was already reserved (allocated_quantity) when the Cross Dock request was raised -
+    # see cross_dock.reserve_cross_dock_demand - so only picked_quantity moves here. max() keeps a
+    # request raised before that reservation existed covered without double-counting a new one.
+    line = frappe.db.get_value("Outbound Delivery Item", request.reference_line, ["allocated_quantity", "picked_quantity"], as_dict=True, for_update=True)
+    picked = flt(line.picked_quantity) + flt(task.confirmed_quantity)
     frappe.db.set_value("Outbound Delivery Item", request.reference_line, {
-        "allocated_quantity": flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "allocated_quantity")) + flt(task.confirmed_quantity),
-        "picked_quantity": current + flt(task.confirmed_quantity),
+        "allocated_quantity": max(flt(line.allocated_quantity), picked),
+        "picked_quantity": picked,
     })
     _update_delivery_picking_status(request.reference_name)
 
@@ -598,11 +635,19 @@ def _relocate_hu_for_task(task, destination_hu=None):
 
 def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
     doc = frappe.get_doc("Handling Unit", hu)
-    if doc.current_bin == destination_bin and not (top_level and doc.parent_hu): return
+    if doc.current_bin == destination_bin and not (top_level and doc.parent_hu):
+        # Already there - e.g. an empty pick carton the operator created right at the staging
+        # lane before scanning it as the destination. It still has to become Staged once stock is
+        # picked into it, or it never shows up as staged/shippable.
+        if top_level and task.task_type in ("Stage", "Pick", "Cross Dock") and doc.status != "Staged":
+            doc.flags.wms_service_update = True
+            doc.status = "Staged"
+            doc.save(ignore_permissions=True)
+        return
     bin_before = doc.current_bin
     doc.flags.wms_service_update = True
     doc.current_bin = destination_bin
-    if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick") else doc.status
+    if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick", "Cross Dock") else doc.status
     if top_level and doc.parent_hu:
         # The HU this task is relocating was nested inside a parent (e.g. Repacked into a tote)
         # that isn't part of this move - relocating it while it stays a child would leave parent
@@ -658,8 +703,7 @@ def reverse_task(task_name, reason=None):
     # status the original confirmation advanced (_unwind_pick_task_allocations) - otherwise the
     # delivery keeps reporting stock as picked that has actually moved back to the shelf.
     require_role("WMS Supervisor")
-    frappe.db.sql("select name from `tabWarehouse Task` where name=%s for update", task_name)
-    original = frappe.get_doc("Warehouse Task", task_name)
+    original = frappe.get_doc("Warehouse Task", task_name, for_update=True)
     if original.docstatus != 1 or original.status != "Confirmed":
         frappe.throw(_("Only a fully confirmed task can be reversed"))
     if frappe.db.exists("Warehouse Task", {"reversal_of": original.name}):

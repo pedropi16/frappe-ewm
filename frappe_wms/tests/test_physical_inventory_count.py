@@ -4,6 +4,7 @@ from frappe.utils import flt
 
 from frappe_wms.services.task import create_and_confirm_move
 from frappe_wms.services.inventory_count import snapshot_count, record_counts, post_count
+from frappe_wms.tests.bootstrap import empty_hu_like
 
 
 class TestPhysicalInventoryCount(IntegrationTestCase):
@@ -105,7 +106,8 @@ class TestPhysicalInventoryCount(IntegrationTestCase):
         item = self._make_item("TEST-PIC-ITEM-2")
         hu = self._receive(item, self.bin_a, 10)
         create_and_confirm_move(warehouse=self.warehouse, product=item, quantity=5, stock_uom=self.uom,
-            stock_type="AVAILABLE", source_bin=self.bin_a, source_hu=hu.name, destination_bin=self.bin_b, destination_hu=hu.name)
+            stock_type="AVAILABLE", source_bin=self.bin_a, source_hu=hu.name, destination_bin=self.bin_b,
+            destination_hu=empty_hu_like(hu.name, self.bin_b))
         count = self._make_count(item)
         snapshot_count(count.name)
         count.reload()
@@ -126,7 +128,8 @@ class TestPhysicalInventoryCount(IntegrationTestCase):
         item = self._make_item("TEST-PIC-ITEM-3")
         hu = self._receive(item, self.bin_a, 12)
         create_and_confirm_move(warehouse=self.warehouse, product=item, quantity=6, stock_uom=self.uom,
-            stock_type="AVAILABLE", source_bin=self.bin_a, source_hu=hu.name, destination_bin=self.bin_b, destination_hu=hu.name)
+            stock_type="AVAILABLE", source_bin=self.bin_a, source_hu=hu.name, destination_bin=self.bin_b,
+            destination_hu=empty_hu_like(hu.name, self.bin_b))
         count = self._make_count(item)
         snapshot_count(count.name)
         count.reload()

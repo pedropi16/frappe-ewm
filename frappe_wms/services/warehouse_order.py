@@ -288,8 +288,11 @@ def list_queues(warehouse=None, activity=None, user=None):
     return frappe.get_all("Warehouse Queue", filters=filters, fields=["name", "queue_code", "queue_name", "activity", "warehouse"])
 
 def _my_resource(user=None):
+    # Same deterministic tiebreak as services/task.my_resource (most recently modified wins) -
+    # without it, a user bound to two Resources could pull work under one and see their task
+    # list under the other.
     user = user or frappe.session.user
-    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group"], as_dict=True)
+    return frappe.db.get_value("WMS Resource", {"user": user, "active": 1}, ["name", "warehouse", "current_queue", "resource_group"], as_dict=True, order_by="modified desc")
 
 def _eligible_queues(resource):
     # current_queue is an optional focus on one specific queue; without it, every active queue
@@ -354,7 +357,9 @@ def pull_next_warehouse_order(user=None):
                 (resource.name, now_datetime(), frappe.session.user, candidate.name),
             )
             claimed = bool(frappe.db.sql("select row_count()")[0][0])
-        except Exception:
+        except (frappe.QueryDeadlockError, frappe.QueryTimeoutError):
+            # Only the database's own concurrency failures mean "someone else got there first" -
+            # anything else (a bug, a bad row) must surface, not masquerade as "no work waiting".
             frappe.db.rollback()
             return None
         if claimed:

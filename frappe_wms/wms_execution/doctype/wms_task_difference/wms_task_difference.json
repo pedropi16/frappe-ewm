@@ -26,6 +26,7 @@
     "stock_type",
     "storage_bin",
     "exception_code",
+    "erpnext_stock_entry",
     "clearance_section",
     "cleared_by",
     "cleared_at",
@@ -150,6 +151,14 @@
       "options": "WMS Exception Code",
       "read_only": 1,
       "description": "Short only - the exception code raise_exception was called with when the task closed below its original planned_quantity."
+    },
+    {
+      "fieldname": "erpnext_stock_entry",
+      "label": "ERPNext Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1,
+      "description": "Material Receipt mirroring an Over difference's inventory gain into ERPNext"
     },
     {
       "fieldname": "clearance_section",

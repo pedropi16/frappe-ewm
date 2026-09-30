@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.consolidation import (
     create_consolidation_group as _create_consolidation_group,
     set_consolidation_target_hu as _set_consolidation_target_hu,
@@ -12,6 +13,7 @@ from frappe_wms.services.task import my_resource
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def list_open_consolidation_groups(user=None):
     resource = my_resource(user)
     filters = {"status": ["in", ("Draft", "Open")]}
@@ -27,6 +29,7 @@ def list_open_consolidation_groups(user=None):
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def get_consolidation_group(group_name):
     doc = frappe.get_doc("Consolidation Group", group_name)
     doc.check_permission("read")
@@ -34,35 +37,42 @@ def get_consolidation_group(group_name):
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def create_consolidation_group(warehouse, staging_bin, priority=None, target_hu=None):
     return _create_consolidation_group(warehouse, staging_bin, priority, target_hu)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def set_consolidation_target_hu(group_name, target_hu=None, hu_type=None):
     return _set_consolidation_target_hu(group_name, target_hu, hu_type)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def find_joinable_references(barcode):
     return _find_joinable_references(barcode)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def add_consolidation_line(group_name, reference_doctype, reference_name):
     return _add_consolidation_line(group_name, reference_doctype, reference_name)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def remove_consolidation_line(group_name, line_name):
     return _remove_consolidation_line(group_name, line_name)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def gather_consolidation_group(group_name):
     return _gather_consolidation_group(group_name)
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def complete_consolidation_group(group_name):
     return _complete_consolidation_group(group_name)

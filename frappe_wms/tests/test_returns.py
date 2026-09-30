@@ -96,6 +96,12 @@ class TestReturns(IntegrationTestCase):
         self.assertEqual(return_dn.is_return, 1)
         self.assertEqual(return_dn.return_against, original_dn)
         self.assertEqual(flt(return_dn.items[0].qty), -4)
+        # ERPNext itself has to know 4 came back (it didn't, when the return was submitted from the
+        # mapper-built object - see erpnext_sync._submit_return)
+        self.assertEqual(flt(frappe.db.get_value("Delivery Note Item", return_dn.items[0].dn_detail, "returned_qty")), 4)
+        # 4 received, 6 still expected on this open return - nothing left to raise a second one for
+        with self.assertRaises(frappe.ValidationError):
+            create_return_inbound_delivery(original_dn, scenario.warehouse)
 
         # Was: only a matching Inspection Rule ever created a WMS Quality Inspection - a return
         # (no rule needed) used to sit in QUALITY with no inspection to act on at all.
@@ -135,3 +141,25 @@ class TestReturns(IntegrationTestCase):
         self.assertEqual(ret_pr.is_return, 1)
         self.assertEqual(ret_pr.return_against, gr.erpnext_purchase_receipt)
         self.assertEqual(flt(ret_pr.items[0].qty), -10)
+
+    def test_over_confirmation_gain_is_mirrored_to_erpnext(self):
+        # An over-confirmed putaway posts the extra units into the difference bin as an inventory
+        # gain - that has to reach ERPNext too, or the two ledgers drift apart for good.
+        scenario = self._new_scenario()
+        erpnext_warehouse = frappe.db.get_value("WMS Warehouse", scenario.warehouse, "erpnext_warehouse")
+        diff_bin = frappe.db.get_value("WMS Warehouse", scenario.warehouse, "default_difference_bin")
+        if not diff_bin:
+            frappe.db.set_value("WMS Warehouse", scenario.warehouse, "default_difference_bin", scenario.recv_bin)
+        hu = self._make_hu(scenario, scenario.recv_bin)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": scenario.warehouse, "supplier": self.supplier, "receiving_bin": scenario.recv_bin,
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 10, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True)
+        result = create_and_submit_goods_receipt(ind.name, frappe.as_json([
+            {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 10, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]))
+        before = flt(frappe.db.sql("select sum(actual_qty) from `tabStock Ledger Entry` where item_code=%s and warehouse=%s and is_cancelled=0", (self.item, erpnext_warehouse))[0][0])
+        outcome = confirm_task(result["warehouse_tasks"][0], confirmed_quantity=12)
+        difference = frappe.get_doc("WMS Task Difference", outcome["difference"])
+        self.assertTrue(difference.erpnext_stock_entry)
+        after = flt(frappe.db.sql("select sum(actual_qty) from `tabStock Ledger Entry` where item_code=%s and warehouse=%s and is_cancelled=0", (self.item, erpnext_warehouse))[0][0])
+        self.assertEqual(after - before, 2)
+

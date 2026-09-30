@@ -175,6 +175,22 @@ def create_consolidation_tasks(destination_hu, destination_bin, warehouse, lines
     return created
 
 
+def _confirmed_tasks_for_allocation(allocation_name):
+    names = set(frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": allocation_name}, pluck="parent"))
+    names |= set(frappe.get_all("Warehouse Task", filters={"stock_allocation": allocation_name}, pluck="name"))
+    return frappe.get_all("Warehouse Task", filters={"name": ["in", list(names) or [""]], "task_type": "Pick", "status": "Confirmed"}, pluck="name")
+
+def _landed_hu(task_names, bin_name):
+    # Where the confirmed task(s) actually put the stock: their recorded destination_hu (confirm_task
+    # stores whatever it resolved - a scanned tote/carton, or the source HU when the whole HU
+    # travelled). Assuming "same HU as it started in" only held when nobody scanned a pick HU;
+    # with one, gathering looked for the stock in the emptied source pallet and failed with
+    # "Insufficient stock".
+    if not task_names: return None
+    rows = frappe.get_all("Warehouse Task", filters={"name": ["in", task_names], "destination_bin": bin_name, "destination_hu": ["is", "set"]},
+        fields=["destination_hu"], order_by="confirmed_at desc", limit=1)
+    return rows[0].destination_hu if rows else None
+
 def gather_consolidation_group(group_name):
     require_role("WMS Operator", "WMS Supervisor")
     group = frappe.get_doc("Consolidation Group", group_name)
@@ -198,7 +214,7 @@ def gather_consolidation_group(group_name):
             # Pick task has already moved it (same physical HU, relocated) to the delivery's
             # own staging bin, which is where it actually sits now.
             source_bin = frappe.db.get_value("Outbound Delivery", allocation.outbound_delivery, "staging_bin")
-            source_hu = allocation.handling_unit
+            source_hu = _landed_hu(_confirmed_tasks_for_allocation(allocation.name), source_bin) or allocation.handling_unit
         else:
             request = frappe.get_doc("Warehouse Request", l.reference_name)
             qty = flt(request.confirmed_quantity)
@@ -207,7 +223,9 @@ def gather_consolidation_group(group_name):
             # supplies it) - the physical HU carried unchanged through the Putaway confirm is
             # request.source_hu (confirm_task falls back to task.source_hu when no destination
             # HU is given), not destination_hu.
-            source_bin, source_hu = request.destination_bin, request.source_hu
+            source_bin = request.destination_bin
+            confirmed = frappe.get_all("Warehouse Task", filters={"warehouse_request": request.name, "status": "Confirmed"}, pluck="name")
+            source_hu = _landed_hu(confirmed, source_bin) or request.source_hu
         if qty <= 0:
             continue
         l.quantity = qty
@@ -254,8 +272,7 @@ def update_consolidation_progress(task, qty):
     group_name = frappe.db.get_value("Consolidation Group Line", task.consolidation_group_line, "parent")
     if not group_name:
         return
-    frappe.db.sql("select name from `tabConsolidation Group` where name=%s for update", group_name)
-    group = frappe.get_doc("Consolidation Group", group_name)
+    group = frappe.get_doc("Consolidation Group", group_name, for_update=True)
     line = next((l for l in group.lines if l.name == task.consolidation_group_line), None)
     if not line:
         return

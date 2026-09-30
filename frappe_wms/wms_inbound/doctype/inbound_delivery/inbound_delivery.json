@@ -150,10 +150,28 @@
     {
       "role": "WMS Operator",
       "read": 1,
-      "write": 0,
-      "create": 0,
+      "write": 1,
+      "create": 1,
       "delete": 0,
-      "submit": 0,
+      "submit": 1,
+      "cancel": 0
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "submit": 1,
+      "cancel": 0
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "submit": 1,
       "cancel": 0
     }
   ]

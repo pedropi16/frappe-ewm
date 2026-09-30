@@ -110,18 +110,16 @@
     {
       "fieldname": "erpnext_gain_stock_entry",
       "label": "ERPNext Gain Stock Entry",
-      "fieldtype": "Link",
-      "options": "Stock Entry",
+      "fieldtype": "Data",
       "read_only": 1,
-      "description": "Material Receipt posted for the positive-variance lines in this count, if any."
+      "description": "ERPNext Stock Entry - several, comma-separated, when the count posted in more than one pass (recount/approval)"
     },
     {
       "fieldname": "erpnext_loss_stock_entry",
       "label": "ERPNext Loss Stock Entry",
-      "fieldtype": "Link",
-      "options": "Stock Entry",
+      "fieldtype": "Data",
       "read_only": 1,
-      "description": "Material Issue posted for the negative-variance lines in this count, if any."
+      "description": "ERPNext Stock Entry - several, comma-separated, when the count posted in more than one pass (recount/approval)"
     },
     {
       "fieldname": "approved_by",

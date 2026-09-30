@@ -32,8 +32,7 @@ def get_vas_order(vas_order_name):
 
 def complete_vas_activity(vas_order_name, activity_row_name, remarks=None):
     require_role("WMS Operator", "WMS Packer", "WMS Supervisor")
-    frappe.db.sql("select name from `tabVAS Order` where name=%s for update", vas_order_name)
-    order = frappe.get_doc("VAS Order", vas_order_name)
+    order = frappe.get_doc("VAS Order", vas_order_name, for_update=True)
     if order.status not in OPEN_VAS_STATUSES: frappe.throw(_("VAS Order is not open"))
     row = next((r for r in order.activities if r.name == activity_row_name), None)
     if not row: frappe.throw(_("Activity {0} not found on this VAS Order").format(activity_row_name))

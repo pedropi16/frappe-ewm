@@ -5,6 +5,11 @@ name: CI
 # after months of manual testing (see the 13 known-stale failures documented in app_gap.md /
 # the production-readiness audit, none of which reproduced against a genuinely fresh site in
 # local testing). No CI existed for this repo before this workflow.
+#
+# Targets Frappe/ERPNext v16 (the app requires Python >=3.14; Frappe v16 requires Node >=24) - it
+# previously built Frappe develop against ERPNext version-15. The site is created without running
+# ERPNext's setup wizard: the suite's before_tests hook (tests/bootstrap.py) creates the Company
+# and the shared master data the tests rely on.
 
 on:
   push:
@@ -45,7 +50,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "24"
 
       - name: Install wkhtmltopdf and other system deps
         run: sudo apt-get update && sudo apt-get install -y wkhtmltopdf
@@ -55,7 +60,7 @@ jobs:
 
       - name: Init bench
         run: |
-          bench init --skip-redis-config-generation --skip-assets --python "$(which python3)" frappe-bench
+          bench init --frappe-branch version-16 --skip-redis-config-generation --skip-assets --python "$(which python3)" frappe-bench
           mv apps/frappe_wms frappe-bench/apps/frappe_wms
 
       - name: Configure bench
@@ -69,7 +74,7 @@ jobs:
 
       - name: Get ERPNext
         working-directory: frappe-bench
-        run: bench get-app erpnext --branch version-15
+        run: bench get-app --branch version-16 https://github.com/frappe/erpnext
 
       - name: Create fresh site
         working-directory: frappe-bench

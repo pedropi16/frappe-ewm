@@ -16,6 +16,9 @@ from frappe_wms.utils import require_role
 
 LOAD_ROLES = ("WMS Supervisor", "WMS Administrator")
 
+# ERPNext's StockReconciliation.submit() queues anything larger than this as a background job.
+SR_MAX_ROWS = 100
+
 
 def _resolve_valuation_rate(item, given):
     if given:
@@ -38,8 +41,7 @@ def post_opening_stock_load(name):
     # same tier of risk as a data-repair script, so it's restricted to Supervisor/Administrator
     # rather than the ordinary operator roles every other posting here allows.
     require_role(*LOAD_ROLES)
-    frappe.db.sql("select name from `tabWMS Opening Stock Load` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Opening Stock Load", name)
+    doc = frappe.get_doc("WMS Opening Stock Load", name, for_update=True)
     if doc.status != "Draft":
         frappe.throw(_("This load has already been posted or cancelled"))
     if not doc.items:
@@ -69,7 +71,7 @@ def post_opening_stock_load(name):
             entry["shelf_life_expiry_date"] = row.shelf_life_expiry_date
         post_entries([entry], doc.doctype, doc.name, f"OSL:{doc.name}:{i}")
 
-    erpnext_sr = None
+    erpnext_srs = []
     if erpnext_warehouse:
         groups = {}
         for row in doc.items:
@@ -79,30 +81,43 @@ def post_opening_stock_load(name):
         account = _resolve_opening_account(company)
         if not account:
             frappe.throw(_("Could not resolve a Stock/Asset account for company {0} to post the opening ERPNext Stock Reconciliation - configure one and post again, or clear the warehouse's ERPNext link first").format(company))
-        sr = frappe.get_doc({"doctype": "Stock Reconciliation", "company": company, "purpose": "Opening Stock", "expense_account": account})
-        for (item, batch_no, serial_no, stock_type), group in groups.items():
-            sr.append("items", {
-                "item_code": item, "warehouse": erpnext_warehouse, "qty": group["quantity"],
-                "valuation_rate": _resolve_valuation_rate(item, group["valuation_rate"]),
-                "batch_no": batch_no, "serial_no": serial_no, "use_serial_batch_fields": 1,
-                "wms_stock_type": stock_type,
-            })
-        sr.flags.wms_managed_posting = True
-        sr.insert(ignore_permissions=True)
-        sr.submit()
-        erpnext_sr = sr.name
+        # Chunked on purpose: ERPNext's StockReconciliation.submit() hands any document with more
+        # than SR_MAX_ROWS rows to a background job instead of submitting it in this request. That
+        # job reloads the document from the database, losing the in-memory wms_managed_posting
+        # flag, so the WMS stock guard (events/erpnext_stock_guard.py) rejected it and the
+        # reconciliation silently stayed Draft - reproduced with a ~240-row cutover load: WMS
+        # showed Posted while ERPNext never received a single unit of opening stock. Keeping each
+        # document at or under the limit keeps every submit synchronous and inside this
+        # transaction, so a failure rolls the whole load back instead of diverging the ledgers.
+        group_items = list(groups.items())
+        for start in range(0, len(group_items), SR_MAX_ROWS):
+            sr = frappe.get_doc({"doctype": "Stock Reconciliation", "company": company, "purpose": "Opening Stock", "expense_account": account})
+            for (item, batch_no, serial_no, stock_type), group in group_items[start:start + SR_MAX_ROWS]:
+                sr.append("items", {
+                    "item_code": item, "warehouse": erpnext_warehouse, "qty": group["quantity"],
+                    "valuation_rate": _resolve_valuation_rate(item, group["valuation_rate"]),
+                    "batch_no": batch_no, "serial_no": serial_no, "use_serial_batch_fields": 1,
+                    "wms_stock_type": stock_type,
+                })
+            sr.flags.wms_managed_posting = True
+            sr.insert(ignore_permissions=True)
+            sr.submit()
+            if sr.docstatus != 1:
+                frappe.throw(_("ERPNext Stock Reconciliation {0} was not submitted").format(sr.name))
+            erpnext_srs.append(sr.name)
 
     doc.db_set({
         "status": "Posted", "posted_by": frappe.session.user, "posted_at": now_datetime(),
-        "erpnext_stock_reconciliations": erpnext_sr or "",
+        "erpnext_stock_reconciliations": ", ".join(erpnext_srs),
     }, update_modified=True)
-    return {"opening_stock_load": doc.name, "status": "Posted", "erpnext_stock_reconciliation": erpnext_sr}
+    return {"opening_stock_load": doc.name, "status": "Posted",
+            "erpnext_stock_reconciliation": erpnext_srs[0] if erpnext_srs else None,
+            "erpnext_stock_reconciliations": erpnext_srs}
 
 
 def cancel_opening_stock_load(name):
     require_role(*LOAD_ROLES)
-    frappe.db.sql("select name from `tabWMS Opening Stock Load` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Opening Stock Load", name)
+    doc = frappe.get_doc("WMS Opening Stock Load", name, for_update=True)
     if doc.status != "Posted":
         frappe.throw(_("Only a posted load can be cancelled"))
     original = frappe.get_all("WMS Stock Ledger Entry", filters={"reference_doctype": doc.doctype, "reference_name": doc.name}, fields=["*"])

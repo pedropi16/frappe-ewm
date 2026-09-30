@@ -16,8 +16,7 @@ POSTING_CHANGE_ROLES = ("WMS Supervisor", "WMS Inventory Controller")
 
 def post_posting_change(name):
     require_role(*POSTING_CHANGE_ROLES)
-    frappe.db.sql("select name from `tabWMS Posting Change` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Posting Change", name)
+    doc = frappe.get_doc("WMS Posting Change", name, for_update=True)
     if doc.status != "Draft":
         frappe.throw(_("This posting change has already been posted or cancelled"))
     if doc.from_stock_type == doc.to_stock_type:
@@ -47,8 +46,7 @@ def post_posting_change(name):
 
 def cancel_posting_change(name):
     require_role(*POSTING_CHANGE_ROLES)
-    frappe.db.sql("select name from `tabWMS Posting Change` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Posting Change", name)
+    doc = frappe.get_doc("WMS Posting Change", name, for_update=True)
     if doc.status != "Posted":
         frappe.throw(_("Only a posted posting change can be cancelled"))
     base = {"warehouse": doc.warehouse, "product": doc.product, "batch_no": doc.batch_no, "serial_no": doc.serial_no,
