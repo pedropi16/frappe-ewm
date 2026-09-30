@@ -17,3 +17,10 @@ def complete_short(doctype, delivery_name, reason=None):
 def wms_status(doctype, name):
     frappe.get_doc(doctype, name).check_permission("read")
     return svc.wms_status(doctype, name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def retry_erp_posting(log_name):
+    from frappe_wms.services.erp_sync_queue import retry_now
+    return retry_now(log_name)

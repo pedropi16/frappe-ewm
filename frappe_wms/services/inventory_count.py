@@ -2,7 +2,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
-from frappe_wms.services.erpnext_sync import sync_physical_inventory_count
 from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
 
@@ -160,10 +159,12 @@ def _mirror_posted_rows(doc, rows):
     # posted in WMS, the count left pending recount, ERPNext still showing the old quantity).
     # Each line posts once (its status moves to Posted), so mirroring per pass can't double up.
     if not rows: return
-    gain_entry, loss_entry = sync_physical_inventory_count(doc, rows=rows)
-    join = lambda current, new: ", ".join(x for x in (current, new) if x)
-    if gain_entry: doc.erpnext_gain_stock_entry = join(doc.erpnext_gain_stock_entry, gain_entry)
-    if loss_entry: doc.erpnext_loss_stock_entry = join(doc.erpnext_loss_stock_entry, loss_entry)
+    from frappe_wms.services.erp_sync_queue import dispatch
+    dispatch("count_rows", doc, rows=[r.name for r in rows])
+    # The operation writes the entries onto the count row in the database; keep the in-memory
+    # doc in step so a later doc.save() in this request doesn't blank them again.
+    doc.erpnext_gain_stock_entry, doc.erpnext_loss_stock_entry = frappe.db.get_value(
+        doc.doctype, doc.name, ["erpnext_gain_stock_entry", "erpnext_loss_stock_entry"])
 
 def post_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")

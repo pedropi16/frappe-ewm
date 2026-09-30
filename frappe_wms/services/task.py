@@ -7,7 +7,6 @@ from frappe_wms.services.bin_rules import validate_destination_bin
 from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues, RESOURCE_ROLES
 from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
-from frappe_wms.services import erpnext_sync
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -619,7 +618,8 @@ def _update_request(name):
     if status == "Completed":
         request = frappe.get_doc("Warehouse Request", name)
         if request.reference_doctype == "Work Order":
-            erpnext_sync.sync_work_order_material_transfer(request)
+            from frappe_wms.services.erp_sync_queue import dispatch
+            dispatch("work_order_transfer", request)
 
 def _relocate_hu_for_task(task, destination_hu=None):
     # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source

@@ -2254,6 +2254,10 @@ class WMSMonitor {
     const alerts = await frappe.call("frappe_wms.api.monitor.get_alerts", { warehouse: this.warehouse }).then((r) => r.message || {});
     $wrap.html(`
       <div style="margin-bottom:24px;">
+        <h6>${__("ERPNext Postings Not Yet Done")}</h6>
+        <div class="wms-mon-alert-erp-sync"></div>
+      </div>
+      <div style="margin-bottom:24px;">
         <h6>${__("Counts Awaiting Approval")}</h6>
         <div class="wms-mon-alert-approval"></div>
       </div>
@@ -2283,6 +2287,18 @@ class WMSMonitor {
       </div>
     `);
     this.render_pending_approval_alerts(alerts.pending_approval_counts || []);
+    this.render_alert_table($wrap.find(".wms-mon-alert-erp-sync"), alerts.erp_sync_problems || [],
+      [["name", __("Log")], ["operation", __("Operation")], ["status", __("Status")], ["reference_doctype", __("Document Type")],
+       ["reference_name", __("Document")], ["attempts", __("Attempts")], ["next_retry_at", __("Next Retry")],
+       ["last_error", __("Last Error"), (row) => `<span title="${frappe.utils.escape_html(row.last_error || "")}">${frappe.utils.escape_html((row.last_error || "").split("\n").filter(Boolean).pop() || "")}</span>`]],
+      "WMS ERP Sync Log", __("Nothing waiting - every posting reached ERPNext"), { actions: [{
+        label: __("Retry now"), appliesTo: (row) => ["Failed", "Queued"].includes(row.status),
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) { try { const r = await frappe.call("frappe_wms.api.erp_integration.retry_erp_posting", { log_name: row.name }); if (r.message === "Done") ok++; } catch (e) { /* shown by frappe */ } }
+          frappe.show_alert({ message: __("{0} of {1} posted to ERPNext", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        } }] });
     this.render_differences_alerts(alerts.open_differences || []);
     this.render_alert_table($wrap.find(".wms-mon-alert-exceptions"), alerts.aged_exceptions || [],
       [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["source_bin", __("Source Bin")],

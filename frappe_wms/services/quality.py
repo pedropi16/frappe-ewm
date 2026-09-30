@@ -3,7 +3,6 @@ from frappe import _
 from frappe.utils import flt, now_datetime, today
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.task import my_resource
-from frappe_wms.services import erpnext_sync
 from frappe_wms.utils import require_role
 
 def _erpnext_reference_for_goods_receipt(goods_receipt):
@@ -73,8 +72,6 @@ def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=N
         transfer_stock(source=source, destination=destination, quantity=failed, movement_type="501", reference_doctype=doc.doctype, reference_name=doc.name, idempotency_key=f"QI:{doc.name}:fail")
 
     doc.db_set({"passed_quantity": passed, "failed_quantity": failed, "status": "Completed", "inspector": frappe.session.user, "completed_at": now_datetime()}, update_modified=True)
-    erpnext_qi = _create_erpnext_quality_inspection(doc, failed)
-    if erpnext_qi: doc.db_set("erpnext_quality_inspection", erpnext_qi, update_modified=False)
-    erpnext_se = erpnext_sync.sync_quality_inspection(doc, passed, failed)
-    if erpnext_se: doc.db_set("erpnext_stock_entry", erpnext_se, update_modified=False)
+    from frappe_wms.services.erp_sync_queue import dispatch
+    dispatch("quality_inspection", doc)
     return {"inspection": doc.name, "status": "Completed", "passed_quantity": passed, "failed_quantity": failed}

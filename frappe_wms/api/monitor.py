@@ -380,6 +380,8 @@ def get_alerts(warehouse):
             filters={"warehouse": warehouse, "quantity": ["<", 0]},
             fields=["name", "product", "storage_bin", "stock_type", "handling_unit", "quantity", "modified"],
             order_by="quantity asc", limit=50),
+        # ERPNext postings a "Queued with Retry" warehouse has not managed to post yet.
+        "erp_sync_problems": __import__("frappe_wms.services.erp_sync_queue", fromlist=["open_problems"]).open_problems(warehouse),
         "open_differences": frappe.get_list("WMS Task Difference",
             filters={"warehouse": warehouse, "status": "Open"},
             fields=["name", "warehouse_task", "task_type", "product", "direction", "difference_quantity", "storage_bin", "creation"],

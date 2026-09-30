@@ -1,0 +1,145 @@
+{
+  "name": "WMS ERP Sync Log",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "operation",
+    "status",
+    "warehouse",
+    "reference_doctype",
+    "reference_name",
+    "column_break_1",
+    "attempts",
+    "next_retry_at",
+    "completed_at",
+    "payload",
+    "error_section",
+    "last_error"
+  ],
+  "fields": [
+    {
+      "fieldname": "operation",
+      "label": "Operation",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Queued\nRunning\nFailed\nDone\nCancelled",
+      "default": "Queued",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "in_standard_filter": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "reference_doctype",
+      "label": "Reference Type",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "read_only": 1
+    },
+    {
+      "fieldname": "reference_name",
+      "label": "Reference",
+      "fieldtype": "Dynamic Link",
+      "options": "reference_doctype",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "attempts",
+      "label": "Attempts",
+      "fieldtype": "Int",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "next_retry_at",
+      "label": "Next Retry",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "completed_at",
+      "label": "Completed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "payload",
+      "label": "Payload",
+      "fieldtype": "Code",
+      "options": "JSON",
+      "read_only": 1
+    },
+    {
+      "fieldname": "error_section",
+      "label": "Last Error",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "last_error",
+      "label": "Last Error",
+      "fieldtype": "Long Text",
+      "read_only": 1
+    }
+  ],
+  "autoname": "hash",
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "description": "ERPNext documents the warehouse posts in the background (WMS Warehouse > ERPNext Posting Mode = Queued with Retry). Failed rows are retried automatically; a supervisor can retry from the WMS Monitor alerts.",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

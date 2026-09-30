@@ -2,7 +2,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
-from frappe_wms.services.erpnext_sync import sync_kitting_order
 from frappe_wms.services.task import my_resource
 from frappe_wms.utils import require_role
 
@@ -87,8 +86,7 @@ def complete_kitting_order(kitting_order_name):
                 "quantity": flt(row.required_qty), "stock_uom": row.stock_uom, "movement_type": movement_type}],
                 order.doctype, order.name, f"KIT:{order.name}:comp:{i}")
 
-    erpnext_entry = sync_kitting_order(order)
-    updates = {"status": "Completed", "completed_at": now_datetime(), "completed_by": frappe.session.user}
-    if erpnext_entry: updates["erpnext_stock_entry"] = erpnext_entry
-    order.db_set(updates, update_modified=True)
+    from frappe_wms.services.erp_sync_queue import dispatch
+    order.db_set({"status": "Completed", "completed_at": now_datetime(), "completed_by": frappe.session.user}, update_modified=True)
+    dispatch("kitting_order", order)
     return {"kitting_order": order.name, "status": "Completed"}

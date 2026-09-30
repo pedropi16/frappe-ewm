@@ -118,6 +118,8 @@ doc_events = {
 }
 
 scheduler_events = {
+    # ERPNext postings queued by warehouses in "Queued with Retry" mode (services/erp_sync_queue.py).
+    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due"]},
     "hourly": [
         "frappe_wms.tasks.recalculate_stale_bin_capacity",
         "frappe_wms.tasks.run_replenishment_check",
