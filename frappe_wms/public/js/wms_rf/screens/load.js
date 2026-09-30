@@ -5,7 +5,7 @@ import { _ } from "#wms/core/i18n.js";
 import { Section, Field, Card, StatusBadge, Badge, Loading, KV, Hint } from "#wms/ui/kit.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
-import { finishFlow, enteredFresh, sectionCrumb } from "#wms/screens/shared.js";
+import { finishFlow, enteredFresh, sectionCrumb, matchScan } from "#wms/screens/shared.js";
 import { listScreen, findRow } from "#wms/screens/lists.js";
 import { matchExpected } from "#wms/core/util.js";
 
@@ -45,7 +45,7 @@ export const loadDetail = {
       pending.length ? Section({ hint: _("Scan each Handling Unit as it goes on the truck, or tap it below.") },
         Field({ name: "hu", kind: "scan", label: _("Handling Unit"), placeholder: _("Scan HU barcode"), value: st.scan, autofocus: true, onInput: (v) => { st.scan = v; },
           onCommit: async (v) => {
-            const m = matchExpected(v, pending.map((x) => x.handling_unit));
+            const m = await matchScan(v, pending.map((x) => x.handling_unit));
             if (!m) return s.handling_units.some((x) => matchExpected(v, [x.handling_unit])) ? _("{0} is already loaded.", [v]) : _("{0} is not on this shipment.", [v]);
             return loaded(m);
           } })) : null,

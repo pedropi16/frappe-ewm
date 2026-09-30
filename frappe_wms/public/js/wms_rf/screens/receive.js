@@ -154,15 +154,15 @@ function entryView(l) {
   const box = Section({ title: `${l.item}${l.item_name && l.item_name !== l.item ? " · " + l.item_name : ""}`, hint: _("Open {0} {1} · {2}", [fmtQty(openQty(l)), l.stock_uom, _(l.stock_type)]) },
     Field({ name: "hu", kind: "scan", label: _("Handling Unit"), placeholder: _("Scan HU / pallet label"), value: e.hu,
       hint: e.hu && e.hu === st.lastHu ? _("Same HU as the previous line - scan another to change it.") : null,
-      onInput: (v) => { e.hu = v; persist(); }, onCommit: (v, via, raw) => { const gs = parseGS1(raw); e.hu = gs && gs.sscc ? gs.sscc : v; persist(); } }),
+      onInput: (v) => { e.hu = v; persist(); }, onCommit: (v) => { e.hu = v; persist(); } }),  // a pallet label arrives here as its SSCC (ui/kit.js)
     Field({ name: "hutype", kind: "select", label: _("If new HU, type"), value: e.huType, options: types, onInput: (v) => { e.huType = v; persist(); } }));
   if (l.batch_required) {
-    box.append(Field({ name: "batch", kind: "scan", label: _("Batch"), placeholder: _("Scan the batch"), value: e.batch,
+    box.append(Field({ name: "batch", kind: "scan", gs1: "batch", label: _("Batch"), placeholder: _("Scan the batch"), value: e.batch,
       hint: e.expiry ? _("Expiry {0} (from the label)", [e.expiry]) : null,
       onInput: (v) => { e.batch = v; persist(); }, onCommit: (v, via, raw) => { const gs = parseGS1(raw); if (gs && gs.batch) { e.batch = gs.batch; if (gs.expiry) e.expiry = gs.expiry; } else e.batch = v; persist(); } }));
   }
   if (l.serial_required) {
-    box.append(Field({ name: "serial", kind: "scan", label: _("Serial numbers ({0} of {1})", [e.serials.length, fmtQty(openQty(l))]), placeholder: _("Scan each serial"), value: "",
+    box.append(Field({ name: "serial", kind: "scan", gs1: "serial", label: _("Serial numbers ({0} of {1})", [e.serials.length, fmtQty(openQty(l))]), placeholder: _("Scan each serial"), value: "",
       onCommit: (v, via, raw) => {
         const gs = parseGS1(raw);
         const err = addSerial(l, gs && gs.serial ? gs.serial : v);

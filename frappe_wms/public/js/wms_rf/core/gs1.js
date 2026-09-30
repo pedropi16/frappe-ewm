@@ -81,3 +81,13 @@ export function gtinVariants(gtin) {
   while (t.length > 8 && t[0] === "0") { t = t.slice(1); out.add(t); }
   return [...out];
 }
+
+// The one element of a GS1 scan a field is after: an HU field takes the SSCC, a product field the
+// GTIN, a batch / serial field its own element. `want` defaults to the most identifying one.
+export function gs1Element(raw, want) {
+  const gs = parseGS1(raw);
+  if (!gs) return null;
+  const key = want || (gs.sscc ? "sscc" : gs.gtin ? "gtin" : gs.content_gtin ? "content_gtin" : null);
+  const value = key ? gs[key] : null;
+  return value == null ? null : String(value);
+}

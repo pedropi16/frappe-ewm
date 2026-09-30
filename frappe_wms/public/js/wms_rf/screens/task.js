@@ -6,7 +6,7 @@ import { Section, Field, KV, Btn, Expect, Stepper, Empty, Loading, StatusBadge, 
 import { fmtQty, flt, round6, parseNum, isNumeric, matchExpected } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
-import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb } from "#wms/screens/shared.js";
+import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb, matchScan } from "#wms/screens/shared.js";
 import { groupOfType } from "#wms/screens/tasks.js";
 
 // Generic Warehouse Task confirmation wizard - one step per history entry, shared by every task
@@ -163,16 +163,16 @@ function stepView(wrap, step) {
   const box = Section({});
   if (step === "source") {
     box.append(Expect(_("Scan source"), [t.source_bin, t.source_hu]),
-      Field({ name: "src", kind: "scan", label: _("Source bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
+      Field({ name: "src", kind: "scan", gs1: "sscc", label: _("Source bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
         onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
         onCommit: async (v) => {
-          const m = matchExpected(v, [t.source_bin, t.source_hu]);
+          const m = await matchScan(v, [t.source_bin, t.source_hu]);
           if (!m) return explainMismatch(v, [t.source_bin, t.source_hu], _("source"));
           f.src = m; f.srcOk = true; return advance("source");
         } }));
   } else if (step === "product") {
     box.append(Expect(_("Scan product"), [t.product]),
-      Field({ name: "prod", kind: "scan", label: _("Product barcode or code"), placeholder: _("Scan the item"), value: f.prod, autofocus: true,
+      Field({ name: "prod", kind: "scan", gs1: "gtin", label: _("Product barcode or code"), placeholder: _("Scan the item"), value: f.prod, autofocus: true,
         onInput: (v) => { f.prod = v; f.prodOk = false; persist(); },
         onCommit: async (v) => {
           if (matchExpected(v, [t.product])) { f.prod = t.product; f.prodOk = true; return advance("product"); }
@@ -192,10 +192,10 @@ function stepView(wrap, step) {
       Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.qty = fmtQty(rem); persist(); S.focusRequest = "qty"; update(); } }));
   } else if (step === "destination") {
     box.append(Expect(_("Scan destination"), [t.destination_bin, t.destination_hu]),
-      Field({ name: "dst", kind: "scan", label: _("Destination bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.dst, autofocus: true,
+      Field({ name: "dst", kind: "scan", gs1: "sscc", label: _("Destination bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.dst, autofocus: true,
         onInput: (v) => { f.dst = v; f.dstOk = false; persist(); },
         onCommit: async (v) => {
-          const m = matchExpected(v, [t.destination_bin, t.destination_hu]);
+          const m = await matchScan(v, [t.destination_bin, t.destination_hu]);
           if (!m) return explainMismatch(v, [t.destination_bin, t.destination_hu], _("destination"));
           f.dst = m; f.dstOk = true; return advance("destination");
         } }));

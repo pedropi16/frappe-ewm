@@ -1,7 +1,7 @@
 import { S, drafts, update, nav, notify } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { uid, debounce } from "#wms/core/util.js";
+import { uid, debounce, matchExpected } from "#wms/core/util.js";
 
 // Cross-screen data and helpers.
 // Task types are grouped by which section of the app an operator naturally works them from -
@@ -96,4 +96,16 @@ export function finishFlow(w0, target, message) {
 export function enteredFresh(ctx, screenId) {
   const from = S.prevRoute && S.prevRoute.id === screenId;
   return !from && !ctx.meta.popped;
+}
+
+// Which of the codes a screen expects this scan stands for: the code itself, or - through the
+// server - the HU whose SSCC / HU number was scanned, the item whose barcode or GTIN it is.
+export async function matchScan(value, expected) {
+  const local = matchExpected(value, expected);
+  if (local) return local;
+  try {
+    const r = await api("frappe_wms.api.scanner.resolve_scan", { code: value }, { read: true, timeoutMs: 6000 });
+    for (const m of r.matches || []) { const hit = matchExpected(m.name, expected); if (hit) return hit; }
+  } catch (e) { /* offline: the caller reports the mismatch */ }
+  return null;
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseGS1, gtinVariants } from "../../public/js/wms_rf/core/gs1.js";
+import { parseGS1, gtinVariants, gs1Element } from "../../public/js/wms_rf/core/gs1.js";
 
 const GS = "\u001d";
 
@@ -29,4 +29,14 @@ test("ordinary codes are not GS1", () => {
 test("gtinVariants matches a stored EAN-13 against a printed GTIN-14", () => {
   assert.ok(gtinVariants("05901234123457").includes("5901234123457"));
   assert.deepEqual(gtinVariants("SKU-1"), ["SKU-1"]);
+});
+
+test("gs1Element picks what a field is after", () => {
+  const label = "(00)095011015300000011(01)09501101530003(10)LOT7(21)SN9";
+  assert.equal(gs1Element(label), "095011015300000011", "SSCC first: the label is a pallet");
+  assert.equal(gs1Element(label, "gtin"), "09501101530003");
+  assert.equal(gs1Element(label, "batch"), "LOT7");
+  assert.equal(gs1Element(label, "serial"), "SN9");
+  assert.equal(gs1Element("(01)09501101530003(10)B1"), "09501101530003");
+  assert.equal(gs1Element("MAD1-BULK-A-01"), null);
 });
