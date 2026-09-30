@@ -74,6 +74,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
     if doc.status not in ("Counting", "Counted"): frappe.throw(_("Count is not open for recording"))
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Found quantity must be greater than zero"))
+    if serial_no and quantity != 1: frappe.throw(_("Serial {0} is one unit: a found serial is counted as 1").format(serial_no))
     stock_uom = stock_uom or frappe.db.get_value("WMS Product", {"item": product}, "stock_uom") or frappe.db.get_value("Item", product, "stock_uom")
     doc.append("items", {
         "product": product, "batch_no": batch_no, "serial_no": serial_no, "handling_unit": handling_unit,
@@ -105,7 +106,13 @@ def record_counts(count_name, counted_quantities):
     if doc.status not in {"Counting", "Counted"}: frappe.throw(_("Count is not open for recording"))
     for row in doc.items:
         if row.name not in counted_quantities: continue
-        row.counted_quantity = flt(counted_quantities[row.name])
+        counted = flt(counted_quantities[row.name])
+        # Refused here, where the operator can correct it - not later, when posting fails.
+        if counted < 0:
+            frappe.throw(_("{0} in {1}: a counted quantity cannot be negative").format(row.product, row.storage_bin or row.handling_unit))
+        if row.serial_no and counted not in (0, 1):
+            frappe.throw(_("Serial {0} is one unit: count it as 1 (found) or 0 (missing)").format(row.serial_no))
+        row.counted_quantity = counted
         row.variance = row.counted_quantity - flt(row.book_quantity)
         row.status = "Counted"
     # Not "every row is Counted" - a recount only resets the rows sent back for review to

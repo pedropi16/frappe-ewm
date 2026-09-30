@@ -481,7 +481,9 @@ class Sim:
                     counted = {}
                     for row in doc.get("items", []):
                         q = row.get("book_quantity") or 0
-                        counted[row["name"]] = q + (rng.choice([-2, -1, 1, 3]) if rng.random() < 0.2 else 0)
+                        found = q + (rng.choice([-2, -1, 1, 3]) if rng.random() < 0.2 else 0)
+                        # what a person can actually count: never below zero, a serial is there or not
+                        counted[row["name"]] = min(max(found, 0), 1) if row.get("serial_no") else max(found, 0)
                     if counted:
                         c.call("frappe_wms.api.inventory.record_counts", count_name=pic["name"], counted_quantities=counted)
                     res = c.call("frappe_wms.api.inventory.post_count", count_name=pic["name"])

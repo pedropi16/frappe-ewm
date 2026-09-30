@@ -172,3 +172,19 @@ class TestPhysicalInventoryCount(IntegrationTestCase):
         self.assertTrue(count.erpnext_gain_stock_entry)
         self.assertTrue(count.erpnext_loss_stock_entry)
         self.assertNotEqual(count.erpnext_gain_stock_entry, count.erpnext_loss_stock_entry)
+
+    def test_negative_and_non_unit_serial_counts_are_refused_when_recorded(self):
+        item = self._make_item("TEST-PIC-NEG")
+        self._receive(item, self.bin_a, 5)
+        count = self._make_count(item, storage_bin=self.bin_a)
+        snapshot_count(count.name)
+        count.reload()
+        with self.assertRaises(frappe.ValidationError):
+            record_counts(count.name, {count.items[0].name: -1})
+        count.reload()
+        self.assertEqual(count.items[0].status, "Open", "nothing was recorded")
+        # a serial row is one unit: only 0 or 1 is a count
+        row = count.items[0]
+        frappe.db.set_value(row.doctype, row.name, "serial_no", "SN-PIC-NEG-1")
+        with self.assertRaises(frappe.ValidationError):
+            record_counts(count.name, {row.name: 2})
