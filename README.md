@@ -49,8 +49,18 @@ way. In short:
   standards/performance, VAS depth (Packaging-Spec-driven step generation,
   duration capture), and task/activity-based 3PL billing.
 
-This is a complete, tested MVP (243 automated tests), not a certified SAP EWM
-replacement — see [Production warning](#production-warning).
+- **Production round**: ERPNext-as-ECC document replication with change and
+  cancel propagation and complete-short ([ERPNext integration](#erpnext-integration)),
+  a queued ERPNext posting mode with retry, a fully customizable Repack Center
+  work center, printing to network printers and a print agent, GS1 scanning
+  everywhere, one authorization matrix with warehouse scoping, kit-to-stock
+  with staging, reverse-stop loading, volume capacity, counting in cases and
+  pallets at receipt, customer minimum shelf life, and an hourly alert digest.
+
+Tested with 389 Python tests on a fresh v16 site, 20 JS unit tests and 39 RF
+browser tests, plus a 27-user concurrent shift simulation with ledger
+invariants. It is not a certified SAP EWM replacement — see [Production
+warning](#production-warning).
 
 ## Contents
 - [Status](#status)
@@ -356,39 +366,33 @@ re-implementing the same rules:
   rejected (an Internal type's HUs only ever get created at a packing
   station inside this app, never scanned in from outside).
 
-## Printing (spool)
+## Printing
 
-Mirrors SAP EWM's spool control: printing is entirely config-driven and
-opt-in, with the same two-layer split as everything else in this app —
-*structure* (what output devices exist) and *rules* (when they print).
+Printing is config-driven and opt-in, as in SAP EWM's output determination:
+*structure* (which printers exist) and *rules* (when they print).
 
-- **Output Device = WMS Resource with `resource_type = Printer`.** No
-  separate doctype — a printer is just another physical device, like a
-  Forklift or a Scanner (see [Resources, Resource
-  Groups](#core-flows) above), identified by its `device_id`.
-- **WMS Print Determination Rule** (`services/printing._matching_rule`,
-  same "priority ascending, first match wins" pattern as [the rule
-  engine](#the-rule-engine-how-config-drives-behavior)) maps a
-  (`warehouse`, `event`) pair to an `output_device` (validated on save to
-  actually be a Printer in that same warehouse) and an optional `print_format`.
-  Four events are wired in today: `HU Created`, `Putaway Confirmed`, `Goods
-  Issue Posted`, `Shipment Loaded`.
-- **`services/printing.create_print_spool`** is called from each of those
-  four trigger points (`Handling Unit.after_insert`, `services/task.confirm_task`
-  for a fully-confirmed Putaway task, `services/issue.post_goods_issue`,
-  `services/shipping.confirm_hu_loaded` once a shipment is fully loaded) and
-  looks up a matching rule for that warehouse+event. **No matching rule means
-  nothing happens** — exactly like a doctype with no `WMS Number Range`
-  configured, this is opt-in per warehouse and per event, not a hard
-  dependency the rest of the app breaks without.
-- A match creates a **WMS Print Spool** row (`Queued`, referencing whatever
-  document raised the event — the Handling Unit, Warehouse Task, Goods
-  Issue, or WMS Shipment) instead of talking to a printer directly. This is
-  a spool queue, not real printer output: something (a Print Station report,
-  a kiosk screen, a background poller) is expected to list `Queued` rows for
-  its device (`api/printing.list_queued_spools`) and, once actually printed,
-  call `api/printing.mark_printed` (or `mark_failed` with a reason on error)
-  — the app ships the queue and its API, not printer hardware integration.
+- **A printer is a WMS Resource with `resource_type = Printer`.** Its
+  connection says how jobs reach it:
+  - **Network (Raw TCP)**: the server sends the job straight to
+    `printer_host:printer_port` (9100) after the transaction commits. A
+    printer that is off is retried every 10 minutes, up to 5 times.
+  - **Print Agent**: `frappe_wms/print_agent/wms_print_agent.py` (standard
+    library only) runs next to printers the server cannot reach. It claims
+    rendered jobs (`api/printing.agent_claim`), prints them locally
+    (`agent_printer_name`) and reports back. A job claimed but never
+    confirmed goes back into the queue after 10 minutes.
+  - `printer_language`: **ZPL** labels (HU labels with SSCC, GS1-128) or
+    **PDF** from a Print Format.
+- **WMS Print Determination Rule** maps (`warehouse`, `event`) to a printer
+  and an optional Print Format. Events: `HU Created`, `HU Closed`, `Putaway
+  Confirmed`, `Goods Issue Posted`, `Shipment Loaded`, and `Manual` (reprints
+  and the Repack Center's "Print label" button). No matching rule, no print.
+- Every job is a **WMS Print Spool** row: `Queued` → `Printing` → `Printed`
+  or `Failed` (with the error and attempt count), and can be requeued.
+- Standard formats: **WMS HU Label** (Handling Unit), **WMS Packing List**
+  (Outbound Delivery: each shipping HU with its nested contents) and **WMS
+  Shipment Manifest** (WMS Shipment). A Print Format with raw printing
+  enabled is rendered as ZPL for label printers.
 
 ## Core flows
 
@@ -623,17 +627,26 @@ purely descriptive label with no behavior behind it).
   Allocation entirely rather than routing through it. In the RF app, Cross
   Dock tasks appear alongside Putaway on the **Putaway Tasks** screen — they
   originate from the same receipt and are worked by the same operator.
-- **Kitting**: a **Kitting Order** (kit item, a submitted **BOM**, warehouse,
-  work center bin, quantity, direction) explodes the BOM's components scaled
-  to the order quantity. Completing it (Assemble: consume components →
-  produce the kit item; Disassemble: the reverse) posts against the real
-  `handling_unit` actually holding each component's stock — not loose — since
-  `WMS Stock Balance` is HU-dimensioned, and mirrors to ERPNext as a
-  **Repack**-purpose Stock Entry (not "Manufacture", which hard-requires
-  backflush rows this flow doesn't produce). Created from the WMS Monitor's
-  **Kitting** tab; completed from either that same tab or the RF app's
-  **Kitting** action (under Internal), which lists open orders scoped to the
-  logged-on operator's own warehouse.
+- **Kitting** (kit-to-stock and reverse kitting): a **Kitting Order** (kit
+  item, a submitted **BOM**, warehouse, work center bin, quantity, direction)
+  explodes the BOM scaled to the order quantity. Then:
+  1. **Stage**: warehouse tasks bring the inputs (components, or the kit when
+     disassembling) from storage to the work center, sources in removal-rule
+     order; part of an HU is unpacked, a whole HU moves as is. Automatic on
+     creation or started from the RF screen (*WMS Warehouse > Kitting > Stage
+     Components*).
+  2. **Complete**: consumes what is actually at the work center, every
+     batch/serial/HU row, soonest expiry first, and posts the output there,
+     optionally onto a scanned HU (*Kitting Output HU Required*). Unstarted
+     staging tasks are cancelled. ERPNext gets a **Repack** Stock Entry with
+     the consumed batches.
+  3. **Put away** (*Put Away Kitting Output*, per order): putaway tasks from
+     the work center. If no destination can be determined yet, the request
+     waits in the Monitor's *Warehouse Requests Without Tasks* alert.
+
+  **Cancel** cancels open staging; staged stock stays at the work center.
+  The RF **Kitting** screen shows each input as required / at the work
+  center / on its way, with Stage, Complete and Cancel.
 - **Slotting & rearrangement**: `analyze_slotting` flags a product with
   genuine recent pick activity (`min_picks` threshold against Pick-movement
   ledger entries) sitting in a `WMS Stock Balance` row whose bin's storage
@@ -834,22 +847,65 @@ Roles are seeded by `setup/roles.py` on install:
 `WMS Inventory Controller`, `WMS Supervisor`, `WMS Process Engineer`,
 `WMS Master Data`, `WMS Administrator`, `WMS Integration User`, `WMS Auditor`.
 
-The RF app checks specific roles per action (Operator/Receiver/Loader/
-Supervisor depending on the action; System Manager always allowed — see
-`utils.require_role` call sites). Desk doctype-level permissions follow
-Frappe's normal role-permission matrix (Role Permission Manager) — nothing
-in this app overrides those except two custom, warehouse-scoped checks:
+Warehouse state changes only through the WMS services, which check roles
+themselves (`utils.require_role`; System Manager always allowed). DocType
+permissions govern what people can *see* and which configuration they can
+*maintain*, from one matrix in `setup/role_permissions.py`:
+
+| Who | Can |
+|---|---|
+| Every WMS role | Read the warehouse structure, customizing and every execution document |
+| WMS Process Engineer | Maintain the customizing (structure, rules, process setup, printers, settings) |
+| WMS Master Data | Maintain products, bins, sections, activity areas, packaging |
+| WMS Supervisor | Keeps its write access (waves, orders, deliveries); reads settings and the ERPNext posting queue |
+
+The matrix is in the DocType definitions for new installs, and is added after
+every migrate to sites whose permissions were customised (never removing
+what an administrator granted). On top of it:
 
 - **WMS Stock Ledger Entry** and **WMS Stock Balance** are read-only from the
   desk (write/create/delete/submit/cancel always denied — they're written
   exclusively by `services/stock.py` with `flags.ignore_permissions`, so a
   desk edit would desync the balance from the ledger).
-- If a user has a **User Permission** row restricting them to specific `WMS
-  Warehouse` values, that also filters their visibility of `WMS Stock Ledger
-  Entry` and `Warehouse Task` rows (`permissions.py`) — no User Permission
-  rows means no extra restriction.
+- A **User Permission** on `WMS Warehouse` limits a user to those
+  warehouses in every WMS doctype that links to one (deliveries, HUs, tasks,
+  counts, orders, balances, the ledger) and in the RF app's lists; no User
+  Permission means no extra restriction.
 
 ## ERPNext integration
+
+### Document flow: ERPNext as ECC, the WMS as EWM
+
+As in SAP, the business document is created in ERPNext and replicated to the
+warehouse, which executes it and reports back. Each **WMS Warehouse** has an
+*ERP Integration* section:
+
+| Setting | Options | What it does |
+|---|---|---|
+| Inbound Replication | Manual / Purchase Order Submitted / Purchase Receipt Draft | Which ERPNext document creates the Inbound Delivery. With *Purchase Receipt Draft* (the ASN pattern) the warehouse submits that same draft at goods receipt |
+| Outbound Replication | Manual / Sales Order Submitted / Delivery Note Draft | Which ERPNext document creates the Outbound Delivery. With *Delivery Note Draft* (the ECC outbound delivery pattern) the warehouse submits that draft at goods issue |
+| Release Replicated Deliveries | on / off | Submit replicated deliveries straight away |
+| Outbound Follow-Up | None / Allocate / Allocate and Create Pick Tasks | What happens to a released outbound delivery next |
+| ERP Change Policy | Adapt Until Execution Starts / Block Changes After Replication | Order edits (Update Items, removed lines, cancellation) reach deliveries that have not started; once started they are refused |
+| Close Short Orders | on / off | A delivery completed short (`Complete short`, supervisors) closes the rest of the Sales/Purchase Order |
+| ERPNext Posting Mode | Synchronous / Queued with Retry | See below |
+
+Only order lines whose ERPNext warehouse maps to a WMS Warehouse are
+replicated; one order can feed several WMS warehouses. SO/PO/DN/PR forms
+show the WMS status and link to the delivery, and ERPNext refuses to cancel
+a document the warehouse posted (reverse it in the WMS instead).
+
+### Posting mode
+
+*Synchronous* posts the ERPNext document inside the warehouse transaction,
+so an ERPNext error (closed period, missing account) stops the warehouse
+posting too. *Queued with Retry* posts in the warehouse first and has
+ERPNext follow from **WMS ERP Sync Log**, retried with backoff every 10
+minutes, like SAP's qRFC queue. A reversal never overtakes its posting, and
+one whose posting never reached ERPNext cancels it instead. The Monitor's
+Alerts view lists what has not reached ERPNext, with *Retry now*.
+
+### Postings
 
 - Each `WMS Warehouse` auto-links to a matching ERPNext `Warehouse`.
 - Posting a `Goods Receipt` / `Goods Issue` mirrors a `Stock Entry` (Material
@@ -888,6 +944,9 @@ Registered in `hooks.py` under `scheduler_events`:
 
 | Frequency | Job | Purpose |
 |---|---|---|
+| Every 10 min | `erp_sync_queue.retry_due` | Retries queued/failed ERPNext postings (Queued with Retry warehouses) |
+| Every 10 min | `printing.retry_print_jobs` | Resends failed network print jobs; requeues agent jobs never confirmed |
+| Hourly | `alerts.send_alert_digest` | Desk notification (and e-mail) to supervisors when a warehouse's alerts change — see WMS Settings > Alerts |
 | Hourly | `recalculate_stale_bin_capacity` | Recomputes `current_hu_count`/`current_weight` per active bin from live HU data |
 | Hourly | `run_replenishment_check` | Evaluates every active Replenishment Rule, raises a Warehouse Request+Task for pick bins at/below minimum (skips if one's already pending) |
 | Hourly | `generate_scheduled_waves` | [P4] Sweeps matching submitted Outbound Deliveries into a new Draft `WMS Wave` per active Wave Template |
@@ -924,14 +983,14 @@ proceed. Only then does the home menu appear, leading to:
 | Internal | Repack | Move whole HUs and/or partial item quantities into a destination HU |
 | Internal | Count | Record physical inventory quantities; auto-posts once every line is counted (or holds for recount/approval — see [Core flows](#core-flows)) |
 | Internal | Handling Units | Look up, create (scan a barcode, or leave it blank for an Internal HU Type), nest/unnest, block/unblock, or recycle an empty, reusable HU (frees its number for reuse) |
-| Internal | Kitting [P4] | List open Kitting Orders for the logged-on operator's warehouse; tap one to complete it (Assemble/Disassemble) |
+| Internal | Kitting [P4] | Open Kitting Orders of the operator's warehouse; per order what is at the work center and on its way, Stage components, Complete (optionally onto a scanned output HU), Cancel |
 | Internal | Consolidation | Scan an Outbound Delivery/Work Order/Stock Allocation/Warehouse Request barcode to find and add joinable lines to a [Consolidation Group](#consolidation-group), set a target HU, Gather, then Split to Destinations |
 | Outbound | Picking | Auto/Manual submenu (`renderSubmenu`, a deliberately reusable tile-list pattern meant for other RF menus too): **Auto** pulls the next task off the operator's eligible queues (same as the Queue bar's Get Work); **Manual** is one scan field for any reference — HU, Warehouse Task, Warehouse Order, Warehouse Request, Queue or Outbound Delivery, told apart by `find_pick_tasks` itself — with per-kind searches underneath |
 | Outbound | Pick Tasks | Confirm any open Pick, Stage, or Load task |
 | Outbound | Ship | Pick a delivery that's fully picked but not issued, confirm/adjust the suggested loaded HU per line, post the Goods Issue manually — a fallback for whatever the automatic post-on-load (see [Shipping/loading](#core-flows)) hasn't already handled |
-| Outbound | Pack | Log on to a packing work center, then scan source HU → product → quantity → destination HU to pack; create a new carton/pallet, pack a whole HU into another, close an HU with its weight (it moves on to the delivery's staging bin); open Packing Orders at the table can still be completed in one tap |
+| Outbound | Pack | Log on to a work center, then scan source HU → product → quantity → destination HU to pack; create a new carton/pallet, pack a whole HU into another, close an HU with its weight. The work center's customizing decides which of these the packer gets (see Repack Center); open Packing Orders at the table can still be completed in one tap |
 | Outbound | VAS | Complete open VAS activity steps, or tap "+ Generate from Packaging Spec" [P4] to build a new VAS Order's steps from a scanned HU's item's Packaging Spec instead of typing them in by hand |
-| Outbound | Load | Pick a `Ready to Load`/`Loading` Shipment, scan each HU to walk it through the Route's Stops (if any) to the door and mark it loaded, then depart the Shipment once full |
+| Outbound | Load | Pick a `Ready to Load`/`Loading` Shipment and load it last stop first (the screen names the next HU and each HU's stop); scan each HU to walk it through the Route's Stops (if any) to the door, then depart the Shipment once full. *WMS Warehouse > Loading > Load Sequence Check* makes an out-of-order HU a warning (confirm) or a block |
 | — | Lookup | HU/bin contents by barcode |
 
 `api/scanner.py` and the other `api/*.py` modules are the whitelisted
@@ -1108,8 +1167,8 @@ deadlock should never surface as an HTTP 500.
     allocated/available per product/bin/HU/stock type), with a per-stock-type
     summary strip — the current-state counterpart to Stock Movements' history.
   - **Warehouse Tasks**, **Handling Units** — searchable, each its own node.
-  - **Packing Station** — the packing work center below, inside the Monitor.
-  - **Repack Center** — free repacking anywhere in the warehouse: a bin/HU/
+  - **Repack Center** — the packing work center below, inside the Monitor.
+  - **HU Workbench** — free repacking anywhere in the warehouse: a bin/HU/
     stock-line tree with drag and drop.
   - **Stock Movements** — searchable `WMS Stock Ledger Entry` history.
   - **Resources & Queues** — resource workload and warehouse queues.
@@ -1135,10 +1194,18 @@ deadlock should never surface as an HTTP 500.
 
   Roles: WMS Supervisor / Administrator / Inventory Controller / Auditor,
   System Manager.
-- **Packing Station** (`/app/wms-packing-station`, also a Monitor node) —
+- **Repack Center** (`/app/wms-packing-station`, also a Monitor node) —
   SAP EWM's packing work center (`/SCWM/PACK`). The packer logs on to a
   **Work Center** (a packing table = one Storage Bin) and gets the three
-  /SCWM/PACK areas: the HU tree of everything on the table, the selected HU's
+  /SCWM/PACK areas. Everything the station does is customizing on the Work
+  Center, as in SAP's work center definition: type, inbound section (HUs
+  arriving at the table, with *Take to table*) and outbound section, default
+  HU type, quantity proposal (full quantity or one unit per scan), weighing
+  on close (optional/required, tolerance %), completeness check
+  (off/warn/block), close follow-up (stay, outbound section, delivery
+  staging bin), label on create/close, and which functions exist at all
+  (pack product, pack HU, unpack, pack by instruction, create/close/delete
+  empty HU, post differences). The station has the HU tree of everything on the table, the selected HU's
   detail (contents, weights, delivery, label), and a scanner area with
   *Pack Product*, *Pack HU*, *Create HU* and *Close HU* tabs where Enter moves
   field to field and runs the action on the last one. Rules
