@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: apps/frappe_wms
+          path: frappe_wms_src
 
       - uses: actions/setup-python@v5
         with:
@@ -61,7 +61,6 @@ jobs:
       - name: Init bench
         run: |
           bench init --frappe-branch version-16 --skip-redis-config-generation --skip-assets --python "$(which python3)" frappe-bench
-          mv apps/frappe_wms frappe-bench/apps/frappe_wms
 
       - name: Configure bench
         working-directory: frappe-bench
@@ -75,6 +74,21 @@ jobs:
       - name: Get ERPNext
         working-directory: frappe-bench
         run: bench get-app --branch version-16 https://github.com/frappe/erpnext
+
+      # Only after ERPNext: once a directory sits in apps/, every bench command (including the asset
+      # build `bench get-app erpnext` runs) imports it, so it has to be installed into the bench's
+      # Python env first - moving it in unregistered right after `bench init` failed every CI run
+      # with "No module named 'frappe_wms'" before a single test ran.
+      - name: Add frappe_wms to the bench
+        working-directory: frappe-bench
+        run: |
+          mv ../frappe_wms_src apps/frappe_wms
+          ./env/bin/python -m pip install --quiet -e apps/frappe_wms
+          if ! grep -qx frappe_wms sites/apps.txt; then
+            [ -n "$(tail -c1 sites/apps.txt)" ] && echo >> sites/apps.txt
+            echo frappe_wms >> sites/apps.txt
+          fi
+          cat sites/apps.txt
 
       - name: Create fresh site
         working-directory: frappe-bench
