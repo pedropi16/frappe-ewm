@@ -1,0 +1,115 @@
+{
+  "name": "WMS Monitor Variant",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "view",
+    "variant_type",
+    "variant_name",
+    "description",
+    "is_default",
+    "is_global",
+    "max_hits",
+    "criteria",
+    "selection_fields",
+    "layout"
+  ],
+  "fields": [
+    {
+      "fieldname": "view",
+      "label": "View",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "WMS Monitor view key (inbound, outbound, stock, tasks, hu, movements, waves)."
+    },
+    {
+      "fieldname": "variant_type",
+      "label": "Variant Type",
+      "fieldtype": "Select",
+      "options": "Selection\nLayout",
+      "reqd": 1,
+      "default": "Selection",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "variant_name",
+      "label": "Variant Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "is_default",
+      "label": "Default for Owner",
+      "fieldtype": "Check",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "is_global",
+      "label": "Global (visible to everyone)",
+      "fieldtype": "Check",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "max_hits",
+      "label": "Maximum No. of Hits",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "criteria",
+      "label": "Selection Criteria",
+      "fieldtype": "Code",
+      "options": "JSON"
+    },
+    {
+      "fieldname": "selection_fields",
+      "label": "Selection Screen Fields",
+      "fieldtype": "Code",
+      "options": "JSON"
+    },
+    {
+      "fieldname": "layout",
+      "label": "Layout",
+      "fieldtype": "Code",
+      "options": "JSON",
+      "description": "Column order, hidden columns, sort and totals."
+    }
+  ],
+  "autoname": "hash",
+  "title_field": "variant_name",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "description": "Saved WMS Monitor selection variants and personal layouts. Managed from the monitor itself.",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}
