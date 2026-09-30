@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
-from frappe_wms.services.task import my_resource
+from frappe_wms.services.task import OPEN_TASK_STATUSES, my_resource
 from frappe_wms.utils import require_role
 
 def list_open_counts(user=None):
@@ -54,6 +54,17 @@ def snapshot_count(count_name):
     # SECOND loss for the very same units). Only bins not already blocked for some other reason
     # are recorded here, and only those get released again once this count posts or is cancelled.
     bin_names = sorted({b.storage_bin for b in balances if b.storage_bin})
+    # As in SAP EWM, a bin with open warehouse tasks is not counted: the stock a pick is about to
+    # take (or a putaway is about to bring) would be counted against a book that is still moving,
+    # and a loss could take away units already reserved for a delivery.
+    busy = frappe.db.sql("""select name, storage_bin from (
+            select name, source_bin as storage_bin from `tabWarehouse Task` where docstatus=0 and status in %(st)s and source_bin in %(bins)s
+            union all
+            select name, destination_bin from `tabWarehouse Task` where docstatus=0 and status in %(st)s and destination_bin in %(bins)s) t
+        limit 5""", {"st": OPEN_TASK_STATUSES, "bins": bin_names or [""]}, as_dict=True)
+    if busy:
+        frappe.throw(_("Bin {0} has open warehouse tasks ({1}). Confirm or cancel them before counting.").format(
+            busy[0].storage_bin, ", ".join(sorted({b.name for b in busy}))))
     newly_blocked = [b for b in bin_names if not frappe.db.get_value("Storage Bin", b, "removal_blocked")]
     if newly_blocked:
         frappe.db.set_value("Storage Bin", {"name": ["in", newly_blocked]}, "removal_blocked", 1)
@@ -142,6 +153,16 @@ def _within_tolerance(group, variance, book_quantity):
 
 def _post_row(doc, row, i):
     variance = flt(row.variance)
+    if variance < 0:
+        # A loss never takes units already reserved for open picks (defence in depth: counting a
+        # bin with open tasks is refused at snapshot, but a task can still appear afterwards).
+        balance = frappe.db.get_value("WMS Stock Balance", {"warehouse": doc.warehouse, "product": row.product, "storage_bin": row.storage_bin,
+                                      "handling_unit": row.handling_unit or ["in", ["", None]], "batch_no": row.batch_no or ["in", ["", None]],
+                                      "serial_no": row.serial_no or ["in", ["", None]], "stock_type": row.stock_type},
+                                      ["quantity", "allocated_quantity"], as_dict=True, for_update=True)
+        if balance and flt(balance.quantity) + variance < flt(balance.allocated_quantity) - 0.000001:
+            frappe.throw(_("{0} in {1}: {2} of the {3} units are reserved for open picks - confirm or cancel those picks before posting a loss of {4}").format(
+                row.product, row.handling_unit or row.storage_bin, flt(balance.allocated_quantity), flt(balance.quantity), -variance))
     if variance != 0:
         movement_type = "701" if variance > 0 else "702"
         entry = {

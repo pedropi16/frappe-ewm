@@ -51,6 +51,7 @@ EXPECTED_PATTERNS = [
     r"No work waiting", r"Nothing left", r"has no outstanding quantity", r"already fully picked",
     r"None of these deliveries have a staged", r"is also picked for",
     r"left to receive", r"Shipment is not open for loading", r"is already loaded",
+    r"has open warehouse tasks", r"reserved for open picks",
 ]
 
 

@@ -96,6 +96,10 @@ class TestKPIDashboard(IntegrationTestCase):
             "warehouse": self.warehouse, "product": item_code, "storage_bin": self.bin_a,
             "stock_type": "AVAILABLE", "stock_uom": self.uom, "quantity": 100, "movement_type": "701",
         }], "Storage Bin", self.bin_a, f"test-kpi-alert-seed:{frappe.generate_hash(length=8)}")
+        # Other tests in this class leave open tasks in bin_a, and a bin with open tasks is not counted.
+        for field in ("source_bin", "destination_bin"):
+            for name in frappe.get_all("Warehouse Task", filters={field: self.bin_a, "docstatus": 0}, pluck="name"):
+                frappe.db.set_value("Warehouse Task", name, {"status": "Cancelled", "docstatus": 2})
         count = frappe.get_doc({"doctype": "WMS Physical Inventory Count", "warehouse": self.warehouse,
             "storage_bin": self.bin_a, "product": item_code, "status": "Draft"}).insert(ignore_permissions=True)
         snapshot_count(count.name)
