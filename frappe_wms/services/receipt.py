@@ -5,7 +5,7 @@ from frappe.utils import add_days, getdate, now_datetime, flt
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.determination import determine_process_type, determine_storage_process, matches_inspection_rule
 from frappe_wms.services.storage_process import first_step
-from frappe_wms.services.cross_dock import find_cross_dock_demand
+from frappe_wms.services.cross_dock import find_cross_dock_demand, reserve_cross_dock_demand
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request
 from frappe_wms.utils import require_role
@@ -86,6 +86,7 @@ def create_putaway_requests(receipt_name):
                     "reference_doctype":"Outbound Delivery","reference_name":match["delivery"],"reference_line":match["delivery_item"],
                     "process_type":cross_dock_process_type,"priority":"High","status":"Open"})
                 cd_req.insert(ignore_permissions=True); names.append(cd_req.name)
+                reserve_cross_dock_demand(match)
                 remaining_qty -= match["quantity"]
         if remaining_qty <= 0: continue  # fully cross-docked - no Putaway request for this row
 

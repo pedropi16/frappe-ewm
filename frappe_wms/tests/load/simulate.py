@@ -397,8 +397,17 @@ class Sim:
                 for d in picked[:2]:
                     with self.lock:
                         if d["name"] in self.shipped_deliveries: continue
-                    s = c.call("frappe_wms.api.shipping.create_shipment", warehouse=WH, outbound_deliveries=[d["name"]], route=d.get("route"))
-                    with self.lock: self.shipped_deliveries.add(d["name"])
+                    group = [d["name"]]
+                    try:
+                        s = c.call("frappe_wms.api.shipping.create_shipment", warehouse=WH, outbound_deliveries=group, route=d.get("route"))
+                    except ApiError as e:
+                        # "HU X is also picked for OBD-..., ship them together" - do what it says
+                        others = re.findall(r"OBD-\d+", (e.message or "").split("is also picked for", 1)[-1]) if "is also picked for" in (e.message or "") else []
+                        if not others: raise
+                        group += [o for o in others if o not in group]
+                        s = c.call("frappe_wms.api.shipping.create_shipment", warehouse=WH, outbound_deliveries=group, route=d.get("route"))
+                        self.stats.event("shipment-grouped")
+                    with self.lock: self.shipped_deliveries.update(group)
                     self.stats.event("shipment-created")
             self.safe(c, build, context="create shipment")
             def load():
@@ -477,7 +486,8 @@ class Sim:
                         c.call("frappe_wms.api.inventory.record_counts", count_name=pic["name"], counted_quantities=counted)
                     res = c.call("frappe_wms.api.inventory.post_count", count_name=pic["name"])
                     self.stats.event(f"count-{(res or {}).get('status', 'posted')}")
-                    if (res or {}).get("status") not in ("Posted", "Under Review") and res:
+                    doc = c.call("frappe.client.get", doctype="WMS Physical Inventory Count", name=pic["name"])
+                    if any(r.get("status") == "Pending Recount" for r in doc.get("items", [])):
                         # out of tolerance: recount (the second count agrees with the book)
                         c.call("frappe_wms.api.inventory.request_recount", count_name=pic["name"])
                         doc = c.call("frappe.client.get", doctype="WMS Physical Inventory Count", name=pic["name"])

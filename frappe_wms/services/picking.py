@@ -91,4 +91,7 @@ def release_delivery_for_picking(delivery_name, strategy="Single Order"):
         delivery.reload()
     if delivery.allocation_status == "Not Allocated":
         frappe.throw(_("No stock could be allocated for this delivery - check available balances"))
+    if delivery.allocation_status == "Fully Allocated" and not frappe.db.exists("Stock Allocation", {"outbound_delivery": delivery_name, "status": "Allocated"}):
+        # Everything is already tasked, or reserved by cross-docking (which needs no pick at all).
+        return []
     return create_pick_tasks(delivery_name, strategy)

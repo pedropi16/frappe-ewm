@@ -551,10 +551,14 @@ def _apply_cross_dock_fulfillment(task):
     if not task.warehouse_request: return
     request = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
     if not request or request.reference_doctype != "Outbound Delivery" or not request.reference_line: return
-    current = flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "picked_quantity"))
+    # The line was already reserved (allocated_quantity) when the Cross Dock request was raised -
+    # see cross_dock.reserve_cross_dock_demand - so only picked_quantity moves here. max() keeps a
+    # request raised before that reservation existed covered without double-counting a new one.
+    line = frappe.db.get_value("Outbound Delivery Item", request.reference_line, ["allocated_quantity", "picked_quantity"], as_dict=True, for_update=True)
+    picked = flt(line.picked_quantity) + flt(task.confirmed_quantity)
     frappe.db.set_value("Outbound Delivery Item", request.reference_line, {
-        "allocated_quantity": flt(frappe.db.get_value("Outbound Delivery Item", request.reference_line, "allocated_quantity")) + flt(task.confirmed_quantity),
-        "picked_quantity": current + flt(task.confirmed_quantity),
+        "allocated_quantity": max(flt(line.allocated_quantity), picked),
+        "picked_quantity": picked,
     })
     _update_delivery_picking_status(request.reference_name)
 

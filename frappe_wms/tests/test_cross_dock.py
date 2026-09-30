@@ -113,6 +113,22 @@ class TestCrossDock(IntegrationTestCase):
         self.assertEqual(obd.picking_status, "Picked")
         self.assertEqual(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}), [])
 
+    def test_cross_dock_reserves_the_delivery_line_straight_away(self):
+        # The matched demand is claimed when the Cross Dock request is raised, so neither a release
+        # nor a second receipt can fulfil the same line again before the task is confirmed.
+        from frappe_wms.services.allocation import allocate_delivery
+        item = self._make_item("TEST-XDOCK-ITEM-6")
+        obd = self._make_delivery(item, 5)
+        gr = self._submit_gr(self._make_hu(), item, 5)
+        self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr.name)], ["Cross Dock"])
+        obd.reload()
+        self.assertEqual(obd.items[0].allocated_quantity, 5)
+        self.assertEqual(obd.allocation_status, "Fully Allocated")
+        allocate_delivery(obd.name)
+        self.assertEqual(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}), [])
+        gr2 = self._submit_gr(self._make_hu(), item, 5)
+        self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr2.name)], ["Putaway"])
+
     def test_cross_docked_delivery_can_be_shipped_and_issued(self):
         # A cross-docked delivery has no Stock Allocation or Pick task, which is all shipping and
         # Goods Issue used to look at - it had "no staged Handling Unit" and could never leave.
