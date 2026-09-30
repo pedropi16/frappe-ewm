@@ -21,8 +21,7 @@ def list_available_resources(warehouse=None):
 def log_on(resource_code, user=None):
     require_role(*RESOURCE_ROLES)
     user = user or frappe.session.user
-    frappe.db.sql("select name from `tabWMS Resource` where name=%s for update", resource_code)
-    resource = frappe.get_doc("WMS Resource", resource_code)
+    resource = frappe.get_doc("WMS Resource", resource_code, for_update=True)
     if not resource.active: frappe.throw(_("WMS Resource {0} is not active").format(resource_code))
     if resource.user and resource.user != user:
         frappe.throw(_("WMS Resource {0} is already logged on by {1}").format(resource_code, resource.user))

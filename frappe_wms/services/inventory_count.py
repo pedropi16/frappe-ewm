@@ -32,8 +32,7 @@ def _release_blocked_bins(doc):
 
 def snapshot_count(count_name):
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Draft": frappe.throw(_("Count has already been started"))
     filters = {"warehouse": doc.warehouse, "quantity": [">", 0]}
     if doc.storage_bin: filters["storage_bin"] = doc.storage_bin
@@ -72,8 +71,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
     # noise). A found line has no book quantity to compare against, so its full quantity IS the
     # variance and it's immediately "Counted" - there's nothing left to count against.
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status not in ("Counting", "Counted"): frappe.throw(_("Count is not open for recording"))
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Found quantity must be greater than zero"))
@@ -94,8 +92,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
 
 def cancel_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status in ("Posted", "Cancelled"): frappe.throw(_("A posted or already-cancelled count cannot be cancelled"))
     _release_blocked_bins(doc)
     doc.status = "Cancelled"
@@ -105,8 +102,7 @@ def cancel_count(count_name):
 def record_counts(count_name, counted_quantities):
     # counted_quantities: {row_name: counted_quantity}
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status not in {"Counting", "Counted"}: frappe.throw(_("Count is not open for recording"))
     for row in doc.items:
         if row.name not in counted_quantities: continue
@@ -157,8 +153,7 @@ def _recompute_pic_status(doc):
 
 def post_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Counted": frappe.throw(_("All lines must be counted before posting"))
     for i, row in enumerate(doc.items, 1):
         if row.status in ("Posted", "Pending Approval"): continue
@@ -194,8 +189,7 @@ def post_count(count_name):
 
 def request_recount(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     for row in doc.items:
         if row.status != "Pending Recount": continue
         row.recount_count = (row.recount_count or 0) + 1
@@ -208,8 +202,7 @@ def request_recount(count_name):
 
 def approve_variance(count_name, remarks=None):
     require_role("WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Physical Inventory Count` where name=%s for update", count_name)
-    doc = frappe.get_doc("WMS Physical Inventory Count", count_name)
+    doc = frappe.get_doc("WMS Physical Inventory Count", count_name, for_update=True)
     if doc.status != "Under Review": frappe.throw(_("Count is not awaiting approval"))
     for i, row in enumerate(doc.items, 1):
         if row.status != "Pending Approval": continue

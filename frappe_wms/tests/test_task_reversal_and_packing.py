@@ -5,6 +5,7 @@ from frappe.utils import nowdate
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
 from frappe_wms.api.scanner import confirm_task, reverse_task, complete_packing_order, repack
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestTaskReversalAndPacking(IntegrationTestCase):
@@ -176,12 +177,8 @@ class TestTaskReversalAndPacking(IntegrationTestCase):
         obd.submit()
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
-        confirm_task(pick_tasks[0], confirmed_quantity=5)
-
-        # FIFO allocation may pick stock from an HU created by an earlier test in this class
-        # (IntegrationTestCase only rolls back at class teardown), so assert on whichever HU the
-        # pick task actually used rather than assuming it is the one this test created.
-        picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")
+        # 5 of an 8-unit pallet: picked into a carton, the pallet stays in the rack.
+        _result, picked_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=5)
         self.assertEqual(frappe.db.get_value("Handling Unit", picked_hu, "status"), "Staged")
 
         # Goods Issue requires the HU to be Loaded and sitting in a Door bin, not merely staged -

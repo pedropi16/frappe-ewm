@@ -5,6 +5,7 @@ from frappe.utils import nowdate
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.services.picking import release_wave
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestWavePicking(IntegrationTestCase):
@@ -82,7 +83,7 @@ class TestWavePicking(IntegrationTestCase):
         self.assertEqual(task.wave, wave.name)
         self.assertEqual(len(task.stock_allocations), 2)
 
-        confirm_task(task.name, confirmed_quantity=7)
+        pick_into_new_hu(task.name, confirmed_quantity=7)  # 7 of a 20-unit pallet, into one cluster tote
 
         allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", [obd1.name, obd2.name]]}, fields=["status", "picked_quantity"])
         self.assertTrue(all(a.status == "Picked" for a in allocations))

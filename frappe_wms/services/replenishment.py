@@ -35,7 +35,7 @@ def _best_source_bin(warehouse, product, storage_type, stock_type, exclude_bin):
     balances = frappe.get_all("WMS Stock Balance", filters={
         "warehouse": warehouse, "product": product, "stock_type": stock_type,
         "storage_bin": ["in", bins_in_type], "available_quantity": [">", 0],
-    }, fields=["storage_bin", "handling_unit", "available_quantity"], order_by="available_quantity desc")
+    }, fields=["storage_bin", "handling_unit", "batch_no", "serial_no", "available_quantity"], order_by="available_quantity desc")
     balances = [b for b in balances if b.storage_bin != exclude_bin]
     if not balances: return None, 0
     return balances[0], balances[0].available_quantity
@@ -57,6 +57,7 @@ def check_replenishment_needs():
         request = frappe.get_doc({
             "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": rule.warehouse, "product": rule.product,
             "requested_quantity": qty, "stock_uom": stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
+            "batch_no": source.batch_no, "serial_no": source.serial_no,
             "destination_bin": rule.storage_bin, "stock_type": rule.stock_type, "reference_doctype": "Replenishment Rule",
             "reference_name": rule.name, "process_type": process_type, "priority": rule.priority or "Normal", "status": "Open",
         })
@@ -87,6 +88,7 @@ def create_order_related_replenishment(task):
     request = frappe.get_doc({
         "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": task.warehouse, "product": task.product,
         "requested_quantity": qty, "stock_uom": task.stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
+        "batch_no": source.batch_no, "serial_no": source.serial_no,
         "destination_bin": task.source_bin, "stock_type": stock_type, "reference_doctype": "Warehouse Task",
         "reference_name": task.name, "process_type": process_type, "priority": "High", "status": "Open",
     })
@@ -110,6 +112,7 @@ def _create_replenishment_request(warehouse, product, storage_bin, stock_type, q
     request = frappe.get_doc({
         "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": warehouse, "product": product,
         "requested_quantity": qty, "stock_uom": stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
+        "batch_no": source.batch_no, "serial_no": source.serial_no,
         "destination_bin": storage_bin, "stock_type": stock_type, "reference_doctype": reference_doctype,
         "reference_name": reference_name or frappe.session.user, "reference_line": reference_line,
         "process_type": process_type, "priority": priority, "status": "Open",

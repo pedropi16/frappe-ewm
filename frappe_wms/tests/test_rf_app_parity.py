@@ -8,6 +8,7 @@ from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_r
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, list_open_packing_orders, complete_packing_order
 from frappe_wms.api.inventory import list_open_counts, list_open_inspections
 from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
+from frappe_wms.tests.bootstrap import pick_into_new_hu, empty_hu_like
 
 
 class TestRfAppParity(IntegrationTestCase):
@@ -201,11 +202,15 @@ class TestRfAppParity(IntegrationTestCase):
 
     def test_move_transfers_stock_and_can_be_confirmed_from_scanner_api(self):
         _ind, hu = self._receive_and_putaway(12)
+        # 4 of the pallet's 12 go into a separate HU at the stage bin - moving them "into" the
+        # pallet itself would leave that one pallet with stock in two bins.
+        tote = empty_hu_like(hu, self.stage_bin)
         result = create_and_confirm_move(warehouse=self.warehouse, product=self.item, quantity=4, stock_uom=self.uom, stock_type="AVAILABLE",
-            source_bin=self.bulk_bin, source_hu=hu, destination_bin=self.stage_bin, destination_hu=hu)
+            source_bin=self.bulk_bin, source_hu=hu, destination_bin=self.stage_bin, destination_hu=tote)
         self.assertEqual(result["status"], "Confirmed")
         bulk_qty = frappe.get_all("WMS Stock Balance", filters={"storage_bin": self.bulk_bin, "handling_unit": hu}, fields=["quantity"])[0].quantity
-        stage_qty = frappe.get_all("WMS Stock Balance", filters={"storage_bin": self.stage_bin, "handling_unit": hu}, fields=["quantity"])[0].quantity
+        stage_qty = frappe.get_all("WMS Stock Balance", filters={"storage_bin": self.stage_bin, "handling_unit": tote}, fields=["quantity"])[0].quantity
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bulk_bin)
         self.assertEqual(bulk_qty, 8)
         self.assertEqual(stage_qty, 4)
 
@@ -237,8 +242,8 @@ class TestRfAppParity(IntegrationTestCase):
         obd.submit()
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
-        picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")
-        confirm_task(pick_tasks[0], confirmed_quantity=7)
+        # picked into a carton - only part of the source pallet
+        _result, picked_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=7)
 
         ready = list_ready_to_ship()
         matching = [d for d in ready if d["name"] == obd.name]

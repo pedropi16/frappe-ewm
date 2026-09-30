@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.batch_characteristics import (
     set_batch_characteristics as _set_batch_characteristics,
     get_batch_characteristics as _get_batch_characteristics,
@@ -6,6 +7,7 @@ from frappe_wms.services.batch_characteristics import (
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def set_batch_characteristics(batch_no, values):
     if isinstance(values, str):
         values = frappe.parse_json(values)
@@ -13,5 +15,6 @@ def set_batch_characteristics(batch_no, values):
 
 
 @frappe.whitelist()
+@retry_on_deadlock
 def get_batch_characteristics(batch_no):
     return _get_batch_characteristics(batch_no)

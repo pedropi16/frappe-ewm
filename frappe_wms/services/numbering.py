@@ -52,15 +52,23 @@ def next_number(range_for, warehouse=None, hu_type=None):
     range_name = find_number_range(range_for, warehouse, hu_type)
     if not range_name:
         frappe.throw(_("No active Number Range is configured for {0}").format(range_for))
-    # Row-lock so concurrent RF scans/shipment creation never hand out the same number twice.
-    frappe.db.sql("select name from `tabWMS Number Range` where name=%s for update", range_name)
+    # Row-lock so concurrent RF scans/shipment creation never hand out the same number twice -
+    # and read current_number through that same locking read (get_doc for_update), not a separate
+    # "select ... for update" followed by a plain get_doc: Frappe runs MariaDB at REPEATABLE READ,
+    # so a plain read after waiting on the lock still sees the transaction's older snapshot, i.e.
+    # the counter as it was before the request that just released the lock bumped it. Reproduced
+    # under concurrent load: two pickers creating cartons at once both got HU-00000001 (one then
+    # failed with DuplicateEntryError), and two shipments collided on the same SHIP- number.
+    doc = frappe.get_doc("WMS Number Range", range_name, for_update=True)
     # A reusable HU (services/handling_unit.recycle_handling_unit) frees its number back into this
-    # range's pool - SAP EWM reissues those before ever incrementing further.
-    pooled = frappe.db.get_value("WMS HU Number Pool", {"number_range": range_name}, ["name", "hu_number"], as_dict=True, order_by="creation asc")
+    # range's pool - SAP EWM reissues those before ever incrementing further. Locking read for the
+    # same reason as above: a snapshot read could hand out a pooled number another request has
+    # already taken (and deleted) since.
+    pooled = frappe.db.sql("select name, hu_number from `tabWMS HU Number Pool` where number_range=%s order by creation asc limit 1 for update",
+        range_name, as_dict=True)
     if pooled:
-        frappe.delete_doc("WMS HU Number Pool", pooled.name, ignore_permissions=True)
-        return pooled.hu_number
-    doc = frappe.get_doc("WMS Number Range", range_name)
+        frappe.delete_doc("WMS HU Number Pool", pooled[0].name, ignore_permissions=True)
+        return pooled[0].hu_number
     next_value = max(doc.current_number or 0, doc.start_number - 1) + 1
     number = None
     while next_value <= doc.end_number:

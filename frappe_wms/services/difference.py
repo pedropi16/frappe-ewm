@@ -73,8 +73,7 @@ def list_open_differences(warehouse=None, direction=None):
 
 def clear_over_difference(name, destination_bin, destination_hu=None):
     require_role(*CLEAR_ROLES)
-    frappe.db.sql("select name from `tabWMS Task Difference` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Task Difference", name)
+    doc = frappe.get_doc("WMS Task Difference", name, for_update=True)
     if doc.status != "Open": frappe.throw(_("Difference {0} is already cleared").format(name))
     if doc.direction != "Over": frappe.throw(_("Difference {0} is a Short difference - use clear_short_difference instead").format(name))
     source = {"warehouse": doc.warehouse, "product": doc.product, "batch_no": doc.batch_no, "serial_no": doc.serial_no,
@@ -88,8 +87,7 @@ def clear_over_difference(name, destination_bin, destination_hu=None):
 
 def clear_short_difference(name, remarks=None):
     require_role(*CLEAR_ROLES)
-    frappe.db.sql("select name from `tabWMS Task Difference` where name=%s for update", name)
-    doc = frappe.get_doc("WMS Task Difference", name)
+    doc = frappe.get_doc("WMS Task Difference", name, for_update=True)
     if doc.status != "Open": frappe.throw(_("Difference {0} is already cleared").format(name))
     if doc.direction != "Short": frappe.throw(_("Difference {0} is an Over difference - use clear_over_difference instead").format(name))
     updates = {"status": "Cleared", "cleared_by": frappe.session.user, "cleared_at": now_datetime()}

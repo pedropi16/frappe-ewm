@@ -14,3 +14,5 @@ frappe_wms.patches.v0_2.seed_sort_process_type
 frappe_wms.patches.v0_2.grant_outbound_delivery_wms_role_permissions
 frappe_wms.patches.v0_2.backfill_unqueued_open_tasks
 frappe_wms.patches.v0_2.backfill_inbound_delivery_receipt_progress
+frappe_wms.patches.v0_2.backfill_request_task_batch
+frappe_wms.patches.v0_2.grant_inbound_delivery_wms_role_permissions

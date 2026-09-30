@@ -59,6 +59,10 @@ def reverse_goods_receipt(doc):
         values.update({"quantity":-row.quantity,"movement_type":"102","reversal_of":row.name})
         post_entries([values],doc.doctype,doc.name,f"GR-REV:{doc.name}:{i}")
     doc.db_set({"status":"Reversed","reversed":1})
+    # Hand the reversed quantity back to the delivery line, or it would stay "Received" forever
+    # and the RF Receive screen would never offer it again for the corrected receipt.
+    if doc.inbound_delivery:
+        _update_inbound_delivery_receipt_progress(doc.inbound_delivery, doc.items, sign=-1)
 
 def create_putaway_requests(receipt_name):
     receipt=frappe.get_doc("Goods Receipt",receipt_name)
@@ -78,7 +82,7 @@ def create_putaway_requests(receipt_name):
             for match in cross_dock_matches:
                 cd_req = frappe.get_doc({"doctype":"Warehouse Request","request_type":"Cross Dock","warehouse":receipt.warehouse,"product":row.item,
                     "requested_quantity":match["quantity"],"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,
-                    "destination_bin":match["staging_bin"],"stock_type":row.stock_type,
+                    "destination_bin":match["staging_bin"],"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,
                     "reference_doctype":"Outbound Delivery","reference_name":match["delivery"],"reference_line":match["delivery_item"],
                     "process_type":cross_dock_process_type,"priority":"High","status":"Open"})
                 cd_req.insert(ignore_permissions=True); names.append(cd_req.name)
@@ -103,7 +107,7 @@ def create_putaway_requests(receipt_name):
             if step:
                 process_type = step.process_type
                 process_step = step.step_code
-        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 
@@ -132,7 +136,45 @@ def _get_or_create_serial_no(item_code, serial_no):
     frappe.get_doc({"doctype": "Serial No", "item_code": item_code, "serial_no": serial_no}).insert(ignore_permissions=True)
     return serial_no
 
-def _update_inbound_delivery_receipt_progress(delivery_name, items):
+def _quantities_by_line(items):
+    by_row = {}
+    for item in items:
+        row_name = item.get("inbound_delivery_item")
+        if row_name: by_row[row_name] = by_row.get(row_name, 0) + flt(item.get("quantity"))
+    return by_row
+
+def _lock_inbound_delivery(delivery_name):
+    # for_update=True, not a separate "select ... for update" followed by a plain get_doc: Frappe
+    # runs MariaDB at REPEATABLE READ, where a plain read after waiting on a row lock still returns
+    # the transaction's older snapshot - a second receiver's request would lock the row, then read
+    # received_quantity as it was *before* the first receiver's receipt committed. get_doc's own
+    # for_update reads the parent and its child rows with locking (current) reads.
+    return frappe.get_doc("Inbound Delivery", delivery_name, for_update=True)
+
+def _validate_receipt_quantities(delivery, items):
+    # The RF Receive screen refuses more than a line's remaining quantity, but nothing server-side
+    # did - and two receivers on the same truck (the normal case at a busy dock) both saw the same
+    # remaining quantity and both posted it. Reproduced under concurrent load: a 48-unit line
+    # ended up with 170 received across four Goods Receipts, and the ERPNext Purchase Receipt
+    # mirror then failed later with an unrelated-looking OverAllowanceError. Must run under
+    # _lock_inbound_delivery so "remaining" can't change between this check and the posting.
+    rows = {row.name: row for row in delivery.items}
+    for row_name, qty in _quantities_by_line(items).items():
+        row = rows.get(row_name)
+        if not row:
+            frappe.throw(_("Line {0} does not belong to Inbound Delivery {1}").format(row_name, delivery.name))
+        if row.status == "Cancelled":
+            frappe.throw(_("Line {0} ({1}) is cancelled").format(row.line_number, row.item))
+        remaining = flt(row.expected_quantity) - flt(row.received_quantity)
+        if qty - remaining > 0.000001:
+            frappe.throw(_("Line {0} ({1}): only {2} {3} left to receive, {4} scanned - it may have just been received on another scanner. Refresh the delivery.").format(
+                row.line_number, row.item, frappe.format(max(remaining, 0), "Float"), row.stock_uom, frappe.format(qty, "Float")))
+    for item in items:
+        row = rows.get(item.get("inbound_delivery_item"))
+        if row and item.get("item") and item.get("item") != row.item:
+            frappe.throw(_("Line {0} is for {1}, not {2}").format(row.line_number, row.item, item.get("item")))
+
+def _update_inbound_delivery_receipt_progress(delivery_name, items, sign=1):
     # Confirmed live in production: without this, an Inbound Delivery's own received_quantity/
     # status never move off their initial values no matter how many Goods Receipts post against
     # it - the RF Receive screen's own line filter (remaining = expected_quantity -
@@ -140,18 +182,18 @@ def _update_inbound_delivery_receipt_progress(delivery_name, items):
     # open work forever, and a repeat attempt eventually fails deep inside the ERPNext mirror with
     # a confusing "No matching Purchase Order rows found" once the underlying PO is actually
     # exhausted - the one place this bug was ever visible, and only long after the real cause.
-    received_by_row = {}
-    for item in items:
-        row_name = item.get("inbound_delivery_item")
-        if row_name: received_by_row[row_name] = received_by_row.get(row_name, 0) + flt(item.get("quantity"))
+    # sign=-1 undoes a cancelled Goods Receipt's quantities, so its lines become receivable again.
+    received_by_row = _quantities_by_line(items)
     if not received_by_row: return
     # frappe.db.set_value throughout, never doc.save(): Inbound Delivery is itself submittable,
     # and a receipt against an already-submitted one (rare, but confirmed to exist in production -
     # INB-00000001) hit Frappe's own "not allowed to change Status after submission" guard on a
     # plain .save() - these are tracking-only fields, not something submission should ever lock.
+    # Read under the row lock (current values), not a plain get_all - see _lock_inbound_delivery.
+    delivery = _lock_inbound_delivery(delivery_name)
     all_received, any_received = True, False
-    for row in frappe.get_all("Inbound Delivery Item", filters={"parent": delivery_name}, fields=["name", "expected_quantity", "received_quantity"]):
-        new_received = flt(row.received_quantity) + received_by_row.get(row.name, 0)
+    for row in delivery.items:
+        new_received = max(flt(row.received_quantity) + sign * received_by_row.get(row.name, 0), 0)
         if row.name in received_by_row:
             new_status = "Received" if new_received >= flt(row.expected_quantity) else ("Partially Received" if new_received > 0 else "Open")
             frappe.db.set_value("Inbound Delivery Item", row.name, {"received_quantity": new_received, "status": new_status}, update_modified=False)
@@ -161,6 +203,9 @@ def _update_inbound_delivery_receipt_progress(delivery_name, items):
         frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Fully Received", "status": "Received"}, update_modified=False)
     elif any_received:
         frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Partially Received", "status": "Partially Received"}, update_modified=False)
+    else:
+        frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Not Received",
+            "status": "Expected" if delivery.docstatus == 1 else "Draft"}, update_modified=False)
 
 def create_and_submit_goods_receipt(inbound_delivery, items):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
@@ -168,8 +213,15 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     # WMS Settings.default_handling_unit_type so a scan of a fresh pallet/carton auto-registers
     # in place, same as the RF "Receive" flow described in the README.
     require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
-    delivery = frappe.get_doc("Inbound Delivery", inbound_delivery)
     if not items: frappe.throw(_("At least one receipt line is required"))
+    # Serializes every receipt against this delivery (see _lock_inbound_delivery) for the rest of
+    # the request, so the remaining-quantity check below and the progress update after posting
+    # see the same, current numbers.
+    delivery = _lock_inbound_delivery(inbound_delivery)
+    if delivery.docstatus == 2: frappe.throw(_("Inbound Delivery {0} is cancelled").format(delivery.name))
+    for item in items:
+        if flt(item.get("quantity")) <= 0: frappe.throw(_("Receipt quantity for {0} must be greater than zero").format(item.get("item")))
+    _validate_receipt_quantities(delivery, items)
     for item in items:
         item["handling_unit"] = get_or_create_handling_unit(
             item.get("handling_unit"), item.get("hu_type"), delivery.receiving_bin, delivery.warehouse,

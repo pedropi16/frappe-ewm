@@ -48,8 +48,7 @@ def find_pick_tasks(reference):
 
 def release_wave(wave_name):
     require_role("WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Wave` where name=%s for update", wave_name)
-    wave = frappe.get_doc("WMS Wave", wave_name)
+    wave = frappe.get_doc("WMS Wave", wave_name, for_update=True)
     if wave.status != "Draft": frappe.throw(_("Wave is not in Draft status"))
     if not wave.deliveries: frappe.throw(_("Wave has no deliveries to release"))
     delivery_names = [row.outbound_delivery for row in wave.deliveries]
@@ -85,8 +84,7 @@ def release_delivery_for_picking(delivery_name, strategy="Single Order"):
     # (Outbound Delivery's "Allocate Stock" / "Create Pick Tasks" buttons) - allocates whatever
     # isn't already allocated, then raises pick tasks for it.
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
-    frappe.db.sql("select name from `tabOutbound Delivery` where name=%s for update", delivery_name)
-    delivery = frappe.get_doc("Outbound Delivery", delivery_name)
+    delivery = frappe.get_doc("Outbound Delivery", delivery_name, for_update=True)
     if delivery.picking_status == "Picked": frappe.throw(_("Delivery is already fully picked"))
     if delivery.allocation_status != "Fully Allocated":
         allocate_delivery(delivery_name)

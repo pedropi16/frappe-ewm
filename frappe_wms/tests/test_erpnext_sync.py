@@ -6,6 +6,7 @@ from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.tasks import verify_erpnext_stock_reconciliation
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestErpnextSync(IntegrationTestCase):
@@ -85,18 +86,19 @@ class TestErpnextSync(IntegrationTestCase):
         obd.submit()
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
-        confirm_task(pick_tasks[0], confirmed_quantity=3)
+        # 3 of the pallet, picked into a carton (the pallet itself stays in the rack)
+        _result, pick_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=3)
 
         # No manual HU status override here: picking must auto-stage the HU on its own.
-        self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged")
+        self.assertEqual(frappe.db.get_value("Handling Unit", pick_hu, "status"), "Staged")
 
         # Goods Issue requires the HU to be Loaded and sitting in a Door bin, not merely staged -
         # this test is about the ERPNext sync wiring, not the loading flow itself.
         frappe.db.set_value("Storage Bin", self.stage_bin, "storage_type", f"{self.warehouse}-DOOR")
-        frappe.db.set_value("Handling Unit", hu.name, "status", "Loaded")
+        frappe.db.set_value("Handling Unit", pick_hu, "status", "Loaded")
 
         gi = frappe.get_doc({"doctype": "Goods Issue", "outbound_delivery": obd.name, "warehouse": self.warehouse, "staging_bin": self.stage_bin,
-            "items": [{"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 3, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+            "items": [{"outbound_delivery_item": obd.items[0].name, "item": self.item, "quantity": 3, "stock_uom": self.uom, "handling_unit": pick_hu, "stock_type": "AVAILABLE"}]})
         gi.insert(ignore_permissions=True)
         gi.submit()
 
@@ -113,7 +115,7 @@ class TestErpnextSync(IntegrationTestCase):
         gi.reload()
         self.assertEqual(gi.status, "Reversed")
         self.assertEqual(gi.reversed, 1)
-        self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged", "reversing the issue should put the HU back into Staged status")
+        self.assertEqual(frappe.db.get_value("Handling Unit", pick_hu, "status"), "Staged", "reversing the issue should put the HU back into Staged status")
 
         # Reconciliation should find no drift after a clean sequence of postings.
         verify_erpnext_stock_reconciliation()

@@ -120,7 +120,7 @@
       "fieldtype": "Small Text"
     }
   ],
-  "autoname": "HUE-.########",
+  "autoname": "hash",
   "sort_field": "event_timestamp",
   "sort_order": "DESC",
   "doctype": "DocType",

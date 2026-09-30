@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe import _
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
@@ -14,6 +15,7 @@ ALERT_AGE_HOURS = 4
 INTERIM_STORAGE_ROLES = ("Receiving", "Staging", "Difference", "Production Supply")
 
 @frappe.whitelist()
+@retry_on_deadlock
 def get_delivery_execution_status(delivery_name):
     require_wms_access()
     # Feeds the Outbound Monitor drill-down: everything a supervisor needs to see and drive the
@@ -47,6 +49,7 @@ def get_delivery_execution_status(delivery_name):
     }
 
 @frappe.whitelist()
+@retry_on_deadlock
 def get_summary(warehouse):
     require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
@@ -67,6 +70,7 @@ def get_summary(warehouse):
     }
 
 @frappe.whitelist()
+@retry_on_deadlock
 def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None, stock_type=None, handling_unit=None,
                     batch_no=None, serial_no=None, limit=200):
     require_wms_access()
@@ -89,6 +93,7 @@ def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None,
     return rows
 
 @frappe.whitelist()
+@retry_on_deadlock
 def stock_overview_summary(warehouse):
     require_wms_access()
     rows = frappe.db.sql(
@@ -99,6 +104,7 @@ def stock_overview_summary(warehouse):
     return [{"stock_type": r[0], "quantity": r[1], "allocated_quantity": r[2], "available_quantity": r[3], "balance_rows": r[4]} for r in rows]
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None, movement_type=None,
                    batch_no=None, serial_no=None, posting_user=None, from_date=None, to_date=None, limit=100):
     require_wms_access()
@@ -119,6 +125,7 @@ def search_ledger(warehouse, product=None, storage_bin=None, handling_unit=None,
     ], order_by="posting_datetime desc", limit=cint(limit) or 100)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def stock_line_history(product, stock_type, storage_bin=None, handling_unit=None, batch_no=None, serial_no=None, limit=10):
     require_wms_access()
     """The last few postings that actually built up one specific balance line - a Repack Center
@@ -135,6 +142,7 @@ def stock_line_history(product, stock_type, storage_bin=None, handling_unit=None
     ], order_by="posting_datetime desc", limit=cint(limit) or 10)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_tasks(warehouse, task_type=None, status=None, product=None, source_bin=None, destination_bin=None,
                   assigned_resource=None, batch_no=None, serial_no=None, wave=None, queue=None, priority=None,
                   confirmed_by=None, from_date=None, to_date=None, limit=200):
@@ -162,6 +170,7 @@ def search_tasks(warehouse, task_type=None, status=None, product=None, source_bi
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, current_bin=None,
                            stock_status=None, outbound_delivery=None, storage_type=None, work_center=None,
                            modified_by=None, from_date=None, to_date=None, limit=200):
@@ -189,6 +198,7 @@ def search_handling_units(warehouse, hu_number=None, status=None, hu_type=None, 
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, limit=200):
     require_wms_access()
     filters = {"warehouse": warehouse}
@@ -203,6 +213,7 @@ def search_bins(warehouse, bin_code=None, storage_type=None, work_center=None, l
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def hu_ancestor_chain(hu_name):
     require_wms_access()
     """Walks parent_hu up to the top, so a search hit that's nested several levels deep can be
@@ -230,6 +241,7 @@ def _hu_node(hu_name):
     return {"hu": hu, "stock": stock, "children": [_hu_node(c) for c in children]}
 
 @frappe.whitelist()
+@retry_on_deadlock
 def handling_unit_tree(hu_name):
     require_wms_access()
     """Full recursive nesting (all descendants, every level) plus contents at each node -
@@ -239,6 +251,7 @@ def handling_unit_tree(hu_name):
     return node
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_status=None, process_status=None,
                                inbound_delivery_number=None, receiving_bin=None, from_date=None, to_date=None, limit=200):
     require_wms_access()
@@ -257,6 +270,7 @@ def search_inbound_deliveries(warehouse, status=None, supplier=None, receipt_sta
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_outbound_deliveries(warehouse, status=None, customer=None, allocation_status=None,
                                 packing_status=None, loading_status=None, priority=None,
                                 outbound_delivery_number=None, route=None, staging_bin=None, door=None,
@@ -281,6 +295,7 @@ def search_outbound_deliveries(warehouse, status=None, customer=None, allocation
     ], order_by="modified desc", limit=cint(limit) or 200)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def resource_workload(warehouse):
     require_wms_access()
     resources = frappe.get_list("WMS Resource", filters={"warehouse": warehouse, "active": 1}, fields=[
@@ -299,6 +314,7 @@ def resource_workload(warehouse):
     return resources
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_queues(warehouse, activity=None, limit=100):
     require_wms_access()
     filters = {"warehouse": warehouse}
@@ -309,18 +325,21 @@ def search_queues(warehouse, activity=None, limit=100):
     ], order_by="queue_code asc", limit=cint(limit) or 100)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def warehouse_kpis(warehouse, from_date=None, to_date=None):
     require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     return _warehouse_kpis(warehouse, from_date, to_date)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def resource_performance(warehouse, from_date=None, to_date=None):
     require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     return _resource_performance(warehouse, from_date, to_date)
 
 @frappe.whitelist()
+@retry_on_deadlock
 def get_alerts(warehouse):
     require_wms_access()
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
@@ -368,6 +387,7 @@ def get_alerts(warehouse):
     }
 
 @frappe.whitelist()
+@retry_on_deadlock
 def search_waves(warehouse, status=None, route=None, released_by=None, from_date=None, to_date=None, limit=100):
     require_wms_access()
     filters = {"warehouse": warehouse}

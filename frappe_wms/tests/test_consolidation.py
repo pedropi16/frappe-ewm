@@ -3,6 +3,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
 
 from frappe_wms.api.inbound import create_and_submit_goods_receipt
+from frappe_wms.tests.bootstrap import company_warehouse, pick_into_new_hu
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.api.consolidation import (
@@ -31,8 +32,8 @@ class TestConsolidation(IntegrationTestCase):
         cls.customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
         cls.uom = "Nos"
         cls.item_group = frappe.get_all("Item Group", limit=1, pluck="name")[0]
-        cls.wip_warehouse = "Work In Progress - TC"
-        cls.fg_erpnext_warehouse = "Finished Goods - TC"
+        cls.wip_warehouse = company_warehouse(cls.company, "Work In Progress")
+        cls.fg_erpnext_warehouse = company_warehouse(cls.company, "Finished Goods")
 
         if not frappe.db.exists("WMS Warehouse", cls.warehouse):
             frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": cls.warehouse, "warehouse_name": cls.warehouse, "company": cls.company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
@@ -100,7 +101,7 @@ class TestConsolidation(IntegrationTestCase):
         request_name = frappe.get_all("Warehouse Request", filters={"reference_doctype": "Work Order", "reference_name": wo.name}, pluck="name")[0]
         request = frappe.get_doc("Warehouse Request", request_name)
         task_name = frappe.get_all("Warehouse Task", filters={"warehouse_request": request_name}, pluck="name")[0]
-        confirm_task(task_name, confirmed_quantity=request.requested_quantity)
+        pick_into_new_hu(task_name, confirmed_quantity=request.requested_quantity)  # part of a 50-unit pallet
         return wo, request_name
 
     def _make_bom(self, suffix, rm_qty=2):

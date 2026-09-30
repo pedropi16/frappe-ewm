@@ -5,6 +5,7 @@ from frappe.utils import nowdate, add_days
 from frappe_wms.api.inbound import create_putaway, create_inbound_delivery_from_purchase_order
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, create_outbound_delivery_from_sales_order, release_delivery_for_picking
 from frappe_wms.api.scanner import confirm_task
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestErpnextPoSoIntegration(IntegrationTestCase):
@@ -156,8 +157,8 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
 
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
-        picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")
-        confirm_task(pick_tasks[0], confirmed_quantity=4)
+        # picked into a carton - only part of the source pallet
+        _result, picked_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=4)
 
         # Goods Issue requires the HU to be Loaded and sitting in a Door bin, not merely staged -
         # this test is about the ERPNext SO/DN sync wiring, not the loading flow itself.
@@ -303,8 +304,8 @@ class TestErpnextSyncAsFloorRoleUser(IntegrationTestCase):
         obd.submit()
         allocate_delivery(obd.name)
         pick_tasks = create_pick_tasks(obd.name)
-        picked_hu = frappe.db.get_value("Warehouse Task", pick_tasks[0], "source_hu")
-        confirm_task(pick_tasks[0], confirmed_quantity=5)
+        # picked into a carton - only part of the source pallet
+        _result, picked_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=5)
         frappe.db.set_value("Storage Bin", self.stage_bin, "storage_type", f"{self.warehouse}-DOOR")
         frappe.db.set_value("Handling Unit", picked_hu, "status", "Loaded")
 

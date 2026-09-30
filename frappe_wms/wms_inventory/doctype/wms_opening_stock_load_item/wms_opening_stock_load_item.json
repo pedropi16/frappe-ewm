@@ -40,8 +40,7 @@
     {
       "fieldname": "handling_unit",
       "label": "Handling Unit",
-      "fieldtype": "Link",
-      "options": "Handling Unit",
+      "fieldtype": "Data",
       "description": "Leave blank for loose stock. If set and it doesn't exist yet, it's auto-registered here (needs HU Type)."
     },
     {

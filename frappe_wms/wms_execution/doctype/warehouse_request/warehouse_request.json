@@ -22,6 +22,8 @@
     "source_hu",
     "destination_hu",
     "stock_type",
+    "batch_no",
+    "serial_no",
     "reference_doctype",
     "reference_name",
     "reference_line",
@@ -126,6 +128,18 @@
       "label": "Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type"
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial Number",
+      "fieldtype": "Link",
+      "options": "Serial No"
     },
     {
       "fieldname": "reference_doctype",

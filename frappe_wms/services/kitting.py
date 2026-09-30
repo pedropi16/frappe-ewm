@@ -45,8 +45,7 @@ def _source_balance(warehouse, product, storage_bin):
 
 def complete_kitting_order(kitting_order_name):
     require_role("WMS Operator", "WMS Supervisor")
-    frappe.db.sql("select name from `tabKitting Order` where name=%s for update", kitting_order_name)
-    order = frappe.get_doc("Kitting Order", kitting_order_name)
+    order = frappe.get_doc("Kitting Order", kitting_order_name, for_update=True)
     if order.status not in ("Draft", "Open"): frappe.throw(_("Kitting Order is not open"))
     kit_uom = frappe.db.get_value("WMS Product", {"item": order.kit_item}, "stock_uom") or frappe.db.get_value("Item", order.kit_item, "stock_uom")
     # Each leg posts as its own single-entry call (post_entries' zero-sum check only applies

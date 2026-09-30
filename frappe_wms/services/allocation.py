@@ -2,7 +2,6 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import add_days, flt, getdate, nowdate
-from frappe_wms.services.stock import _lock_balance
 from frappe_wms.services.removal_rules import apply_strategy, match_removal_rule, strategy_fefo
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
@@ -88,15 +87,19 @@ def _candidate_balances(row, warehouse):
 
 def allocate_delivery(delivery_name):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
-    doc=frappe.get_doc("Outbound Delivery",delivery_name); doc.check_permission("write")
+    # for_update: serializes concurrent allocation of the same delivery and makes the
+    # allocated_quantity read below current rather than a REPEATABLE READ snapshot.
+    doc=frappe.get_doc("Outbound Delivery",delivery_name,for_update=True); doc.check_permission("write")
     if doc.docstatus != 1: frappe.throw(_("Outbound Delivery must be submitted before it can be allocated"))
     created=[]
     for row in doc.items:
         needed=flt(row.requested_quantity)-flt(row.allocated_quantity)
         for stock in _candidate_balances(row,doc.warehouse):
             if needed<=0: break
-            _lock_balance(stock.name)
-            fresh = frappe.db.get_value("WMS Stock Balance", stock.name, ["available_quantity", "allocated_quantity"], as_dict=True)
+            # One locking read, not "lock, then plain get_value": at REPEATABLE READ the plain read
+            # returns this transaction's older snapshot, so two deliveries allocating the same
+            # product at once could both see (and both reserve) the same available quantity.
+            fresh = frappe.db.get_value("WMS Stock Balance", stock.name, ["available_quantity", "allocated_quantity"], as_dict=True, for_update=True)
             if not fresh or flt(fresh.available_quantity) <= 0: continue
             qty=min(needed,flt(fresh.available_quantity))
             allocation=frappe.get_doc({"doctype":"Stock Allocation","outbound_delivery":doc.name,"outbound_delivery_item":row.name,"product":row.item,"stock_balance":stock.name,"storage_bin":stock.storage_bin,"handling_unit":stock.handling_unit,"batch_no":stock.batch_no,"serial_no":stock.serial_no,"stock_type":stock.stock_type,"allocated_quantity":qty,"status":"Allocated"})
@@ -133,7 +136,7 @@ def cancel_allocations_for_delivery(delivery_name):
         sync_warehouse_order(wo_name)
     for allocation in allocations:
         if allocation.stock_balance and frappe.db.exists("WMS Stock Balance", allocation.stock_balance):
-            balance = frappe.get_doc("WMS Stock Balance", allocation.stock_balance)
+            balance = frappe.get_doc("WMS Stock Balance", allocation.stock_balance, for_update=True)
             balance.allocated_quantity = max(flt(balance.allocated_quantity) - flt(allocation.allocated_quantity), 0)
             balance.available_quantity = flt(balance.quantity) - balance.allocated_quantity
             balance.flags.ignore_permissions = True

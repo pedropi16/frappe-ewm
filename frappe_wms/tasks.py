@@ -33,6 +33,8 @@ def verify_stock_balance_integrity():
     if negatives: frappe.log_error("\n".join(map(str,negatives)),"WMS negative stock integrity check")
 
 def verify_erpnext_stock_reconciliation():
+    from erpnext.stock.stock_balance import get_balance_qty_from_sle, update_bin_qty
+
     warehouses = frappe.get_all("WMS Warehouse", filters={"erpnext_warehouse": ["is", "set"]}, fields=["name", "erpnext_warehouse"])
     mismatches = []
     for wh in warehouses:
@@ -41,7 +43,19 @@ def verify_erpnext_stock_reconciliation():
             wh.name,
         )
         for product, wms_qty in wms_totals:
-            erpnext_qty = flt(frappe.db.get_value("Bin", {"warehouse": wh.erpnext_warehouse, "item_code": product}, "actual_qty"))
+            # ERPNext's own Stock Ledger (last qty_after_transaction) is what WMS mirrors into, not
+            # its Bin row: Bin.actual_qty is a cache that ERPNext core can itself leave stale under
+            # concurrency (erpnext/stock/doctype/bin/bin.py::update_qty re-writes actual_qty from a
+            # non-locking read, so e.g. a Sales Order reserving stock while a Purchase Receipt
+            # posts the same item can overwrite the receipt's new quantity) - reproduced in a
+            # simulated shift: ledger 360, Bin 290, WMS 360. Comparing against the Bin reported
+            # that as WMS/ERPNext drift when the two ledgers actually agreed.
+            erpnext_qty = get_balance_qty_from_sle(product, wh.erpnext_warehouse)
             if round(flt(wms_qty), 6) != round(erpnext_qty, 6):
                 mismatches.append({"warehouse": wh.name, "erpnext_warehouse": wh.erpnext_warehouse, "product": product, "wms_quantity": wms_qty, "erpnext_quantity": erpnext_qty})
+                continue
+            bin_qty = flt(frappe.db.get_value("Bin", {"warehouse": wh.erpnext_warehouse, "item_code": product}, "actual_qty"))
+            if round(bin_qty, 6) != round(erpnext_qty, 6):
+                # Ledgers agree, only ERPNext's cache is off: repair it with ERPNext's own helper.
+                update_bin_qty(product, wh.erpnext_warehouse, {"actual_qty": erpnext_qty})
     if mismatches: frappe.log_error("\n".join(map(str, mismatches)), "WMS/ERPNext stock reconciliation drift")

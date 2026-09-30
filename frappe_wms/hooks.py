@@ -31,6 +31,7 @@ doctype_js = {
 
 after_install = "frappe_wms.install.after_install"
 after_migrate = "frappe_wms.db_maintenance.ensure_indexes"
+before_tests = "frappe_wms.tests.bootstrap.before_tests"
 
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 

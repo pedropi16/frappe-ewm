@@ -115,8 +115,7 @@ def _route_hops(route_name, door_bin):
 
 def confirm_hu_loaded(shipment_name, hu_name):
     require_role(*LOAD_ROLES)
-    frappe.db.sql("select name from `tabWMS Shipment` where name=%s for update", shipment_name)
-    shipment = frappe.get_doc("WMS Shipment", shipment_name)
+    shipment = frappe.get_doc("WMS Shipment", shipment_name, for_update=True)
     if shipment.status not in ("Ready to Load", "Loading"): frappe.throw(_("Shipment is not open for loading"))
     row = next((r for r in shipment.handling_units if r.handling_unit == hu_name), None)
     if not row: frappe.throw(_("Handling Unit {0} is not on this shipment").format(hu_name))
@@ -204,7 +203,10 @@ def _relocate_handling_unit(hu_name, destination_bin, movement_type, reference_d
         _relocate_handling_unit(child, destination_bin, movement_type, reference_doctype, reference_name, event_type, hu_status)
 
 def depart_shipment(shipment_name):
-    require_role("WMS Supervisor")
+    # LOAD_ROLES, not Supervisor-only: the RF Load screen offers "Depart" to whoever just loaded
+    # the last HU, and a WMS Loader tapping it got "You are not permitted to perform this
+    # warehouse operation" - the truck is loaded and closed either way.
+    require_role(*LOAD_ROLES)
     shipment = frappe.get_doc("WMS Shipment", shipment_name)
     if shipment.status != "Loaded": frappe.throw(_("Shipment must be fully loaded before it can depart"))
     shipment.db_set({"status": "Departed", "actual_departure": now_datetime()}, update_modified=True)

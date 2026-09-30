@@ -45,8 +45,7 @@ def list_open_inspections(user=None):
 
 def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None):
     require_role("WMS Inventory Controller", "WMS Supervisor")
-    frappe.db.sql("select name from `tabWMS Quality Inspection` where name=%s for update", inspection_name)
-    doc = frappe.get_doc("WMS Quality Inspection", inspection_name)
+    doc = frappe.get_doc("WMS Quality Inspection", inspection_name, for_update=True)
     if doc.status != "Draft": frappe.throw(_("Inspection has already been completed"))
     passed = flt(passed_quantity) if passed_quantity is not None else flt(doc.passed_quantity)
     failed = flt(failed_quantity) if failed_quantity is not None else flt(doc.failed_quantity)

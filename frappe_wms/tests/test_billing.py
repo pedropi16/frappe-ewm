@@ -6,6 +6,7 @@ from frappe_wms.services.receipt import create_putaway_requests
 from frappe_wms.services.task import create_tasks_for_request
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.services.billing import generate_billing_for_period, create_billing_sales_invoice
+from frappe_wms.tests.bootstrap import pick_into_new_hu
 
 
 class TestBilling(IntegrationTestCase):
@@ -118,7 +119,7 @@ class TestBilling(IntegrationTestCase):
         request_names = create_putaway_requests(gr.name)
         putaway_request = next(r for r in [frappe.get_doc("Warehouse Request", n) for n in request_names] if r.request_type == "Putaway")
         task_name = create_tasks_for_request(putaway_request.name)
-        confirm_task(task_name, confirmed_quantity=7)
+        pick_into_new_hu(task_name, confirmed_quantity=7)  # 7 of the 10 on the receipt HU (3 were cross-docked)
 
         lines = generate_billing_for_period(self.warehouse, self.customer, nowdate(), nowdate())
         self.assertEqual([l for l in lines if l["activity"] == "Putaway"], [])
