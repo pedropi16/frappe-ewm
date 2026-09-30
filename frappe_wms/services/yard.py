@@ -45,8 +45,17 @@ def _clashes(door, start, end, warehouse, exclude=None):
             and add_to_date(get_datetime(r.planned_end), minutes=gap) > start]
 
 
-def free_door(warehouse, start, end, exclude=None):
-    return next((d for d in doors(warehouse) if not _clashes(d, start, end, warehouse, exclude)), None)
+def _occupant(door, exclude=None):
+    """The truck physically at this door right now, if any."""
+    return frappe.db.get_value("WMS Dock Appointment", {"door": door, "status": "At Door", "name": ["!=", exclude or ""]},
+                               ["name", "vehicle_registration"], as_dict=True)
+
+
+def free_door(warehouse, start, end, exclude=None, now=False):
+    """First door with no overlapping booking; with now=True it must also be empty right now
+    (a truck still at a door holds it even when its slot is over or has not started)."""
+    return next((d for d in doors(warehouse) if not _clashes(d, start, end, warehouse, exclude)
+                 and not (now and _occupant(d, exclude))), None)
 
 
 def validate_appointment(doc):
@@ -163,9 +172,9 @@ def to_door(appointment, door=None):
     door = door or doc.door
     if not door:
         now = now_datetime()
-        door = free_door(doc.warehouse, now, max(get_datetime(doc.planned_end), add_to_date(now, minutes=30)), doc.name)
+        door = free_door(doc.warehouse, now, max(get_datetime(doc.planned_end), add_to_date(now, minutes=30)), doc.name, now=True)
         if not door: frappe.throw(_("No door is free right now"))
-    occupant = frappe.db.get_value("WMS Dock Appointment", {"door": door, "status": "At Door", "name": ["!=", doc.name]}, ["name", "vehicle_registration"], as_dict=True)
+    occupant = _occupant(door, doc.name)
     if occupant: frappe.throw(_("Door {0} is still occupied by {1} ({2})").format(door, occupant.vehicle_registration or "", occupant.name))
     doc.door = door
     doc.update({"status": "At Door", "docked_at": now_datetime(), "checked_in_at": doc.checked_in_at or now_datetime()})

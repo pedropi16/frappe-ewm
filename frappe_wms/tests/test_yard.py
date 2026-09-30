@@ -75,3 +75,12 @@ class TestYardAndDockAppointments(IntegrationTestCase):
                         "a no-show frees its door")
         board = yard.yard_board(self.wh)
         self.assertIn("NOBODY", [r.vehicle_registration for r in board["appointments"]])
+
+    def test_a_truck_at_a_door_holds_it_outside_its_slot(self):
+        # Booked for later, but already at the door: an automatic door choice must skip that door
+        # at any time of day (the slot check alone would call it free).
+        a = self._book(add_to_date(now_datetime(), hours=6), vehicle_registration="EARLY-1")
+        yard.check_in(self.wh, appointment=a)
+        self.assertEqual(yard.to_door(a)["door"], self.doors[0])
+        w = yard.check_in(self.wh, vehicle_registration="NEXT-1", direction="Inbound")["appointment"]
+        self.assertEqual(yard.to_door(w)["door"], self.doors[1])
