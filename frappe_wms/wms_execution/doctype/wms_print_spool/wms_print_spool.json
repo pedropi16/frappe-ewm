@@ -36,7 +36,7 @@
       "fieldname": "event",
       "label": "Event",
       "fieldtype": "Select",
-      "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded",
+      "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded\nHU Closed",
       "reqd": 1,
       "in_standard_filter": 1
     },

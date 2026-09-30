@@ -4,7 +4,7 @@ frappe.pages["wms-monitor"].on_page_load = function (wrapper) {
     title: __("WMS Monitor"),
     single_column: true,
   });
-  frappe.require("/assets/frappe_wms/js/wms_selection.js", () => new WMSMonitor(page));
+  frappe.require(["/assets/frappe_wms/js/wms_selection.js", "/assets/frappe_wms/js/wms_packing_station.js"], () => new WMSMonitor(page));
 };
 
 // SAP EWM-style Warehouse Management Monitor: one warehouse selector, a node tree of
@@ -18,6 +18,7 @@ const VIEWS = [
   { key: "stock", label: __("Stock Overview") },
   { key: "tasks", label: __("Warehouse Tasks") },
   { key: "hu", label: __("Handling Units") },
+  { key: "packing", label: __("Packing Station") },
   { key: "repack", label: __("Repack Center") },
   { key: "movements", label: __("Stock Movements") },
   { key: "resources", label: __("Resources & Queues") },
@@ -599,6 +600,7 @@ class WMSMonitor {
       stock: () => this.load_stock_overview(),
       tasks: () => this.load_tasks(),
       hu: () => this.load_handling_units(),
+      packing: () => this.load_packing_station(),
       repack: () => this.load_repack_center(),
       movements: () => this.load_movements(),
       resources: () => this.load_resources(),
@@ -1029,6 +1031,18 @@ class WMSMonitor {
     }
     (node.children || []).forEach((child) => $wrap.append(this.render_hu_node(child, depth + 1)));
     return $wrap;
+  }
+
+  // ---------- Packing Station: the SAP EWM packing work center (public/js/wms_packing_station.js) ----------
+  async load_packing_station() {
+    const $wrap = this.body_for("packing");
+    if (!this.packing_station) this.packing_station = new WMSPackingStation($wrap, () => this.warehouse);
+    if (this.packing_station_wh !== this.warehouse) {
+      this.packing_station_wh = this.warehouse;
+      await this.packing_station.render();
+    } else if (this.packing_station.wc) {
+      await this.packing_station.load();
+    }
   }
 
   // ---------- Repack Center: modeled on SAP EWM's /SCWM/PACK repacking workstation - one
