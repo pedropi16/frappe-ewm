@@ -27,7 +27,12 @@
     "column_break_erp1",
     "erp_change_policy",
     "close_short_orders",
-    "erp_sync_mode"
+    "erp_sync_mode",
+    "kitting_section",
+    "kitting_stage_components",
+    "kitting_putaway_output",
+    "column_break_kit1",
+    "kitting_output_hu_required"
   ],
   "fields": [
     {
@@ -172,6 +177,38 @@
       "options": "Synchronous\nQueued with Retry",
       "default": "Synchronous",
       "description": "Synchronous: the ERPNext document posts inside the warehouse transaction, and an ERPNext error stops the warehouse posting. Queued with Retry: the warehouse posts first and the ERPNext document follows in the background, retried automatically and listed in WMS ERP Sync Log if it keeps failing."
+    },
+    {
+      "fieldname": "kitting_section",
+      "fieldtype": "Section Break",
+      "label": "Kitting",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "kitting_stage_components",
+      "fieldtype": "Select",
+      "label": "Stage Components",
+      "options": "Manually\nOn Order Creation",
+      "default": "Manually",
+      "description": "When the component (or kit) stock is moved from storage to the kitting work center by warehouse tasks. Manually: the operator starts it from the RF Kitting screen."
+    },
+    {
+      "fieldname": "kitting_putaway_output",
+      "fieldtype": "Check",
+      "label": "Put Away Kitting Output",
+      "default": "0",
+      "description": "After completion, the produced kits (or components when disassembling) get a putaway task from the work center."
+    },
+    {
+      "fieldname": "column_break_kit1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "kitting_output_hu_required",
+      "fieldtype": "Check",
+      "label": "Kitting Output HU Required",
+      "default": "0",
+      "description": "The operator must scan a Handling Unit to put the output on when completing a kitting order."
     }
   ],
   "autoname": "field:warehouse_code",

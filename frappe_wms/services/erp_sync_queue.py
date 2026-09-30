@@ -52,9 +52,9 @@ def _quality_inspection(doc):
         if se: doc.db_set("erpnext_stock_entry", se, update_modified=False)
 
 
-def _kitting_order(doc):
+def _kitting_order(doc, consumed=None):
     if doc.get("erpnext_stock_entry"): return
-    se = erpnext_sync.sync_kitting_order(doc)
+    se = erpnext_sync.sync_kitting_order(doc, consumed=consumed)
     if se: doc.db_set("erpnext_stock_entry", se, update_modified=False)
 
 

@@ -23,7 +23,7 @@ import { deconScan, deconDetail } from "#wms/screens/decon.js";
 import closeMovement from "#wms/screens/closemove.js";
 import { repackScan, repackDetail } from "#wms/screens/repack.js";
 import { huList, huNew, huDetail } from "#wms/screens/hu.js";
-import kitting from "#wms/screens/kitting.js";
+import kitting, { kittingDetail } from "#wms/screens/kitting.js";
 import { consolidationList, consolidationDetail } from "#wms/screens/consolidation.js";
 import { pickingMenu, pickingManual, pickingFind } from "#wms/screens/picking.js";
 import { vasList, vasNew, vasDetail } from "#wms/screens/vas.js";
@@ -32,7 +32,7 @@ import { vasList, vasNew, vasDetail } from "#wms/screens/vas.js";
 const SCREENS = [
   logon, menu, section, session, lookup, tasks, task, move,
   receiveList, receiveDetail, shipList, shipDetail, pack, countList, countDetail, qualityList, qualityDetail, loadList, loadDetail,
-  deconScan, deconDetail, closeMovement, repackScan, repackDetail, huList, huNew, huDetail, kitting, consolidationList, consolidationDetail,
+  deconScan, deconDetail, closeMovement, repackScan, repackDetail, huList, huNew, huDetail, kitting, kittingDetail, consolidationList, consolidationDetail,
   pickingMenu, pickingManual, pickingFind, vasList, vasNew, vasDetail,
 ];
 

@@ -4,7 +4,7 @@ from frappe import _
 from frappe.utils import cint, now_datetime, add_to_date
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.kpi import warehouse_kpis as _warehouse_kpis, resource_performance as _resource_performance
-from frappe_wms.utils import wildcard_filter, require_wms_access
+from frappe_wms.utils import wildcard_filter, require_role, require_wms_access
 
 OPEN_TASK_STATUSES = ("Open", "Available", "Assigned", "In Process", "Partially Confirmed")
 ALERT_AGE_HOURS = 4
@@ -382,11 +382,38 @@ def get_alerts(warehouse):
             order_by="quantity asc", limit=50),
         # ERPNext postings a "Queued with Retry" warehouse has not managed to post yet.
         "erp_sync_problems": __import__("frappe_wms.services.erp_sync_queue", fromlist=["open_problems"]).open_problems(warehouse),
+        # Requests whose tasks could not be created (no destination bin found for a kitting
+        # output, a cross-dock fallback...) - planned again from here once the rule is fixed.
+        "unplanned_requests": frappe.get_list("Warehouse Request",
+            filters={"warehouse": warehouse, "status": ["in", ["Open", "Draft"]], "created_quantity": ["<=", 0],
+                     "creation": ["<", add_to_date(now_datetime(), minutes=-2)]},
+            fields=["name", "request_type", "product", "requested_quantity", "source_bin", "source_hu", "destination_bin",
+                    "reference_doctype", "reference_name", "creation"],
+            order_by="creation asc", limit=50),
         "open_differences": frappe.get_list("WMS Task Difference",
             filters={"warehouse": warehouse, "status": "Open"},
             fields=["name", "warehouse_task", "task_type", "product", "direction", "difference_quantity", "storage_bin", "creation"],
             order_by="creation asc", limit=50),
     }
+
+@frappe.whitelist()
+@retry_on_deadlock
+def plan_warehouse_requests(names):
+    """Monitor action: create the tasks of requests that could not be planned when they were made."""
+    from frappe_wms.services.task import create_tasks_for_request
+    from frappe_wms.utils import parse_json
+    require_role("WMS Supervisor", "WMS Administrator", "WMS Process Engineer")
+    planned, errors = 0, []
+    for name in parse_json(names) if isinstance(names, str) else names:
+        frappe.db.savepoint("plan_request")
+        try:
+            create_tasks_for_request(name)
+            planned += 1
+        except frappe.ValidationError as e:
+            frappe.db.rollback(save_point="plan_request")
+            frappe.clear_messages()
+            errors.append(f"{name}: {e}")
+    return {"planned": planned, "errors": errors}
 
 @frappe.whitelist()
 @retry_on_deadlock

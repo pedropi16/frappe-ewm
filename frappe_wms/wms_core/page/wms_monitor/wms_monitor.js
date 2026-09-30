@@ -2258,6 +2258,10 @@ class WMSMonitor {
         <div class="wms-mon-alert-erp-sync"></div>
       </div>
       <div style="margin-bottom:24px;">
+        <h6>${__("Warehouse Requests Without Tasks")}</h6>
+        <div class="wms-mon-alert-unplanned"></div>
+      </div>
+      <div style="margin-bottom:24px;">
         <h6>${__("Counts Awaiting Approval")}</h6>
         <div class="wms-mon-alert-approval"></div>
       </div>
@@ -2297,6 +2301,19 @@ class WMSMonitor {
           let ok = 0;
           for (const row of rows) { try { const r = await frappe.call("frappe_wms.api.erp_integration.retry_erp_posting", { log_name: row.name }); if (r.message === "Done") ok++; } catch (e) { /* shown by frappe */ } }
           frappe.show_alert({ message: __("{0} of {1} posted to ERPNext", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        } }] });
+    this.render_alert_table($wrap.find(".wms-mon-alert-unplanned"), alerts.unplanned_requests || [],
+      [["name", __("Request")], ["request_type", __("Type")], ["product", __("Product")], ["requested_quantity", __("Quantity")],
+       ["source_bin", __("Source Bin")], ["source_hu", __("HU")], ["reference_doctype", __("Reference Type")], ["reference_name", __("Reference")],
+       ["creation", __("Since")]],
+      "Warehouse Request", __("Every request has its tasks"), { actions: [{
+        label: __("Create tasks"), appliesTo: () => true,
+        run: async (rows) => {
+          const r = await frappe.call("frappe_wms.api.monitor.plan_warehouse_requests", { names: rows.map((row) => row.name) });
+          const out = r.message || {};
+          frappe.show_alert({ message: __("{0} of {1} planned", [out.planned || 0, rows.length]) + (out.errors && out.errors.length ? ` - ${out.errors[0]}` : ""),
+            indicator: out.planned === rows.length ? "green" : "orange" });
           this.load_alerts();
         } }] });
     this.render_differences_alerts(alerts.open_differences || []);

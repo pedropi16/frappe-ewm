@@ -714,20 +714,24 @@ def sync_over_difference(doc):
 # ERPNext's own purpose for an N:M item-composition change without a Work Order - the correct
 # fit, not a workaround.
 
-def sync_kitting_order(order):
+def sync_kitting_order(order, consumed=None):
     erpnext_warehouse = _erpnext_warehouse(order.warehouse)
     if not erpnext_warehouse: return None
     company = frappe.db.get_value("WMS Warehouse", order.warehouse, "company")
     kit_uom = frappe.db.get_value("WMS Product", {"item": order.kit_item}, "stock_uom") or frappe.db.get_value("Item", order.kit_item, "stock_uom")
     kit_row = frappe._dict(item=order.kit_item, quantity=order.quantity, stock_uom=kit_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
     se = _make_stock_entry(stock_entry_type="Repack", company=company, remarks=f"frappe_wms Kitting Order {order.name}")
+    # What the warehouse actually consumed - batch and serial included - when it is known.
+    consumed_rows = [frappe._dict(item=c["item"], quantity=c["quantity"], stock_uom=c["stock_uom"], batch_no=c.get("batch_no"),
+                                  serial_no=c.get("serial_no"), stock_type="AVAILABLE") for c in (consumed or [])]
     if order.direction == "Assemble":
-        for c in order.components:
-            comp_row = frappe._dict(item=c.item, quantity=c.required_qty, stock_uom=c.stock_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
+        for comp_row in consumed_rows or [frappe._dict(item=c.item, quantity=c.required_qty, stock_uom=c.stock_uom, batch_no=None, serial_no=None,
+                                                       stock_type="AVAILABLE") for c in order.components]:
             _append_row(se, comp_row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
         _append_row(se, kit_row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
     else:
-        _append_row(se, kit_row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
+        for row in consumed_rows or [kit_row]:
+            _append_row(se, row, target_field="s_warehouse", erpnext_warehouse=erpnext_warehouse)
         for c in order.components:
             comp_row = frappe._dict(item=c.item, quantity=c.required_qty, stock_uom=c.stock_uom, batch_no=None, serial_no=None, stock_type="AVAILABLE")
             _append_row(se, comp_row, target_field="t_warehouse", erpnext_warehouse=erpnext_warehouse)
