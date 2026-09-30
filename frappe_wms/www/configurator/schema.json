@@ -76,11 +76,33 @@
      "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk."
     },
     {
+     "fieldname": "blind_counting",
+     "label": "Blind Counting",
+     "fieldtype": "Check",
+     "default": "1",
+     "description": "When enabled, the RF app and count APIs never return a line's book quantity to the counter before it's recorded - matching SAP EWM's own default RF counting behavior, since a counter who can see the book quantity beforehand tends to just copy it in rather than actually count. The server still compares against the real book quantity either way."
+    },
+    {
      "fieldname": "default_handling_unit_type",
      "label": "Default Handling Unit Type",
      "fieldtype": "Link",
      "options": "Handling Unit Type",
      "description": "Used by the RF app when a scanned Handling Unit barcode does not exist yet and needs to be auto-registered without asking the operator to pick a type."
+    },
+    {
+     "fieldname": "gs1_company_prefix",
+     "label": "GS1 Company Prefix",
+     "fieldtype": "Data",
+     "default": "0614141",
+     "description": "GS1 Company Prefix used to build SSCC-18 codes for Handling Unit labels (services/labeling.generate_sscc). Defaults to GS1's own reserved test prefix (0614141) - a label printed with this prefix scans and structurally validates correctly but is NOT a globally-unique real-world identifier. Replace with your organization's actual GS1-issued prefix before relying on printed labels outside this system - this is a config change only, no code change needed."
+    },
+    {
+     "fieldname": "sscc_next_serial",
+     "label": "SSCC Next Serial",
+     "fieldtype": "Int",
+     "default": "0",
+     "description": "The last SSCC serial reference issued (services/labeling.generate_sscc). Advances by 1 per label; not a WMS Number Range like Handling Unit/Shipment numbering since SSCC has no backing DocType for that mechanism's own collision check to run against.",
+     "read_only": 1
     }
    ],
    "key": {
@@ -139,6 +161,13 @@
      "options": "Storage Bin"
     },
     {
+     "fieldname": "default_picking_staging_bin",
+     "label": "Default Picking Staging Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Two-Step Picking's shared, order-agnostic first stop (see Warehouse Process Type.picking_strategy) - a Pick task under a Two-Step process type lands here, not the delivery's own staging bin, and a follow-up Sort task moves it on from here once confirmed."
+    },
+    {
      "fieldname": "default_stock_type",
      "label": "Default Stock Type",
      "fieldtype": "Link",
@@ -155,6 +184,82 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "inbound_replication",
+     "label": "Inbound Replication",
+     "fieldtype": "Select",
+     "options": "Manual\nPurchase Order Submitted\nPurchase Receipt Draft",
+     "default": "Manual",
+     "description": "Manual: a user creates the Inbound Delivery (button on the Purchase Order). Purchase Order Submitted: every submitted PO line for this warehouse becomes an Inbound Delivery automatically. Purchase Receipt Draft: a draft Purchase Receipt (an ASN) becomes the Inbound Delivery and the Goods Receipt later submits that same Purchase Receipt."
+    },
+    {
+     "fieldname": "outbound_replication",
+     "label": "Outbound Replication",
+     "fieldtype": "Select",
+     "options": "Manual\nSales Order Submitted\nDelivery Note Draft",
+     "default": "Manual",
+     "description": "Manual: a user creates the Outbound Delivery (button on the Sales Order). Sales Order Submitted: every submitted SO line for this warehouse becomes an Outbound Delivery automatically. Delivery Note Draft: a draft Delivery Note (the ECC delivery) becomes the Outbound Delivery and the Goods Issue later submits that same Delivery Note."
+    },
+    {
+     "fieldname": "release_replicated_deliveries",
+     "label": "Release Replicated Deliveries",
+     "fieldtype": "Check",
+     "default": "1",
+     "description": "Submit deliveries created by replication so they are ready for execution straight away."
+    },
+    {
+     "fieldname": "outbound_follow_up",
+     "label": "Outbound Follow-up on Release",
+     "fieldtype": "Select",
+     "options": "None\nAllocate\nAllocate and Create Pick Tasks",
+     "default": "None",
+     "description": "What happens to a released Outbound Delivery without a wave: nothing (a planner allocates later), allocate stock, or allocate and create pick tasks."
+    },
+    {
+     "fieldname": "erp_change_policy",
+     "label": "Order Change Policy",
+     "fieldtype": "Select",
+     "options": "Adapt Until Execution Starts\nBlock Changes After Replication",
+     "default": "Adapt Until Execution Starts",
+     "description": "What an edit or cancellation of the ERPNext order does once it has been replicated: follow it into the WMS delivery while nothing has been allocated/received yet, or refuse it."
+    },
+    {
+     "fieldname": "close_short_orders",
+     "label": "Close Order Remainder on Short Completion",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "When a delivery is completed short (supplier under-delivered, or the warehouse closed it short), close the ERPNext Purchase/Sales Order so the remainder is not delivered again."
+    },
+    {
+     "fieldname": "erp_sync_mode",
+     "label": "ERPNext Posting Mode",
+     "fieldtype": "Select",
+     "options": "Synchronous\nQueued with Retry",
+     "default": "Synchronous",
+     "description": "Synchronous: the ERPNext document posts inside the warehouse transaction, and an ERPNext error stops the warehouse posting. Queued with Retry: the warehouse posts first and the ERPNext document follows in the background, retried automatically and listed in WMS ERP Sync Log if it keeps failing."
+    },
+    {
+     "fieldname": "kitting_stage_components",
+     "label": "Stage Components",
+     "fieldtype": "Select",
+     "options": "Manually\nOn Order Creation",
+     "default": "Manually",
+     "description": "When the component (or kit) stock is moved from storage to the kitting work center by warehouse tasks. Manually: the operator starts it from the RF Kitting screen."
+    },
+    {
+     "fieldname": "kitting_putaway_output",
+     "label": "Put Away Kitting Output",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "After completion, the produced kits (or components when disassembling) get a putaway task from the work center."
+    },
+    {
+     "fieldname": "kitting_output_hu_required",
+     "label": "Kitting Output HU Required",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "The operator must scan a Handling Unit to put the output on when completing a kitting order."
     }
    ],
    "key": {
@@ -589,6 +694,135 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "work_center_type",
+     "label": "Work Center Type",
+     "fieldtype": "Select",
+     "options": "Packing\nDeconsolidation\nVAS\nQuality\nKitting",
+     "default": "Packing",
+     "description": "What the station is for (SAP work center type). The Repack Center uses Packing stations."
+    },
+    {
+     "fieldname": "inbound_section_bin",
+     "label": "Inbound Section Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Where HUs arrive for this station (optional). The Repack Center lists them so the packer can take them onto the table."
+    },
+    {
+     "fieldname": "outbound_section_bin",
+     "label": "Outbound Section Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Where finished (closed) HUs are put down (optional) - see Close HU Follow-up."
+    },
+    {
+     "fieldname": "default_hu_type",
+     "label": "Default Packaging (HU Type)",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "description": "Proposed when the packer creates a new HU."
+    },
+    {
+     "fieldname": "quantity_proposal",
+     "label": "Quantity Proposal",
+     "fieldtype": "Select",
+     "options": "Full Quantity\nOne Unit per Scan",
+     "default": "Full Quantity",
+     "description": "Full Quantity: packing a product proposes all of it. One Unit per Scan: each product scan packs one unit (piece-count packing, serial capture)."
+    },
+    {
+     "fieldname": "weigh_on_close",
+     "label": "Weighing on Close",
+     "fieldtype": "Select",
+     "options": "Optional\nRequired",
+     "default": "Optional"
+    },
+    {
+     "fieldname": "weight_tolerance_percent",
+     "label": "Weight Tolerance %",
+     "fieldtype": "Float",
+     "description": "Refuse closing when the weighed gross differs from the calculated gross (product weights + tare) by more than this percentage. 0 = no check."
+    },
+    {
+     "fieldname": "completeness_check",
+     "label": "Completeness Check on Close",
+     "fieldtype": "Select",
+     "options": "Off\nWarn\nBlock",
+     "default": "Warn",
+     "description": "On closing an HU of a delivery: warn or refuse while stock of the same delivery is still unpacked on the table (loose or in HUs that are not closed)."
+    },
+    {
+     "fieldname": "close_follow_up",
+     "label": "Close HU Follow-up",
+     "fieldtype": "Select",
+     "options": "Stay at Work Center\nMove to Outbound Section\nMove to Delivery Staging Bin",
+     "default": "Stay at Work Center",
+     "description": "Where a closed HU goes. Loading can take HUs from any of these places."
+    },
+    {
+     "fieldname": "print_label_on_create",
+     "label": "Print HU Label on Create",
+     "fieldtype": "Check",
+     "default": "0"
+    },
+    {
+     "fieldname": "print_label_on_close",
+     "label": "Print HU Label on Close",
+     "fieldtype": "Check",
+     "default": "1",
+     "description": "Queues the label through WMS Print Determination Rule events HU Created / HU Closed."
+    },
+    {
+     "fieldname": "allow_pack_product",
+     "label": "Pack Product",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_pack_hu",
+     "label": "Pack HU into HU",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_unpack",
+     "label": "Take HU out of HU",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_pack_by_instruction",
+     "label": "Pack by Packing Instruction",
+     "fieldtype": "Check",
+     "default": "1",
+     "description": "Split a product into new HUs by its Packaging Spec (e.g. 12 per carton)."
+    },
+    {
+     "fieldname": "allow_create_hu",
+     "label": "Create HU",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_close_hu",
+     "label": "Close / Reopen HU",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_delete_empty_hu",
+     "label": "Delete Empty HU",
+     "fieldtype": "Check",
+     "default": "1"
+    },
+    {
+     "fieldname": "allow_differences",
+     "label": "Post Missing Quantity (Difference)",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "Let the packer send stock that is not physically there to the warehouse difference bin (only stock not picked for a delivery)."
     }
    ],
    "key": {
@@ -762,7 +996,7 @@
      "fieldname": "activity",
      "label": "Activity",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count\nSort",
      "reqd": 1
     },
     {
@@ -799,6 +1033,23 @@
      "fieldtype": "Link",
      "options": "WMS Movement Type",
      "reqd": 1
+    },
+    {
+     "fieldname": "picking_strategy",
+     "label": "Picking Strategy",
+     "fieldtype": "Select",
+     "options": "Single-Step\nTwo-Step\nPick-Pack-Pass",
+     "default": "Single-Step",
+     "depends_on": "eval:doc.activity=='Pick'",
+     "description": "Pick activity only. Single-Step (default, unchanged behavior): picks straight to the Outbound Delivery's own staging bin. Two-Step: picks to the warehouse's shared picking staging area first (WMS Warehouse.default_picking_staging_bin), then auto-creates a follow-up Sort task moving it on to the delivery. Pick-Pack-Pass: picks straight into one shared destination HU per delivery (Pick Pack Pass HU Type below), skipping a separate packing step."
+    },
+    {
+     "fieldname": "pick_pack_pass_hu_type",
+     "label": "Pick-Pack-Pass HU Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "depends_on": "eval:doc.picking_strategy=='Pick-Pack-Pass'",
+     "description": "The Handling Unit Type auto-created (once per delivery, reused across every pick line for it) as the final shipping container a picker packs straight into."
     },
     {
      "fieldname": "active",
@@ -1265,7 +1516,7 @@
      "fieldname": "activity",
      "label": "Activity",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nSort\nCross Dock",
      "reqd": 1
     },
     {
@@ -1287,6 +1538,37 @@
      "label": "Maximum Tasks per Warehouse Order",
      "fieldtype": "Int",
      "description": "Once an open Warehouse Order matching this rule reaches this many tasks, further tasks spill into a new Warehouse Order instead of joining it. Leave blank for no limit."
+    },
+    {
+     "fieldname": "maximum_weight",
+     "label": "Maximum Weight per Warehouse Order",
+     "fieldtype": "Float",
+     "description": "Optional - leave blank for no weight limit. Uses whatever unit WMS Product's Gross Weight per Unit is recorded in; once an open Warehouse Order's accumulated task weight would exceed this, further tasks spill into a new Warehouse Order."
+    },
+    {
+     "fieldname": "maximum_volume",
+     "label": "Maximum Volume per Warehouse Order",
+     "fieldtype": "Float",
+     "description": "Optional - leave blank for no volume limit. Uses whatever unit WMS Product's Volume per Unit is recorded in."
+    },
+    {
+     "fieldname": "standard_minutes_per_task",
+     "label": "Standard Minutes per Task",
+     "fieldtype": "Float",
+     "description": "A rough per-task time estimate used only to cap a Warehouse Order against Maximum Minutes below - not a real time-and-motion measurement."
+    },
+    {
+     "fieldname": "maximum_minutes",
+     "label": "Maximum Estimated Minutes per Warehouse Order",
+     "fieldtype": "Float",
+     "description": "Optional - leave blank for no time limit. Only takes effect when Standard Minutes per Task is also set."
+    },
+    {
+     "fieldname": "pick_hu_type",
+     "label": "Pick HU Type",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type",
+     "description": "Pick activity rules only: every task bundled into one Warehouse Order under this rule shares one auto-created Handling Unit of this type as its destination (mirrors SAP EWM's packing profile). Leave blank to keep today's behavior, where the picker's own scan decides the destination HU."
     },
     {
      "fieldname": "active",
@@ -1748,7 +2030,7 @@
      "fieldname": "event",
      "label": "Event",
      "fieldtype": "Select",
-     "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded",
+     "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded\nHU Closed\nManual",
      "reqd": 1
     },
     {
@@ -2105,6 +2387,41 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "printer_connection",
+     "label": "Connection",
+     "fieldtype": "Select",
+     "options": "Print Agent\nNetwork (Raw TCP)",
+     "default": "Print Agent"
+    },
+    {
+     "fieldname": "printer_language",
+     "label": "Printer Language",
+     "fieldtype": "Select",
+     "options": "ZPL\nPDF",
+     "default": "ZPL",
+     "description": "ZPL for label printers (Zebra and compatibles), PDF for office printers (agent only)."
+    },
+    {
+     "fieldname": "printer_host",
+     "label": "Printer Address",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.printer_connection==\"Network (Raw TCP)\""
+    },
+    {
+     "fieldname": "printer_port",
+     "label": "Printer Port",
+     "fieldtype": "Int",
+     "default": "9100",
+     "depends_on": "eval:doc.printer_connection==\"Network (Raw TCP)\""
+    },
+    {
+     "fieldname": "agent_printer_name",
+     "label": "Agent Printer Name",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.printer_connection==\"Print Agent\"",
+     "description": "The printer name as the agent's computer knows it (e.g. the CUPS queue). Blank = the agent's default printer."
     }
    ],
    "key": {
@@ -2189,7 +2506,7 @@
      "fieldname": "activity",
      "label": "Activity",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count\nSort\nCross Dock",
      "reqd": 1
     },
     {
@@ -2334,7 +2651,7 @@
      "fieldname": "task_type",
      "label": "Task Type",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nSort",
      "reqd": 1
     },
     {
@@ -2393,7 +2710,7 @@
      "fieldname": "activity",
      "label": "Activity",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nSort",
      "reqd": 1
     },
     {
@@ -2439,7 +2756,7 @@
      "fieldname": "task_type",
      "label": "Task Type",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nSort",
      "reqd": 1
     }
    ],
@@ -2723,6 +3040,10 @@
     {
      "target": "Purchase Order",
      "label": "Items \u2192 Purchase Order"
+    },
+    {
+     "target": "DocType",
+     "label": "ERP Source Document Type"
     }
    ]
   },
@@ -2780,6 +3101,10 @@
     {
      "target": "Purchase Receipt",
      "label": "ERPNext Purchase Receipt"
+    },
+    {
+     "target": "Delivery Note",
+     "label": "ERPNext Delivery Note"
     }
    ]
   },
@@ -2837,6 +3162,10 @@
     {
      "target": "Quality Inspection",
      "label": "ERPNext Quality Inspection"
+    },
+    {
+     "target": "Stock Entry",
+     "label": "ERPNext Stock Entry"
     }
    ]
   },
@@ -2967,6 +3296,14 @@
      "label": "Stock Type"
     },
     {
+     "target": "Batch",
+     "label": "Batch"
+    },
+    {
+     "target": "Serial No",
+     "label": "Serial Number"
+    },
+    {
      "target": "DocType",
      "label": "Reference DocType"
     },
@@ -3002,6 +3339,10 @@
     {
      "target": "WMS Resource",
      "label": "Assigned Resource"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Pick Handling Unit"
     },
     {
      "target": "DocType",
@@ -3212,6 +3553,10 @@
      "label": "Work Center Bin"
     },
     {
+     "target": "Handling Unit",
+     "label": "Output Handling Unit"
+    },
+    {
      "target": "Item",
      "label": "Components \u2192 Item"
     },
@@ -3249,6 +3594,10 @@
      "label": "Staging Bin"
     },
     {
+     "target": "Handling Unit",
+     "label": "Pick-Pack-Pass HU"
+    },
+    {
      "target": "Storage Bin",
      "label": "Door"
     },
@@ -3279,6 +3628,10 @@
     {
      "target": "Sales Order",
      "label": "Items \u2192 Sales Order"
+    },
+    {
+     "target": "DocType",
+     "label": "ERP Source Document Type"
     }
    ]
   },
@@ -3464,6 +3817,10 @@
     {
      "target": "Delivery Note",
      "label": "ERPNext Delivery Note"
+    },
+    {
+     "target": "Purchase Receipt",
+     "label": "ERPNext Purchase Receipt"
     }
    ]
   },
@@ -3652,14 +4009,6 @@
     {
      "target": "User",
      "label": "Posted By"
-    },
-    {
-     "target": "Stock Entry",
-     "label": "ERPNext Gain Stock Entry"
-    },
-    {
-     "target": "Stock Entry",
-     "label": "ERPNext Loss Stock Entry"
     },
     {
      "target": "User",
