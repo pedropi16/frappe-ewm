@@ -20,7 +20,9 @@
     "requested_by",
     "printed_at",
     "printed_by",
-    "remarks"
+    "remarks",
+    "attempts",
+    "claimed_at"
   ],
   "fields": [
     {
@@ -36,7 +38,7 @@
       "fieldname": "event",
       "label": "Event",
       "fieldtype": "Select",
-      "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded\nHU Closed",
+      "options": "HU Created\nPutaway Confirmed\nGoods Issue Posted\nShipment Loaded\nHU Closed\nManual",
       "reqd": 1,
       "in_standard_filter": 1
     },
@@ -78,7 +80,7 @@
       "fieldname": "status",
       "label": "Status",
       "fieldtype": "Select",
-      "options": "Queued\nPrinted\nFailed\nCancelled",
+      "options": "Queued\nPrinting\nPrinted\nFailed\nCancelled",
       "default": "Queued",
       "reqd": 1,
       "in_list_view": 1,
@@ -114,6 +116,18 @@
       "fieldname": "remarks",
       "label": "Remarks",
       "fieldtype": "Small Text"
+    },
+    {
+      "fieldname": "attempts",
+      "label": "Attempts",
+      "fieldtype": "Int",
+      "read_only": 1
+    },
+    {
+      "fieldname": "claimed_at",
+      "label": "Claimed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
     }
   ],
   "autoname": "PRSP-.#######",

@@ -148,3 +148,84 @@ class TestPrinting(IntegrationTestCase):
         gi_spool = frappe.get_all("WMS Print Spool", filters={"reference_doctype": "Goods Issue", "reference_name": gi_name}, fields=["status"])
         self.assertEqual(len(gi_spool), 1)
         self.assertEqual(gi_spool[0].status, "Queued")
+
+
+class TestPrintDelivery(IntegrationTestCase):
+    """Getting spool entries onto paper: network printers, the print agent, manual reprints."""
+
+    def setUp(self):
+        frappe.set_user("Administrator")
+        company = frappe.get_all("Company", limit=1, pluck="name")[0]
+        wh = f"PRNT-{frappe.generate_hash(length=5).upper()}"
+        frappe.get_doc({"doctype": "WMS Warehouse", "warehouse_code": wh, "warehouse_name": wh, "company": company, "default_stock_type": "AVAILABLE"}).insert(ignore_permissions=True)
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": wh, "storage_type_code": "GR", "storage_type_name": "GR", "storage_role": "Receiving",
+                        "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        self.bin = frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{wh}-B", "warehouse": wh, "storage_type": f"{wh}-GR", "active": 1, "sequence": 1}).insert(ignore_permissions=True).name
+        if not frappe.db.exists("Handling Unit Type", "PRINTTEST-PALLET"):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "PRINTTEST-PALLET", "hu_type_name": "Print Test Pallet"}).insert(ignore_permissions=True)
+        self.wh = wh
+
+    def printer(self, **kw):
+        return frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "warehouse": self.wh,
+                               "resource_type": "Printer", "active": 1, **kw}).insert(ignore_permissions=True).name
+
+    def hu(self):
+        return frappe.get_doc({"doctype": "Handling Unit", "hu_type": "PRINTTEST-PALLET", "hu_number": frappe.generate_hash(length=10),
+                               "warehouse": self.wh, "current_bin": self.bin}).insert(ignore_permissions=True).name
+
+    def test_network_printer_receives_zpl(self):
+        import socket, threading
+        from frappe_wms.services.printing import request_print, send_direct
+        server = socket.socket(); server.bind(("127.0.0.1", 0)); server.listen(1)
+        received = []
+        def serve():
+            conn, _ = server.accept()
+            with conn:
+                chunks = []
+                while True:
+                    data = conn.recv(4096)
+                    if not data: break
+                    chunks.append(data)
+                received.append(b"".join(chunks).decode())
+        t = threading.Thread(target=serve, daemon=True); t.start()
+        printer = self.printer(printer_connection="Network (Raw TCP)", printer_host="127.0.0.1", printer_port=server.getsockname()[1])
+        hu = self.hu()
+        spool = request_print("Handling Unit", hu, output_device=printer)
+        self.assertEqual(send_direct(spool), "Printed")
+        t.join(5); server.close()
+        self.assertIn("^XA", received[0])
+        self.assertIn(frappe.db.get_value("Handling Unit", hu, "hu_number"), received[0])
+
+    def test_unreachable_printer_fails_and_is_requeued(self):
+        from frappe_wms.services.printing import request_print, requeue, send_direct
+        printer = self.printer(printer_connection="Network (Raw TCP)", printer_host="127.0.0.1", printer_port=1)
+        spool = request_print("Handling Unit", self.hu(), output_device=printer)
+        self.assertEqual(send_direct(spool), "Failed")
+        self.assertEqual(frappe.db.get_value("WMS Print Spool", spool, "attempts"), 1)
+        requeue(spool)
+        self.assertEqual(frappe.db.get_value("WMS Print Spool", spool, "status"), "Queued")
+
+    def test_print_agent_claims_each_job_once(self):
+        from frappe_wms.services.printing import agent_claim, mark_printed, request_print
+        printer = self.printer(printer_connection="Print Agent", agent_printer_name="Zebra_Pack1")
+        spool = request_print("Handling Unit", self.hu(), output_device=printer)
+        jobs = agent_claim(printer)
+        self.assertEqual([(j["spool"], j["format"], j["printer"]) for j in jobs], [(spool, "zpl", "Zebra_Pack1")])
+        self.assertEqual(agent_claim(printer), [], "a claimed job is not handed out twice")
+        mark_printed(spool)
+        self.assertEqual(frappe.db.get_value("WMS Print Spool", spool, "status"), "Printed")
+
+    def test_manual_print_needs_a_printer_or_a_manual_rule(self):
+        from frappe_wms.services.printing import request_print
+        hu = self.hu()
+        with self.assertRaisesRegex(frappe.ValidationError, "event Manual"):
+            request_print("Handling Unit", hu)
+        printer = self.printer()
+        frappe.get_doc({"doctype": "WMS Print Determination Rule", "priority": 1, "warehouse": self.wh, "event": "Manual",
+                        "output_device": printer, "active": 1}).insert(ignore_permissions=True)
+        spool = request_print("Handling Unit", hu)
+        self.assertEqual(frappe.db.get_value("WMS Print Spool", spool, "output_device"), printer)
+
+    def test_standard_print_formats_render(self):
+        html = frappe.get_print("Handling Unit", self.hu(), print_format="WMS HU Label")
+        self.assertIn("PRINTTEST-PALLET", html)

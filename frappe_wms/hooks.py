@@ -32,6 +32,7 @@ doctype_js = {
 after_install = "frappe_wms.install.after_install"
 after_migrate = ["frappe_wms.db_maintenance.ensure_indexes", "frappe_wms.setup.custom_fields.ensure_custom_fields"]
 before_tests = "frappe_wms.tests.bootstrap.before_tests"
+jinja = {"methods": ["frappe_wms.services.printing.packing_list_data"]}
 
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 
@@ -119,7 +120,7 @@ doc_events = {
 
 scheduler_events = {
     # ERPNext postings queued by warehouses in "Queued with Retry" mode (services/erp_sync_queue.py).
-    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due"]},
+    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due", "frappe_wms.services.printing.retry_print_jobs"]},
     "hourly": [
         "frappe_wms.tasks.recalculate_stale_bin_capacity",
         "frappe_wms.tasks.run_replenishment_check",

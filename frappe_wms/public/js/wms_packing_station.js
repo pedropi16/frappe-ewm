@@ -179,7 +179,7 @@
           ${!cfg.allow_close_hu ? "" : n.closed ? `<button class="btn btn-xs btn-default wps-reopen">${__("Reopen")}</button>` : `<button class="btn btn-xs btn-primary wps-close">${__("Close HU…")}</button>`}
           ${n.parent_hu && cfg.allow_unpack ? `<button class="btn btn-xs btn-default wps-unpack">${__("Take out of {0}", [esc(n.parent_hu)])}</button>` : ""}
           ${cfg.allow_delete_empty_hu && !(n.stock || []).length && !(n.children || []).length ? `<button class="btn btn-xs btn-danger wps-delete">${__("Delete empty HU")}</button>` : ""}
-          <button class="btn btn-xs btn-default wps-label">${__("Label (ZPL)")}</button>
+          <button class="btn btn-xs btn-default wps-label">${__("Print label")}</button>
         </div>`);
       $d.find(".wps-as-src").on("click", () => { this.form.source = n.name; this.setTab("product"); });
       $d.find(".wps-as-dst").on("click", () => { this.form.dest = n.name; this.form.hu_dest = n.name; this.drawTree(); this.drawScanner(); });
@@ -188,8 +188,15 @@
       $d.find(".wps-delete").on("click", () => frappe.confirm(__("Delete empty HU {0}?", [n.name]), () => { this.selected = null; this.call("delete_empty_hu", { hu_name: n.name }, __("{0} deleted", [n.name])); }));
       $d.find(".wps-unpack").on("click", () => this.call("unpack_hu", { hu_name: n.name }, __("{0} is loose on the table again", [n.name])));
       $d.find(".wps-label").on("click", async () => {
-        const r = await frappe.call("frappe_wms.api.labeling.render_hu_label_zpl", { hu_name: n.name });
-        frappe.msgprint({ title: __("HU label (ZPL)"), message: `<pre style="white-space:pre-wrap;font-size:11px;">${esc(r.message)}</pre>` });
+        // Printed through the warehouse's "Manual" Print Determination Rule; without one, show
+        // the label so it can still be checked or copied to a printer by hand.
+        try {
+          const r = await frappe.call({ method: "frappe_wms.api.printing.request_print", args: { reference_doctype: "Handling Unit", reference_name: n.name }, error_handlers: { ValidationError: () => {} } });
+          frappe.show_alert({ message: __("Label sent to the printer ({0})", [r.message]), indicator: "green" });
+        } catch (e) {
+          const r = await frappe.call("frappe_wms.api.labeling.render_hu_label_zpl", { hu_name: n.name });
+          frappe.msgprint({ title: __("HU label (ZPL) - no printer set up for manual prints"), message: `<pre style="white-space:pre-wrap;font-size:11px;">${esc(r.message)}</pre>` });
+        }
       });
     }
 

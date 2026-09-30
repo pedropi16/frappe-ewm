@@ -1,0 +1,20 @@
+{
+ "doctype": "Print Format",
+ "name": "WMS Packing List",
+ "doc_type": "Outbound Delivery",
+ "module": "WMS Outbound",
+ "standard": "Yes",
+ "custom_format": 1,
+ "print_format_type": "Jinja",
+ "print_format_builder": 0,
+ "raw_printing": 0,
+ "disabled": 0,
+ "font_size": 10,
+ "html": "<div class=\"wms-pl\">\n<h2>{{ _(\"Packing List\") }} {{ doc.outbound_delivery_number or doc.name }}</h2>\n<table class=\"meta\"><tr><td>{{ _(\"Customer\") }}: <b>{{ doc.customer }}</b></td><td>{{ _(\"Delivery date\") }}: {{ frappe.format(doc.delivery_date, {\"fieldtype\": \"Date\"}) }}</td></tr>\n<tr><td>{{ _(\"Route\") }}: {{ doc.route or \"\" }}</td><td>{{ _(\"Reference\") }}: {{ doc.external_reference or \"\" }}</td></tr></table>\n<table><thead><tr><th>{{ _(\"Handling Unit\") }}</th><th>{{ _(\"Product\") }}</th><th>{{ _(\"Batch / Serial\") }}</th><th class=\"num\">{{ _(\"Quantity\") }}</th><th class=\"num\">{{ _(\"Gross kg\") }}</th></tr></thead><tbody>\n{% for row in packing_list_data(doc.name) %}{% set hu = row.hu %}\n<tr class=\"hu\"><td style=\"padding-left:{{ 6 + row.depth * 14 }}px\">{{ hu.hu_number or hu.name }} {% if hu.sscc %}<br><small>SSCC {{ hu.sscc }}</small>{% endif %}</td><td>{{ hu.hu_type or \"\" }}</td><td></td><td></td><td class=\"num\">{{ hu.gross_weight or \"\" }}</td></tr>\n{% for s in hu.stock %}<tr><td></td><td>{{ s.product }}</td><td>{{ s.batch_no or s.serial_no or \"\" }}</td><td class=\"num\">{{ s.quantity }} {{ s.stock_uom }}</td><td></td></tr>{% endfor %}\n{% endfor %}</tbody></table>\n<table><thead><tr><th>{{ _(\"Line\") }}</th><th>{{ _(\"Product\") }}</th><th class=\"num\">{{ _(\"Ordered\") }}</th><th class=\"num\">{{ _(\"Picked\") }}</th><th class=\"num\">{{ _(\"Issued\") }}</th></tr></thead><tbody>\n{% for i in doc.items %}<tr><td>{{ i.line_number }}</td><td>{{ i.item }}</td><td class=\"num\">{{ i.requested_quantity }}</td><td class=\"num\">{{ i.picked_quantity }}</td><td class=\"num\">{{ i.issued_quantity }}</td></tr>{% endfor %}\n</tbody></table></div>",
+ "css": ".wms-pl h2{margin:0 0 4px} .wms-pl table{width:100%;border-collapse:collapse;margin-top:10px}\n.wms-pl th,.wms-pl td{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left;font-size:11px}\n.wms-pl .hu td{background:#f3f4f6;font-weight:600} .wms-pl .num{text-align:right} .wms-pl .meta td{border:0;padding:1px 6px}",
+ "default_print_language": "en",
+ "align_labels_right": 0,
+ "show_section_headings": 0,
+ "line_breaks": 0,
+ "absolute_value": 0
+}
