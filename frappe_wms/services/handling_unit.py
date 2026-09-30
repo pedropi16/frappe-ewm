@@ -4,7 +4,7 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.numbering import find_number_range
 from frappe_wms.services.task import my_resource
 from frappe_wms.services.stock import relocate_hu_balances
-from frappe_wms.services.bin_rules import validate_destination_bin
+from frappe_wms.services.bin_rules import hu_load, validate_destination_bin
 from frappe_wms.utils import require_role
 
 HU_ROLES = ("WMS Operator", "WMS Receiver", "WMS Picker", "WMS Packer", "WMS Supervisor")
@@ -194,7 +194,8 @@ def relocate_handling_unit(hu_name, destination_bin):
         frappe.throw(_("{0} is already in {1}").format(hu_name, destination_bin))
     destination = frappe.get_doc("Storage Bin", destination_bin)
     if destination.warehouse != hu.warehouse: frappe.throw(_("Destination bin must be in the same warehouse"))
-    validate_destination_bin(destination_bin, hu_type=hu.hu_type, destination_hu=hu.name)
+    incoming_weight, incoming_volume = hu_load(hu.name) if hu.current_bin != destination_bin else (None, None)
+    validate_destination_bin(destination_bin, hu_type=hu.hu_type, destination_hu=hu.name, incoming_weight=incoming_weight, incoming_volume=incoming_volume)
     before = {"parent_hu_before": hu.parent_hu, "bin_before": hu.current_bin}
     moved = hu.current_bin != destination_bin
     hu.parent_hu = None

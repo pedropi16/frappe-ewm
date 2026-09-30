@@ -27,6 +27,8 @@ class TestBinRules(IntegrationTestCase):
 
     def setUp(self):
         frappe.db.set_value("Storage Bin", self.bin, {"current_hu_count": 0, "active": 1, "putaway_blocked": 0, "maximum_weight": 0, "maximum_hus": 2})
+        # Each test starts from an empty bin - loose stock counts toward weight and volume.
+        frappe.db.delete("WMS Stock Balance", {"storage_bin": self.bin})
         frappe.db.set_value("Storage Type", f"{self.warehouse}-ST", {"capacity_check_method": "HU Count", "allow_mixed_products": 0, "allow_mixed_stock_types": 0, "allow_mixed_batches": 0, "hu_managed": 0})
         for row in frappe.get_all("Storage Bin Allowed Stock Type", filters={"parent": self.bin}, pluck="name"):
             frappe.delete_doc("Storage Bin Allowed Stock Type", row, force=True)
@@ -75,6 +77,28 @@ class TestBinRules(IntegrationTestCase):
         self._make_hu(weight=90)
         self.assertTrue(bin_violations(self.bin, incoming_weight=20))
         self.assertEqual(bin_violations(self.bin, incoming_weight=5), [])
+
+    def test_loose_stock_counts_toward_weight_and_volume(self):
+        post_entries = __import__("frappe_wms.services.stock", fromlist=["post_entries"]).post_entries
+        product = frappe.get_doc("WMS Product", self.item)
+        before = (product.gross_weight_per_unit, product.volume_per_unit)
+        product.db_set({"gross_weight_per_unit": 2, "volume_per_unit": 0.1})
+        try:
+            frappe.db.delete("Handling Unit", {"current_bin": self.bin})
+            post_entries([{"warehouse": self.warehouse, "product": self.item, "storage_bin": self.bin, "stock_type": "AVAILABLE",
+                           "stock_uom": self.uom, "quantity": 40, "movement_type": "701"}],
+                         "Storage Bin", self.bin, f"test-bin-rules:{frappe.generate_hash(length=8)}")
+            frappe.db.set_value("Storage Type", f"{self.warehouse}-ST", "capacity_check_method", "Weight")
+            frappe.db.set_value("Storage Bin", self.bin, {"maximum_weight": 100, "maximum_volume": 5})
+            frappe.clear_document_cache("Storage Type", f"{self.warehouse}-ST")
+            self.assertTrue(bin_violations(self.bin, incoming_weight=30), "80 kg of loose stock + 30 exceeds 100")
+            self.assertEqual(bin_violations(self.bin, incoming_weight=15), [])
+            frappe.db.set_value("Storage Type", f"{self.warehouse}-ST", "capacity_check_method", "Volume")
+            frappe.clear_document_cache("Storage Type", f"{self.warehouse}-ST")
+            self.assertTrue(bin_violations(self.bin, incoming_volume=2), "4 m3 held + 2 exceeds 5")
+            self.assertEqual(bin_violations(self.bin, incoming_volume=0.5), [])
+        finally:
+            product.db_set({"gross_weight_per_unit": before[0], "volume_per_unit": before[1]})
 
     def test_hu_managed_storage_type_requires_a_destination_hu(self):
         frappe.db.set_value("Storage Type", f"{self.warehouse}-ST", "hu_managed", 1)
