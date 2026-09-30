@@ -18,7 +18,10 @@
   "default_handling_unit_type",
   "labeling_section",
   "gs1_company_prefix",
-  "sscc_next_serial"
+  "sscc_next_serial",
+  "alerts_section",
+  "alert_notifications",
+  "alert_recipients"
  ],
  "fields": [
   {
@@ -103,6 +106,26 @@
    "fieldtype": "Int",
    "label": "SSCC Next Serial",
    "read_only": 1
+  },
+  {
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Alerts",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "alert_notifications",
+   "fieldtype": "Select",
+   "label": "Alert Notifications",
+   "options": "Off\nDesk Notification\nDesk Notification and Email",
+   "default": "Desk Notification",
+   "description": "Every hour, supervisors are told about what needs a person: ERPNext postings that keep failing, negative quants, aged task exceptions, requests without tasks, stalled warehouse orders. Only when something changed since the last digest."
+  },
+  {
+   "fieldname": "alert_recipients",
+   "fieldtype": "Small Text",
+   "label": "Alert Recipients",
+   "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
   }
  ],
  "icon": "icon-cog",

@@ -609,5 +609,11 @@
   "Supplier": "ERPNext. Used as a Route's carrier.",
   "Print Format": "ERPNext. Chosen by Print Determination Rules.",
   "User": "ERPNext user, logged onto WMS Resources."
+ },
+ "WMS Settings": {
+  "fields": {
+   "alert_notifications": "Hourly digest of what needs a person (failed ERPNext postings, negative quants, aged exceptions, requests without tasks, stalled orders): off, a desk bell notification, or that plus e-mail. Sent only when something changed.",
+   "alert_recipients": "Users or e-mail addresses, one per line. Empty: every WMS Supervisor, for the warehouses their User Permissions allow."
+  }
  }
 }

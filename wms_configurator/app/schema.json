@@ -103,6 +103,20 @@
      "default": "0",
      "description": "The last SSCC serial reference issued (services/labeling.generate_sscc). Advances by 1 per label; not a WMS Number Range like Handling Unit/Shipment numbering since SSCC has no backing DocType for that mechanism's own collision check to run against.",
      "read_only": 1
+    },
+    {
+     "fieldname": "alert_notifications",
+     "label": "Alert Notifications",
+     "fieldtype": "Select",
+     "options": "Off\nDesk Notification\nDesk Notification and Email",
+     "default": "Desk Notification",
+     "description": "Every hour, supervisors are told about what needs a person: ERPNext postings that keep failing, negative quants, aged task exceptions, requests without tasks, stalled warehouse orders. Only when something changed since the last digest."
+    },
+    {
+     "fieldname": "alert_recipients",
+     "label": "Alert Recipients",
+     "fieldtype": "Small Text",
+     "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
     }
    ],
    "key": {
