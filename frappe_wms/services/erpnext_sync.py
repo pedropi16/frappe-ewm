@@ -257,7 +257,24 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
         pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
 
-_RETURN_DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "dn_detail")
+# against_sales_order/so_detail too: without them ERPNext can't write the returned quantity back
+# onto the Sales Order row either.
+_RETURN_DN_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "dn_detail",
+    "against_sales_order", "so_detail")
+
+def _submit_return(ret):
+    # Submit a freshly loaded copy, not the object make_sales_return/make_return_doc built:
+    # ERPNext's DeliveryNote/PurchaseReceipt assemble their status_updater rules - including the
+    # ones that write returned_qty back onto the original rows - in __init__, from is_return, and
+    # the mapper constructs the object before is_return is set. Submitting that object skipped
+    # them, so the original Delivery Note never learned anything had been returned (returned_qty
+    # stayed 0 after returns were received - found in a simulated shift, where it also let the
+    # same Delivery Note be returned again and again).
+    fresh = frappe.get_doc(ret.doctype, ret.name)
+    fresh.flags.ignore_permissions = True
+    fresh.flags.wms_managed_posting = True
+    fresh.submit()
+    return fresh
 
 def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_links):
     # Customer return: erpnext.stock.doctype.delivery_note.delivery_note.make_sales_return
@@ -302,7 +319,7 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
         ret.flags.ignore_permissions = True
         ret.flags.wms_managed_posting = True
         ret.insert(ignore_permissions=True)
-        ret.submit()
+        ret = _submit_return(ret)
     doc.db_set("erpnext_delivery_note", ret.name, update_modified=False)
 
 # --- Warehouse Request (Work Order material staging) -> Stock Entry ---
@@ -498,7 +515,8 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
         dn.submit()
     doc.db_set("erpnext_delivery_note", dn.name, update_modified=False)
 
-_RETURN_PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "purchase_receipt_item")
+_RETURN_PR_TEMPLATE_FIELDS = ("item_code", "item_name", "description", "uom", "conversion_factor", "rate", "purchase_receipt_item",
+    "purchase_order", "purchase_order_item")
 
 def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_links):
     # Return to vendor: erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_return
@@ -537,7 +555,7 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
         ret.flags.ignore_permissions = True
         ret.flags.wms_managed_posting = True
         ret.insert(ignore_permissions=True)
-        ret.submit()
+        ret = _submit_return(ret)
     doc.db_set("erpnext_purchase_receipt", ret.name, update_modified=False)
 
 def reverse_goods_issue(doc):
@@ -556,11 +574,13 @@ def reverse_goods_issue(doc):
 # Receipt/Issue instead - the same document type erpnext_sync already uses for every other
 # standalone stock change - which supports dimensions on ordinary transactions.
 
-def sync_physical_inventory_count(doc):
+def sync_physical_inventory_count(doc, rows=None):
+    # rows: just the lines posted in this pass (default: every line) - see
+    # inventory_count._mirror_posted_rows for why a count can post in more than one pass.
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
-    if not erpnext_warehouse: return None
+    if not erpnext_warehouse: return None, None
     groups = {}
-    for row in doc.items:
+    for row in (doc.items if rows is None else rows):
         key = (row.product, row.batch_no, row.serial_no, row.stock_type)
         group = groups.setdefault(key, {"variance": 0.0, "stock_uom": row.stock_uom})
         group["variance"] += flt(row.variance)
@@ -604,6 +624,32 @@ def sync_physical_inventory_count(doc):
         loss_entry = se.name
 
     return gain_entry, loss_entry
+
+def sync_over_difference(doc):
+    # An Over difference (services/difference.record_over_difference) is a real inventory gain -
+    # extra units found while confirming a task - posted in WMS as movement 701 into the
+    # difference bin. Without this mirror ERPNext never learned about them: reproduced in a
+    # simulated shift as small, permanent WMS-vs-ERPNext ledger gaps on every item that ever had
+    # an over-confirmation. Clearing the difference later is a bin-to-bin WMS transfer within the
+    # same ERPNext warehouse, so this one receipt is the only ERPNext-side effect.
+    erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
+    if not erpnext_warehouse: return None
+    company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
+    se = _make_stock_entry(stock_entry_type="Material Receipt", company=company,
+        remarks=f"frappe_wms task difference {doc.name} (over-confirmation on {doc.warehouse_task})")
+    values = {
+        "item_code": doc.product, "qty": flt(doc.difference_quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
+        "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
+        "t_warehouse": erpnext_warehouse, "to_wms_stock_type": doc.stock_type,
+    }
+    rate = _resolve_rate(doc.product)
+    if rate: values["basic_rate"] = rate
+    else: values["allow_zero_valuation_rate"] = 1
+    se.append("items", values)
+    se.flags.wms_managed_posting = True
+    _insert_and_submit_as_system(se)
+    doc.db_set("erpnext_stock_entry", se.name, update_modified=False)
+    return se.name
 
 # --- Kitting Order -> Stock Entry ("Repack") ---
 #

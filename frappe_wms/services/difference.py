@@ -42,6 +42,8 @@ def record_over_difference(task, excess_qty, idempotency_key):
         "stock_type": stock_type, "storage_bin": bin_name, "status": "Open",
     })
     doc.insert(ignore_permissions=True)
+    from frappe_wms.services import erpnext_sync  # deferred: erpnext_sync imports a lot at module load
+    erpnext_sync.sync_over_difference(doc)
     return doc.name
 
 

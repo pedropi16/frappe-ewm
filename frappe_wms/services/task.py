@@ -423,6 +423,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     # (services/difference.record_over_difference), pending a supervisor deciding where it
     # actually belongs (clear_over_difference).
     excess = max(round(qty - (flt(task.planned_quantity) - already_confirmed), 6), 0)
+    if excess > 0 and task.serial_no:
+        # A serial number is exactly one unit - "extra" units found alongside it are different
+        # serials that have to be received under their own numbers, not booked as more of this one.
+        frappe.throw(_("Task {0} is for serial number {1} (1 unit) - receive any extra units with their own serial numbers").format(task.name, task.serial_no))
     posted_qty = qty - excess
     new_confirmed = already_confirmed + posted_qty
     if excess > 0:
@@ -631,7 +635,7 @@ def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
         # Already there - e.g. an empty pick carton the operator created right at the staging
         # lane before scanning it as the destination. It still has to become Staged once stock is
         # picked into it, or it never shows up as staged/shippable.
-        if top_level and task.task_type in ("Stage", "Pick") and doc.status != "Staged":
+        if top_level and task.task_type in ("Stage", "Pick", "Cross Dock") and doc.status != "Staged":
             doc.flags.wms_service_update = True
             doc.status = "Staged"
             doc.save(ignore_permissions=True)
@@ -639,7 +643,7 @@ def _move_hu_and_descendants(hu, destination_bin, source_bin, task, top_level):
     bin_before = doc.current_bin
     doc.flags.wms_service_update = True
     doc.current_bin = destination_bin
-    if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick") else doc.status
+    if top_level: doc.status = "Staged" if task.task_type in ("Stage", "Pick", "Cross Dock") else doc.status
     if top_level and doc.parent_hu:
         # The HU this task is relocating was nested inside a parent (e.g. Repacked into a tote)
         # that isn't part of this move - relocating it while it stays a child would leave parent

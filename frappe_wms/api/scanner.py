@@ -12,6 +12,8 @@ from frappe_wms.services.idempotency import run_once
 def get_task(task_name):
     doc=frappe.get_doc("Warehouse Task",task_name); doc.check_permission("read")
     result = doc.as_dict()
+    # Operators recognise stock by its name, not its item code - the task screen only showed "SKU-00187".
+    if doc.product: result["product_name"] = frappe.db.get_value("Item", doc.product, "item_name")
     if len(doc.stock_allocations or []) > 1:
         # A cluster pick task's own fields only show the aggregate - the RF app needs the
         # per-order breakdown (which delivery gets how much) so an operator sorting the pick

@@ -278,7 +278,7 @@ def ensure_people():
         if not frappe.db.exists("WMS Resource Group", g):
             _ins({"doctype": "WMS Resource Group", "group_code": g, "group_name": name, "warehouse": WH, "active": 1})
     for code, activity, group, st in [
-        ("PUTAWAY", "Putaway", "INBOUND", None), ("PICK", "Pick", "OUTBOUND", None),
+        ("PUTAWAY", "Putaway", "INBOUND", None), ("XDOCK", "Cross Dock", "INBOUND", None), ("PICK", "Pick", "OUTBOUND", None),
         ("MOVE", "Internal Move", "INVENTORY", None), ("STAGE", "Stage", "OUTBOUND", None),
         ("LOAD", "Load", "OUTBOUND", None), ("COUNT", "Inventory Count", "INVENTORY", None),
     ]:

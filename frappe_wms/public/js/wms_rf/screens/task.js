@@ -124,6 +124,7 @@ function summary(t) {
   const rem = remaining(t);
   const box = Section({},
     h("div.row1", h("div.card-title", `${_(t.task_type)} · ${t.product || ""}`), h("div.card-right", StatusBadge(t.status), Badge(_(t.priority), t.priority))),
+    t.product_name && t.product_name !== t.product ? h("div.line-sub", t.product_name) : null,
     h("div", { style: { height: "10px" } }),
     KV([[_("Planned"), `${fmtQty(t.planned_quantity)} ${t.stock_uom || ""}`], [_("Remaining"), `${fmtQty(rem)} ${t.stock_uom || ""}`], [_("From"), taskLocation(t, "src")], [_("To"), taskLocation(t, "dst")]]));
   const alloc = t.stock_allocations || [];

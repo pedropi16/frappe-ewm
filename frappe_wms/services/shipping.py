@@ -12,18 +12,33 @@ from frappe_wms.utils import require_role
 LOAD_ROLES = ("WMS Operator", "WMS Loader", "WMS Supervisor")
 OPEN_SHIPMENT_STATUSES = ("Planned", "Released", "Staging", "Ready to Load", "Loading")
 
+def cross_dock_handling_units(outbound_delivery=None, outbound_delivery_item=None):
+    # Cross-docked stock never has a Stock Allocation or a Pick task: it is staged for the delivery
+    # by a Cross Dock task raised straight from the Goods Receipt (services/receipt.py), whose
+    # Warehouse Request points back at the delivery (and line). Without this, a delivery filled by
+    # cross-docking had "no staged Handling Unit" and could never be shipped or issued -
+    # reproduced in a simulated shift once a Cross Dock queue was configured.
+    filters = {"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery"}
+    if outbound_delivery: filters["reference_name"] = ["in", outbound_delivery] if isinstance(outbound_delivery, (list, tuple, set)) else outbound_delivery
+    if outbound_delivery_item: filters["reference_line"] = outbound_delivery_item
+    requests = frappe.get_all("Warehouse Request", filters=filters, pluck="name")
+    if not requests: return []
+    return frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", requests], "task_type": "Cross Dock",
+        "status": "Confirmed", "destination_hu": ["is", "set"]}, pluck="destination_hu", distinct=True)
+
 def _staged_handling_units(delivery_names):
     # Stock Allocation.handling_unit is the pre-pick source HU, not where the line actually
     # ended up - only a confirmed Pick task's destination_hu records the real staged HU (it's
     # what _relocate_hu_for_task physically relocated). Walk allocation -> task to get it right.
+    hus = set(cross_dock_handling_units(outbound_delivery=list(delivery_names)))
     allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", delivery_names]}, pluck="name")
-    if not allocation_names: return []
-    task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent")
-    if not task_names: return []
-    tasks = frappe.get_all("Warehouse Task",
-        filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
-        fields=["destination_hu"], distinct=True)
-    return sorted({t.destination_hu for t in tasks})
+    task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent") if allocation_names else []
+    if task_names:
+        tasks = frappe.get_all("Warehouse Task",
+            filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
+            fields=["destination_hu"], distinct=True)
+        hus |= {t.destination_hu for t in tasks}
+    return sorted(hus)
 
 def _other_deliveries_sharing_hu(hu_name, deliveries_being_shipped):
     # A confirmed Pick task's destination_hu defaults to its own source_hu when no distinct

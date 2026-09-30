@@ -145,6 +145,40 @@ class TestLoadTestFindings(IntegrationTestCase):
         self.assertEqual(row.status, "Open")
         self.assertEqual(frappe.db.get_value("Inbound Delivery", ind.name, "receipt_status"), "Not Received")
 
+    # --- quality inspection follows its HU -------------------------------------------------------
+
+    def test_inspection_can_be_completed_after_putaway(self):
+        # The inspection is raised at Goods Receipt, pointing at the receiving bin; putaway then
+        # moves the QUALITY pallet on. Completing it used to fail with "Insufficient stock".
+        from frappe_wms.services.quality import complete_inspection
+        ind = self._delivery(self.item, 6)
+        line = {"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 6, "stock_uom": self.uom,
+                "handling_unit": frappe.generate_hash(length=10), "stock_type": "QUALITY", "hu_type": HU_TYPE}
+        result = create_and_submit_goods_receipt(ind.name, [line])
+        inspection = frappe.get_all("WMS Quality Inspection", filters={"goods_receipt": result["goods_receipt"]}, pluck="name")[0]
+        confirm_task(result["warehouse_tasks"][0], confirmed_quantity=6)
+        self.assertNotEqual(frappe.db.get_value("Handling Unit", line["handling_unit"], "current_bin"), self.recv_bin)
+        complete_inspection(inspection, passed_quantity=5, failed_quantity=1)
+        where = frappe.db.get_value("Handling Unit", line["handling_unit"], "current_bin")
+        self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"handling_unit": line["handling_unit"], "storage_bin": where, "stock_type": "AVAILABLE"}, "quantity")), 5)
+
+    # --- allocation status ----------------------------------------------------------------------
+
+    def test_delivery_with_no_stock_stays_not_allocated(self):
+        from frappe_wms.services.allocation import allocate_delivery
+        from frappe_wms.services.picking import release_delivery_for_picking
+        item = self._item("LOADFIND-NO-STOCK")
+        customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": WH,
+                              "customer": customer, "delivery_date": frappe.utils.nowdate(), "staging_bin": self.rack_bin,
+                              "items": [{"line_number": 1, "item": item, "requested_quantity": 3, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "allocation_status"), "Not Allocated")
+        with self.assertRaisesRegex(frappe.ValidationError, "No stock could be allocated"):
+            release_delivery_for_picking(obd.name)
+
     # --- partial quantity out of an HU ----------------------------------------------------------
 
     def test_partial_move_into_the_source_hu_is_refused(self):

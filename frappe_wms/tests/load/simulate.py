@@ -50,6 +50,7 @@ EXPECTED_PATTERNS = [
     r"No stock could be allocated", r"not fully picked", r"already on an open shipment",
     r"No work waiting", r"Nothing left", r"has no outstanding quantity", r"already fully picked",
     r"None of these deliveries have a staged", r"is also picked for",
+    r"left to receive", r"Shipment is not open for loading", r"is already loaded",
 ]
 
 
@@ -219,6 +220,9 @@ class Sim:
                     self.stats.event("pick-short-oos")
                     continue
             kwargs["confirmed_quantity"] = remaining
+            if t["task_type"] == "Putaway" and rng.random() < 0.04:
+                kwargs["confirmed_quantity"] = remaining + rng.randint(1, 3)  # found a few extra on the pallet
+                self.stats.event("putaway-over-confirm")
             try:
                 c.call("frappe_wms.api.scanner.confirm_task", **kwargs)
             except ApiError as e:
@@ -471,10 +475,26 @@ class Sim:
                         counted[row["name"]] = q + (rng.choice([-2, -1, 1, 3]) if rng.random() < 0.2 else 0)
                     if counted:
                         c.call("frappe_wms.api.inventory.record_counts", count_name=pic["name"], counted_quantities=counted)
-                    c.call("frappe_wms.api.inventory.post_count", count_name=pic["name"])
-                    self.stats.event("count-posted")
+                    res = c.call("frappe_wms.api.inventory.post_count", count_name=pic["name"])
+                    self.stats.event(f"count-{(res or {}).get('status', 'posted')}")
+                    if (res or {}).get("status") not in ("Posted", "Under Review") and res:
+                        # out of tolerance: recount (the second count agrees with the book)
+                        c.call("frappe_wms.api.inventory.request_recount", count_name=pic["name"])
+                        doc = c.call("frappe.client.get", doctype="WMS Physical Inventory Count", name=pic["name"])
+                        again = {r["name"]: r.get("book_quantity") or 0 for r in doc.get("items", []) if r.get("status") in ("Open", "Pending Recount")}
+                        if again: c.call("frappe_wms.api.inventory.record_counts", count_name=pic["name"], counted_quantities=again)
+                        res = c.call("frappe_wms.api.inventory.post_count", count_name=pic["name"])
+                        self.stats.event(f"recount-{(res or {}).get('status')}")
                 self.safe(c, count, context="count")
             else:
+                def inspect():
+                    for qi in (c.call("frappe_wms.api.inventory.list_open_inspections") or [])[:2]:
+                        q = qi.get("quantity") or 0
+                        failed = 1 if q >= 2 and rng.random() < 0.5 else 0
+                        c.call("frappe_wms.api.inventory.complete_inspection", inspection_name=qi["name"], passed_quantity=q - failed, failed_quantity=failed)
+                        self.stats.event("inspection-completed")
+                self.safe(c, inspect, context="inspection")
+
                 def replenish():
                     c.call("frappe_wms.api.inventory.check_replenishment_needs")
                     self.stats.event("replenishment-check")
@@ -483,9 +503,53 @@ class Sim:
                 self.safe(c, replenish, context="replenish")
             time.sleep(rng.uniform(3, 7))
 
+    def supervisor_ops(self):
+        rng = random.Random(self.rng_seed + 120)
+        c = self.user("sup.ursula", "sup-ops")
+        while self.alive():
+            time.sleep(rng.uniform(6, 12))
+
+            def approvals():
+                for pic in c.call("frappe.client.get_list", doctype="WMS Physical Inventory Count",
+                                  filters={"warehouse": WH, "status": "Under Review"}, limit_page_length=3) or []:
+                    c.call("frappe_wms.api.inventory.approve_variance", count_name=pic["name"], remarks="checked on the floor")
+                    self.stats.event("count-approved")
+            self.safe(c, approvals, context="approve counts")
+
+            def differences():
+                for d in (c.call("frappe_wms.api.difference.list_open_differences", warehouse=WH) or [])[:3]:
+                    if d.get("direction") == "Over":
+                        c.call("frappe_wms.api.difference.clear_over_difference", name=d["name"], destination_bin=f"{WH}-QUAL-01",
+                               destination_hu=(c.call("frappe_wms.api.handling_unit.create_handling_unit", hu_type="EUR-PAL", hu_number=f"PAL{uuid.uuid4().int % 10**12:012d}", storage_bin=f"{WH}-QUAL-01", warehouse=WH) or {}).get("name"))
+                    else:
+                        c.call("frappe_wms.api.difference.clear_short_difference", name=d["name"], remarks="confirmed short")
+                    self.stats.event(f"difference-cleared-{d.get('direction')}")
+            self.safe(c, differences, context="differences")
+
+            def hold_resume():
+                wos = c.call("frappe.client.get_list", doctype="Warehouse Order", filters={"warehouse": WH, "status": "Open"}, limit_page_length=10) or []
+                if not wos: return
+                wo = rng.choice(wos)["name"]
+                c.call("frappe_wms.api.warehouse_order.block_warehouse_order", wo_name=wo, reason="dock congestion")
+                self.stats.event("wo-held")
+                time.sleep(rng.uniform(1, 4))
+                c.call("frappe_wms.api.warehouse_order.resume_warehouse_order", wo_name=wo)
+                self.stats.event("wo-resumed")
+            if rng.random() < 0.5:
+                self.safe(c, hold_resume, context="hold/resume")
+
+            def customer_return():
+                dns = self.admin.call("frappe.client.get_list", doctype="Delivery Note", filters={"docstatus": 1, "is_return": 0}, limit_page_length=20) or []
+                if not dns: return
+                ibd = c.call("frappe_wms.api.inbound.create_return_inbound_delivery", delivery_note=rng.choice(dns)["name"], warehouse=WH)
+                self.stats.event("customer-return-created")
+            if rng.random() < 0.3:
+                self.safe(c, customer_return, context="customer return")
+
     def chaos(self):
         rng = random.Random(self.rng_seed + 99)
         a, b = self.user("rec.ana", "chaos-a"), self.user("rec.luis", "chaos-b")
+        pa, pb = self.user("pick.hugo", "chaos-pa"), self.user("pick.irene", "chaos-pb")
         results = collections.Counter()
         while self.alive():
             time.sleep(rng.uniform(8, 15))
@@ -524,11 +588,12 @@ class Sim:
                                         fields=["name", "planned_quantity", "source_bin", "source_hu", "destination_bin"], limit_page_length=5)
                 if not tasks: return
                 t = rng.choice(tasks)
-                pa, pb = self.user("pick.hugo", "chaos-pa"), self.user("pick.irene", "chaos-pb")
+                cartons = {tag: (cli.call("frappe_wms.api.handling_unit.create_handling_unit", hu_type="CARTON", storage_bin=t["destination_bin"], warehouse=WH) or {}).get("name")
+                           for tag, cli in (("a", pa), ("b", pb))}
                 out = {}
                 def conf(cli, tag):
                     try:
-                        out[tag] = cli.call("frappe_wms.api.scanner.confirm_task", task_name=t["name"], confirmed_quantity=t["planned_quantity"], idempotency_key=f"{t['name']}:0:{tag}{uuid.uuid4().hex[:6]}")
+                        out[tag] = cli.call("frappe_wms.api.scanner.confirm_task", task_name=t["name"], confirmed_quantity=t["planned_quantity"], destination_hu=cartons[tag], idempotency_key=f"{t['name']}:0:{tag}{uuid.uuid4().hex[:6]}")
                     except ApiError as e:
                         out[tag] = e
                 ts = [threading.Thread(target=conf, args=(pa, "a")), threading.Thread(target=conf, args=(pb, "b"))]
@@ -546,7 +611,7 @@ class Sim:
     def run(self):
         threads = [threading.Thread(target=self.buyer, name="buyer"), threading.Thread(target=self.inbound_supervisor, name="inb-sup"),
                    threading.Thread(target=self.sales, name="sales"), threading.Thread(target=self.outbound_supervisor, name="out-sup"),
-                   threading.Thread(target=self.chaos, name="chaos")]
+                   threading.Thread(target=self.chaos, name="chaos"), threading.Thread(target=self.supervisor_ops, name="sup-ops")]
         for i, u in enumerate(["rec.ana", "rec.luis", "rec.marta", "rec.javier"], 1):
             threads.append(threading.Thread(target=self.receiver, args=(i, u), name=u))
         for i, u in enumerate(["pick.bruno", "pick.carla", "pick.diego", "pick.elena", "pick.fran", "pick.gema", "pick.hugo", "pick.irene"], 5):

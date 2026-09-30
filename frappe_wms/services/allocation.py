@@ -113,7 +113,13 @@ def allocate_delivery(delivery_name):
             frappe.db.set_value("WMS Stock Balance",stock.name,{"allocated_quantity":flt(fresh.allocated_quantity)+qty,"available_quantity":flt(fresh.available_quantity)-qty})
             needed-=qty
         row.db_set("allocated_quantity",flt(row.requested_quantity)-needed)
-    doc.db_set("allocation_status","Fully Allocated" if all(flt(x.allocated_quantity)>=flt(x.requested_quantity) for x in doc.items) else "Partially Allocated")
+    # "Not Allocated" when nothing at all could be reserved - it used to fall through to "Partially
+    # Allocated", so release_delivery_for_picking's own "No stock could be allocated" check never
+    # fired and the operator got a confusing "No open allocations to create pick tasks for".
+    if all(flt(x.allocated_quantity)>=flt(x.requested_quantity) for x in doc.items): status = "Fully Allocated"
+    elif any(flt(x.allocated_quantity)>0 for x in doc.items): status = "Partially Allocated"
+    else: status = "Not Allocated"
+    doc.db_set("allocation_status", status)
     return created
 
 def cancel_allocations_for_delivery(delivery_name):

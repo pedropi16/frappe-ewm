@@ -116,7 +116,7 @@ def list_open_inbound_deliveries(user=None):
     filters = {"status": ["in", OPEN_INBOUND_STATUSES]}
     if resource: filters["warehouse"] = resource.warehouse
     return frappe.get_list("Inbound Delivery", filters=filters,
-        fields=["name", "inbound_delivery_number", "warehouse", "supplier", "receiving_bin", "status", "posting_date"],
+        fields=["name", "inbound_delivery_number", "warehouse", "supplier", "external_reference", "receiving_bin", "status", "posting_date"],
         order_by="posting_date asc, creation asc", limit=50)
 
 def _get_or_create_batch(item_code, batch_no):
@@ -270,19 +270,41 @@ def create_return_inbound_delivery(delivery_note, warehouse):
     # (erpnext_sync._sync_goods_receipt_to_return_delivery_note) can build a proper Sales Return
     # against the original Delivery Note row-for-row, instead of an unlinked standalone receipt.
     require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
-    dn = frappe.get_doc("Delivery Note", delivery_note)
+    # for_update: two returns raised for the same Delivery Note at once must not both see the
+    # same "still returnable" quantity.
+    dn = frappe.get_doc("Delivery Note", delivery_note, for_update=True)
     if dn.docstatus != 1: frappe.throw(_("Delivery Note must be submitted before it can be returned"))
+    if dn.is_return: frappe.throw(_("Delivery Note {0} is itself a return").format(dn.name))
     wh = frappe.get_doc("WMS Warehouse", warehouse)
     if not wh.default_receiving_bin: frappe.throw(_("WMS Warehouse {0} has no default receiving bin configured").format(warehouse))
-    items = [{
-        "line_number": i, "item": row.item_code, "expected_quantity": row.qty, "stock_uom": row.stock_uom,
-        "expected_stock_type": "QUALITY", "source_document_type": "Delivery Note",
-        "source_document_number": dn.name, "source_document_line": row.name,
-    } for i, row in enumerate(dn.items, 1)]
-    if not items: frappe.throw(_("Delivery Note {0} has no items to return").format(dn.name))
+    # Only what is still returnable: the row's quantity less what ERPNext has already taken back
+    # (returned_qty) and less what another open return delivery is still expecting for it.
+    # Previously every line went in at its full original quantity, so a second return of the same
+    # Delivery Note was accepted, received on the RF app, and only then rejected by ERPNext's own
+    # StockOverReturnError - on every attempt, leaving an unreceivable delivery in every
+    # receiver's list (reproduced in a simulated shift: 888 failed receipts from 20 returns).
+    items = []
+    for row in dn.items:
+        pending = frappe.db.sql("""
+            select coalesce(sum(greatest(i.expected_quantity - ifnull(i.received_quantity, 0), 0)), 0)
+            from `tabInbound Delivery Item` i join `tabInbound Delivery` d on d.name = i.parent
+            where i.source_document_type = 'Delivery Note' and i.source_document_line = %s
+              and d.docstatus < 2 and d.status not in ('Cancelled', 'Completed')""", row.name)[0][0]
+        # stock units throughout: WMS quantities are stock-UOM, and ERPNext keeps returned_qty in
+        # stock_qty terms (the return mirror divides back by the row's conversion_factor itself)
+        returnable = flt(row.stock_qty or row.qty) - flt(row.returned_qty) - flt(pending)
+        if returnable <= 0: continue
+        items.append({
+            "line_number": len(items) + 1, "item": row.item_code, "expected_quantity": returnable, "stock_uom": row.stock_uom,
+            "expected_stock_type": "QUALITY", "source_document_type": "Delivery Note",
+            "source_document_number": dn.name, "source_document_line": row.name,
+        })
+    if not items: frappe.throw(_("Nothing left to return on Delivery Note {0} - it has already been returned, or a return for it is still open").format(dn.name))
     ind = frappe.get_doc({
         "doctype": "Inbound Delivery", "inbound_delivery_number": f"{dn.name}-RET-{frappe.generate_hash(length=4)}",
         "warehouse": warehouse, "company": dn.company, "supplier": _customer_returns_supplier(),
+        # the placeholder supplier says nothing about who is sending it back - the receiving list shows this
+        "external_reference": _("Return from {0}").format(dn.customer_name or dn.customer),
         "receiving_bin": wh.default_receiving_bin, "items": items,
     })
     ind.insert(ignore_permissions=True)

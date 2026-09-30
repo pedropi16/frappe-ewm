@@ -53,6 +53,15 @@ def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=N
     if round(passed + failed, 6) != round(flt(doc.quantity), 6):
         frappe.throw(_("Passed and failed quantities must add up to the inspected quantity ({0})").format(doc.quantity))
 
+    # The inspection records where the stock was when it was created (the receiving bin, for one
+    # raised at Goods Receipt), but QUALITY stock doesn't wait there - putaway moves the HU on to a
+    # quality/storage bin. Posting against the stale bin failed with "Insufficient stock" on every
+    # attempt (reproduced in a simulated shift: every inspection completed after putaway). The HU
+    # travels with the stock, so its current bin is where the inspected quantity actually is.
+    if doc.handling_unit:
+        current_bin = frappe.db.get_value("Handling Unit", doc.handling_unit, "current_bin")
+        if current_bin and current_bin != doc.storage_bin:
+            doc.db_set("storage_bin", current_bin, update_modified=False)
     base = {"warehouse": doc.warehouse, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "handling_unit": doc.handling_unit, "storage_bin": doc.storage_bin, "stock_uom": doc.stock_uom}
     if passed > 0:
         source = {**base, "product": doc.product, "stock_type": doc.from_stock_type}

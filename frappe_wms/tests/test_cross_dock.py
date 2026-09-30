@@ -113,6 +113,33 @@ class TestCrossDock(IntegrationTestCase):
         self.assertEqual(obd.picking_status, "Picked")
         self.assertEqual(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}), [])
 
+    def test_cross_docked_delivery_can_be_shipped_and_issued(self):
+        # A cross-docked delivery has no Stock Allocation or Pick task, which is all shipping and
+        # Goods Issue used to look at - it had "no staged Handling Unit" and could never leave.
+        from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
+        door_type, door_bin, route = f"{self.warehouse}-DOOR", f"{self.warehouse}-DOOR-1", f"{self.warehouse}-ROUTE"
+        if not frappe.db.exists("Storage Type", door_type):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": self.warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Bin", door_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": door_bin, "warehouse": self.warehouse, "storage_type": door_type, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Route", route):
+            frappe.get_doc({"doctype": "WMS Route", "route_code": route, "route_name": route, "origin_warehouse": self.warehouse,
+                "default_staging_bin": self.stage_bin, "default_door": door_bin, "active": 1}).insert(ignore_permissions=True)
+        item = self._make_item("TEST-XDOCK-ITEM-5")
+        obd = self._make_delivery(item, 5)
+        hu = self._make_hu()
+        gr = self._submit_gr(hu, item, 5)
+        task_name = create_tasks_for_request(create_putaway_requests(gr.name)[0])
+        confirm_task(task_name, confirmed_quantity=5)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu.name, "status"), "Staged")
+
+        shipment = create_shipment(self.warehouse, [obd.name], route=route)
+        self.assertEqual([r.handling_unit for r in frappe.get_doc("WMS Shipment", shipment).handling_units], [hu.name])
+        confirm_hu_loaded(shipment, hu.name)
+        obd.reload()
+        self.assertEqual(obd.goods_issue_status, "Posted")
+        self.assertEqual(obd.items[0].issued_quantity, 5)
+
     def test_receipt_with_no_open_demand_is_unaffected(self):
         item = self._make_item("TEST-XDOCK-ITEM-4")
         hu = self._make_hu()

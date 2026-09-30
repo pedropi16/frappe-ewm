@@ -9,7 +9,8 @@ None of these should ever fire, whatever mix of concurrent traffic produced the 
   negative_balances      no negative quantity in a warehouse that forbids negative stock
   allocation_bounds      0 <= allocated_quantity <= quantity on every balance row
   allocation_vs_balance  a balance row's allocated_quantity equals its open Stock Allocations
-  wms_vs_erpnext         per item, WMS on-hand equals ERPNext Bin.actual_qty (mirrored warehouse)
+  wms_vs_erpnext         per item, WMS on-hand equals ERPNext's stock ledger (mirrored warehouse)
+  erpnext_bin_cache      ERPNext's Bin.actual_qty equals its own ledger (repaired by the drift job)
   inbound_progress       Inbound Delivery Item.received_quantity equals its submitted GR rows
   over_receipt           no line received beyond its expected quantity
   hu_location            an HU holding stock sits in the bin its stock balances say it's in
@@ -59,17 +60,29 @@ def allocation_vs_balance(wh):
 
 
 def wms_vs_erpnext(wh):
+    # Against ERPNext's stock ledger (sum of non-cancelled SLE qty), not its Bin cache - see
+    # erpnext_bin_cache for why those two can disagree on their own.
     erp_wh = frappe.db.get_value("WMS Warehouse", wh, "erpnext_warehouse")
     if not erp_wh: return []
     return frappe.db.sql("""
-        select coalesce(w.product, e.item_code) item, coalesce(w.qty, 0) wms_qty, coalesce(e.qty, 0) erpnext_qty
+        select w.product item, w.qty wms_qty, coalesce(e.qty, 0) erpnext_ledger_qty
         from (select product, sum(quantity) qty from `tabWMS Stock Balance` where warehouse=%(wh)s group by product) w
-        left join (select item_code, sum(actual_qty) qty from `tabBin` where warehouse=%(erp)s group by item_code) e on e.item_code=w.product
-        where abs(coalesce(w.qty,0) - coalesce(e.qty,0)) > %(eps)s
-        union
-        select e.item_code, 0, e.qty from (select item_code, sum(actual_qty) qty from `tabBin` where warehouse=%(erp)s group by item_code) e
-        where e.qty <> 0 and not exists (select 1 from `tabWMS Stock Balance` b where b.warehouse=%(wh)s and b.product=e.item_code)""",
-        {"wh": wh, "erp": erp_wh, "eps": EPS}, as_dict=True)
+        left join (select item_code, sum(actual_qty) qty from `tabStock Ledger Entry` where warehouse=%(erp)s and is_cancelled=0 group by item_code) e
+          on e.item_code=w.product
+        where abs(w.qty - coalesce(e.qty, 0)) > %(eps)s""", {"wh": wh, "erp": erp_wh, "eps": EPS}, as_dict=True)
+
+
+def erpnext_bin_cache(wh):
+    # ERPNext's own Bin.actual_qty vs its own ledger. Not a WMS defect when it fires (ERPNext
+    # core's bin.update_qty rewrites actual_qty from a non-locking read), but WMS's scheduled
+    # verify_erpnext_stock_reconciliation repairs it - so this should be empty after that runs.
+    erp_wh = frappe.db.get_value("WMS Warehouse", wh, "erpnext_warehouse")
+    if not erp_wh: return []
+    return frappe.db.sql("""
+        select b.item_code, b.actual_qty bin_qty, coalesce(e.qty, 0) ledger_qty from `tabBin` b
+        left join (select item_code, sum(actual_qty) qty from `tabStock Ledger Entry` where warehouse=%(erp)s and is_cancelled=0 group by item_code) e
+          on e.item_code=b.item_code
+        where b.warehouse=%(erp)s and abs(b.actual_qty - coalesce(e.qty, 0)) > %(eps)s""", {"erp": erp_wh, "eps": EPS}, as_dict=True)
 
 
 def inbound_progress(wh):
@@ -131,7 +144,7 @@ def outbound_progress(wh):
               or i.issued_quantity - i.picked_quantity > %s)""", (wh, EPS, EPS, EPS), as_dict=True)
 
 
-CHECKS = [ledger_vs_balance, negative_balances, allocation_bounds, allocation_vs_balance, wms_vs_erpnext, inbound_progress,
+CHECKS = [ledger_vs_balance, negative_balances, allocation_bounds, allocation_vs_balance, wms_vs_erpnext, erpnext_bin_cache, inbound_progress,
           over_receipt, hu_location, hu_hierarchy, task_double_posting, wo_single_owner, outbound_progress]
 
 

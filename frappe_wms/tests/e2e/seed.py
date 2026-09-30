@@ -38,7 +38,10 @@ def run():
     # order_by="creation asc": with no explicit order this defaults to newest-first, which any
     # ad-hoc test-created stock item (even a throwaway one from a spec elsewhere) would then keep
     # winning over the long-standing baseline item every future run - oldest-first is stable.
-    item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
+    # Not batch/serial-managed: these specs post receipts/moves without a batch or serial, so on a
+    # site whose oldest stock item happens to be batch-managed every such spec failed for that
+    # reason alone (seen running this suite on a site that also holds the tests/load DC seed).
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
 
     _user(*OPERATOR, roles=["WMS Operator", "Desk User"])
     _user(*ADMIN, roles=["System Manager", "WMS Administrator", "WMS Supervisor", "WMS Operator", "Stock Manager", "Item Manager"])
@@ -71,6 +74,9 @@ def run():
         frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "E2E-PALLET", "hu_type_name": "E2E pallet"}).insert(ignore_permissions=True)
     if not frappe.db.exists("WMS Product", {"item": item}):
         frappe.get_doc({"doctype": "WMS Product", "item": item, "stock_uom": frappe.db.get_value("Item", item, "stock_uom"), "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+    # The barcode must resolve to *this* item - a previous run may have attached it to another one.
+    for row in frappe.get_all("Item Barcode", filters={"barcode": BARCODE, "parent": ["!=", item]}, pluck="name"):
+        frappe.db.delete("Item Barcode", row)
     if not frappe.db.exists("Item Barcode", {"barcode": BARCODE}):
         doc = frappe.get_doc("Item", item)
         doc.append("barcodes", {"barcode": BARCODE})
