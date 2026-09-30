@@ -51,4 +51,5 @@ class HandlingUnit(Document):
             "bin_after": self.current_bin, "parent_hu_after": self.parent_hu, "status_after": self.status,
             "event_timestamp": now_datetime(), "performed_by": frappe.session.user,
         }).insert(ignore_permissions=True)
-        create_print_spool("Handling Unit", self.name, "HU Created", self.warehouse)
+        if not frappe.flags.get("wms_skip_hu_created_print"):  # a packing work center can switch the label off
+            create_print_spool("Handling Unit", self.name, "HU Created", self.warehouse)

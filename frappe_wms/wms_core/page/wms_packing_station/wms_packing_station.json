@@ -5,15 +5,25 @@
  "name": "wms-packing-station",
  "page_name": "wms-packing-station",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "WMS Administrator"},
-  {"role": "WMS Supervisor"},
-  {"role": "WMS Packer"},
-  {"role": "WMS Operator"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Packer"
+  },
+  {
+   "role": "WMS Operator"
+  }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Packing Station"
+ "title": "Repack Center"
 }

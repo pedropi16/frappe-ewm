@@ -1,7 +1,7 @@
-// Stand-alone Packing Station for packers (who don't get the full WMS Monitor): the same
+// Stand-alone Repack Center (SAP /SCWM/PACK) for packers (who don't get the full WMS Monitor): the same
 // component as the Monitor's "Packing Station" view - see public/js/wms_packing_station.js.
 frappe.pages["wms-packing-station"].on_page_load = function (wrapper) {
-  const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Packing Station"), single_column: true });
+  const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Repack Center"), single_column: true });
   frappe.require("/assets/frappe_wms/js/wms_packing_station.js", async () => {
     const warehouses = await frappe.db.get_list("WMS Warehouse", { fields: ["name"], limit: 200 });
     let warehouse = warehouses.length === 1 ? warehouses[0].name : null;

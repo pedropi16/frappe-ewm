@@ -18,8 +18,8 @@ const VIEWS = [
   { key: "stock", label: __("Stock Overview") },
   { key: "tasks", label: __("Warehouse Tasks") },
   { key: "hu", label: __("Handling Units") },
-  { key: "packing", label: __("Packing Station") },
-  { key: "repack", label: __("Repack Center") },
+  { key: "packing", label: __("Repack Center") },
+  { key: "repack", label: __("HU Workbench") },
   { key: "movements", label: __("Stock Movements") },
   { key: "resources", label: __("Resources & Queues") },
   { key: "differences", label: __("Difference Analyzer") },
@@ -1033,7 +1033,7 @@ class WMSMonitor {
     return $wrap;
   }
 
-  // ---------- Packing Station: the SAP EWM packing work center (public/js/wms_packing_station.js) ----------
+  // ---------- Repack Center: the SAP EWM packing work center /SCWM/PACK (public/js/wms_packing_station.js) ----------
   async load_packing_station() {
     const $wrap = this.body_for("packing");
     if (!this.packing_station) this.packing_station = new WMSPackingStation($wrap, () => this.warehouse);

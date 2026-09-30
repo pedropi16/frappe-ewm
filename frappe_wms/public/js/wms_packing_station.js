@@ -88,7 +88,7 @@
       this.data = (await frappe.call(`${API}.station_overview`, { work_center: this.wc })).message;
       const d = this.data;
       const count = (nodes) => nodes.reduce((a, n) => a + 1 + count(n.children || []), 0);
-      this.$wrap.find(".wps-summary").text(__("Bin {0} · {1} HU(s) · {2} open packing order(s)", [d.work_center.bin, count(d.handling_units), d.packing_orders.length]));
+      this.$wrap.find(".wps-summary").text(__("{0} station · bin {1} · {2} HU(s) · {3} open packing order(s)", [__(d.work_center.work_center_type || "Packing"), d.work_center.bin, count(d.handling_units), d.packing_orders.length]));
       if (!$body.find(".wps-main").length) {
         $body.html(`
           <div class="wps-main"><div class="wps-tree"></div><div class="wps-detail"></div></div>
@@ -141,6 +141,15 @@
         $t.append(`<div class="wps-node" style="cursor:default"><b>${__("Loose on the table")}</b></div>`);
         d.loose_stock.forEach((s) => $t.append(`<div class="wps-line" style="padding-left:24px">${esc(s.product)} · <b>${num(s.quantity)}</b> ${esc(s.stock_uom)}${s.batch_no ? " · " + esc(s.batch_no) : ""}</div>`));
       }
+      if ((d.arriving || []).length) {
+        $t.append(`<div class="wps-node" style="cursor:default"><b>${__("Arriving at {0}", [esc(d.work_center.inbound_section_bin)])}</b></div>`);
+        d.arriving.forEach((a) => {
+          const $a = $(`<div class="wps-node" style="padding-left:24px">\u{1F4E6} ${esc(a.hu_number || a.name)} <span class="text-muted" style="font-size:11px;">${esc(a.hu_type || "")}</span>
+            <button class="btn btn-xs btn-default" style="margin-left:auto">${__("Take to table")}</button></div>`);
+          $a.find("button").on("click", (e) => { e.stopPropagation(); this.call("take_to_table", { hu_name: a.name }, __("{0} is on the table", [a.name])); });
+          $t.append($a);
+        });
+      }
       d.handling_units.forEach((n) => row(n, 0));
       if (!d.handling_units.length && !d.loose_stock.length) $t.html(`<div class="text-muted">${__("The table is empty. Bring picked HUs here (pick with this bin as staging bin) or create a new HU below.")}</div>`);
     }
@@ -150,6 +159,7 @@
       const $d = this.$wrap.find(".wps-detail").empty();
       const n = this.selected && this.findNode(this.selected);
       if (!n) { $d.html(`<div class="text-muted">${__("Select an HU in the tree to see its details.")}</div>`); return; }
+      const cfg = this.data.work_center;
       const dl = this.topDeliveries(n.name).map((x) => { const i = this.data.deliveries[x] || {}; return `${esc(i.outbound_delivery_number || x)} · ${esc(i.customer || "")}`; }).join("<br>") || "-";
       $d.html(`
         <h5 style="margin-top:0">${esc(n.hu_number || n.name)} ${n.closed ? "\u{1F512}" : ""}</h5>
@@ -166,14 +176,16 @@
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
           <button class="btn btn-xs btn-default wps-as-src">${__("Use as source")}</button>
           <button class="btn btn-xs btn-default wps-as-dst">${__("Use as destination")}</button>
-          ${n.closed ? `<button class="btn btn-xs btn-default wps-reopen">${__("Reopen")}</button>` : `<button class="btn btn-xs btn-primary wps-close">${__("Close HU…")}</button>`}
-          ${n.parent_hu ? `<button class="btn btn-xs btn-default wps-unpack">${__("Take out of {0}", [esc(n.parent_hu)])}</button>` : ""}
+          ${!cfg.allow_close_hu ? "" : n.closed ? `<button class="btn btn-xs btn-default wps-reopen">${__("Reopen")}</button>` : `<button class="btn btn-xs btn-primary wps-close">${__("Close HU…")}</button>`}
+          ${n.parent_hu && cfg.allow_unpack ? `<button class="btn btn-xs btn-default wps-unpack">${__("Take out of {0}", [esc(n.parent_hu)])}</button>` : ""}
+          ${cfg.allow_delete_empty_hu && !(n.stock || []).length && !(n.children || []).length ? `<button class="btn btn-xs btn-danger wps-delete">${__("Delete empty HU")}</button>` : ""}
           <button class="btn btn-xs btn-default wps-label">${__("Label (ZPL)")}</button>
         </div>`);
       $d.find(".wps-as-src").on("click", () => { this.form.source = n.name; this.setTab("product"); });
       $d.find(".wps-as-dst").on("click", () => { this.form.dest = n.name; this.form.hu_dest = n.name; this.drawTree(); this.drawScanner(); });
       $d.find(".wps-close").on("click", () => { this.form.close_hu = n.name; this.setTab("close"); });
       $d.find(".wps-reopen").on("click", () => this.call("reopen_hu", { hu_name: n.name }, __("{0} reopened", [n.name])));
+      $d.find(".wps-delete").on("click", () => frappe.confirm(__("Delete empty HU {0}?", [n.name]), () => { this.selected = null; this.call("delete_empty_hu", { hu_name: n.name }, __("{0} deleted", [n.name])); }));
       $d.find(".wps-unpack").on("click", () => this.call("unpack_hu", { hu_name: n.name }, __("{0} is loose on the table again", [n.name])));
       $d.find(".wps-label").on("click", async () => {
         const r = await frappe.call("frappe_wms.api.labeling.render_hu_label_zpl", { hu_name: n.name });
@@ -216,18 +228,38 @@
       const $s = this.$wrap.find(".wps-scan");
       const hus = this.huList();
       const allDeliveries = Object.values(this.data.deliveries).map((x) => ({ value: x.name, label: `${x.outbound_delivery_number || x.name} · ${x.customer || ""}` }));
-      const tabs = [["product", __("Pack Product")], ["hu", __("Pack HU")], ["create", __("Create HU")], ["close", __("Close HU")]];
+      const cfg = this.data.work_center;
+      const tabs = [["product", __("Pack Product"), "allow_pack_product"], ["hu", __("Pack HU"), "allow_pack_hu"],
+        ["instruction", __("By Instruction"), "allow_pack_by_instruction"], ["create", __("Create HU"), "allow_create_hu"],
+        ["close", __("Close HU"), "allow_close_hu"], ["diff", __("Missing Qty"), "allow_differences"]].filter((t) => cfg[t[2]]);
+      if (!tabs.length) { $s.html(`<div class="text-muted">${__("No packing functions are enabled for this work center.")}</div>`); return; }
+      if (!tabs.some((t) => t[0] === this.tab)) this.tab = tabs[0][0];
+      const oneByOne = cfg.quantity_proposal === "One Unit per Scan";
+      if (this.tab === "create" && !this.form.type && cfg.default_hu_type) this.form.type = cfg.default_hu_type;
       let fields = "", action = "";
       if (this.tab === "product") {
         fields = this.field("source", __("Source HU (blank = loose on table)"), { list: hus, ph: __("Scan HU") })
           + this.field("product", __("Product"), { list: this.productsFor(this.form.source), ph: __("Scan product") })
-          + this.field("qty", __("Quantity (blank = all of it)"), { type: "number", ph: "" })
+          + this.field("qty", oneByOne ? __("Quantity (one unit per scan)") : __("Quantity (blank = all of it)"), { type: "number", ph: oneByOne ? "1" : "" })
           + this.field("dest", __("Destination HU"), { list: hus, ph: __("Scan HU") })
           + `<div class="wps-dlv-wrap">${this.field("delivery", __("For delivery"), { options: [{ value: "", label: "" }] })}</div>`;
         action = `<button class="btn btn-primary wps-go">${__("Pack")} ↵</button> <button class="btn btn-default wps-all">${__("Pack all of source")}</button>`;
       } else if (this.tab === "hu") {
         fields = this.field("hu", __("HU to pack"), { list: hus, ph: __("Scan HU") }) + this.field("hu_dest", __("Into HU"), { list: hus, ph: __("Scan HU") });
         action = `<button class="btn btn-primary wps-go">${__("Pack HU")} ↵</button>`;
+      } else if (this.tab === "instruction") {
+        fields = this.field("source", __("Source HU (blank = loose on table)"), { list: hus, ph: __("Scan HU") })
+          + this.field("product", __("Product"), { list: this.productsFor(this.form.source), ph: __("Scan product") })
+          + this.field("level", __("Packing instruction"), { options: [{ value: "", label: "" }] })
+          + this.field("per_hu", __("Quantity per HU (blank = instruction)"), { type: "number", ph: "" })
+          + `<div class="wps-dlv-wrap">${this.field("delivery", __("For delivery"), { options: [{ value: "", label: "" }] })}</div>`;
+        action = `<button class="btn btn-primary wps-go">${__("Pack into new HUs")} ↵</button> <label style="font-size:12px;margin-left:8px;"><input type="checkbox" class="wps-close-each" ${this.form.close_each ? "checked" : ""}> ${__("Close each HU")}</label>`;
+      } else if (this.tab === "diff") {
+        fields = this.field("source", __("Source HU (blank = loose on table)"), { list: hus, ph: __("Scan HU") })
+          + this.field("product", __("Product"), { list: this.productsFor(this.form.source), ph: __("Scan product") })
+          + this.field("qty", __("Missing quantity"), { type: "number", ph: "" })
+          + this.field("remarks", __("Remarks"), { ph: "" });
+        action = `<button class="btn btn-danger wps-go">${__("Post to difference bin")} ↵</button> <span class="text-muted" style="font-size:12px;">${__("Only stock that is not picked for a delivery.")}</span>`;
       } else if (this.tab === "create") {
         const types = this.data.hu_types || [];
         fields = this.field("type", __("HU type / packaging"), { options: [{ value: "", label: __("Choose…") }].concat(types.map((x) => ({ value: x.name, label: x.hu_type_name || x.name }))) })
@@ -236,8 +268,8 @@
         action = `<button class="btn btn-primary wps-go">${__("Create")} ↵</button> <span class="text-muted" style="font-size:12px;">${__("The new HU becomes the packing destination.")}</span>`;
       } else {
         fields = this.field("close_hu", __("HU to close"), { list: hus.filter((h) => !h.label.includes("closed")), ph: __("Scan HU") })
-          + this.field("weight", __("Gross weight (from the scale)"), { type: "number", ph: "" })
-          + this.field("move_to", __("Then move to bin (optional)"), { list: [], ph: "" });
+          + this.field("weight", cfg.weigh_on_close === "Required" ? __("Gross weight (required)") : __("Gross weight (from the scale)"), { type: "number", ph: "" })
+          + this.field("move_to", __("Move to bin (blank = station setting)"), { list: [], ph: __(cfg.close_follow_up || "") });
         action = `<button class="btn btn-primary wps-go">${__("Close HU")} ↵</button>`;
       }
       $s.html(`
@@ -255,10 +287,12 @@
         const all = this.$wrap.find(".wps-scan .wps-f").filter(":visible").toArray();
         const i = all.indexOf(e.target);
         this.form[e.target.dataset.k] = e.target.value;
+        if (oneByOne && this.tab === "product" && e.target.dataset.k === "product" && this.form.dest) { this.form.qty = "1"; this.go(); return; }
         if (i < all.length - 1) all[i + 1].focus(); else this.go();
       });
       $s.find(".wps-go").on("click", () => this.go());
       $s.find(".wps-all").on("click", () => this.packAll());
+      $s.find(".wps-close-each").on("change", (e) => { this.form.close_each = e.target.checked; });
       this.refreshDynamic();
       const first = $s.find(".wps-f:visible").filter((_, el) => !el.value).first();
       (first.length ? first : $s.find(".wps-f:visible").first()).trigger("focus");
@@ -269,7 +303,13 @@
     refreshDynamic(changed) {
       const $s = this.$wrap.find(".wps-scan");
       const f = this.form;
-      if (this.tab === "product") {
+      if (this.tab === "instruction" && (!changed || changed === "product" || changed === "source")) {
+        const levels = (this.data.instructions || {})[f.product] || [];
+        $s.find('.wps-f[data-k="level"]').html(levels.length ? levels.map((l) => `<option value="${esc(l.level_name)}" ${l.level_name === f.level ? "selected" : ""}>${esc(l.level_name)} · ${num(l.quantity_per_level)} / ${esc(l.hu_type || "")}</option>`).join("")
+          : `<option value="">${esc(__("no Packaging Spec - enter quantity per HU"))}</option>`);
+        if (levels.length && !levels.some((l) => l.level_name === f.level)) f.level = levels[0].level_name;
+      }
+      if (this.tab === "product" || this.tab === "instruction") {
         if (!changed || changed === "source") {
           $s.find("#wps-dl-product").html(this.productsFor(f.source).map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`).join(""));
           const dl = this.topDeliveries(f.source);
@@ -283,9 +323,9 @@
         const t = (this.data.hu_types || []).find((x) => x.name === f.type);
         $s.find('.wps-f[data-k="number"]').attr("placeholder", t && t.numbering_mode === "Internal" ? __("blank = automatic number") : __("Scan the label, or blank"));
       } else if (this.tab === "close" && (!changed || changed === "close_hu")) {
-        const staging = this.stagingFor(f.close_hu);
-        $s.find("#wps-dl-move_to").html(staging.map((b) => `<option value="${esc(b)}">${esc(__("staging bin"))}</option>`).join(""));
-        if (staging.length === 1 && !f.move_to) { f.move_to = staging[0]; $s.find('.wps-f[data-k="move_to"]').val(f.move_to); }
+        const cfg = this.data.work_center;
+        const bins = this.stagingFor(f.close_hu).map((b) => [b, __("delivery staging bin")]).concat(cfg.outbound_section_bin ? [[cfg.outbound_section_bin, __("outbound section")]] : []);
+        $s.find("#wps-dl-move_to").html(bins.map(([b, l]) => `<option value="${esc(b)}">${esc(l)}</option>`).join(""));
         const n = this.findNode(f.close_hu);
         $s.find('.wps-f[data-k="weight"]').attr("placeholder", n ? __("calculated {0}", [num(n.gross_weight)]) : "");
       }
@@ -319,6 +359,18 @@
         const ok = await this.call("pack_product", { product: f.product, quantity: qty, destination_hu: f.dest, source_hu: f.source || undefined,
           outbound_delivery: f.delivery || undefined, idempotency_key: `PS:${frappe.utils.get_random(12)}` }, __("Packed {0} {1} into {2}", [num(qty), f.product, f.dest]));
         if (ok !== undefined) { f.product = ""; f.qty = ""; this.drawScanner(); }
+      } else if (this.tab === "instruction") {
+        if (!f.product) { this.msg = { kind: "err", text: __("Scan the product.") }; return this.drawScanner(); }
+        const r = await this.call("pack_by_instruction", { product: f.product, source_hu: f.source || undefined, level_name: f.level || undefined,
+          quantity_per_hu: f.per_hu || undefined, outbound_delivery: f.delivery || undefined, close: f.close_each ? 1 : 0,
+          idempotency_key: `PSINS:${frappe.utils.get_random(12)}` }, __("Packed by instruction"));
+        if (r) { this.msg = { kind: "ok", text: __("{0} HU(s) created: {1}", [r.handling_units.length, r.handling_units.join(", ")]) }; f.product = ""; this.drawScanner(); }
+      } else if (this.tab === "diff") {
+        if (!f.product || !f.qty) { this.msg = { kind: "err", text: __("Scan the product and enter the missing quantity.") }; return this.drawScanner(); }
+        if (!(await new Promise((res) => frappe.confirm(__("Post {0} {1} as missing (moves it to the difference bin)?", [f.qty, f.product]), () => res(true), () => res(false))))) return;
+        const r = await this.call("post_difference", { product: f.product, quantity: f.qty, source_hu: f.source || undefined, remarks: f.remarks || undefined },
+          __("Missing quantity posted"));
+        if (r) { f.product = ""; f.qty = ""; f.remarks = ""; this.drawScanner(); }
       } else if (this.tab === "hu") {
         if (!f.hu || !f.hu_dest) { this.msg = { kind: "err", text: __("Scan both HUs.") }; return this.drawScanner(); }
         const ok = await this.call("pack_hu", { hu_name: f.hu, destination_hu: f.hu_dest }, __("{0} packed into {1}", [f.hu, f.hu_dest]));
@@ -329,12 +381,18 @@
         if (r) { f.dest = r.name; f.hu_dest = r.name; f.number = ""; this.selected = r.name; this.msg = { kind: "ok", text: __("{0} created - it is now the packing destination", [r.name]) }; this.tab = "product"; this.drawTree(); this.drawDetail(); this.drawScanner(); }
       } else {
         if (!f.close_hu) { this.msg = { kind: "err", text: __("Scan the HU to close.") }; return this.drawScanner(); }
-        const r = await this.call("close_hu", { hu_name: f.close_hu, gross_weight: f.weight || undefined, move_to_bin: f.move_to || undefined },
-          f.move_to ? __("{0} closed and moved to {1}", [f.close_hu, f.move_to]) : __("{0} closed", [f.close_hu]));
-        if (r) {
+        const args = { hu_name: f.close_hu, gross_weight: f.weight || undefined, move_to_bin: f.move_to || undefined };
+        let r = await this.call("close_hu", args, __("{0} checked", [f.close_hu]));
+        if (r && r.needs_confirmation) {
+          const go = await new Promise((res) => frappe.confirm(esc(r.message), () => res(true), () => res(false)));
+          if (!go) { this.msg = { kind: "err", text: r.message }; return this.drawScanner(); }
+          r = await this.call("close_hu", { ...args, confirm_incomplete: 1 }, __("{0} closed", [f.close_hu]));
+        }
+        if (r && !r.needs_confirmation) {
+          this.msg = { kind: "ok", text: r.moved_to ? __("{0} closed and moved to {1}", [f.close_hu, r.moved_to]) : __("{0} closed", [f.close_hu]) };
           if (r.print_spool) frappe.show_alert({ message: __("Label queued ({0})", [r.print_spool]), indicator: "blue" });
           if (f.dest === f.close_hu) f.dest = "";
-          f.close_hu = ""; f.weight = ""; f.move_to = ""; this.drawScanner();
+          f.close_hu = ""; f.weight = ""; f.move_to = ""; this.drawTree(); this.drawScanner();
         }
       }
     }

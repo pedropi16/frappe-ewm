@@ -12,7 +12,30 @@
     "work_center_code",
     "work_center_name",
     "bin",
-    "active"
+    "active",
+    "work_center_type",
+    "inbound_section_bin",
+    "outbound_section_bin",
+    "default_hu_type",
+    "packing_rules_section",
+    "quantity_proposal",
+    "weigh_on_close",
+    "weight_tolerance_percent",
+    "completeness_check",
+    "column_break_rules",
+    "close_follow_up",
+    "print_label_on_create",
+    "print_label_on_close",
+    "functions_section",
+    "allow_pack_product",
+    "allow_pack_hu",
+    "allow_unpack",
+    "allow_pack_by_instruction",
+    "column_break_functions",
+    "allow_create_hu",
+    "allow_close_hu",
+    "allow_delete_empty_hu",
+    "allow_differences"
   ],
   "fields": [
     {
@@ -52,6 +75,158 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "work_center_type",
+      "label": "Work Center Type",
+      "fieldtype": "Select",
+      "options": "Packing\nDeconsolidation\nVAS\nQuality\nKitting",
+      "default": "Packing",
+      "in_list_view": 1,
+      "description": "What the station is for (SAP work center type). The Repack Center uses Packing stations."
+    },
+    {
+      "fieldname": "inbound_section_bin",
+      "label": "Inbound Section Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Where HUs arrive for this station (optional). The Repack Center lists them so the packer can take them onto the table."
+    },
+    {
+      "fieldname": "outbound_section_bin",
+      "label": "Outbound Section Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Where finished (closed) HUs are put down (optional) - see Close HU Follow-up."
+    },
+    {
+      "fieldname": "default_hu_type",
+      "label": "Default Packaging (HU Type)",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "description": "Proposed when the packer creates a new HU."
+    },
+    {
+      "fieldname": "packing_rules_section",
+      "label": "Packing Rules",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "quantity_proposal",
+      "label": "Quantity Proposal",
+      "fieldtype": "Select",
+      "options": "Full Quantity\nOne Unit per Scan",
+      "default": "Full Quantity",
+      "description": "Full Quantity: packing a product proposes all of it. One Unit per Scan: each product scan packs one unit (piece-count packing, serial capture)."
+    },
+    {
+      "fieldname": "weigh_on_close",
+      "label": "Weighing on Close",
+      "fieldtype": "Select",
+      "options": "Optional\nRequired",
+      "default": "Optional"
+    },
+    {
+      "fieldname": "weight_tolerance_percent",
+      "label": "Weight Tolerance %",
+      "fieldtype": "Float",
+      "description": "Refuse closing when the weighed gross differs from the calculated gross (product weights + tare) by more than this percentage. 0 = no check."
+    },
+    {
+      "fieldname": "completeness_check",
+      "label": "Completeness Check on Close",
+      "fieldtype": "Select",
+      "options": "Off\nWarn\nBlock",
+      "default": "Warn",
+      "description": "On closing an HU of a delivery: warn or refuse while stock of the same delivery is still unpacked on the table (loose or in HUs that are not closed)."
+    },
+    {
+      "fieldname": "column_break_rules",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "close_follow_up",
+      "label": "Close HU Follow-up",
+      "fieldtype": "Select",
+      "options": "Stay at Work Center\nMove to Outbound Section\nMove to Delivery Staging Bin",
+      "default": "Stay at Work Center",
+      "description": "Where a closed HU goes. Loading can take HUs from any of these places."
+    },
+    {
+      "fieldname": "print_label_on_create",
+      "label": "Print HU Label on Create",
+      "fieldtype": "Check",
+      "default": "0"
+    },
+    {
+      "fieldname": "print_label_on_close",
+      "label": "Print HU Label on Close",
+      "fieldtype": "Check",
+      "default": "1",
+      "description": "Queues the label through WMS Print Determination Rule events HU Created / HU Closed."
+    },
+    {
+      "fieldname": "functions_section",
+      "label": "Enabled Functions",
+      "fieldtype": "Section Break",
+      "collapsible": 1,
+      "description": "Which Repack Center functions the packer gets at this station."
+    },
+    {
+      "fieldname": "allow_pack_product",
+      "label": "Pack Product",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_pack_hu",
+      "label": "Pack HU into HU",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_unpack",
+      "label": "Take HU out of HU",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_pack_by_instruction",
+      "label": "Pack by Packing Instruction",
+      "fieldtype": "Check",
+      "default": "1",
+      "description": "Split a product into new HUs by its Packaging Spec (e.g. 12 per carton)."
+    },
+    {
+      "fieldname": "column_break_functions",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "allow_create_hu",
+      "label": "Create HU",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_close_hu",
+      "label": "Close / Reopen HU",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_delete_empty_hu",
+      "label": "Delete Empty HU",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "allow_differences",
+      "label": "Post Missing Quantity (Difference)",
+      "fieldtype": "Check",
+      "default": "0",
+      "description": "Let the packer send stock that is not physically there to the warehouse difference bin (only stock not picked for a delivery)."
     }
   ],
   "autoname": "format:{warehouse}-{work_center_code}",

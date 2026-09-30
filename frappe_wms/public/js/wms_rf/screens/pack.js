@@ -84,7 +84,12 @@ export default {
     if (!d) return Loading();
     wrap.append(h("div.hint", `\u{1F3ED} ${d.work_center.work_center_name || d.work_center.name} · ${d.work_center.bin}`,
       h("button.linkbtn", { type: "button", style: { marginLeft: "10px" }, onclick: logOff }, _("Change"))));
-    const modes = [["product", _("Pack product")], ["hu", _("Pack HU")], ["new", _("New HU")], ["close", _("Close HU")]];
+    const cfg = d.work_center;
+    const modes = [["product", _("Pack product"), "allow_pack_product"], ["hu", _("Pack HU"), "allow_pack_hu"],
+      ["new", _("New HU"), "allow_create_hu"], ["close", _("Close HU"), "allow_close_hu"]].filter((m) => cfg[m[2]]);
+    if (!modes.length) { wrap.append(Hint(_("No packing functions are enabled for this work center."))); return wrap; }
+    if (!modes.some((m) => m[0] === st.mode)) st.mode = modes[0][0];
+    if (st.mode === "new" && !st.f.type && cfg.default_hu_type) st.f.type = cfg.default_hu_type;
     wrap.append(h("div.seg", modes.map(([k, l]) => h("button", { type: "button", class: st.mode === k ? "on" : "", onclick: () => { st.mode = k; update(); } }, l))));
     const f = st.f;
     const box = Section({});
@@ -93,7 +98,15 @@ export default {
       box.append(
         Field({ name: "src", kind: "scan", label: _("Source HU (skip = loose on table)"), placeholder: _("Scan HU"), value: f.src, autofocus: !f.src,
           onInput: (v) => { f.src = v; }, onCommit: (v) => (v ? scanHu("src")(v) : undefined) }),
-        Field({ name: "prod", kind: "scan", label: _("Product"), placeholder: _("Scan product or GS1 label"), value: f.prod, onInput: (v) => { f.prod = v; }, onCommit: (v, via, raw) => productFrom(v, raw) }),
+        Field({ name: "prod", kind: "scan", label: cfg.quantity_proposal === "One Unit per Scan" ? _("Product (each scan packs one)") : _("Product"),
+          placeholder: _("Scan product or GS1 label"), value: f.prod, onInput: (v) => { f.prod = v; },
+          onCommit: async (v, via, raw) => {
+            const err = await productFrom(v, raw);
+            if (err || cfg.quantity_proposal !== "One Unit per Scan") return err;
+            f.qty = "1";
+            if (!f.dst) return { focus: "dst" };
+            return (await packProduct()) === false ? false : { focus: "prod" };
+          } }),
         Field({ name: "qty", kind: "qty", label: _("Quantity"), value: f.qty, enterNext: true, onInput: (v) => { f.qty = v; } }),
         Field({ name: "dst", kind: "scan", label: _("Destination HU"), placeholder: _("Scan carton / pallet"), value: f.dst, onInput: (v) => { f.dst = v; },
           onCommit: async (v) => { const e = scanHu("dst")(v); if (e) return e; return (await packProduct()) === false ? false : { focus: "prod" }; } }),
@@ -113,7 +126,7 @@ export default {
     } else {
       box.append(
         Field({ name: "close", kind: "scan", label: _("HU to close"), placeholder: _("Scan HU"), value: f.close, autofocus: true, onInput: (v) => { f.close = v; }, onCommit: scanHu("close") }),
-        Field({ name: "weight", kind: "qty", label: _("Gross weight (scale)"), value: f.weight, unit: "kg", onInput: (v) => { f.weight = v; }, onCommit: () => closeHu() }));
+        Field({ name: "weight", kind: "qty", label: cfg.weigh_on_close === "Required" ? _("Gross weight (scale, required)") : _("Gross weight (scale)"), value: f.weight, unit: "kg", onInput: (v) => { f.weight = v; }, onCommit: () => closeHu() }));
     }
     wrap.append(box);
     const tops = d.handling_units;
@@ -180,12 +193,21 @@ async function closeHu() {
   if (!f.close) { S.fieldErrors.close = _("Scan the HU to close."); feedback.error(); S.focusRequest = "close"; update(); return false; }
   if (f.weight && !isNumeric(f.weight)) { S.fieldErrors.weight = _("Enter a number."); feedback.error(); S.focusRequest = "weight"; update(); return false; }
   const n = node(f.close);
-  const staging = [...new Set((deliveriesOf(f.close)).map((x) => (st.data.deliveries[x] || {}).staging_bin).filter((b) => b && b !== st.data.work_center.bin))];
-  const r = await station("close_hu", { hu_name: f.close, gross_weight: f.weight ? parseNum(f.weight) : undefined, move_to_bin: staging.length === 1 ? staging[0] : undefined },
-    (x) => (x.moved_to ? _("{0} closed and moved to {1}", [f.close, x.moved_to]) : _("{0} closed", [f.close])));
+  // Where the closed HU goes is the work center's "Close HU Follow-up" setting (server side).
+  const args = { work_center: wc(), hu_name: f.close, gross_weight: f.weight ? parseNum(f.weight) : undefined };
+  let r = await run(() => api(`${API}.close_hu`, args), { label: _("Closing…") });
   if (r === undefined) return false;
+  if (r.needs_confirmation) {
+    if (!confirm(r.message)) return false;
+    r = await run(() => api(`${API}.close_hu`, { ...args, confirm_incomplete: 1 }), { label: _("Closing…") });
+    if (r === undefined) return false;
+  }
+  feedback.done();
+  notify.ok(r.moved_to ? _("{0} closed and moved to {1}", [f.close, r.moved_to]) : _("{0} closed", [f.close]), { ttl: 2500 });
   if (f.dst === (n && n.name)) f.dst = "";
-  Object.assign(f, { close: "", weight: "" }); S.focusRequest = "close"; update();
+  Object.assign(f, { close: "", weight: "" });
+  await refresh();
+  S.focusRequest = "close"; update();
 }
 
 async function completeOrder(o) {

@@ -45,17 +45,43 @@ def unpack_hu(work_center, hu_name):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_hu(work_center, hu_type, hu_number=None, outbound_delivery=None):
+def create_hu(work_center, hu_type=None, hu_number=None, outbound_delivery=None):
     return ps.create_station_hu(work_center, hu_type, hu_number, outbound_delivery)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
-def close_hu(work_center, hu_name, gross_weight=None, move_to_bin=None):
-    return ps.close_hu(work_center, hu_name, gross_weight, move_to_bin)
+def close_hu(work_center, hu_name, gross_weight=None, move_to_bin=None, confirm_incomplete=0):
+    return ps.close_hu(work_center, hu_name, gross_weight, move_to_bin, confirm_incomplete)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
 def reopen_hu(work_center, hu_name):
     return ps.reopen_hu(work_center, hu_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def pack_by_instruction(work_center, product, source_hu=None, level_name=None, hu_type=None, quantity_per_hu=None, stock_type=None,
+                        batch_no=None, serial_no=None, outbound_delivery=None, close=0, idempotency_key=None):
+    return ps.pack_by_instruction(work_center, product, source_hu, level_name, hu_type, quantity_per_hu, stock_type, batch_no, serial_no,
+                                  outbound_delivery, close, idempotency_key)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def take_to_table(work_center, hu_name):
+    return ps.take_to_table(work_center, hu_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def delete_empty_hu(work_center, hu_name):
+    return ps.delete_empty_hu(work_center, hu_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def post_difference(work_center, product, quantity, source_hu=None, stock_type=None, batch_no=None, serial_no=None, remarks=None):
+    return ps.post_difference(work_center, product, quantity, source_hu, stock_type, batch_no, serial_no, remarks)
