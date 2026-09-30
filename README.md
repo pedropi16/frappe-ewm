@@ -1007,6 +1007,11 @@ there are more, **Load next** appends the next page in the same order.
 
 ## RF / scanner app
 
+Device setup and kiosk lockdown (Android dedicated devices, iOS Single App
+Mode / Guided Access, scanner settings): [docs/rf-devices.md](docs/rf-devices.md).
+What each role does on the floor and in the desk: [docs/operator-guide.md](docs/operator-guide.md).
+
+
 `/wms` is a chrome-free, scanner-oriented page (not a desk form) — the RF
 frontend at `frappe_wms/www/wms/`, styled after SAP EWM's RF UI. Opening it
 first shows a **Log On** screen: if the signed-in user isn't currently logged
