@@ -14,6 +14,13 @@ def get_task(task_name):
     result = doc.as_dict()
     # Operators recognise stock by its name, not its item code - the task screen only showed "SKU-00187".
     if doc.product: result["product_name"] = frappe.db.get_value("Item", doc.product, "item_name")
+    # Units the operator may count in; a pick for a delivery ordered in cases offers cases first.
+    from frappe_wms.services.uom import unit_options
+    line_unit = None
+    if doc.stock_allocations:
+        delivery_item = frappe.db.get_value("Stock Allocation", doc.stock_allocations[0].stock_allocation, "outbound_delivery_item")
+        line_unit = frappe.db.get_value("Outbound Delivery Item", delivery_item, ["uom", "conversion_factor"], as_dict=True) if delivery_item else None
+    result["uoms"] = unit_options(doc.product, doc.stock_uom, line_unit and line_unit.uom, line_unit and line_unit.conversion_factor) if doc.product else []
     if len(doc.stock_allocations or []) > 1:
         # A cluster pick task's own fields only show the aggregate - the RF app needs the
         # per-order breakdown (which delivery gets how much) so an operator sorting the pick

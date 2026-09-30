@@ -203,8 +203,10 @@ def station_overview(work_center):
     delivery_names = sorted({d for n in nodes for d in n["deliveries"]} | {o.outbound_delivery for o in orders if o.outbound_delivery})
     deliveries = {d.name: d for d in frappe.get_all("Outbound Delivery", filters={"name": ["in", delivery_names]},
                   fields=["name", "outbound_delivery_number", "customer", "route", "staging_bin", "door", "packing_status"])} if delivery_names else {}
-    products = sorted({s.product for n in nodes for s in _all_stock(n)} | {s.product for s in loose})
-    return {"work_center": wc, "handling_units": nodes, "loose_stock": loose, "arriving": arriving, "packing_orders": orders,
+    stock_uom = {s["product"]: s["stock_uom"] for n in nodes for s in _all_stock(n)} | {s.product: s.stock_uom for s in loose}
+    products = sorted(stock_uom)
+    from frappe_wms.services.uom import unit_options
+    return {"units": {p: unit_options(p, stock_uom[p]) for p in products}, "work_center": wc, "handling_units": nodes, "loose_stock": loose, "arriving": arriving, "packing_orders": orders,
             "deliveries": deliveries, "instructions": {p: packing_instructions(p) for p in products},
             "hu_types": frappe.get_all("Handling Unit Type", filters={"active": 1}, fields=["name", "hu_type_name", "numbering_mode", "category"])}
 

@@ -279,3 +279,31 @@ test("a double-fired scan (same label read twice back to back) advances exactly 
   await page.waitForTimeout(800);
   await expect(page).toHaveURL(/\/quantity$/);                       // not pushed on to destination by the duplicate
 });
+
+test("counting unit: the quantity is typed in cases and confirmed in stock units", async ({ page, request }) => {
+  const s = seed(), a = admin(request);
+  try { await a.get("/api/resource/UOM/E2E Case"); } catch (e) { await a.post("/api/resource/UOM", { uom_name: "E2E Case" }); }
+  const item = (await a.get(`/api/resource/Item/${encodeURIComponent(s.item)}`)).data;
+  const before = item.uoms.map((u) => ({ uom: u.uom, conversion_factor: u.conversion_factor }));
+  await a.put(`/api/resource/Item/${encodeURIComponent(s.item)}`, { uoms: [...before.filter((u) => u.uom !== "E2E Case"), { uom: "E2E Case", conversion_factor: 4 }] });
+  try {
+    const t = await makeTask(request, { planned_quantity: 8 });
+    await openTask(page, t);
+    await scan(page, "E2E-WH-A1");
+    await expect(page).toHaveURL(/\/quantity$/);
+    await page.locator('[data-fk="uom"]').selectOption("E2E Case");
+    await expect(page.locator('[data-fk="qty"]')).toHaveValue("2");          // 8 stock units shown as 2 cases
+    await page.locator('[data-fk="qty"]').fill("1");
+    await expect(view(page)).toContainText(`= 4 ${s.uom}`);
+    await enter(page);
+    await scan(page, "E2E-WH-B1");
+    await expect(view(page)).toContainText("(1 E2E Case)");
+    await page.getByRole("button", { name: /Confirm/ }).click();
+    await expect(page).toHaveURL(/#\/tasks\/internal$/);
+    const done = await getTask(request, t.name);
+    expect(done.confirmed_quantity).toBe(4);
+    expect(done.status).toBe("Partially Confirmed");
+  } finally {
+    await a.put(`/api/resource/Item/${encodeURIComponent(s.item)}`, { uoms: before });
+  }
+});

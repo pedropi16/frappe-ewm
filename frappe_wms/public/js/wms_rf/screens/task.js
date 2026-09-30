@@ -34,6 +34,11 @@ function completed(stepKey, f) {
   return { source: f.srcOk, product: f.prodOk, quantity: f.qtyOk, destination: f.dstOk, review: false }[stepKey];
 }
 
+// Counting units offered for the task's product (stock unit first); f.uqty is what the operator
+// typed in f.uom, f.qty always the stock quantity that is confirmed.
+const unitsOf = (t) => (t.uoms && t.uoms.length ? t.uoms : [{ uom: t.stock_uom, factor: 1 }]);
+const unitOf = (t, f) => unitsOf(t).find((u) => u.uom === f.uom) || unitsOf(t)[0];
+
 function newForm(task) {
   return { src: "", srcOk: false, prod: "", prodOk: false, qty: fmtQty(remaining(task)), qtyOk: false, dst: "", dstOk: false, hu: "", idem: "", w0: nav.depth, base: flt(task.confirmed_quantity) };
 }
@@ -186,10 +191,20 @@ function stepView(wrap, step) {
         } }));
   } else if (step === "quantity") {
     const rem = remaining(t);
-    box.append(Field({ name: "qty", kind: "qty", label: `${_("Quantity")} · ${_("remaining {0}", [fmtQty(rem)])}`, value: f.qty, unit: t.stock_uom, autofocus: true,
-        hint: rem > 1 ? _("Confirming less than planned keeps the task open for the rest.") : null,
-        onInput: (v) => { f.qty = v; f.qtyOk = false; persist(); } }),
-      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.qty = fmtQty(rem); persist(); S.focusRequest = "qty"; update(); } }));
+    const units = unitsOf(t), unit = unitOf(t, f);
+    if (f.uqty == null) f.uqty = f.qty;
+    if (units.length > 1) {
+      box.append(Field({ name: "uom", kind: "select", label: _("Counting unit"), value: unit.uom,
+        options: units.map((u) => ({ value: u.uom, label: u.factor === 1 ? u.uom : `${u.uom} (${fmtQty(u.factor)} ${t.stock_uom})` })),
+        onInput: (v) => { const now = (units.find((u) => u.uom === v) || units[0]).factor;
+          if (isNumeric(f.uqty)) f.uqty = fmtQty(round6(parseNum(f.uqty) * unit.factor / now)); f.uom = v; f.qtyOk = false; persist(); update(); } }));
+    }
+    const inUnit = unit.factor !== 1 ? ` (${fmtQty(round6(rem / unit.factor))} ${unit.uom})` : "";
+    box.append(Field({ name: "qty", kind: "qty", label: `${_("Quantity")} · ${_("remaining {0}", [fmtQty(rem)])}${inUnit}`, value: f.uqty, unit: unit.uom, autofocus: true,
+        hint: unit.factor !== 1 && isNumeric(f.uqty) ? _("= {0} {1}", [fmtQty(round6(parseNum(f.uqty) * unit.factor)), t.stock_uom])
+          : rem > 1 ? _("Confirming less than planned keeps the task open for the rest.") : null,
+        onInput: (v) => { f.uqty = v; f.qtyOk = false; persist(); if (unit.factor !== 1) update(); } }),
+      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }));
   } else if (step === "destination") {
     box.append(Expect(_("Scan destination"), [t.destination_bin, t.destination_hu]),
       Field({ name: "dst", kind: "scan", gs1: "sscc", label: _("Destination bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.dst, autofocus: true,
@@ -201,7 +216,8 @@ function stepView(wrap, step) {
         } }));
   } else if (step === "review") {
     const excess = round6(parseNum(f.qty) - remaining(t));
-    box.append(KV([[_("Product"), t.product], [_("Quantity"), `${f.qty} ${t.stock_uom || ""}`], [_("From"), f.src || taskLocation(t, "src")], [_("To"), f.dst || taskLocation(t, "dst")]]));
+    const unit = unitOf(t, f);
+    box.append(KV([[_("Product"), t.product], [_("Quantity"), `${f.qty} ${t.stock_uom || ""}${unit.factor !== 1 ? ` (${f.uqty} ${unit.uom})` : ""}`], [_("From"), f.src || taskLocation(t, "src")], [_("To"), f.dst || taskLocation(t, "dst")]]));
     if (excess > 0) box.append(Hint(_("{0} more than planned ({1}) - the extra goes to the warehouse's difference bin, not here.", [fmtQty(excess), fmtQty(remaining(t))])));
     box.append(h("div", { style: { height: "14px" } }),
       Field({ name: "hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan or leave as suggested"), value: f.hu,
@@ -223,8 +239,9 @@ function advance(stepKey) {
 function next(step) {
   const t = st.task, f = st.form;
   if (step === "quantity") {
-    if (!isNumeric(f.qty)) return fail("qty", _("Enter a number."));
-    const qty = parseNum(f.qty);
+    if (f.uqty == null) f.uqty = f.qty;
+    if (!isNumeric(f.uqty)) return fail("qty", _("Enter a number."));
+    const qty = round6(parseNum(f.uqty) * unitOf(t, f).factor);  // always confirmed in the stock unit
     if (qty <= 0) return fail("qty", _("Enter a quantity greater than zero."));
     // More than planned is allowed (a real find, e.g. Unload/Putaway) - it is capped at the task's
     // own plan server-side and the excess is posted to the warehouse's difference bin instead of

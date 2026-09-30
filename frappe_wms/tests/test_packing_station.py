@@ -232,3 +232,25 @@ class TestPackingStation(IntegrationTestCase):
         d1, tote = self._picked_delivery(2)
         with self.assertRaisesRegex(frappe.ValidationError, "picked for"):
             post_difference(self.wc, self.item, 1, source_hu=tote)
+
+    def test_counting_units_for_picking_and_packing(self):
+        from frappe_wms.api.scanner import get_task
+        if not frappe.db.exists("UOM", "WMS Test Case"):
+            frappe.get_doc({"doctype": "UOM", "uom_name": "WMS Test Case"}).insert(ignore_permissions=True)
+        item = frappe.get_doc("Item", self.item)
+        if not any(c.uom == "WMS Test Case" for c in item.uoms):
+            item.append("uoms", {"uom": "WMS Test Case", "conversion_factor": 5})
+            item.save(ignore_permissions=True)
+        # A delivery ordered in cases: its pick task offers the case first after the stock unit.
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh,
+                              "customer": TEST_CUSTOMER, "delivery_date": nowdate(), "staging_bin": self.bins["PACK"],
+                              "items": [{"line_number": 1, "item": self.item, "requested_quantity": 5, "stock_uom": self.uom, "uom": "WMS Test Case",
+                                         "conversion_factor": 5, "required_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+        units = get_task(create_pick_tasks(obd.name)[0])["uoms"]
+        self.assertEqual(units[0], {"uom": self.uom, "factor": 1})
+        self.assertEqual(units[1], {"uom": "WMS Test Case", "factor": 5})
+        # The Repack Center gets every product's units on the table.
+        self._picked_delivery(2)
+        self.assertIn({"uom": "WMS Test Case", "factor": 5}, station_overview(self.wc)["units"][self.item])

@@ -3,7 +3,7 @@ import { S, run, load, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
 import { Section, Field, Card, Badge, Btn, Empty, Loading, Hint } from "#wms/ui/kit.js";
-import { fmtQty, parseNum, isNumeric } from "#wms/core/util.js";
+import { fmtQty, parseNum, isNumeric, round6 } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { parseGS1, gtinVariants } from "#wms/core/gs1.js";
 import { refreshSession, sectionCrumb, sectionHash, ensureKey } from "#wms/screens/shared.js";
@@ -12,7 +12,7 @@ import { refreshSession, sectionCrumb, sectionHash, ensureKey } from "#wms/scree
 // then scan source HU -> product -> quantity -> destination HU and the pack posts; Close HU asks
 // for the weight. Same backend as the desk Packing Station (api/packing_station.py).
 const API = "frappe_wms.api.packing_station";
-const st = { mode: "product", f: { src: "", prod: "", qty: "", dst: "", dlv: "", hu: "", into: "", close: "", weight: "", type: "", idem: "" },
+const st = { mode: "product", f: { src: "", prod: "", qty: "", uom: "", dst: "", dlv: "", hu: "", into: "", close: "", weight: "", type: "", idem: "" },
   data: null, centers: null, orders: [], loading: false };
 
 const wc = () => (S.resource && S.resource.current_work_center) || null;
@@ -53,8 +53,24 @@ async function productFrom(value, raw) {
     }
   }
   if (!hit) return _("{0} is not a product in {1}.", [value, st.f.src || _("the loose stock")]);
-  st.f.prod = hit.product;
+  st.f.prod = hit.product; st.f.uom = hit.stock_uom;
   if (!st.f.qty) st.f.qty = fmtQty(gs && gs.count ? Math.min(gs.count, hit.quantity) : hit.quantity);
+}
+
+// The product's counting units (stock unit first, then the Item's UOM conversions): packing a case
+// of 12 is typed as 1 case and posted as 12.
+const unitsFor = (product) => ((st.data && st.data.units) || {})[product] || [];
+const unitFor = (f) => unitsFor(f.prod).find((u) => u.uom === f.uom) || unitsFor(f.prod)[0] || { uom: "", factor: 1 };
+function unitFields(f) {
+  const units = unitsFor(f.prod), unit = unitFor(f);
+  return [
+    units.length > 1 ? Field({ name: "uom", kind: "select", label: _("Counting unit"), value: unit.uom,
+      options: units.map((u) => ({ value: u.uom, label: u.factor === 1 ? u.uom : `${u.uom} (${fmtQty(u.factor)} ${units[0].uom})` })),
+      onInput: (v) => { const now = (units.find((u) => u.uom === v) || units[0]).factor;
+        if (isNumeric(f.qty)) f.qty = fmtQty(round6(parseNum(f.qty) * unit.factor / now)); f.uom = v; update(); } }) : null,
+    Field({ name: "qty", kind: "qty", label: _("Quantity"), value: f.qty, unit: unit.uom || undefined, enterNext: true, onInput: (v) => { f.qty = v; if (unit.factor !== 1) update(); },
+      hint: unit.factor !== 1 && isNumeric(f.qty) ? _("= {0} {1}", [fmtQty(round6(parseNum(f.qty) * unit.factor)), units[0].uom]) : null }),
+  ];
 }
 
 function scanHu(key, mustExist = true) {
@@ -95,7 +111,7 @@ export default {
     const box = Section({});
     if (st.mode === "product") {
       const dl = deliveriesOf(f.src);
-      box.append(
+      box.append(...[
         Field({ name: "src", kind: "scan", label: _("Source HU (skip = loose on table)"), placeholder: _("Scan HU"), value: f.src, autofocus: !f.src,
           onInput: (v) => { f.src = v; }, onCommit: (v) => (v ? scanHu("src")(v) : undefined) }),
         Field({ name: "prod", kind: "scan", label: cfg.quantity_proposal === "One Unit per Scan" ? _("Product (each scan packs one)") : _("Product"),
@@ -107,11 +123,11 @@ export default {
             if (!f.dst) return { focus: "dst" };
             return (await packProduct()) === false ? false : { focus: "prod" };
           } }),
-        Field({ name: "qty", kind: "qty", label: _("Quantity"), value: f.qty, enterNext: true, onInput: (v) => { f.qty = v; } }),
+        ...unitFields(f),
         Field({ name: "dst", kind: "scan", label: _("Destination HU"), placeholder: _("Scan carton / pallet"), value: f.dst, onInput: (v) => { f.dst = v; },
           onCommit: async (v) => { const e = scanHu("dst")(v); if (e) return e; return (await packProduct()) === false ? false : { focus: "prod" }; } }),
         dl.length > 1 ? Field({ name: "dlv", kind: "select", label: _("For delivery"), value: f.dlv, onInput: (v) => { f.dlv = v; },
-          options: [{ value: "", label: _("Choose…") }, ...dl.map((x) => ({ value: x, label: (d.deliveries[x] || {}).outbound_delivery_number || x }))] }) : null);
+          options: [{ value: "", label: _("Choose…") }, ...dl.map((x) => ({ value: x, label: (d.deliveries[x] || {}).outbound_delivery_number || x }))] }) : null].filter(Boolean));
     } else if (st.mode === "hu") {
       box.append(
         Field({ name: "hu", kind: "scan", label: _("HU to pack"), placeholder: _("Scan HU"), value: f.hu, autofocus: true, onInput: (v) => { f.hu = v; }, onCommit: scanHu("hu") }),
@@ -164,11 +180,12 @@ async function packProduct() {
   if (!isNumeric(f.qty) || parseNum(f.qty) <= 0) { S.fieldErrors.qty = _("Enter a quantity greater than zero."); feedback.error(); S.focusRequest = "qty"; update(); return false; }
   if (!f.dst) { S.fieldErrors.dst = _("Scan the destination HU."); feedback.error(); S.focusRequest = "dst"; update(); return false; }
   const idem = ensureKey(f, "RF-PACK");
-  const r = await station("pack_product", { product: f.prod, quantity: parseNum(f.qty), destination_hu: f.dst, source_hu: f.src || undefined,
-    outbound_delivery: f.dlv || undefined, idempotency_key: idem }, () => _("Packed {0} {1} into {2}", [fmtQty(parseNum(f.qty)), f.prod, f.dst]));
+  const stockQty = round6(parseNum(f.qty) * unitFor(f).factor);  // always packed in the stock unit
+  const r = await station("pack_product", { product: f.prod, quantity: stockQty, destination_hu: f.dst, source_hu: f.src || undefined,
+    outbound_delivery: f.dlv || undefined, idempotency_key: idem }, () => _("Packed {0} {1} into {2}", [fmtQty(stockQty), f.prod, f.dst]));
   if (r === undefined) return false;
   // Keep source and destination: the next scan is usually the next product for the same carton.
-  Object.assign(f, { prod: "", qty: "", idem: "" });
+  Object.assign(f, { prod: "", qty: "", uom: "", idem: "" });
   S.focusRequest = "prod"; update();
 }
 

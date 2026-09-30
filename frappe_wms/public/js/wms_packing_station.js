@@ -52,7 +52,7 @@
       this.data = null;
       this.selected = null;
       this.expanded = new Set();
-      this.form = { source: "", product: "", qty: "", dest: "", delivery: "", hu: "", hu_dest: "", type: "", number: "", for_delivery: "", close_hu: "", weight: "", move_to: "" };
+      this.form = { source: "", product: "", qty: "", uom: "", dest: "", delivery: "", hu: "", hu_dest: "", type: "", number: "", for_delivery: "", close_hu: "", weight: "", move_to: "" };
       styles();
     }
 
@@ -248,6 +248,7 @@
         fields = this.field("source", __("Source HU (blank = loose on table)"), { list: hus, ph: __("Scan HU") })
           + this.field("product", __("Product"), { list: this.productsFor(this.form.source), ph: __("Scan product") })
           + this.field("qty", oneByOne ? __("Quantity (one unit per scan)") : __("Quantity (blank = all of it)"), { type: "number", ph: oneByOne ? "1" : "" })
+          + `<div class="wps-uom-wrap">${this.field("uom", __("Counting unit"), { options: [{ value: "", label: "" }] })}</div>`
           + this.field("dest", __("Destination HU"), { list: hus, ph: __("Scan HU") })
           + `<div class="wps-dlv-wrap">${this.field("delivery", __("For delivery"), { options: [{ value: "", label: "" }] })}</div>`;
         action = `<button class="btn btn-primary wps-go">${__("Pack")} ↵</button> <button class="btn btn-default wps-all">${__("Pack all of source")}</button>`;
@@ -316,6 +317,13 @@
           : `<option value="">${esc(__("no Packaging Spec - enter quantity per HU"))}</option>`);
         if (levels.length && !levels.some((l) => l.level_name === f.level)) f.level = levels[0].level_name;
       }
+      if (this.tab === "product" && (!changed || changed === "product")) {
+        // The product's counting units (stock unit first): 1 case is packed as its 12 stock units.
+        const units = (this.data.units || {})[f.product] || [];
+        if (!units.some((u) => u.uom === f.uom)) f.uom = units.length ? units[0].uom : "";
+        $s.find(".wps-uom-wrap").toggle(units.length > 1);
+        $s.find('.wps-f[data-k="uom"]').html(units.map((u) => `<option value="${esc(u.uom)}" ${u.uom === f.uom ? "selected" : ""}>${esc(u.factor === 1 ? u.uom : `${u.uom} (${num(u.factor)} ${units[0].uom})`)}</option>`).join(""));
+      }
       if (this.tab === "product" || this.tab === "instruction") {
         if (!changed || changed === "source") {
           $s.find("#wps-dl-product").html(this.productsFor(f.source).map((v) => `<option value="${esc(v.value)}">${esc(v.label)}</option>`).join(""));
@@ -356,7 +364,8 @@
       const f = this.form;
       if (this.tab === "product") {
         if (!f.product || !f.dest) { this.msg = { kind: "err", text: __("Scan a product and a destination HU.") }; return this.drawScanner(); }
-        let qty = f.qty;
+        const unit = ((this.data.units || {})[f.product] || []).find((u) => u.uom === f.uom);
+        let qty = f.qty && unit ? Math.round(parseFloat(f.qty) * unit.factor * 1e6) / 1e6 : f.qty;  // always packed in the stock unit
         if (!qty) {
           const src = f.source ? this.findNode(f.source) : null;
           const rows = (src ? src.stock : this.data.loose_stock).filter((s) => s.product === f.product);
@@ -365,7 +374,7 @@
         }
         const ok = await this.call("pack_product", { product: f.product, quantity: qty, destination_hu: f.dest, source_hu: f.source || undefined,
           outbound_delivery: f.delivery || undefined, idempotency_key: `PS:${frappe.utils.get_random(12)}` }, __("Packed {0} {1} into {2}", [num(qty), f.product, f.dest]));
-        if (ok !== undefined) { f.product = ""; f.qty = ""; this.drawScanner(); }
+        if (ok !== undefined) { f.product = ""; f.qty = ""; f.uom = ""; this.drawScanner(); }
       } else if (this.tab === "instruction") {
         if (!f.product) { this.msg = { kind: "err", text: __("Scan the product.") }; return this.drawScanner(); }
         const r = await this.call("pack_by_instruction", { product: f.product, source_hu: f.source || undefined, level_name: f.level || undefined,

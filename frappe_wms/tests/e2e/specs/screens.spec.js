@@ -69,6 +69,7 @@ test("every screen renders without a JS error (smoke over all routes)", async ({
     await openApp(page, `#/${r}`);
     await page.waitForTimeout(350);
     await expect(page.locator("#view")).not.toContainText("could not be displayed");
+    await expect(page.locator("#view"), `#/${r} renders a bare null/undefined`).not.toContainText(/\b(null|undefined)\b/);
   }
   expect(errors, errors.join("\n")).toEqual([]);
 });

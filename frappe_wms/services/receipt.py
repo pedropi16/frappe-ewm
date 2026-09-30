@@ -160,14 +160,8 @@ def receiving_worklist(inbound_delivery):
     }
 
 def _receiving_uoms(row):
-    uoms = [{"uom": row.stock_uom, "factor": 1}]
-    conversions = frappe.get_all("UOM Conversion Detail", filters={"parent": row.item, "parenttype": "Item"}, fields=["uom", "conversion_factor"])
-    if row.get("uom") and row.uom != row.stock_uom and flt(row.get("conversion_factor")) > 0:
-        conversions.insert(0, frappe._dict(uom=row.uom, conversion_factor=row.conversion_factor))
-    for c in conversions:
-        if c.uom != row.stock_uom and flt(c.conversion_factor) > 0 and not any(u["uom"] == c.uom for u in uoms):
-            uoms.append({"uom": c.uom, "factor": flt(c.conversion_factor)})
-    return uoms
+    from frappe_wms.services.uom import unit_options
+    return unit_options(row.item, row.stock_uom, row.get("uom"), row.get("conversion_factor"))
 
 def _get_or_create_batch(item_code, batch_no):
     # Same "a scan of something new registers it in place" idiom as get_or_create_handling_unit -
