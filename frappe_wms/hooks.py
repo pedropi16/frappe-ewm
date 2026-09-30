@@ -30,7 +30,8 @@ doctype_js = {
 }
 
 after_install = "frappe_wms.install.after_install"
-after_migrate = ["frappe_wms.db_maintenance.ensure_indexes", "frappe_wms.setup.custom_fields.ensure_custom_fields"]
+after_migrate = ["frappe_wms.db_maintenance.ensure_indexes", "frappe_wms.setup.custom_fields.ensure_custom_fields",
+                 "frappe_wms.setup.role_permissions.ensure_role_permissions"]
 before_tests = "frappe_wms.tests.bootstrap.before_tests"
 jinja = {"methods": ["frappe_wms.services.printing.packing_list_data"]}
 

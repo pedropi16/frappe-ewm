@@ -252,7 +252,10 @@
       "delete": 1,
       "submit": 1,
       "cancel": 1,
-      "amend": 1
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Operator",
@@ -261,7 +264,10 @@
       "create": 1,
       "delete": 0,
       "submit": 1,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Picker",
@@ -270,7 +276,10 @@
       "create": 1,
       "delete": 0,
       "submit": 1,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Loader",
@@ -279,7 +288,10 @@
       "create": 1,
       "delete": 0,
       "submit": 1,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Supervisor",
@@ -288,7 +300,59 @@
       "create": 1,
       "delete": 0,
       "submit": 1,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     }
   ]
 }
