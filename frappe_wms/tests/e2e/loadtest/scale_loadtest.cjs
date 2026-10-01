@@ -5,6 +5,7 @@
 // work that has no RF screen anyway (POs, releasing deliveries, approving counts) - reaching
 // real 50-concurrent-actor backend load without 50 browser processes on a 6.9GB host.
 const path = require("path");
+const dns = require("dns");
 const { chromium } = require("playwright-core");
 const fs = require("fs");
 
@@ -13,6 +14,27 @@ const PASSWORD = process.env.LOADTEST_PASSWORD;
 if (!PASSWORD) { console.error("Set LOADTEST_PASSWORD"); process.exit(1); }
 const SHOT_DIR = process.env.LOADTEST_SHOT_DIR || path.join(__dirname, "shots-scale");
 fs.mkdirSync(SHOT_DIR, { recursive: true });
+
+const TARGET_HOST = new URL(BASE).hostname;
+// Confirmed live: when this script and the production stack run on the SAME host, resolving the
+// public domain hairpins out through the home router's NAT and back in - fine for one request at
+// a time, but under real concurrent connections this degraded every "open delivery" page load to
+// 15-30+ seconds, even though gunicorn/nginx/the app itself all answered a direct loopback hit in
+// single-digit milliseconds throughout. Set LOADTEST_SKIP_HAIRPIN_BYPASS=1 to disable this (e.g.
+// running the script from a genuinely different machine, where the public DNS answer is correct).
+if (!process.env.LOADTEST_SKIP_HAIRPIN_BYPASS) {
+  const bypassIP = process.env.LOADTEST_BYPASS_IP || "127.0.0.1";
+  const originalLookup = dns.lookup;
+  dns.lookup = (hostname, options, callback) => {
+    if (typeof options === "function") { callback = options; options = {}; }
+    if (hostname === TARGET_HOST) {
+      if (options && options.all) return callback(null, [{ address: bypassIP, family: 4 }]);
+      return callback(null, bypassIP, 4);
+    }
+    return originalLookup(hostname, options, callback);
+  };
+  console.log(`[hairpin bypass] ${TARGET_HOST} -> ${bypassIP} for this process's own DNS lookups (Node fetch/http); Chromium gets its own --host-resolver-rules below.`);
+}
 
 const RF_NAMES = ["Ana","Bruno","Carla","Diego","Elena","Felipe","Gabriela","Hugo","Irene","Javier",
   "Karina","Luis","Marta","Nico","Olivia","Pablo","Quinn","Rosa","Santiago","Teresa"];
@@ -222,6 +244,10 @@ const deliveryNames = (process.env.LOADTEST_IBD_NAMES || "").split(",").filter(B
 async function runWave(waveIndex, personas, { doReceive, doPutaway, doMoveRepack, doPick, doCount, doShip }) {
   console.log(`\n########## WAVE ${waveIndex + 1}/${WAVES.length}: ${personas.map((p) => p.name).join(", ")} ##########`);
   const launchOpts = { args: ["--no-sandbox"] };
+  if (!process.env.LOADTEST_SKIP_HAIRPIN_BYPASS) {
+    const bypassIP = process.env.LOADTEST_BYPASS_IP || "127.0.0.1";
+    launchOpts.args.push(`--host-resolver-rules=MAP ${TARGET_HOST} ${bypassIP}`);
+  }
   if (process.env.CHROMIUM_EXECUTABLE_PATH) launchOpts.executablePath = process.env.CHROMIUM_EXECUTABLE_PATH;
   const browser = await chromium.launch(launchOpts);
   const sessions = {};
