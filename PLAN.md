@@ -1,8 +1,30 @@
 # WMS RF App load-test & hardening — status and plan
 
-Last updated 2026-09-30. This tracks an ongoing engagement, separate from `app_gap.md` (an
+Last updated 2026-10-01. This tracks an ongoing engagement, separate from `app_gap.md` (an
 unrelated earlier SAP-EWM-parity roadmap) — this one is specifically about driving the `/wms` RF
 app under realistic, concurrent load against **production** and fixing whatever breaks.
+
+## 🚨 Current blocker — read this first
+
+Production's backend runs with only **`GUNICORN_WORKERS=2`, `GUNICORN_THREADS=4`** (8 concurrent
+request slots total, confirmed live via process inspection inside `frappe-backend-1`: exactly 1
+gunicorn master + 2 workers). A 2026-10-01 50-actor run (20 real RF browser sessions in safe waves
+of 6 + 30 lightweight API desk actors, full details in the findings doc) found this reliably stalls
+**every** Inbound Delivery page load under just 6-way concurrent RF traffic — 15-30+ second waits,
+zero receipts posted, the entire downstream cycle (putaway/pick/count/ship) never got to run. This
+is an infrastructure capacity finding, not an app bug.
+
+**This needs to be fixed before any further concurrent load testing is worth running.** The fix
+(bump `GUNICORN_WORKERS`, e.g. to 4) can't be applied from this repo or this checkout — the running
+stack is Portainer-managed (`docker inspect frappe-backend-1` shows
+`com.docker.compose.project.working_dir: /data/compose/22`, inside Portainer's own data volume, not
+`~/frappe_docker/docker-compose.yml` on disk, which was edited as a reference but does **not**
+drive the live containers). Apply it via Portainer's UI (or find the real compose source it deploys
+from), restart the backend service, then re-run
+`frappe_wms/tests/e2e/loadtest/scale_loadtest.cjs` (committed, wave-based, 20 RF + 30 desk actors)
+to get the full-cycle validation this was meant to deliver. 200 new products (`WH-*`), POs,
+Inbound Deliveries, Sales Orders and count documents are already seeded on production and ready for
+that re-run — see the findings doc's 2026-10-01 entries for full detail.
 
 ## The standing task
 
