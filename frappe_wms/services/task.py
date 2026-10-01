@@ -3,11 +3,10 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
-from frappe_wms.services.bin_rules import validate_destination_bin
+from frappe_wms.services.bin_rules import incoming_load, validate_destination_bin
 from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues, RESOURCE_ROLES
 from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
-from frappe_wms.services import erpnext_sync
 from frappe_wms.utils import require_role
 
 TASK_TYPE_BY_REQUEST = {
@@ -27,6 +26,26 @@ def _split_by_full_pallet(remaining, full_qty):
         chunks.append(min(left, full_qty))
         left -= full_qty
     return chunks
+
+def plan_requests(request_names, batch_key=None):
+    """Creates the tasks of each request. One that cannot be planned now (no free destination
+    bin - a full storage type, a missing rule) stays an open request instead of undoing the
+    goods receipt / kit / delivery change that raised it: the Monitor lists it under Warehouse
+    Requests Without Tasks and plans it again with "Create tasks" (SAP: the warehouse request
+    stays open with its error log). -> (task names, unplanned request names)"""
+    tasks, unplanned = [], []
+    for name in request_names:
+        frappe.db.savepoint("wms_plan_request")
+        try:
+            created = create_tasks_for_request(name, batch_key=batch_key) if batch_key else create_tasks_for_request(name)
+        except frappe.ValidationError as e:
+            frappe.db.rollback(save_point="wms_plan_request")
+            frappe.clear_messages()
+            frappe.get_doc("Warehouse Request", name).add_comment("Comment", _("Tasks could not be created yet: {0}").format(e))
+            unplanned.append(name)
+            continue
+        tasks += created if isinstance(created, list) else [created] if created else []
+    return tasks, unplanned
 
 def create_tasks_for_request(request_name, batch_key=None):
     request = frappe.get_doc("Warehouse Request", request_name, for_update=True)
@@ -57,11 +76,10 @@ def create_tasks_for_request(request_name, batch_key=None):
         if not destination_bin and process_type and process_type.destination_required:
             hu_type = frappe.db.get_value("Handling Unit", request.source_hu, "hu_type") if request.source_hu else None
             source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
-            gross_weight_per_unit = frappe.db.get_value("WMS Product", request.product, "gross_weight_per_unit")
-            incoming_weight = flt(gross_weight_per_unit) * chunk_qty if gross_weight_per_unit else None
+            incoming_weight, incoming_volume = incoming_load(request.product, chunk_qty)
             destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product,
                 "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type,
-                "incoming_weight": incoming_weight, "destination_hu": request.destination_hu or request.source_hu,
+                "incoming_weight": incoming_weight, "incoming_volume": incoming_volume, "destination_hu": request.destination_hu or request.source_hu,
                 "reserved_hu_counts": reserved_hu_counts})
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
@@ -90,10 +108,9 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
     # Warehouse Task as one action since there is no separate planning step to wait on.
     require_role("WMS Operator", "WMS Supervisor")
     hu_type = frappe.db.get_value("Handling Unit", source_hu, "hu_type") if source_hu else None
-    gross_weight_per_unit = frappe.db.get_value("WMS Product", product, "gross_weight_per_unit")
-    incoming_weight = flt(gross_weight_per_unit) * flt(quantity) if gross_weight_per_unit else None
+    incoming_weight, incoming_volume = incoming_load(product, quantity)
     validate_destination_bin(destination_bin, item=product, stock_type=stock_type, hu_type=hu_type,
-        batch_no=batch_no, destination_hu=destination_hu or source_hu, incoming_weight=incoming_weight)
+        batch_no=batch_no, destination_hu=destination_hu or source_hu, incoming_weight=incoming_weight, incoming_volume=incoming_volume)
     process_type_name = determine_process_type(warehouse, "Internal Move", item=product, stock_type=stock_type, default="INTERNAL_MOVE")
     process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
     task = frappe.get_doc({
@@ -619,7 +636,8 @@ def _update_request(name):
     if status == "Completed":
         request = frappe.get_doc("Warehouse Request", name)
         if request.reference_doctype == "Work Order":
-            erpnext_sync.sync_work_order_material_transfer(request)
+            from frappe_wms.services.erp_sync_queue import dispatch
+            dispatch("work_order_transfer", request)
 
 def _relocate_hu_for_task(task, destination_hu=None):
     # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source

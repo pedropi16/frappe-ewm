@@ -2,6 +2,8 @@ import { h } from "#wms/ui/dom.js";
 import { S, update, run } from "#wms/app.js";
 import { _ } from "#wms/core/i18n.js";
 import { normalizeScan } from "#wms/core/scan.js";
+import { gs1Element, parseGS1 } from "#wms/core/gs1.js";
+import { api } from "#wms/core/api.js";
 import { feedback } from "#wms/core/feedback.js";
 import { prefs } from "#wms/core/prefs.js";
 import { scanWithCamera, cameraSupported } from "#wms/core/camera.js";
@@ -52,7 +54,7 @@ export function Expect(label, values) {
 
 // ---------- fields ----------
 // spec: { name, label, value, kind: "scan"|"text"|"qty"|"select", placeholder, hint, unit, options, autofocus, disabled,
-//         onInput(value), onCommit(value, via) -> undefined | "error text" | Promise<...> }
+//         onInput(value), onCommit(value, via, raw) -> undefined | "error text" | false | {focus: "field"} | Promise<...> }
 // A field with onCommit is validated when the operator presses Enter / a scanner ends a scan / the camera returns a code.
 export function Field(spec) {
   const kind = spec.kind || "text";
@@ -110,15 +112,39 @@ export async function commitField(rec, raw, via) {
 async function commitFieldInner(rec, raw, via) {
   const token = S.routeToken;
   if (rec.tok !== token) return false; // rendered for a previous screen
-  const value = rec.kind === "scan" ? normalizeScan(raw) : String(raw == null ? "" : raw).trim();
+  let value = rec.kind === "scan" ? normalizeScan(raw) : String(raw == null ? "" : raw).trim();
+  // A GS1 label scanned into any scan field: the field gets its own element (spec.gs1 names it -
+  // "sscc", "gtin", "batch", "serial" - or the most identifying one); handlers still get `raw`.
+  if (rec.kind === "scan" && rec.spec.gs1 !== false) {
+    const want = rec.spec.gs1 || null;
+    const element = gs1Element(raw, want) || gs1Element(value, want);
+    if (element) {
+      value = element;
+      // An SSCC stands for a Handling Unit: hand the screen the HU it belongs to.
+      const gs = parseGS1(raw) || parseGS1(normalizeScan(raw));
+      if (gs && gs.sscc === element) {
+        try {
+          const r = await api("frappe_wms.api.scanner.resolve_scan", { code: element }, { read: true, timeoutMs: 6000 });
+          const hu = (r.matches || []).find((m) => m.type === "hu");
+          if (hu) value = hu.name;
+        } catch (e) { /* offline: keep the SSCC, the screen reports it if it cannot use it */ }
+      }
+    }
+  }
   if (rec.input.isConnected) rec.input.value = value;
   if (rec.spec.onInput) rec.spec.onInput(value);
   let error;
   if (rec.spec.onCommit) {
     if (rec.kind === "qty" && value && !isNumeric(value)) error = _("Enter a number.");
-    else error = await rec.spec.onCommit(value, via);
+    else error = await rec.spec.onCommit(value, via, raw); // raw keeps GS1 separators (core/gs1.js)
   }
   if (token !== S.routeToken) return !error; // the commit itself navigated (e.g. advanced a wizard step)
+  if (error && typeof error === "object" && error.focus) { // accepted, and the handler knows which field comes next
+    delete S.fieldErrors[rec.name];
+    if (rec.kind === "scan" || via === "scan" || via === "camera") feedback.ok();
+    S.focusRequest = error.focus; update();
+    return true;
+  }
   if (error === false) { S.focusRequest = rec.name; update(); return false; } // failed and already reported (e.g. by run())
   if (error) {
     S.fieldErrors[rec.name] = error;

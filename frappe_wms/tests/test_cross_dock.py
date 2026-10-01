@@ -165,3 +165,54 @@ class TestCrossDock(IntegrationTestCase):
         request = frappe.get_doc("Warehouse Request", request_names[0])
         self.assertEqual(request.request_type, "Putaway")
         self.assertEqual(request.requested_quantity, 8)
+
+    def test_cancelled_delivery_sends_open_cross_dock_stock_to_putaway(self):
+        item = self._make_item("TEST-XDOCK-ITEM-CANCEL")
+        obd = self._make_delivery(item, 5)
+        gr = self._submit_gr(self._make_hu(), item, 5)
+        [cd] = create_putaway_requests(gr.name)
+        self.assertEqual(frappe.db.get_value("Warehouse Request", cd, "request_type"), "Cross Dock")
+        from frappe_wms.services.task import create_tasks_for_request
+        create_tasks_for_request(cd)
+        obd.reload()
+        obd.cancel()
+        self.assertEqual(frappe.db.get_value("Warehouse Request", cd, "status"), "Cancelled")
+        self.assertFalse(frappe.db.exists("Warehouse Task", {"warehouse_request": cd, "docstatus": 0}), "open cross-dock tasks are cancelled")
+        putaway = frappe.get_all("Warehouse Request", filters={"request_type": "Putaway", "reference_name": cd},
+                                 fields=["name", "requested_quantity", "source_bin"])
+        self.assertEqual([(p.requested_quantity, p.source_bin) for p in putaway], [(5, self.recv_bin)])
+        self.assertTrue(frappe.db.exists("Warehouse Task", {"warehouse_request": putaway[0].name, "task_type": "Putaway"}))
+
+    def test_shipment_loads_last_stop_first_and_checks_the_sequence(self):
+        from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
+        door_type, door_bin, route = f"{self.warehouse}-DOOR", f"{self.warehouse}-DOOR-1", f"{self.warehouse}-ROUTE"
+        if not frappe.db.exists("Storage Type", door_type):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": self.warehouse, "storage_type_code": "DOOR", "storage_type_name": "DOOR", "storage_role": "Door", "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Bin", door_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": door_bin, "warehouse": self.warehouse, "storage_type": door_type, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Route", route):
+            frappe.get_doc({"doctype": "WMS Route", "route_code": route, "route_name": route, "origin_warehouse": self.warehouse,
+                "default_staging_bin": self.stage_bin, "default_door": door_bin, "active": 1}).insert(ignore_permissions=True)
+        staged = {}
+        for n in (1, 2):
+            item = self._make_item(f"TEST-XDOCK-SEQ-{n}")
+            obd = self._make_delivery(item, 3)
+            hu = self._make_hu()
+            gr = self._submit_gr(hu, item, 3)
+            confirm_task(create_tasks_for_request(create_putaway_requests(gr.name)[0]), confirmed_quantity=3)
+            staged[n] = (obd.name, hu.name)
+
+        shipment = create_shipment(self.warehouse, [staged[1][0], staged[2][0]], route=route)  # stop 1, then stop 2
+        rows = sorted(frappe.get_doc("WMS Shipment", shipment).handling_units, key=lambda r: r.load_sequence)
+        self.assertEqual([(r.handling_unit, r.stop_sequence) for r in rows], [(staged[2][1], 2), (staged[1][1], 1)], "the last stop goes in first")
+
+        frappe.db.set_value("WMS Warehouse", self.warehouse, "load_sequence_check", "Block")
+        try:
+            with self.assertRaises(frappe.ValidationError):
+                confirm_hu_loaded(shipment, staged[1][1])
+            frappe.db.set_value("WMS Warehouse", self.warehouse, "load_sequence_check", "Warn")
+            self.assertIn("needs_confirmation", confirm_hu_loaded(shipment, staged[1][1]))
+            self.assertEqual(confirm_hu_loaded(shipment, staged[1][1], confirm_out_of_sequence=1)["shipment_status"], "Loading")
+            self.assertEqual(confirm_hu_loaded(shipment, staged[2][1])["shipment_status"], "Loaded")
+        finally:
+            frappe.db.set_value("WMS Warehouse", self.warehouse, "load_sequence_check", "Off")

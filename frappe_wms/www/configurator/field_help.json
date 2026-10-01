@@ -11,7 +11,22 @@
    "default_difference_bin": "Where count differences and unexplained stock are parked (a Difference-role bin). Optional, but exceptions like 'Create Difference Task' need somewhere to put stock.",
    "default_stock_type": "Stock Type assigned to stock that arrives without one - normally AVAILABLE. Decides whether freshly received stock can be picked and shipped straight away.",
    "allow_negative_stock": "Off (recommended): a posting that would take a bin/HU below zero is rejected. Turn on only for warehouses where physical stock is sometimes moved before its receipt is booked.",
-   "active": "Untick to retire the warehouse without deleting it. Inactive warehouses are ignored by rules and RF screens."
+   "active": "Untick to retire the warehouse without deleting it. Inactive warehouses are ignored by rules and RF screens.",
+   "inbound_replication": "Which ERPNext document creates the Inbound Delivery here. Manual: nobody, it is created by hand. Purchase Order Submitted: on PO submit. Purchase Receipt Draft: a saved draft Purchase Receipt (the ASN / ECC inbound delivery pattern), posted by the warehouse at goods receipt.",
+   "outbound_replication": "Which ERPNext document creates the Outbound Delivery. Manual, Sales Order Submitted, or Delivery Note Draft (the ECC outbound delivery pattern: the warehouse picks, packs and submits the draft at goods issue).",
+   "release_replicated_deliveries": "Replicated deliveries are submitted right away, ready for the warehouse, instead of waiting as drafts.",
+   "outbound_follow_up": "What happens to a released outbound delivery next: nothing, allocate stock, or allocate and create the pick tasks.",
+   "erp_change_policy": "When the ERPNext order changes after replication. Adapt Until Execution Starts: quantities and lines follow while the warehouse has not started. Block Changes After Replication: every change is refused once the warehouse has the document.",
+   "close_short_orders": "When a delivery is completed short in the warehouse, close the rest of the Sales/Purchase Order in ERPNext too.",
+   "erp_sync_mode": "Synchronous: ERPNext documents post inside the warehouse transaction. Queued with Retry: the warehouse posts first and ERPNext follows from a retried queue (Monitor > ERPNext Postings Not Yet Done).",
+   "kitting_stage_components": "When kitting inputs get their staging tasks from storage to the work center: from the RF Kitting screen, or as soon as the Kitting Order is created.",
+   "kitting_putaway_output": "Default for new Kitting Orders: the produced output gets putaway tasks from the work center.",
+   "kitting_output_hu_required": "The operator must scan a Handling Unit for the kitting output.",
+   "load_sequence_check": "Shipments load the last stop first. Off: any order. Warn: loading an earlier stop's HU while a later stop's HUs are still waiting asks the loader to confirm. Block: refused.",
+   "dock_slot_minutes": "Length of a dock appointment when no end time is given.",
+   "dock_changeover_minutes": "Minutes kept free at a door between two appointments.",
+   "appointment_check": "A truck at the gate with no appointment: Allow (checked in as a walk-in), Warn (the gate confirms) or Block.",
+   "no_show_after_minutes": "A planned appointment not checked in this many minutes after its start becomes No Show and frees its door. 0: never."
   }
  },
  "Storage Type": {
@@ -98,7 +113,26 @@
    "warehouse": "The WMS Warehouse the station is in.",
    "work_center_code": "Short unique code, e.g. PACK-1.",
    "work_center_name": "Descriptive name, optional.",
-   "active": "Untick to retire the work center."
+   "active": "Untick to retire the work center.",
+   "work_center_type": "What the station is for: Packing, Deconsolidation, VAS, Quality or Kitting.",
+   "inbound_section_bin": "Where HUs arriving at the station wait (shown as 'arriving' in the Repack Center).",
+   "outbound_section_bin": "Where closed HUs go next when Close Follow-Up moves them.",
+   "default_hu_type": "HU type proposed when the packer creates a new HU at this station.",
+   "quantity_proposal": "What the quantity field proposes when a product is scanned: the full quantity on the source, or one unit per scan.",
+   "weigh_on_close": "Closing an HU asks for its gross weight: optionally, or it is required.",
+   "weight_tolerance_percent": "Allowed difference between the weighed and the calculated gross weight before closing is refused.",
+   "completeness_check": "On close: Off, Warn (confirm to close anyway) or Block, when the HU is not complete against its delivery or instruction.",
+   "close_follow_up": "What happens to a closed HU: it stays at the work center, or gets a move task to the outbound section or to its delivery's staging bin.",
+   "print_label_on_create": "Print the HU label as soon as an HU is created at this station.",
+   "print_label_on_close": "Print the HU label (and packing list rules) when the HU is closed.",
+   "allow_pack_product": "Packers may pack products into HUs here.",
+   "allow_pack_hu": "Packers may nest HUs into other HUs here.",
+   "allow_unpack": "Packers may take products or HUs out of an HU here.",
+   "allow_pack_by_instruction": "Packing Specifications can be executed here (pack by instruction).",
+   "allow_create_hu": "New HUs can be created at this station.",
+   "allow_close_hu": "HUs can be closed at this station.",
+   "allow_delete_empty_hu": "Empty HUs can be deleted here.",
+   "allow_differences": "Packers may post a stock difference (missing quantity) from the station."
   }
  },
  "WMS Stock Type": {
@@ -404,7 +438,12 @@
    "current_queue": "The queue the resource is currently focused on. Set at runtime - leave blank.",
    "current_work_center": "Optional: the work center the resource is at.",
    "current_bin": "Where the resource is right now. Set at runtime - leave blank.",
-   "active": "Untick to retire the resource."
+   "active": "Untick to retire the resource.",
+   "printer_connection": "Network (Raw TCP): the server sends jobs straight to the printer. Print Agent: the on-site agent (frappe_wms/print_agent) fetches jobs and prints locally.",
+   "printer_language": "ZPL for label printers; PDF for office printers (rendered from the Print Format).",
+   "printer_host": "Printer IP or host name, for Network (Raw TCP).",
+   "printer_port": "Raw printing port, usually 9100.",
+   "agent_printer_name": "The printer's name on the machine running the print agent."
   }
  },
  "WMS Resource Group": {
@@ -574,5 +613,12 @@
   "Supplier": "ERPNext. Used as a Route's carrier.",
   "Print Format": "ERPNext. Chosen by Print Determination Rules.",
   "User": "ERPNext user, logged onto WMS Resources."
+ },
+ "WMS Settings": {
+  "fields": {
+   "alert_notifications": "Hourly digest of what needs a person (failed ERPNext postings, negative quants, aged exceptions, requests without tasks, stalled orders): off, a desk bell notification, or that plus e-mail. Sent only when something changed.",
+   "alert_recipients": "Users or e-mail addresses, one per line. Empty: every WMS Supervisor, for the warehouses their User Permissions allow.",
+   "ledger_retention_months": "0 keeps every stock ledger entry forever. Otherwise (at least 12), older entries move monthly to an archive file and each stock position keeps one carry-forward entry, so balances stay exact."
+  }
  }
 }

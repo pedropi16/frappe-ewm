@@ -10,6 +10,8 @@
   "field_order": [
     "handling_unit",
     "load_sequence",
+    "outbound_delivery",
+    "stop_sequence",
     "loaded"
   ],
   "fields": [
@@ -25,6 +27,21 @@
       "fieldname": "load_sequence",
       "label": "Load Sequence",
       "fieldtype": "Int"
+    },
+    {
+      "fieldname": "outbound_delivery",
+      "fieldtype": "Link",
+      "label": "Outbound Delivery",
+      "options": "Outbound Delivery",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stop_sequence",
+      "fieldtype": "Int",
+      "label": "Stop",
+      "read_only": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "loaded",

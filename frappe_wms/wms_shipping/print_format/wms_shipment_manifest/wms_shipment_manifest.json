@@ -1,0 +1,20 @@
+{
+ "doctype": "Print Format",
+ "name": "WMS Shipment Manifest",
+ "doc_type": "WMS Shipment",
+ "module": "WMS Shipping",
+ "standard": "Yes",
+ "custom_format": 1,
+ "print_format_type": "Jinja",
+ "print_format_builder": 0,
+ "raw_printing": 0,
+ "disabled": 0,
+ "font_size": 10,
+ "html": "<div class=\"wms-pl\">\n<h2>{{ _(\"Shipment Manifest\") }} {{ doc.shipment_number or doc.name }}</h2>\n<table class=\"meta\"><tr><td>{{ _(\"Route\") }}: <b>{{ doc.route or \"\" }}</b></td><td>{{ _(\"Carrier\") }}: {{ doc.carrier or \"\" }}</td></tr>\n<tr><td>{{ _(\"Vehicle\") }}: {{ doc.vehicle_registration or \"\" }}</td><td>{{ _(\"Driver\") }}: {{ doc.driver_name or \"\" }}</td></tr></table>\n<table><thead><tr><th>{{ _(\"Delivery\") }}</th><th>{{ _(\"Customer\") }}</th></tr></thead><tbody>\n{% for d in doc.deliveries %}<tr><td>{{ d.outbound_delivery }}</td><td>{{ frappe.db.get_value(\"Outbound Delivery\", d.outbound_delivery, \"customer\") }}</td></tr>{% endfor %}\n</tbody></table>\n<table><thead><tr><th>#</th><th>{{ _(\"Handling Unit\") }}</th><th>SSCC</th><th class=\"num\">{{ _(\"Gross kg\") }}</th><th>{{ _(\"Loaded\") }}</th></tr></thead><tbody>\n{% for h in doc.handling_units %}{% set hu = frappe.db.get_value(\"Handling Unit\", h.handling_unit, [\"hu_number\", \"sscc\", \"gross_weight\"], as_dict=True) or {} %}\n<tr><td>{{ h.load_sequence }}</td><td>{{ hu.hu_number or h.handling_unit }}</td><td>{{ hu.sscc or \"\" }}</td><td class=\"num\">{{ hu.gross_weight or \"\" }}</td><td>{{ _(\"Yes\") if h.loaded else \"\" }}</td></tr>{% endfor %}\n</tbody></table>\n<p style=\"margin-top:30px\">{{ _(\"Driver signature\") }}: ____________________________</p></div>",
+ "css": ".wms-pl h2{margin:0 0 4px} .wms-pl table{width:100%;border-collapse:collapse;margin-top:10px}\n.wms-pl th,.wms-pl td{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left;font-size:11px}\n.wms-pl .hu td{background:#f3f4f6;font-weight:600} .wms-pl .num{text-align:right} .wms-pl .meta td{border:0;padding:1px 6px}",
+ "default_print_language": "en",
+ "align_labels_right": 0,
+ "show_section_headings": 0,
+ "line_breaks": 0,
+ "absolute_value": 0
+}

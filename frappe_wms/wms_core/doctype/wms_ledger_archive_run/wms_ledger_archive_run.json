@@ -1,0 +1,143 @@
+{
+ "name": "WMS Ledger Archive Run",
+ "doctype": "DocType",
+ "module": "WMS Core",
+ "custom": 0,
+ "is_submittable": 0,
+ "istable": 0,
+ "track_changes": 1,
+ "engine": "InnoDB",
+ "autoname": "format:LAR-{#####}",
+ "naming_rule": "Expression",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "description": "Moves stock ledger entries older than the retention period into a downloadable archive file and replaces them with one carry-forward entry per stock position, so balances and history totals stay exact.",
+ "field_order": [
+  "cutoff_date",
+  "warehouse",
+  "status",
+  "column_break_1",
+  "entries_archived",
+  "positions_carried_forward",
+  "archive_file",
+  "section_log",
+  "started_by",
+  "completed_at",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "cutoff_date",
+   "label": "Archive Entries Before",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "label": "Warehouse",
+   "fieldtype": "Link",
+   "options": "WMS Warehouse",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "Empty: every warehouse."
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "Queued\nRunning\nCompleted\nFailed",
+   "default": "Queued",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "entries_archived",
+   "label": "Entries Archived",
+   "fieldtype": "Int",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "positions_carried_forward",
+   "label": "Positions Carried Forward",
+   "fieldtype": "Int",
+   "read_only": 1
+  },
+  {
+   "fieldname": "archive_file",
+   "label": "Archive File",
+   "fieldtype": "Attach",
+   "read_only": 1,
+   "description": "Every archived ledger entry as gzipped JSON lines - download to audit or reload them."
+  },
+  {
+   "fieldname": "section_log",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "started_by",
+   "label": "Started By",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "label": "Completed At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "label": "Error",
+   "fieldtype": "Long Text",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "WMS Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ]
+}

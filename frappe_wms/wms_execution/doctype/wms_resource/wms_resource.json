@@ -18,7 +18,14 @@
     "current_queue",
     "current_work_center",
     "current_bin",
-    "active"
+    "active",
+    "printer_section",
+    "printer_connection",
+    "printer_language",
+    "column_break_printer",
+    "printer_host",
+    "printer_port",
+    "agent_printer_name"
   ],
   "fields": [
     {
@@ -97,6 +104,53 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "printer_section",
+      "label": "Printer",
+      "fieldtype": "Section Break",
+      "depends_on": "eval:doc.resource_type==\"Printer\"",
+      "description": "How print jobs reach this printer. Network: the server sends ZPL straight to the printer (raw TCP, usually port 9100). Print Agent: the on-site agent (frappe_wms/print_agent/wms_print_agent.py) collects jobs and prints them locally - use it when the server cannot reach the printer, or for PDF."
+    },
+    {
+      "fieldname": "printer_connection",
+      "label": "Connection",
+      "fieldtype": "Select",
+      "options": "Print Agent\nNetwork (Raw TCP)",
+      "default": "Print Agent"
+    },
+    {
+      "fieldname": "printer_language",
+      "label": "Printer Language",
+      "fieldtype": "Select",
+      "options": "ZPL\nPDF",
+      "default": "ZPL",
+      "description": "ZPL for label printers (Zebra and compatibles), PDF for office printers (agent only)."
+    },
+    {
+      "fieldname": "column_break_printer",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "printer_host",
+      "label": "Printer Address",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.printer_connection==\"Network (Raw TCP)\""
+    },
+    {
+      "fieldname": "printer_port",
+      "label": "Printer Port",
+      "fieldtype": "Int",
+      "default": "9100",
+      "depends_on": "eval:doc.printer_connection==\"Network (Raw TCP)\""
+    },
+    {
+      "fieldname": "agent_printer_name",
+      "label": "Agent Printer Name",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.printer_connection==\"Print Agent\"",
+      "description": "The printer name as the agent's computer knows it (e.g. the CUPS queue). Blank = the agent's default printer."
     }
   ],
   "autoname": "field:resource_code",
@@ -122,7 +176,10 @@
       "delete": 1,
       "submit": 1,
       "cancel": 1,
-      "amend": 1
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Operator",
@@ -131,7 +188,83 @@
       "create": 0,
       "delete": 0,
       "submit": 0,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     }
   ]
 }

@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
+from frappe_wms.services.bin_rules import hu_load
 from frappe_wms.services.warehouse_order import attach_task
 from frappe_wms.utils import require_role
 
@@ -26,13 +27,11 @@ def close_movement(hu_name, device=None):
 
     source_storage_type = frappe.db.get_value("Storage Bin", hu.current_bin, "storage_type")
     first = balances[0]
-    gross_weight_per_unit = frappe.db.get_value("WMS Product", first.product, "gross_weight_per_unit")
-    total_qty = sum(flt(b.quantity) for b in balances)
-    incoming_weight = flt(gross_weight_per_unit) * total_qty if gross_weight_per_unit else None
+    incoming_weight, incoming_volume = hu_load(hu_name)
     destination_bin = determine_destination_bin({
         "warehouse": hu.warehouse, "activity": "Internal Move", "item": first.product,
         "stock_type": first.stock_type, "hu_type": hu.hu_type, "source_storage_type": source_storage_type,
-        "incoming_weight": incoming_weight, "incoming_hu_count": 1,
+        "incoming_weight": incoming_weight, "incoming_volume": incoming_volume, "incoming_hu_count": 1,
         # The HU itself is what's making this hop - it is its own destination HU.
         "destination_hu": hu_name,
     })

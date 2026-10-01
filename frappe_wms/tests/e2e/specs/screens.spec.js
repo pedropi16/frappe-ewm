@@ -64,11 +64,12 @@ test("every screen renders without a JS error (smoke over all routes)", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   const routes = ["", "s/inbound", "s/internal", "s/outbound", "lookup", "session", "tasks/inbound", "tasks/internal", "tasks/outbound", "receive", "ship", "pack", "count", "quality", "load",
-    "decon", "close-movement", "repack", "hu", "hu-new", "kitting", "consolidation", "picking", "picking-manual", "picking-find/hu", "vas", "vas-new", "move"];
+    "decon", "close-movement", "repack", "hu", "hu-new", "kitting", "consolidation", "picking", "picking-manual", "picking-find/hu", "vas", "vas-new", "move", "yard", "yard-new"];
   for (const r of routes) {
     await openApp(page, `#/${r}`);
     await page.waitForTimeout(350);
     await expect(page.locator("#view")).not.toContainText("could not be displayed");
+    await expect(page.locator("#view"), `#/${r} renders a bare null/undefined`).not.toContainText(/\b(null|undefined)\b/);
   }
   expect(errors, errors.join("\n")).toEqual([]);
 });

@@ -50,3 +50,40 @@ def reserve_cross_dock_demand(match):
     elif any(flt(r.allocated_quantity) > 0 for r in rows): status = "Partially Allocated"
     else: status = "Not Allocated"
     frappe.db.set_value("Outbound Delivery", parent, "allocation_status", status)
+
+
+def redirect_cross_dock_to_putaway(delivery_name):
+    """The delivery a receipt was being cross-docked to is gone (cancelled or completed short):
+    its open Cross Dock work is cancelled and whatever has not moved yet is put away normally
+    instead of travelling to a staging lane for a delivery that no longer needs it."""
+    from frappe_wms.services.determination import determine_process_type
+    from frappe_wms.services.task import plan_requests
+    from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
+    requests = frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery",
+        "reference_name": delivery_name, "status": ["not in", ["Completed", "Cancelled"]]}, pluck="name")
+    created = []
+    for name in requests:
+        req = frappe.get_doc("Warehouse Request", name, for_update=True)
+        tasks = frappe.get_all("Warehouse Task", filters={"warehouse_request": name, "docstatus": ["<", 2]},
+                               fields=["name", "docstatus", "confirmed_quantity", "warehouse_order"])
+        moved = sum(flt(t.confirmed_quantity) for t in tasks)
+        orders = set()
+        for t in tasks:
+            if t.docstatus == 0:
+                frappe.db.set_value("Warehouse Task", t.name, {"status": "Cancelled", "docstatus": 2}, update_modified=True)
+                if t.warehouse_order: orders.add(t.warehouse_order)
+        for wo in orders:
+            release_next_in_sequence(wo)
+            sync_warehouse_order(wo)
+        req.db_set("status", "Cancelled", update_modified=True)
+        open_qty = flt(req.requested_quantity) - moved
+        if open_qty <= 0.000001: continue
+        putaway = frappe.get_doc({"doctype": "Warehouse Request", "request_type": "Putaway", "warehouse": req.warehouse, "product": req.product,
+            "requested_quantity": open_qty, "stock_uom": req.stock_uom, "source_bin": req.source_bin, "source_hu": req.source_hu,
+            "stock_type": req.stock_type, "batch_no": req.batch_no, "serial_no": req.serial_no,
+            "reference_doctype": "Warehouse Request", "reference_name": req.name,
+            "process_type": determine_process_type(req.warehouse, "Putaway", item=req.product, stock_type=req.stock_type, default="GR_PUTAWAY"),
+            "priority": "High", "status": "Open"}).insert(ignore_permissions=True)
+        plan_requests([putaway.name])
+        created.append(putaway.name)
+    return created

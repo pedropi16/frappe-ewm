@@ -2,8 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
-from frappe_wms.services.erpnext_sync import sync_physical_inventory_count
-from frappe_wms.services.task import my_resource
+from frappe_wms.services.task import OPEN_TASK_STATUSES, my_resource
 from frappe_wms.utils import require_role
 
 def list_open_counts(user=None):
@@ -55,6 +54,17 @@ def snapshot_count(count_name):
     # SECOND loss for the very same units). Only bins not already blocked for some other reason
     # are recorded here, and only those get released again once this count posts or is cancelled.
     bin_names = sorted({b.storage_bin for b in balances if b.storage_bin})
+    # As in SAP EWM, a bin with open warehouse tasks is not counted: the stock a pick is about to
+    # take (or a putaway is about to bring) would be counted against a book that is still moving,
+    # and a loss could take away units already reserved for a delivery.
+    busy = frappe.db.sql("""select name, storage_bin from (
+            select name, source_bin as storage_bin from `tabWarehouse Task` where docstatus=0 and status in %(st)s and source_bin in %(bins)s
+            union all
+            select name, destination_bin from `tabWarehouse Task` where docstatus=0 and status in %(st)s and destination_bin in %(bins)s) t
+        limit 5""", {"st": OPEN_TASK_STATUSES, "bins": bin_names or [""]}, as_dict=True)
+    if busy:
+        frappe.throw(_("Bin {0} has open warehouse tasks ({1}). Confirm or cancel them before counting.").format(
+            busy[0].storage_bin, ", ".join(sorted({b.name for b in busy}))))
     newly_blocked = [b for b in bin_names if not frappe.db.get_value("Storage Bin", b, "removal_blocked")]
     if newly_blocked:
         frappe.db.set_value("Storage Bin", {"name": ["in", newly_blocked]}, "removal_blocked", 1)
@@ -75,6 +85,7 @@ def add_found_line(count_name, product, storage_bin, stock_type, quantity, batch
     if doc.status not in ("Counting", "Counted"): frappe.throw(_("Count is not open for recording"))
     quantity = flt(quantity)
     if quantity <= 0: frappe.throw(_("Found quantity must be greater than zero"))
+    if serial_no and quantity != 1: frappe.throw(_("Serial {0} is one unit: a found serial is counted as 1").format(serial_no))
     stock_uom = stock_uom or frappe.db.get_value("WMS Product", {"item": product}, "stock_uom") or frappe.db.get_value("Item", product, "stock_uom")
     doc.append("items", {
         "product": product, "batch_no": batch_no, "serial_no": serial_no, "handling_unit": handling_unit,
@@ -106,7 +117,13 @@ def record_counts(count_name, counted_quantities):
     if doc.status not in {"Counting", "Counted"}: frappe.throw(_("Count is not open for recording"))
     for row in doc.items:
         if row.name not in counted_quantities: continue
-        row.counted_quantity = flt(counted_quantities[row.name])
+        counted = flt(counted_quantities[row.name])
+        # Refused here, where the operator can correct it - not later, when posting fails.
+        if counted < 0:
+            frappe.throw(_("{0} in {1}: a counted quantity cannot be negative").format(row.product, row.storage_bin or row.handling_unit))
+        if row.serial_no and counted not in (0, 1):
+            frappe.throw(_("Serial {0} is one unit: count it as 1 (found) or 0 (missing)").format(row.serial_no))
+        row.counted_quantity = counted
         row.variance = row.counted_quantity - flt(row.book_quantity)
         row.status = "Counted"
     # Not "every row is Counted" - a recount only resets the rows sent back for review to
@@ -136,6 +153,16 @@ def _within_tolerance(group, variance, book_quantity):
 
 def _post_row(doc, row, i):
     variance = flt(row.variance)
+    if variance < 0:
+        # A loss never takes units already reserved for open picks (defence in depth: counting a
+        # bin with open tasks is refused at snapshot, but a task can still appear afterwards).
+        balance = frappe.db.get_value("WMS Stock Balance", {"warehouse": doc.warehouse, "product": row.product, "storage_bin": row.storage_bin,
+                                      "handling_unit": row.handling_unit or ["in", ["", None]], "batch_no": row.batch_no or ["in", ["", None]],
+                                      "serial_no": row.serial_no or ["in", ["", None]], "stock_type": row.stock_type},
+                                      ["quantity", "allocated_quantity"], as_dict=True, for_update=True)
+        if balance and flt(balance.quantity) + variance < flt(balance.allocated_quantity) - 0.000001:
+            frappe.throw(_("{0} in {1}: {2} of the {3} units are reserved for open picks - confirm or cancel those picks before posting a loss of {4}").format(
+                row.product, row.handling_unit or row.storage_bin, flt(balance.allocated_quantity), flt(balance.quantity), -variance))
     if variance != 0:
         movement_type = "701" if variance > 0 else "702"
         entry = {
@@ -160,10 +187,12 @@ def _mirror_posted_rows(doc, rows):
     # posted in WMS, the count left pending recount, ERPNext still showing the old quantity).
     # Each line posts once (its status moves to Posted), so mirroring per pass can't double up.
     if not rows: return
-    gain_entry, loss_entry = sync_physical_inventory_count(doc, rows=rows)
-    join = lambda current, new: ", ".join(x for x in (current, new) if x)
-    if gain_entry: doc.erpnext_gain_stock_entry = join(doc.erpnext_gain_stock_entry, gain_entry)
-    if loss_entry: doc.erpnext_loss_stock_entry = join(doc.erpnext_loss_stock_entry, loss_entry)
+    from frappe_wms.services.erp_sync_queue import dispatch
+    dispatch("count_rows", doc, rows=[r.name for r in rows])
+    # The operation writes the entries onto the count row in the database; keep the in-memory
+    # doc in step so a later doc.save() in this request doesn't blank them again.
+    doc.erpnext_gain_stock_entry, doc.erpnext_loss_stock_entry = frappe.db.get_value(
+        doc.doctype, doc.name, ["erpnext_gain_stock_entry", "erpnext_loss_stock_entry"])
 
 def post_count(count_name):
     require_role("WMS Inventory Controller", "WMS Supervisor")

@@ -2,7 +2,6 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 from frappe_wms.services.stock import transfer_stock
-from frappe_wms.services import erpnext_sync
 from frappe_wms.utils import require_role
 
 # SAP EWM's posting change: a stock-type-only move (AVAILABLE <-> WAREHOUSE_BLOCKED, a manual
@@ -36,11 +35,10 @@ def post_posting_change(name):
     transfer_stock(source=source, destination=destination, quantity=doc.quantity, movement_type="501",
         reference_doctype=doc.doctype, reference_name=doc.name, idempotency_key=f"PSC:{doc.name}")
 
-    erpnext_se = erpnext_sync.sync_posting_change(doc)
-    doc.db_set({
-        "status": "Posted", "posted_by": frappe.session.user, "posted_at": now_datetime(),
-        "erpnext_stock_entry": erpnext_se or "",
-    }, update_modified=True)
+    from frappe_wms.services.erp_sync_queue import dispatch
+    doc.db_set({"status": "Posted", "posted_by": frappe.session.user, "posted_at": now_datetime()}, update_modified=True)
+    dispatch("posting_change", doc)
+    erpnext_se = frappe.db.get_value(doc.doctype, doc.name, "erpnext_stock_entry")
     return {"posting_change": doc.name, "status": "Posted", "erpnext_stock_entry": erpnext_se}
 
 
@@ -60,6 +58,7 @@ def cancel_posting_change(name):
         se = frappe.get_doc("Stock Entry", doc.erpnext_stock_entry)
         if se.docstatus == 1:
             se.flags.ignore_permissions = True
+            se.flags.wms_managed_posting = True
             se.cancel()
     doc.db_set({"status": "Cancelled"}, update_modified=True)
     return {"posting_change": doc.name, "status": "Cancelled"}

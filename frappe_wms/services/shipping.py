@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import cint, flt, now_datetime
 from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.determination import determine_route
 from frappe_wms.services.numbering import next_number
@@ -26,10 +26,15 @@ def cross_dock_handling_units(outbound_delivery=None, outbound_delivery_item=Non
     return frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", requests], "task_type": "Cross Dock",
         "status": "Confirmed", "destination_hu": ["is", "set"]}, pluck="destination_hu", distinct=True)
 
-def _staged_handling_units(delivery_names):
-    # Stock Allocation.handling_unit is the pre-pick source HU, not where the line actually
-    # ended up - only a confirmed Pick task's destination_hu records the real staged HU (it's
-    # what _relocate_hu_for_task physically relocated). Walk allocation -> task to get it right.
+def delivery_handling_units(delivery_names):
+    """The top-level HUs that currently hold stock for these deliveries - what a shipment loads.
+
+    Stock reaches a delivery's HUs three ways: a confirmed Pick task's destination_hu (Stock
+    Allocation.handling_unit is only the pre-pick source), a Cross Dock task's destination_hu,
+    and a carton packed for the delivery at a packing station (Handling Unit.outbound_delivery,
+    see services/packing_station.py). A pick HU emptied by repacking holds nothing any more and
+    drops out; a carton packed inside a pallet is shipped as that pallet."""
+    from frappe_wms.services.packing_station import subtree_quantity, top_hu
     hus = set(cross_dock_handling_units(outbound_delivery=list(delivery_names)))
     allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": ["in", delivery_names]}, pluck="name")
     task_names = frappe.get_all("Warehouse Task Allocation", filters={"stock_allocation": ["in", allocation_names]}, pluck="parent") if allocation_names else []
@@ -38,7 +43,9 @@ def _staged_handling_units(delivery_names):
             filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
             fields=["destination_hu"], distinct=True)
         hus |= {t.destination_hu for t in tasks}
-    return sorted(hus)
+    hus |= set(frappe.get_all("Handling Unit", filters={"outbound_delivery": ["in", list(delivery_names)],
+        "status": ["not in", ["Shipped", "Cancelled"]]}, pluck="name"))
+    return sorted({top_hu(hu) for hu in hus if subtree_quantity(hu) > 0.000001})
 
 def _other_deliveries_sharing_hu(hu_name, deliveries_being_shipped):
     # A confirmed Pick task's destination_hu defaults to its own source_hu when no distinct
@@ -50,22 +57,11 @@ def _other_deliveries_sharing_hu(hu_name, deliveries_being_shipped):
     # needs from it: reproduced with two deliveries allocated off one bulk pallet, each shipped
     # independently - the second could never post its Goods Issue once the first shipment's HU
     # moved past "Loaded" to "Shipped". Returns the other delivery name(s) still owed stock from
-    # this HU that aren't part of *this* shipment, so the caller can refuse with an actionable
-    # message instead of silently mis-shipping.
-    task_names = frappe.get_all("Warehouse Task",
-        filters={"task_type": "Pick", "status": "Confirmed", "destination_hu": hu_name}, pluck="name")
-    if not task_names: return []
-    allocation_names = frappe.get_all("Warehouse Task Allocation", filters={"parent": ["in", task_names]}, pluck="stock_allocation")
-    if not allocation_names: return []
-    rows = frappe.get_all("Stock Allocation", filters={"name": ["in", allocation_names]},
-        fields=["outbound_delivery", "outbound_delivery_item", "picked_quantity"])
-    others = set()
-    for r in rows:
-        if not r.outbound_delivery or r.outbound_delivery in deliveries_being_shipped: continue
-        issued = flt(frappe.db.get_value("Outbound Delivery Item", r.outbound_delivery_item, "issued_quantity"))
-        if flt(r.picked_quantity) - issued > 0.000001:
-            others.add(r.outbound_delivery)
-    return sorted(others)
+    # this HU - or from anything nested in it, e.g. a carton another delivery was packed into -
+    # that aren't part of *this* shipment, so the caller can refuse with an actionable message
+    # instead of silently mis-shipping.
+    from frappe_wms.services.packing_station import hu_deliveries
+    return sorted(hu_deliveries(hu_name) - set(deliveries_being_shipped))
 
 def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, vehicle_registration=None, driver_name=None):
     require_role(*LOAD_ROLES)
@@ -83,8 +79,15 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
     route = route or determine_route(warehouse, carrier=carrier)
     if not route: frappe.throw(_("No Route could be determined for warehouse {0}; configure one or pass route explicitly").format(warehouse))
 
-    hus = _staged_handling_units(outbound_deliveries)
+    hus = delivery_handling_units(outbound_deliveries)
     if not hus: frappe.throw(_("None of these deliveries have a staged Handling Unit yet"))
+    # The deliveries come in stop order (1 = first consignee). The truck is loaded in reverse -
+    # the last stop's HUs go in first, deepest - so every stop unloads from the back.
+    stop_of = {name: i for i, name in enumerate(outbound_deliveries, 1)}
+    delivery_of = {}
+    for name in outbound_deliveries:
+        for hu in delivery_handling_units([name]): delivery_of.setdefault(hu, name)
+    hus = sorted(hus, key=lambda hu: (-stop_of.get(delivery_of.get(hu), 0), hus.index(hu)))
     delivery_set = set(outbound_deliveries)
     for hu in hus:
         others = _other_deliveries_sharing_hu(hu, delivery_set)
@@ -97,8 +100,9 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
         "doctype": "WMS Shipment", "shipment_number": next_number("WMS Shipment", warehouse=warehouse),
         "warehouse": warehouse, "route": route, "carrier": carrier,
         "vehicle_registration": vehicle_registration, "driver_name": driver_name, "status": "Ready to Load",
-        "deliveries": [{"outbound_delivery": d.name} for d in deliveries],
-        "handling_units": [{"handling_unit": hu, "load_sequence": i, "loaded": 0} for i, hu in enumerate(hus, 1)],
+        "deliveries": [{"outbound_delivery": name, "stop_sequence": stop_of[name]} for name in outbound_deliveries],
+        "handling_units": [{"handling_unit": hu, "load_sequence": i, "loaded": 0, "outbound_delivery": delivery_of.get(hu),
+                            "stop_sequence": stop_of.get(delivery_of.get(hu))} for i, hu in enumerate(hus, 1)],
     })
     shipment.insert(ignore_permissions=True)
     frappe.db.set_value("Outbound Delivery", {"name": ["in", outbound_deliveries]}, {"status": "Loading", "loading_status": "In Process"})
@@ -112,7 +116,8 @@ def list_loadable_shipments(user=None):
     shipments = frappe.get_list("WMS Shipment", filters=filters,
         fields=["name", "shipment_number", "warehouse", "route", "door", "staging_bin", "status"], order_by="creation asc", limit=50)
     for s in shipments:
-        rows = frappe.get_all("Shipment Handling Unit", filters={"parent": s.name}, fields=["handling_unit", "loaded", "load_sequence"], order_by="load_sequence asc")
+        rows = frappe.get_all("Shipment Handling Unit", filters={"parent": s.name}, fields=["handling_unit", "loaded", "load_sequence", "outbound_delivery", "stop_sequence"],
+                              order_by="load_sequence asc")
         s["handling_units"] = rows
         s["loaded_count"] = sum(1 for r in rows if r.loaded)
         s["total_count"] = len(rows)
@@ -128,13 +133,21 @@ def _route_hops(route_name, door_bin):
     hops.append(door_bin)
     return hops
 
-def confirm_hu_loaded(shipment_name, hu_name):
+def confirm_hu_loaded(shipment_name, hu_name, confirm_out_of_sequence=0):
     require_role(*LOAD_ROLES)
     shipment = frappe.get_doc("WMS Shipment", shipment_name, for_update=True)
     if shipment.status not in ("Ready to Load", "Loading"): frappe.throw(_("Shipment is not open for loading"))
     row = next((r for r in shipment.handling_units if r.handling_unit == hu_name), None)
     if not row: frappe.throw(_("Handling Unit {0} is not on this shipment").format(hu_name))
     if row.loaded: frappe.throw(_("Handling Unit {0} is already loaded").format(hu_name))
+    check = frappe.db.get_value("WMS Warehouse", shipment.warehouse, "load_sequence_check") or "Off"
+    if check != "Off" and row.stop_sequence:
+        deeper = [r for r in shipment.handling_units if not r.loaded and cint(r.stop_sequence) > cint(row.stop_sequence)]
+        if deeper:
+            message = _("{0} is for stop {1}, but {2} HU(s) for a later stop must go into the truck first (next: {3}, stop {4})").format(
+                hu_name, row.stop_sequence, len(deeper), deeper[0].handling_unit, deeper[0].stop_sequence)
+            if check == "Block": frappe.throw(message)
+            if not cint(confirm_out_of_sequence): return {"needs_confirmation": message}
     door_bin = shipment.door or shipment.staging_bin
     if not door_bin: frappe.throw(_("Shipment has no door or staging bin configured"))
     hops = _route_hops(shipment.route, door_bin) if shipment.route else [door_bin]
@@ -225,6 +238,8 @@ def depart_shipment(shipment_name):
     shipment = frappe.get_doc("WMS Shipment", shipment_name)
     if shipment.status != "Loaded": frappe.throw(_("Shipment must be fully loaded before it can depart"))
     shipment.db_set({"status": "Departed", "actual_departure": now_datetime()}, update_modified=True)
+    from frappe_wms.services.yard import on_shipment_departed
+    on_shipment_departed(shipment.name)
     return {"shipment": shipment.name, "status": "Departed"}
 
 def complete_shipment(shipment_name):

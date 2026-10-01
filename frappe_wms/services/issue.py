@@ -42,6 +42,7 @@ def post_goods_issue(doc):
     create_print_spool("Goods Issue", doc.name, "Goods Issue Posted", doc.warehouse)
 
 def reverse_goods_issue(doc):
+    from frappe_wms.services.archiving import ensure_reversible; ensure_reversible(doc)
     original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
     if not original: return
     hus=set()
@@ -93,7 +94,13 @@ def _loaded_handling_units_for_line(outbound_delivery_item):
         destination_hus |= set(frappe.get_all("Warehouse Task",
             filters={"name": ["in", task_names], "task_type": "Pick", "status": "Confirmed", "destination_hu": ["is", "set"]},
             pluck="destination_hu", distinct=True))
-    return sorted({hu for hu in destination_hus if frappe.db.get_value("Handling Unit", hu, "status") == "Loaded"})
+    # Cartons packed for the delivery at a packing station, and anything nested in a loaded HU
+    # (loading cascades "Loaded" down to every nested HU - services/shipping.py).
+    from frappe_wms.services.packing_station import hu_subtree
+    delivery = frappe.db.get_value("Outbound Delivery Item", outbound_delivery_item, "parent")
+    destination_hus |= set(frappe.get_all("Handling Unit", filters={"outbound_delivery": delivery}, pluck="name"))
+    candidates = {sub for hu in destination_hus for sub in hu_subtree(hu)}
+    return sorted({hu for hu in candidates if frappe.db.get_value("Handling Unit", hu, "status") == "Loaded"})
 
 def _ready_lines_for_delivery(delivery_name):
     # Each line still owing a goods issue, split across however many loaded HUs it actually
@@ -104,6 +111,7 @@ def _ready_lines_for_delivery(delivery_name):
     rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name},
         fields=["name", "item", "picked_quantity", "issued_quantity", "stock_uom", "required_stock_type"])
     lines = []
+    used = {}  # (hu, product, stock_type) -> already split to an earlier line of this delivery
     for row in rows:
         remaining = flt(row.picked_quantity) - flt(row.issued_quantity)
         if remaining <= 0: continue
@@ -116,9 +124,12 @@ def _ready_lines_for_delivery(delivery_name):
             on_hand = flt(frappe.db.get_value("WMS Stock Balance", {
                 "handling_unit": hu_name, "storage_bin": bin_name, "product": row.item, "stock_type": row.required_stock_type,
             }, "quantity"))
+            key = (hu_name, row.item, row.required_stock_type)
+            on_hand -= used.get(key, 0)
             if on_hand <= 0: continue
             take = min(need, on_hand)
             splits.append({"handling_unit": hu_name, "quantity": take})
+            used[key] = used.get(key, 0) + take
             need -= take
         row["handling_unit_splits"] = splits
         row["suggested_handling_unit"] = splits[0]["handling_unit"] if splits else None

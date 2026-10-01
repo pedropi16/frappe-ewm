@@ -8,7 +8,8 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "outbound_delivery"
+    "outbound_delivery",
+    "stop_sequence"
   ],
   "fields": [
     {
@@ -18,6 +19,13 @@
       "options": "Outbound Delivery",
       "reqd": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "stop_sequence",
+      "fieldtype": "Int",
+      "label": "Stop",
+      "in_list_view": 1,
+      "description": "Order the truck reaches this delivery's consignee (1 = first stop). Loading goes in reverse: the last stop's HUs first."
     }
   ],
   "sort_field": "modified",

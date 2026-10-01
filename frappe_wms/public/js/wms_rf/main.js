@@ -23,17 +23,18 @@ import { deconScan, deconDetail } from "#wms/screens/decon.js";
 import closeMovement from "#wms/screens/closemove.js";
 import { repackScan, repackDetail } from "#wms/screens/repack.js";
 import { huList, huNew, huDetail } from "#wms/screens/hu.js";
-import kitting from "#wms/screens/kitting.js";
+import kitting, { kittingDetail } from "#wms/screens/kitting.js";
 import { consolidationList, consolidationDetail } from "#wms/screens/consolidation.js";
 import { pickingMenu, pickingManual, pickingFind } from "#wms/screens/picking.js";
 import { vasList, vasNew, vasDetail } from "#wms/screens/vas.js";
+import { yardList, yardNew, yardDetail } from "#wms/screens/yard.js";
 
 // Literal routes come before ":param" routes so "hu-new" / "vas-new" can never be read as a name.
 const SCREENS = [
   logon, menu, section, session, lookup, tasks, task, move,
   receiveList, receiveDetail, shipList, shipDetail, pack, countList, countDetail, qualityList, qualityDetail, loadList, loadDetail,
-  deconScan, deconDetail, closeMovement, repackScan, repackDetail, huList, huNew, huDetail, kitting, consolidationList, consolidationDetail,
-  pickingMenu, pickingManual, pickingFind, vasList, vasNew, vasDetail,
+  deconScan, deconDetail, closeMovement, repackScan, repackDetail, huList, huNew, huDetail, kitting, kittingDetail, consolidationList, consolidationDetail,
+  pickingMenu, pickingManual, pickingFind, vasList, vasNew, vasDetail, yardList, yardNew, yardDetail,
 ];
 
 async function boot() {

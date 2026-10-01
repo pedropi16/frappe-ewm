@@ -14,6 +14,13 @@ OPEN_INBOUND_STATUSES = ("Draft", "Expected", "Arrived", "Receiving", "Partially
 
 def post_goods_receipt(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype": doc.doctype, "reference_name": doc.name}): return
+    # Receipt progress moves on submit for every Goods Receipt - API, RF or a plain desk
+    # submit - exactly as reverse_goods_receipt moves it back on cancel; it used to move only on
+    # the API path, so a desk-submitted receipt was never counted against its delivery.
+    if doc.inbound_delivery:
+        delivery = _lock_inbound_delivery(doc.inbound_delivery)
+        if delivery.docstatus == 2: frappe.throw(_("Inbound Delivery {0} is cancelled").format(delivery.name))
+        _validate_receipt_quantities(delivery, doc.items)
     entries=[]
     inspection_rows=[]
     for row in doc.items:
@@ -42,6 +49,8 @@ def post_goods_receipt(doc):
         entries.append(entry)
     # A receipt is an external increase, so post each row independently.
     for i, entry in enumerate(entries,1): post_entries([entry],doc.doctype,doc.name,f"GR:{doc.name}:{i}")
+    if doc.inbound_delivery:
+        _update_inbound_delivery_receipt_progress(doc.inbound_delivery, doc.items)
     for row in inspection_rows:
         frappe.get_doc({
             "doctype": "WMS Quality Inspection", "warehouse": doc.warehouse, "product": row.item,
@@ -52,6 +61,7 @@ def post_goods_receipt(doc):
     doc.db_set("status","Posted")
 
 def reverse_goods_receipt(doc):
+    from frappe_wms.services.archiving import ensure_reversible; ensure_reversible(doc)
     original=frappe.get_all("WMS Stock Ledger Entry",filters={"reference_doctype":doc.doctype,"reference_name":doc.name,"reversal_of":["in",[None,""]]},fields=["*"])
     if not original: return
     for i,row in enumerate(original,1):
@@ -119,6 +129,40 @@ def list_open_inbound_deliveries(user=None):
     return frappe.get_list("Inbound Delivery", filters=filters,
         fields=["name", "inbound_delivery_number", "warehouse", "supplier", "external_reference", "receiving_bin", "status", "posting_date"],
         order_by="posting_date asc, creation asc", limit=50)
+
+def receiving_worklist(inbound_delivery):
+    """Everything the RF scan-first Receive screen needs in one call: each open line with what is
+    left to receive, the item's barcodes (so a scan resolves on the device, no round trip), and
+    whether posting will demand a batch or serial - the same rules post_goods_receipt enforces."""
+    doc = frappe.get_doc("Inbound Delivery", inbound_delivery)
+    doc.check_permission("read")
+    lines = []
+    for row in doc.items:
+        remaining = flt(row.expected_quantity) - flt(row.received_quantity)
+        if remaining <= 0.000001: continue
+        product = frappe.db.get_value("WMS Product", row.item, ["warehouse_managed", "batch_control", "serial_control"], as_dict=True) or {}
+        managed = bool(product.get("warehouse_managed"))
+        lines.append({
+            "inbound_delivery_item": row.name, "line_number": row.line_number, "item": row.item,
+            "item_name": row.item_name or frappe.db.get_value("Item", row.item, "item_name"),
+            "remaining": remaining, "stock_uom": row.stock_uom, "stock_type": row.expected_stock_type,
+            "barcodes": frappe.get_all("Item Barcode", filters={"parent": row.item}, pluck="barcode"),
+            # Units the operator may count in (cases, pallets...), each with its factor to the
+            # stock UOM - the ERPNext Item's UOM conversions, the order line's UOM first.
+            "uoms": _receiving_uoms(row),
+            "batch_required": bool(managed and product.get("batch_control")),
+            "serial_required": bool(managed and product.get("serial_control") in ("Required at Receipt", "Always")),
+        })
+    return {
+        "name": doc.name, "inbound_delivery_number": doc.inbound_delivery_number, "supplier": doc.supplier,
+        "external_reference": doc.external_reference, "receiving_bin": doc.receiving_bin, "status": doc.status, "lines": lines,
+        "hu_types": frappe.get_all("Handling Unit Type", filters={"active": 1}, fields=["name", "numbering_mode"]),
+        "default_hu_type": frappe.db.get_single_value("WMS Settings", "default_handling_unit_type"),
+    }
+
+def _receiving_uoms(row):
+    from frappe_wms.services.uom import unit_options
+    return unit_options(row.item, row.stock_uom, row.get("uom"), row.get("conversion_factor"))
 
 def _get_or_create_batch(item_code, batch_no):
     # Same "a scan of something new registers it in place" idiom as get_or_create_handling_unit -
@@ -236,11 +280,11 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
-    _update_inbound_delivery_receipt_progress(delivery.name, items)
     request_names = create_putaway_requests(gr.name)
-    batch_key = frappe.generate_hash(length=10)
-    task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
-    return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names}
+    # The goods are received either way; a putaway with no free bin waits in the Monitor.
+    from frappe_wms.services.task import plan_requests
+    task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
+    return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names, "unplanned_requests": unplanned}
 
 def _production_supplier():
     # Inbound Delivery's supplier field is mandatory (it's normally an external-receiving
@@ -342,7 +386,6 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
     gr.insert(ignore_permissions=True)
     gr.flags.ignore_permissions = True
     gr.submit()
-    _update_inbound_delivery_receipt_progress(ind.name, gr.items)
     request_names = create_putaway_requests(gr.name)
     batch_key = frappe.generate_hash(length=10)
     task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]

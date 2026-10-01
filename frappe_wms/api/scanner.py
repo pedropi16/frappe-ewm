@@ -14,6 +14,13 @@ def get_task(task_name):
     result = doc.as_dict()
     # Operators recognise stock by its name, not its item code - the task screen only showed "SKU-00187".
     if doc.product: result["product_name"] = frappe.db.get_value("Item", doc.product, "item_name")
+    # Units the operator may count in; a pick for a delivery ordered in cases offers cases first.
+    from frappe_wms.services.uom import unit_options
+    line_unit = None
+    if doc.stock_allocations:
+        delivery_item = frappe.db.get_value("Stock Allocation", doc.stock_allocations[0].stock_allocation, "outbound_delivery_item")
+        line_unit = frappe.db.get_value("Outbound Delivery Item", delivery_item, ["uom", "conversion_factor"], as_dict=True) if delivery_item else None
+    result["uoms"] = unit_options(doc.product, doc.stock_uom, line_unit and line_unit.uom, line_unit and line_unit.conversion_factor) if doc.product else []
     if len(doc.stock_allocations or []) > 1:
         # A cluster pick task's own fields only show the aggregate - the RF app needs the
         # per-order breakdown (which delivery gets how much) so an operator sorting the pick
@@ -122,11 +129,26 @@ def resolve_scan(code, warehouse=None):
     code = (code or "").strip()
     matches = []
     if not code: return {"code": code, "matches": matches}
-    if frappe.db.exists("Storage Bin", code):
+    # A GS1 label (pallet/case) carries the SSCC of the HU and/or the GTIN of the product - and
+    # batch, expiry, serial, count - in one scan. It is resolved through those elements.
+    from frappe_wms.services.gs1 import gtin_variants, parse as parse_gs1
+    gs1 = parse_gs1(code)
+    hu_codes = [code] + ([gs1["sscc"]] if gs1 and gs1.get("sscc") else [])
+    item_codes = [code] + ([gs1.get("gtin") or gs1.get("content_gtin")] if gs1 and (gs1.get("gtin") or gs1.get("content_gtin")) else [])
+    if not gs1 and frappe.db.exists("Storage Bin", code):
         matches.append({"type": "bin", "name": code, "warehouse": frappe.db.get_value("Storage Bin", code, "warehouse")})
-    if frappe.db.exists("Handling Unit", code):
-        matches.append({"type": "hu", "name": code})
-    item = code if frappe.db.exists("Item", code) else frappe.db.get_value("Item Barcode", {"barcode": code}, "parent")
+    for c in hu_codes:
+        hu = c if frappe.db.exists("Handling Unit", c) else (frappe.db.get_value("Handling Unit", {"sscc": c})
+                                                             or frappe.db.get_value("Handling Unit", {"hu_number": c}))
+        if hu and not any(m["name"] == hu for m in matches):
+            matches.append({"type": "hu", "name": hu})
+    item = None
+    for c in item_codes:
+        item = c if frappe.db.exists("Item", c) else None
+        if not item:
+            variants = gtin_variants(c) if c.isdigit() else [c]
+            item = frappe.db.get_value("Item Barcode", {"barcode": ["in", variants]}, "parent")
+        if item: break
     if item:
         matches.append({"type": "item", "name": item, "item_name": frappe.db.get_value("Item", item, "item_name"), "stock_uom": frappe.db.get_value("Item", item, "stock_uom")})
-    return {"code": code, "matches": matches}
+    return {"code": code, "matches": matches, "gs1": gs1}

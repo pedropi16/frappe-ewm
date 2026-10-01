@@ -1,0 +1,20 @@
+{
+ "doctype": "Print Format",
+ "name": "WMS HU Label",
+ "doc_type": "Handling Unit",
+ "module": "WMS Handling Units",
+ "standard": "Yes",
+ "custom_format": 1,
+ "print_format_type": "Jinja",
+ "print_format_builder": 0,
+ "raw_printing": 0,
+ "disabled": 0,
+ "font_size": 10,
+ "html": "<div style=\"border:2px solid #000;padding:12px;width:360px;font-family:sans-serif\">\n<div style=\"font-size:26px;font-weight:700\">{{ doc.hu_number or doc.name }}</div>\n<div>{{ _(\"Type\") }}: {{ doc.hu_type or \"\" }} &middot; {{ _(\"Warehouse\") }}: {{ doc.warehouse or \"\" }}</div>\n{% if doc.outbound_delivery %}<div>{{ _(\"Delivery\") }}: <b>{{ doc.outbound_delivery }}</b> &middot; {{ frappe.db.get_value(\"Outbound Delivery\", doc.outbound_delivery, \"customer\") }}</div>{% endif %}\n<div>{{ _(\"Gross\") }}: {{ doc.gross_weight or 0 }} kg</div>\n{% if doc.sscc %}<div style=\"margin-top:8px;font-size:18px;letter-spacing:2px\">(00) {{ doc.sscc }}</div>{% endif %}\n</div>",
+ "css": "",
+ "default_print_language": "en",
+ "align_labels_right": 0,
+ "show_section_headings": 0,
+ "line_breaks": 0,
+ "absolute_value": 0
+}

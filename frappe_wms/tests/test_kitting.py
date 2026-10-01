@@ -2,7 +2,9 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
-from frappe_wms.services.kitting import create_kitting_order, complete_kitting_order, list_open_kitting_orders
+from frappe_wms.services.kitting import (cancel_kitting_order, complete_kitting_order, create_kitting_order, get_kitting_order,
+                                         list_open_kitting_orders, stage_kitting_components)
+from frappe_wms.services.task import confirm_task
 
 
 class TestKitting(IntegrationTestCase):
@@ -23,6 +25,11 @@ class TestKitting(IntegrationTestCase):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "WC", "storage_type_name": "Work Center", "storage_role": "Packing", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("Storage Bin", cls.work_center_bin):
             frappe.get_doc({"doctype": "Storage Bin", "bin_code": cls.work_center_bin, "warehouse": cls.warehouse, "storage_type": f"{cls.warehouse}-WC", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Type", f"{cls.warehouse}-ST"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "ST", "storage_type_name": "Storage", "storage_role": "Storage", "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        cls.storage_bin = f"{cls.warehouse}-ST-01"
+        if not frappe.db.exists("Storage Bin", cls.storage_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": cls.storage_bin, "warehouse": cls.warehouse, "storage_type": f"{cls.warehouse}-ST", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
         if not frappe.db.exists("Handling Unit Type", "KIT-TEST-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "KIT-TEST-PALLET", "hu_type_name": "Kit Test Pallet"}).insert(ignore_permissions=True)
 
@@ -46,16 +53,17 @@ class TestKitting(IntegrationTestCase):
             bom_name = frappe.get_all("BOM", filters={"item": fg, "docstatus": 1}, pluck="name")[0]
         return rm1, rm2, fg, bom_name
 
-    def _seed(self, item, qty):
+    def _seed(self, item, qty, bin=None):
         # A real Goods Receipt (not a raw ledger post) so ERPNext's own side also has
         # valuated stock for this item/warehouse - Kitting Order's ERPNext mirror (a Repack
         # Stock Entry) needs a resolvable valuation rate for whatever it consumes.
-        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "KIT-TEST-PALLET", "warehouse": self.warehouse, "current_bin": self.work_center_bin, "status": "Open"})
+        bin = bin or self.work_center_bin
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "KIT-TEST-PALLET", "warehouse": self.warehouse, "current_bin": bin, "status": "Open"})
         hu.insert(ignore_permissions=True)
-        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.work_center_bin,
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": bin,
             "items": [{"line_number": 1, "item": item, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
         ind.insert(ignore_permissions=True)
-        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.work_center_bin,
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": bin,
             "items": [{"inbound_delivery_item": ind.items[0].name, "item": item, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
         gr.insert(ignore_permissions=True)
         gr.submit()
@@ -126,3 +134,42 @@ class TestKitting(IntegrationTestCase):
         names = {row.name for row in list_open_kitting_orders()}
         self.assertIn(open_name, names)
         self.assertNotIn(completed_name, names)
+
+    def test_stage_consume_across_hus_output_hu_and_putaway(self):
+        rm1, rm2, fg, bom_name = self._make_bom_set("F")
+        self._seed(rm1, 6, self.storage_bin)
+        self._seed(rm1, 6, self.storage_bin)   # rm1 on two HUs: the order needs 8
+        self._seed(rm2, 20, self.storage_bin)
+        name = create_kitting_order(fg, bom_name, self.warehouse, self.work_center_bin, 4, "Assemble", putaway_output=1)
+        view = get_kitting_order(name)
+        self.assertFalse(view["ready"])
+        self.assertEqual({i["item"]: i["at_work_center"] for i in view["inputs"]}, {rm1: 0, rm2: 0})
+
+        staged = stage_kitting_components(name)
+        self.assertEqual(staged["short"], [])
+        self.assertEqual({i["item"]: i["in_transit"] for i in get_kitting_order(name)["inputs"]}, {rm1: 8, rm2: 12})
+        self.assertEqual(stage_kitting_components(name)["requests"], [], "nothing is staged twice")
+        for task in frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", staged["requests"]], "docstatus": 0}, fields=["name", "source_bin", "destination_bin"]):
+            confirm_task(task.name, scanned_source=task.source_bin, scanned_destination=task.destination_bin)
+        view = get_kitting_order(name)
+        self.assertTrue(view["ready"], view["inputs"])
+
+        out_hu = frappe.generate_hash(length=10)
+        frappe.get_doc({"doctype": "Handling Unit", "hu_number": out_hu, "hu_type": "KIT-TEST-PALLET", "warehouse": self.warehouse, "current_bin": self.work_center_bin, "status": "Open"}).insert(ignore_permissions=True)
+        result = complete_kitting_order(name, destination_hu=out_hu)
+        self.assertEqual(self._balance(rm1), 0, "8 consumed across both staged HUs")
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"handling_unit": out_hu, "product": fg}, "quantity"), 4)
+        self.assertEqual(len(result["putaway_requests"]), 1)
+        req = frappe.get_doc("Warehouse Request", result["putaway_requests"][0])
+        self.assertEqual((req.request_type, req.source_bin, req.source_hu, req.product), ("Putaway", self.work_center_bin, out_hu, fg))
+
+    def test_cancel_cancels_open_staging(self):
+        rm1, rm2, fg, bom_name = self._make_bom_set("G")
+        self._seed(rm1, 10, self.storage_bin)
+        self._seed(rm2, 10, self.storage_bin)
+        name = create_kitting_order(fg, bom_name, self.warehouse, self.work_center_bin, 1, "Assemble")
+        staged = stage_kitting_components(name)
+        cancel_kitting_order(name)
+        self.assertEqual(frappe.db.get_value("Kitting Order", name, "status"), "Cancelled")
+        self.assertFalse(frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", staged["requests"]], "docstatus": 0}))
+        self.assertEqual({frappe.db.get_value("Warehouse Request", r, "status") for r in staged["requests"]}, {"Cancelled"})

@@ -21,8 +21,8 @@ def list_loadable_shipments():
 
 @frappe.whitelist()
 @retry_on_deadlock
-def confirm_hu_loaded(shipment_name, hu_name):
-    return _confirm_hu_loaded(shipment_name, hu_name)
+def confirm_hu_loaded(shipment_name, hu_name, confirm_out_of_sequence=0):
+    return _confirm_hu_loaded(shipment_name, hu_name, confirm_out_of_sequence=confirm_out_of_sequence)
 
 @frappe.whitelist()
 @retry_on_deadlock

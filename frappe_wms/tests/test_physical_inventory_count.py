@@ -172,3 +172,41 @@ class TestPhysicalInventoryCount(IntegrationTestCase):
         self.assertTrue(count.erpnext_gain_stock_entry)
         self.assertTrue(count.erpnext_loss_stock_entry)
         self.assertNotEqual(count.erpnext_gain_stock_entry, count.erpnext_loss_stock_entry)
+
+    def test_negative_and_non_unit_serial_counts_are_refused_when_recorded(self):
+        item = self._make_item("TEST-PIC-NEG")
+        self._receive(item, self.bin_a, 5)
+        count = self._make_count(item, storage_bin=self.bin_a)
+        snapshot_count(count.name)
+        count.reload()
+        with self.assertRaises(frappe.ValidationError):
+            record_counts(count.name, {count.items[0].name: -1})
+        count.reload()
+        self.assertEqual(count.items[0].status, "Open", "nothing was recorded")
+        # a serial row is one unit: only 0 or 1 is a count
+        row = count.items[0]
+        frappe.db.set_value(row.doctype, row.name, "serial_no", "SN-PIC-NEG-1")
+        with self.assertRaises(frappe.ValidationError):
+            record_counts(count.name, {row.name: 2})
+
+    def test_bins_with_open_tasks_are_not_counted_and_losses_keep_reservations(self):
+        item = self._make_item("TEST-PIC-BUSY")
+        hu = self._receive(item, self.bin_b, 10)
+        task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": self.warehouse, "product": item,
+                               "planned_quantity": 4, "stock_uom": self.uom, "source_bin": self.bin_b, "source_hu": hu.name, "destination_bin": self.bin_a,
+                               "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "301", "priority": "Normal",
+                               "status": "Open"}).insert(ignore_permissions=True)
+        count = self._make_count(item, storage_bin=self.bin_b)
+        with self.assertRaises(frappe.ValidationError):
+            snapshot_count(count.name)
+        frappe.db.set_value("Warehouse Task", task.name, {"status": "Cancelled", "docstatus": 2})
+        snapshot_count(count.name)
+        count.reload()
+        # 8 of the 10 units get reserved after the count started: a loss of 5 would eat into them
+        balance = frappe.get_all("WMS Stock Balance", filters={"product": item, "storage_bin": self.bin_b, "quantity": [">", 0]}, pluck="name")[0]
+        frappe.db.set_value("WMS Stock Balance", balance, "allocated_quantity", 8)
+        record_counts(count.name, {count.items[0].name: 5})
+        with self.assertRaises(frappe.ValidationError):
+            post_count(count.name)
+        self.assertEqual(self._wms_qty(item), 10, "nothing posted")
+        frappe.db.set_value("WMS Stock Balance", balance, "allocated_quantity", 0)

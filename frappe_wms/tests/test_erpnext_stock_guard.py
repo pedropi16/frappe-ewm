@@ -95,3 +95,25 @@ class TestErpnextStockGuard(IntegrationTestCase):
         # Stock Entries it spawns are guarded, via the Stock Entry entry above.
         doc = self._fake_doc("Work Order", fg_warehouse=self.wh.erpnext_warehouse, wip_warehouse=None, source_warehouse=None, items=[])
         guard_validate(doc)  # should not raise
+
+    def test_blocks_pos_invoice_asset_documents_and_bundle_components(self):
+        wh, other = self.wh.erpnext_warehouse, self.unmanaged_warehouse
+        blocked = [
+            self._fake_doc("POS Invoice", update_stock=1, items=[frappe._dict(warehouse=wh)]),
+            self._fake_doc("Asset Capitalization", stock_items=[frappe._dict(warehouse=wh)]),
+            self._fake_doc("Asset Repair", stock_items=[frappe._dict(warehouse=wh)]),
+            # a product bundle sold from an unmanaged warehouse whose component ships from the WMS one
+            self._fake_doc("Delivery Note", items=[frappe._dict(warehouse=other)], packed_items=[frappe._dict(warehouse=wh)]),
+            self._fake_doc("Sales Invoice", update_stock=1, items=[frappe._dict(warehouse=other)], packed_items=[frappe._dict(warehouse=wh)]),
+        ]
+        for doc in blocked:
+            with self.assertRaises(frappe.ValidationError, msg=doc.doctype):
+                guard_validate(doc)
+        guard_validate(self._fake_doc("POS Invoice", update_stock=1, items=[frappe._dict(warehouse=other)]))
+        guard_validate(self._fake_doc("Asset Repair", stock_items=[frappe._dict(warehouse=other)]))
+
+    def test_every_guarded_doctype_is_hooked(self):
+        from frappe_wms.events.erpnext_stock_guard import _WAREHOUSE_FIELDS
+        doc_events = frappe.get_hooks("doc_events")
+        for doctype in _WAREHOUSE_FIELDS:
+            self.assertIn("frappe_wms.events.erpnext_stock_guard.validate", doc_events.get(doctype, {}).get("validate", []), doctype)

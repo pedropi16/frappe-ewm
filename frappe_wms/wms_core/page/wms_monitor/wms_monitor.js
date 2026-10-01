@@ -4,7 +4,7 @@ frappe.pages["wms-monitor"].on_page_load = function (wrapper) {
     title: __("WMS Monitor"),
     single_column: true,
   });
-  new WMSMonitor(page);
+  frappe.require(["/assets/frappe_wms/js/wms_selection.js", "/assets/frappe_wms/js/wms_packing_station.js"], () => new WMSMonitor(page));
 };
 
 // SAP EWM-style Warehouse Management Monitor: one warehouse selector, a node tree of
@@ -15,10 +15,12 @@ const VIEWS = [
   { key: "overview", label: __("Overview") },
   { key: "inbound", label: __("Inbound Monitor") },
   { key: "outbound", label: __("Outbound Monitor") },
+  { key: "yard", label: __("Yard & Doors") },
   { key: "stock", label: __("Stock Overview") },
   { key: "tasks", label: __("Warehouse Tasks") },
   { key: "hu", label: __("Handling Units") },
-  { key: "repack", label: __("Repack Center") },
+  { key: "packing", label: __("Repack Center") },
+  { key: "repack", label: __("HU Workbench") },
   { key: "movements", label: __("Stock Movements") },
   { key: "resources", label: __("Resources & Queues") },
   { key: "differences", label: __("Difference Analyzer") },
@@ -59,6 +61,13 @@ function ensure_grid_styles() {
     .wms-grid-filter-pop .wms-grid-filter-links { display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px; }
     .wms-grid-filter-pop .wms-grid-filter-links a { cursor:pointer; }
     .wms-grid-filter-pop .wms-grid-filter-actions { display:flex; justify-content:flex-end; gap:6px; }
+    .wms-grid-grip { cursor:grab; opacity:.35; font-size:10px; letter-spacing:-2px; padding-right:2px; }
+    .wms-grid-grip:hover { opacity:1; }
+    .wms-grid-colhead.wms-grid-dragover { box-shadow: inset 3px 0 0 var(--blue-500,#3b82f6); }
+    .wms-grid-table tfoot td, .wms-grid-table tfoot th { font-weight:600; background:var(--control-bg,#f5f5f5); position:sticky; bottom:0; }
+    .wms-grid-table thead th { position:sticky; top:0; z-index:1; }
+    .wms-grid-num { text-align:right; font-variant-numeric: tabular-nums; }
+    .wms-grid-layoutbar { display:flex; align-items:center; gap:6px; }
   ` }).appendTo("head");
 }
 
@@ -100,8 +109,10 @@ class DataGrid {
     this.opts = opts || {};
     this.filterText = "";
     this.colFilters = {}; // {field: Set(allowedValues)} - absent/undefined = no filter on that column
-    this.sortField = null;
-    this.sortDir = 0; // 1 asc, -1 desc
+    this.sortField = (this.opts.sort && this.opts.sort[0]) || null;
+    this.sortDir = (this.opts.sort && this.opts.sort[1]) || 0; // 1 asc, -1 desc
+    this.showTotals = !!this.opts.totals;
+    this.numeric = new Set(this.opts.numeric || []);
     this.sels = []; // [{r0,r1,c0,c1}, ...] - r0 includes the header row (0); c0 excludes the gutter (starts at 1)
     this.anchor = null;
     this.$el = $(`<div class="wms-grid"></div>`);
@@ -164,6 +175,9 @@ class DataGrid {
       <div class="wms-grid-toolbar">
         <input type="text" class="form-control input-sm wms-grid-filter" style="width:220px;" placeholder="${__("Filter visible rows...")}">
         <button type="button" class="btn btn-default btn-xs wms-grid-copy">${__("Copy")}</button>
+        <button type="button" class="btn btn-default btn-xs wms-grid-csv" title="${__("Download the visible rows and columns as CSV")}">${__("Export")}</button>
+        <button type="button" class="btn btn-default btn-xs wms-grid-totals" title="${__("Totals of numeric columns")}">&Sigma;</button>
+        <span class="wms-grid-layoutbar"></span>
         <button type="button" class="btn btn-default btn-xs wms-grid-clear-filters" style="display:none;">${__("Clear filters/sort")}</button>
         <span class="text-muted wms-grid-hint"></span>
         <div class="wms-grid-actionbar"></div>
@@ -176,7 +190,12 @@ class DataGrid {
     this.$el.attr("tabindex", 0).css("outline", "none");
     $toolbar.find(".wms-grid-filter").on("input", (e) => { this.filterText = e.target.value; this.sels = []; this._render(); });
     $toolbar.find(".wms-grid-copy").on("click", () => this._copy());
-    $toolbar.find(".wms-grid-clear-filters").on("click", () => { this.colFilters = {}; this.sortField = null; this.sortDir = 0; this.sels = []; this._render(); });
+    $toolbar.find(".wms-grid-csv").on("click", () => this._exportCsv());
+    $toolbar.find(".wms-grid-totals").toggleClass("active", this.showTotals).on("click", (e) => {
+      this.showTotals = !this.showTotals; $(e.currentTarget).toggleClass("active", this.showTotals); this._render(); this._layoutChanged();
+    });
+    if (this.opts.layoutBar) $toolbar.find(".wms-grid-layoutbar").append(this.opts.layoutBar);
+    $toolbar.find(".wms-grid-clear-filters").on("click", () => { this.colFilters = {}; this.sortField = null; this.sortDir = 0; this.sels = []; this._render(); this._layoutChanged(); });
     this._bindSelection();
     this.$el.on("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) { e.preventDefault(); this._copy(); }
@@ -196,7 +215,7 @@ class DataGrid {
         const filterActive = !!this.colFilters[field];
         return `<th class="wms-grid-colhead" data-r="0" data-c="${ci + 1}" data-field="${frappe.utils.escape_html(field)}">
           <div class="wms-grid-colhead-inner">
-            <span class="wms-grid-colhead-label">${frappe.utils.escape_html(label)}</span>
+            <span><span class="wms-grid-grip" draggable="true" data-c="${ci}" title="${__("Drag to move this column")}">&#8942;&#8942;</span><span class="wms-grid-colhead-label">${frappe.utils.escape_html(label)}</span></span>
             <span>
               <span class="wms-grid-sort ${sortCls}" data-field="${frappe.utils.escape_html(field)}" title="${__("Sort")}">${sortIcon}</span>
               <span class="wms-grid-filter-btn ${filterActive ? "active" : ""}" data-field="${frappe.utils.escape_html(field)}" title="${__("Filter")}">▾</span>
@@ -220,12 +239,21 @@ class DataGrid {
           } else {
             inner = raw === null || raw === undefined ? "" : frappe.utils.escape_html(String(raw));
           }
-          return `<td class="wms-grid-cell" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
+          return `<td class="wms-grid-cell${this.numeric.has(field) ? " wms-grid-num" : ""}" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
         })
       ).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
-    this.$table.html(`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`);
+    let foot = "";
+    if (this.showTotals && rows.length) {
+      const cells = this.columns.map(([field]) => {
+        if (!this.numeric.has(field)) return `<td></td>`;
+        const total = rows.reduce((acc, row) => acc + (parseFloat(row[field]) || 0), 0);
+        return `<td class="wms-grid-num">${frappe.utils.escape_html(String(Math.round(total * 1e6) / 1e6))}</td>`;
+      });
+      foot = `<tfoot><tr><th class="wms-grid-rowhead">&Sigma;</th>${cells.join("")}</tr></tfoot>`;
+    }
+    this.$table.html(`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}`);
     this._maxR = maxR; this._maxC = maxC;
     this.$el.find(".wms-grid-hint").text(rows.length === this.rows.length ? __("{0} row(s)", [rows.length]) : __("{0} of {1} row(s)", [rows.length, this.rows.length]));
     this.$el.find(".wms-grid-clear-filters").toggle(!!(this.sortField || Object.keys(this.colFilters).length));
@@ -243,7 +271,25 @@ class DataGrid {
       else if (this.sortDir === -1) { this.sortField = null; this.sortDir = 0; }
       else this.sortDir = 1;
       this._render();
+      this._layoutChanged();
     });
+    // Column move: drag the grip in a header onto another header (SAP ALV "drag a column").
+    this.$table.find(".wms-grid-grip").on("mousedown", (e) => e.stopPropagation())
+      .on("dragstart", (e) => { this._dragCol = Number(e.currentTarget.dataset.c); e.originalEvent.dataTransfer.effectAllowed = "move"; e.originalEvent.dataTransfer.setData("text/plain", "col"); });
+    this.$table.find(".wms-grid-colhead")
+      .on("dragover", (e) => { if (this._dragCol == null) return; e.preventDefault(); $(e.currentTarget).addClass("wms-grid-dragover"); })
+      .on("dragleave", (e) => $(e.currentTarget).removeClass("wms-grid-dragover"))
+      .on("drop", (e) => {
+        e.preventDefault();
+        const from = this._dragCol, to = Number(e.currentTarget.dataset.c) - 1;
+        this._dragCol = null;
+        if (from == null || to < 0 || from === to) { this._render(); return; }
+        const [col] = this.columns.splice(from, 1);
+        this.columns.splice(to, 0, col);
+        this.sels = [];
+        this._render();
+        this._layoutChanged();
+      });
     this.$table.find(".wms-grid-filter-btn").on("mousedown", (e) => {
       e.preventDefault(); e.stopPropagation();
       this._openColumnFilter($(e.currentTarget).data("field"), $(e.currentTarget));
@@ -332,6 +378,7 @@ class DataGrid {
   _bindSelection() {
     let dragging = false, liveIndex = -1;
     this.$table.on("mousedown", "th, td", (e) => {
+      if ($(e.currentTarget).closest("tfoot").length) return; // the totals row is not selectable data
       if ($(e.target).is("a, button, input, select, textarea, label")) return; // let interactive controls work normally, don't hijack them into a selection
       const $cell = $(e.currentTarget);
       const r = Number($cell.data("r")), c = Number($cell.data("c"));
@@ -388,6 +435,24 @@ class DataGrid {
     });
   }
 
+  layoutState() {
+    return { columns: this.columns.map(([f]) => f), sort: this.sortField ? [this.sortField, this.sortDir] : null, totals: this.showTotals };
+  }
+
+  _layoutChanged() { if (this.opts.onLayoutChange) this.opts.onLayoutChange(this.layoutState()); }
+
+  _exportCsv() {
+    const esc = (v) => { const t = v === null || v === undefined ? "" : String(v); return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const lines = [this.columns.map(([, label]) => esc(label)).join(",")].concat(
+      this._visRows.map((row) => this.columns.map(([f]) => esc(row[f])).join(",")));
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(this.opts.exportName || this.doctype || "export").replace(/[^\w-]+/g, "_")}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   _copy() {
     if (!this.sels.length) { frappe.show_alert({ message: __("Select a cell, row, or column first"), indicator: "orange" }); return; }
     const cellSet = new Map(); // "r,c" -> [r,c], de-duplicated across overlapping/multiple rectangles
@@ -421,15 +486,6 @@ class DataGrid {
   }
 }
 
-// Builds a <select class="...cls..."> with a blank "any" option - used for filter fields backed
-// by a fixed Select fieldtype, so a filter can't silently return nothing from a typo or a
-// mismatched case (e.g. typing "picked" instead of "Picked").
-function select_html(cls, options, placeholder) {
-  const opts = [`<option value="">${frappe.utils.escape_html(placeholder || __("Any"))}</option>`]
-    .concat(options.map((o) => `<option value="${frappe.utils.escape_html(o)}">${frappe.utils.escape_html(o)}</option>`));
-  return `<select class="form-control input-sm ${cls}" style="width:150px;">${opts.join("")}</select>`;
-}
-
 // SAP selection-screen convention used across every search tab: nothing loads until Execute is
 // pressed (no auto-run on tab entry, no auto-run on a filter changing), and any text field takes
 // '*' as an explicit wildcard placeholder (no '*' -> exact match; 'AB*'/'*AB'/'*AB*' -> prefix/
@@ -440,15 +496,6 @@ function sap_search_hint() {
 function sap_unexecuted_html() {
   return `<div class="text-muted">${__("Not executed yet - set your criteria and click Execute.")}</div>`;
 }
-
-const TASK_TYPES = ["Unload", "Putaway", "Pick", "Internal Move", "Deconsolidation", "Consolidation", "Stage", "Load", "Posting Change", "Inventory Count", "Cross Dock", "Repack", "Sort"];
-const TASK_STATUSES = ["Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed", "Confirmed", "Cancelled", "Exception"];
-const PRIORITIES = ["Low", "Normal", "High", "Urgent"];
-const INBOUND_STATUSES = ["Draft", "Expected", "Arrived", "Receiving", "Partially Received", "Received", "Putaway In Process", "Completed", "Cancelled"];
-const OUTBOUND_STATUSES = ["Draft", "Open", "Allocated", "Picking", "Picked", "Packing", "Packed", "Staging", "Staged", "Loading", "Loaded", "Goods Issued", "Completed", "Cancelled"];
-const HU_STATUSES = ["Created", "Open", "Closed", "In Process", "Staged", "Loaded", "Shipped", "Empty", "Blocked", "Cancelled"];
-const HU_STOCK_STATUSES = ["Empty", "Partial", "Full"];
-const WAVE_STATUSES = ["Draft", "Released", "Picking", "Picked", "Completed", "Cancelled"];
 
 class WMSMonitor {
   constructor(page) {
@@ -537,6 +584,7 @@ class WMSMonitor {
     ];
     selectors.forEach((sel) => { const $el = this.$body.find(sel); if ($el.length) $el.html(sap_unexecuted_html()); });
     this.$body.find(".wms-mon-obd-detail").empty();
+    Object.values(this.selections || {}).forEach((p) => p.then((sel) => { sel.lastRows = null; }));
     if (this.repack.roots.length || this.repack.selected) {
       this.repack = { roots: [], expanded: new Set(), childrenOf: {}, selected: null, detail: null, target: null, hu_types: this.repack.hu_types, newDest: null, _drag: null, selectedRows: new Map() };
       const $tree = this.$body.find(".wms-repack-tree");
@@ -553,6 +601,7 @@ class WMSMonitor {
       stock: () => this.load_stock_overview(),
       tasks: () => this.load_tasks(),
       hu: () => this.load_handling_units(),
+      packing: () => this.load_packing_station(),
       repack: () => this.load_repack_center(),
       movements: () => this.load_movements(),
       resources: () => this.load_resources(),
@@ -561,6 +610,7 @@ class WMSMonitor {
       slotting: () => this.load_slotting(),
       bin_assignment: () => this.load_bin_assignment(),
       kitting: () => this.load_kitting(),
+      yard: () => this.load_yard(),
       billing: () => this.load_billing(),
       alerts: () => this.load_alerts(),
     };
@@ -568,6 +618,27 @@ class WMSMonitor {
   }
 
   body_for(view) { return this.$body.find(`.wms-mon-view-body[data-view-body="${view}"]`); }
+
+  // SAP selection screen (public/js/wms_selection.js) for one monitor view: multiple selection
+  // with include/exclude and operators, pasted lists, any field, saved variants and layouts.
+  selection(view, $mount, $results, decorate) {
+    this.selections = this.selections || {};
+    if (!this.selections[view]) {
+      $mount.html(`<div class="text-muted">${__("Loading selection screen…")}</div>`);
+      this.selections[view] = new wms_selection.SelectionScreen({
+        view, $mount, $results, decorate: decorate || {},
+        getWarehouse: () => this.warehouse,
+        makeGrid: (rows, columns, opts, doctype) => this.render_table(rows, columns, doctype, opts),
+      }).init();
+    }
+    return this.selections[view];
+  }
+
+  async execute_selection(view) {
+    if (!this.selections || !this.selections[view]) return;
+    const sel = await this.selections[view];
+    return sel.execute();
+  }
 
   render_cards($container, cards) {
     $container.empty();
@@ -606,120 +677,50 @@ class WMSMonitor {
   // ---------- Inbound Monitor ----------
   async load_inbound() {
     const $wrap = this.body_for("inbound");
-    if (!$wrap.find(".wms-mon-ind-filters").length) {
-      $wrap.html(`
-        <div class="wms-mon-ind-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-ind-number" placeholder="${__("Delivery Number")}" style="width:150px;">
-          ${select_html("wms-mon-ind-status", INBOUND_STATUSES, __("Status"))}
-          <input class="form-control input-sm wms-mon-ind-supplier" placeholder="${__("Supplier")}" style="width:160px;">
-          <input class="form-control input-sm wms-mon-ind-bin" placeholder="${__("Receiving Bin")}" style="width:140px;">
-          ${select_html("wms-mon-ind-receipt-status", ["Not Received", "Partially Received", "Fully Received"], __("Receipt Status"))}
-          ${select_html("wms-mon-ind-process-status", ["Not Started", "In Process", "Completed", "Exception"], __("Process Status"))}
-          <label class="text-muted" style="font-size:11px;">${__("Expected")} <input type="date" class="form-control input-sm wms-mon-ind-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-ind-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-ind-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
-        <div class="wms-mon-ind-table">${sap_unexecuted_html()}</div>
-      `);
-      $wrap.find(".wms-mon-ind-search").on("click", () => this.search_inbound_deliveries());
+    if (!$wrap.find(".wms-mon-ind-sel").length) {
+      $wrap.html(`<div class="wms-mon-ind-sel"></div><div class="wms-mon-ind-table">${sap_unexecuted_html()}</div>`);
+      this.selection("inbound", $wrap.find(".wms-mon-ind-sel"), $wrap.find(".wms-mon-ind-table"));
     }
   }
 
-  async search_inbound_deliveries() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("inbound");
-    const args = {
-      warehouse: this.warehouse,
-      inbound_delivery_number: $wrap.find(".wms-mon-ind-number").val() || undefined,
-      status: $wrap.find(".wms-mon-ind-status").val() || undefined,
-      supplier: $wrap.find(".wms-mon-ind-supplier").val() || undefined,
-      receiving_bin: $wrap.find(".wms-mon-ind-bin").val() || undefined,
-      receipt_status: $wrap.find(".wms-mon-ind-receipt-status").val() || undefined,
-      process_status: $wrap.find(".wms-mon-ind-process-status").val() || undefined,
-      from_date: $wrap.find(".wms-mon-ind-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-ind-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_inbound_deliveries", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-ind-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No inbound deliveries found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("Delivery")], ["inbound_delivery_number", __("Number")], ["warehouse", __("Warehouse")],
-      ["company", __("Company")], ["supplier", __("Supplier")], ["receiving_bin", __("Receiving Bin")],
-      ["expected_arrival", __("Expected Arrival")], ["posting_date", __("Posting Date")],
-      ["receipt_status", __("Receipt Status")], ["process_status", __("Process Status")], ["status", __("Status")],
-      ["external_reference", __("External Ref")], ["modified", __("Last Modified")],
-    ], "Inbound Delivery"));
-  }
+  search_inbound_deliveries() { return this.execute_selection("inbound"); }
 
   // ---------- Outbound Monitor ----------
   async load_outbound() {
     const $wrap = this.body_for("outbound");
-    if (!$wrap.find(".wms-mon-obd-filters").length) {
+    if (!$wrap.find(".wms-mon-obd-sel").length) {
       $wrap.html(`
-        <div class="wms-mon-obd-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-obd-number" placeholder="${__("Delivery Number")}" style="width:150px;">
-          ${select_html("wms-mon-obd-status", OUTBOUND_STATUSES, __("Status"))}
-          <input class="form-control input-sm wms-mon-obd-customer" placeholder="${__("Customer")}" style="width:160px;">
-          <input class="form-control input-sm wms-mon-obd-route" placeholder="${__("Route")}" style="width:130px;">
-          <input class="form-control input-sm wms-mon-obd-staging" placeholder="${__("Staging Bin")}" style="width:130px;">
-          <input class="form-control input-sm wms-mon-obd-door" placeholder="${__("Door")}" style="width:100px;">
-          ${select_html("wms-mon-obd-priority", PRIORITIES, __("Priority"))}
-          ${select_html("wms-mon-obd-allocation", ["Not Allocated", "Partially Allocated", "Fully Allocated"], __("Allocation"))}
-          <label class="text-muted" style="font-size:11px;">${__("Delivery")} <input type="date" class="form-control input-sm wms-mon-obd-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-obd-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-obd-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
+        <div class="wms-mon-obd-sel"></div>
         <div class="wms-mon-obd-table" style="margin-bottom:12px;">${sap_unexecuted_html()}</div>
         <div class="wms-mon-obd-detail" style="margin-bottom:24px;"></div>
         <h5>${__("Waves")}</h5>
-        <div class="wms-mon-wave-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          ${select_html("wms-mon-wave-status", WAVE_STATUSES, __("Status"))}
-          <input class="form-control input-sm wms-mon-wave-route" placeholder="${__("Route")}" style="width:130px;">
-          <input class="form-control input-sm wms-mon-wave-released-by" placeholder="${__("Released By")}" style="width:140px;">
-          <label class="text-muted" style="font-size:11px;">${__("Ship")} <input type="date" class="form-control input-sm wms-mon-wave-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-wave-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-wave-search">${__("Execute")}</button>
-        </div>
+        <div class="wms-mon-wave-sel"></div>
         <div class="wms-mon-wave-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-obd-search").on("click", () => this.search_outbound_deliveries());
-      $wrap.find(".wms-mon-wave-search").on("click", () => this.search_waves());
+      this.selection("outbound", $wrap.find(".wms-mon-obd-sel"), $wrap.find(".wms-mon-obd-table"), {
+        renderers: {
+          name: (row) => `<a href="/app/outbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>
+            <button type="button" class="btn btn-xs btn-default wms-mon-obd-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("View")}</button>`,
+        },
+        afterRender: ($res) => $res.find(".wms-mon-obd-view").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery)),
+      });
+      this.selection("waves", $wrap.find(".wms-mon-wave-sel"), $wrap.find(".wms-mon-wave-table"), {
+        extraColumns: [["_release", __("Release"), (row) => row.status === "Draft"
+          ? `<button type="button" class="btn btn-xs btn-primary wms-mon-release-wave" data-wave="${frappe.utils.escape_html(row.name)}">${__("Release")}</button>` : ""]],
+        afterRender: ($res) => $res.find(".wms-mon-release-wave").on("click", (e) => {
+          const wave = e.currentTarget.dataset.wave;
+          frappe.confirm(__("Release wave {0}? This allocates and creates pick tasks for every delivery in it.", [wave]), () => {
+            frappe.call("frappe_wms.api.outbound.release_wave", { wave_name: wave }).then(() => {
+              frappe.show_alert({ message: __("Wave released"), indicator: "green" });
+              this.search_waves();
+            });
+          });
+        }),
+      });
     }
   }
 
-  async search_outbound_deliveries() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("outbound");
-    const args = {
-      warehouse: this.warehouse,
-      outbound_delivery_number: $wrap.find(".wms-mon-obd-number").val() || undefined,
-      status: $wrap.find(".wms-mon-obd-status").val() || undefined,
-      customer: $wrap.find(".wms-mon-obd-customer").val() || undefined,
-      route: $wrap.find(".wms-mon-obd-route").val() || undefined,
-      staging_bin: $wrap.find(".wms-mon-obd-staging").val() || undefined,
-      door: $wrap.find(".wms-mon-obd-door").val() || undefined,
-      priority: $wrap.find(".wms-mon-obd-priority").val() || undefined,
-      allocation_status: $wrap.find(".wms-mon-obd-allocation").val() || undefined,
-      from_date: $wrap.find(".wms-mon-obd-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-obd-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_outbound_deliveries", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-obd-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No outbound deliveries found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("Delivery")],
-      ["view", __(""), (row) => `<button type="button" class="btn btn-xs btn-default wms-mon-obd-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("View")}</button>`],
-      ["outbound_delivery_number", __("Number")], ["warehouse", __("Warehouse")], ["customer", __("Customer")],
-      ["route", __("Route")], ["delivery_date", __("Delivery Date")], ["priority", __("Priority")],
-      ["staging_bin", __("Staging Bin")], ["door", __("Door")], ["allocation_status", __("Allocation")],
-      ["picking_status", __("Picking")], ["packing_status", __("Packing")], ["loading_status", __("Loading")],
-      ["goods_issue_status", __("Goods Issue")], ["status", __("Status")], ["external_reference", __("External Ref")],
-      ["modified", __("Last Modified")],
-    ], "Outbound Delivery"));
-    $table.find(".wms-mon-obd-view").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery));
-  }
+  search_outbound_deliveries() { return this.execute_selection("outbound"); }
 
   async load_delivery_detail(delivery_name) {
     const $detail = this.body_for("outbound").find(".wms-mon-obd-detail");
@@ -817,58 +818,21 @@ class WMSMonitor {
     $detail.empty().append($wrap);
   }
 
-  async search_waves() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("outbound");
-    const args = {
-      warehouse: this.warehouse,
-      status: $wrap.find(".wms-mon-wave-status").val() || undefined,
-      route: $wrap.find(".wms-mon-wave-route").val() || undefined,
-      released_by: $wrap.find(".wms-mon-wave-released-by").val() || undefined,
-      from_date: $wrap.find(".wms-mon-wave-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-wave-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_waves", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-wave-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No waves found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("Wave")], ["route", __("Route")], ["ship_date", __("Ship Date")], ["priority", __("Priority")],
-      ["picking_strategy", __("Strategy")], ["status", __("Status")], ["delivery_count", __("Deliveries")],
-      ["released_at", __("Released At")], ["released_by", __("Released By")], ["modified", __("Last Modified")],
-      ["release", __(""), (row) => row.status === "Draft"
-        ? `<button type="button" class="btn btn-xs btn-primary wms-mon-release-wave" data-wave="${frappe.utils.escape_html(row.name)}">${__("Release")}</button>` : ""],
-    ], "WMS Wave"));
-    $table.find(".wms-mon-release-wave").on("click", (e) => {
-      const wave = e.currentTarget.dataset.wave;
-      frappe.confirm(__("Release wave {0}? This allocates and creates pick tasks for every delivery in it.", [wave]), () => {
-        frappe.call("frappe_wms.api.outbound.release_wave", { wave_name: wave }).then(() => {
-          frappe.show_alert({ message: __("Wave released"), indicator: "green" });
-          this.search_waves();
-        });
-      });
-    });
-  }
+  search_waves() { return this.execute_selection("waves"); }
 
   // ---------- Stock Overview ----------
   async load_stock_overview() {
     const $wrap = this.body_for("stock");
-    if (!$wrap.find(".wms-mon-stock-filters").length) {
+    if (!$wrap.find(".wms-mon-stock-sel").length) {
       $wrap.html(`
         <div class="wms-mon-stock-summary" style="margin-bottom:16px;"></div>
-        <div class="wms-mon-stock-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-stock-product" placeholder="${__("Product")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-stock-bin" placeholder="${__("Storage Bin")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-stock-storage-type" placeholder="${__("Storage Type")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-stock-stock-type" placeholder="${__("Stock Type")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-stock-hu" placeholder="${__("Handling Unit")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-stock-batch" placeholder="${__("Batch No")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-stock-serial" placeholder="${__("Serial No")}" style="width:120px;">
-          <button class="btn btn-primary btn-sm wms-mon-stock-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
+        <div class="wms-mon-stock-sel"></div>
         <div class="wms-mon-stock-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-stock-search").on("click", () => this.search_stock_overview());
+      this.selection("stock", $wrap.find(".wms-mon-stock-sel"), $wrap.find(".wms-mon-stock-table"), {
+        renderers: { handling_unit: this.hu_link_cell("handling_unit") },
+        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
+      });
     }
     const summary = await frappe.call("frappe_wms.api.monitor.stock_overview_summary", { warehouse: this.warehouse }).then((r) => r.message || []);
     this.render_cards($wrap.find(".wms-mon-stock-summary"), summary.map((row) => ({
@@ -877,88 +841,22 @@ class WMSMonitor {
     })));
   }
 
-  async search_stock_overview() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("stock");
-    const args = {
-      warehouse: this.warehouse,
-      product: $wrap.find(".wms-mon-stock-product").val() || undefined,
-      storage_bin: $wrap.find(".wms-mon-stock-bin").val() || undefined,
-      storage_type: $wrap.find(".wms-mon-stock-storage-type").val() || undefined,
-      stock_type: $wrap.find(".wms-mon-stock-stock-type").val() || undefined,
-      handling_unit: $wrap.find(".wms-mon-stock-hu").val() || undefined,
-      batch_no: $wrap.find(".wms-mon-stock-batch").val() || undefined,
-      serial_no: $wrap.find(".wms-mon-stock-serial").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.stock_overview", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-stock-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No stock found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["product", __("Product")], ["storage_bin", __("Bin")], ["handling_unit", __("HU")],
-      ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["stock_type", __("Stock Type")],
-      ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
-      ["available_quantity", __("Available")], ["stock_uom", __("UOM")], ["last_movement_date", __("Last Movement")],
-    ]));
-  }
+  search_stock_overview() { return this.execute_selection("stock"); }
 
   // ---------- Warehouse Tasks ----------
   async load_tasks() {
     const $wrap = this.body_for("tasks");
-    if (!$wrap.find(".wms-mon-task-filters").length) {
-      $wrap.html(`
-        <div class="wms-mon-task-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-task-product" placeholder="${__("Product")}" style="width:140px;">
-          ${select_html("wms-mon-task-type", TASK_TYPES, __("Task Type"))}
-          ${select_html("wms-mon-task-status", TASK_STATUSES, __("Status"))}
-          ${select_html("wms-mon-task-priority", PRIORITIES, __("Priority"))}
-          <input class="form-control input-sm wms-mon-task-resource" placeholder="${__("Resource")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-task-batch" placeholder="${__("Batch No")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-task-wave" placeholder="${__("Wave")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-task-confirmed-by" placeholder="${__("Confirmed By")}" style="width:140px;">
-          <label class="text-muted" style="font-size:11px;">${__("Confirmed")} <input type="date" class="form-control input-sm wms-mon-task-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-task-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-task-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
-        <div class="wms-mon-task-table">${sap_unexecuted_html()}</div>
-      `);
-      $wrap.find(".wms-mon-task-search").on("click", () => this.search_tasks());
+    if (!$wrap.find(".wms-mon-task-sel").length) {
+      $wrap.html(`<div class="wms-mon-task-sel"></div><div class="wms-mon-task-table">${sap_unexecuted_html()}</div>`);
+      this.selection("tasks", $wrap.find(".wms-mon-task-sel"), $wrap.find(".wms-mon-task-table"), {
+        renderers: { source_hu: this.hu_link_cell("source_hu"), destination_hu: this.hu_link_cell("destination_hu") },
+        actions: this.task_quick_actions(),
+        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
+      });
     }
   }
 
-  async search_tasks() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("tasks");
-    const args = {
-      warehouse: this.warehouse,
-      product: $wrap.find(".wms-mon-task-product").val() || undefined,
-      task_type: $wrap.find(".wms-mon-task-type").val() || undefined,
-      status: $wrap.find(".wms-mon-task-status").val() || undefined,
-      priority: $wrap.find(".wms-mon-task-priority").val() || undefined,
-      assigned_resource: $wrap.find(".wms-mon-task-resource").val() || undefined,
-      batch_no: $wrap.find(".wms-mon-task-batch").val() || undefined,
-      wave: $wrap.find(".wms-mon-task-wave").val() || undefined,
-      confirmed_by: $wrap.find(".wms-mon-task-confirmed-by").val() || undefined,
-      from_date: $wrap.find(".wms-mon-task-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-task-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_tasks", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-task-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No tasks found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
-      ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")], ["stock_uom", __("UOM")],
-      ["batch_no", __("Batch")], ["serial_no", __("Serial")],
-      ["source_bin", __("Source Bin")], ["destination_bin", __("Destination Bin")],
-      ["source_hu", __("Source HU"), this.hu_link_cell("source_hu")], ["destination_hu", __("Destination HU"), this.hu_link_cell("destination_hu")],
-      ["stock_type_from", __("Stock Type From")], ["stock_type_to", __("Stock Type To")],
-      ["movement_type", __("Movement Type")], ["priority", __("Priority")], ["assigned_resource", __("Resource")],
-      ["wave", __("Wave")], ["queue", __("Queue")], ["warehouse_order", __("Warehouse Order")], ["sequence", __("Sequence")],
-      ["started_at", __("Started")], ["confirmed_at", __("Confirmed At")], ["confirmed_by", __("Confirmed By")],
-      ["exception_code", __("Exception")], ["blocking_reason", __("Blocking Reason")], ["modified", __("Last Modified")],
-    ], "Warehouse Task", { actions: this.task_quick_actions() }));
-    $table.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
-  }
+  search_tasks() { return this.execute_selection("tasks"); }
 
   // Quick actions for the Warehouse Tasks grid - SAP EWM Monitor-style: act on whatever is
   // currently selected without opening each task. Each server call runs one row at a time
@@ -1013,59 +911,24 @@ class WMSMonitor {
   // ---------- Handling Units ----------
   async load_handling_units() {
     const $wrap = this.body_for("hu");
-    if (!$wrap.find(".wms-mon-hu-filters").length) {
+    if (!$wrap.find(".wms-mon-hu-sel").length) {
       $wrap.html(`
-        <div class="wms-mon-hu-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-hu-number" placeholder="${__("HU Number")}" style="width:140px;">
-          ${select_html("wms-mon-hu-status", HU_STATUSES, __("Status"))}
-          ${select_html("wms-mon-hu-stock-status", HU_STOCK_STATUSES, __("Stock Status"))}
-          <input class="form-control input-sm wms-mon-hu-type" placeholder="${__("HU Type")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-hu-bin" placeholder="${__("Current Bin")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-hu-workcenter" placeholder="${__("Work Center")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-hu-obd" placeholder="${__("Outbound Delivery")}" style="width:160px;">
-          <input class="form-control input-sm wms-mon-hu-modified-by" placeholder="${__("Last Modified By")}" style="width:150px;">
-          <label class="text-muted" style="font-size:11px;">${__("Modified")} <input type="date" class="form-control input-sm wms-mon-hu-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-hu-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-hu-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
+        <div class="wms-mon-hu-sel"></div>
         <div class="wms-mon-hu-hint text-muted" style="margin-bottom:6px;font-size:12px;">${__("Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons.")}</div>
         <div class="wms-mon-hu-table">${sap_unexecuted_html()}</div>
       `);
-      $wrap.find(".wms-mon-hu-search").on("click", () => this.search_handling_units());
+      this.selection("hu", $wrap.find(".wms-mon-hu-sel"), $wrap.find(".wms-mon-hu-table"), {
+        renderers: {
+          name: (row) => `<a href="#" class="wms-hu-open" data-hu="${frappe.utils.escape_html(row.name)}">${frappe.utils.escape_html(row.name)}</a>`,
+          parent_hu: this.hu_link_cell("parent_hu"), top_hu: this.hu_link_cell("top_hu"),
+        },
+        actions: this.hu_quick_actions(),
+        afterRender: ($res) => $res.find(".wms-hu-open, .wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
+      });
     }
   }
 
-  async search_handling_units() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("hu");
-    const args = {
-      warehouse: this.warehouse,
-      hu_number: $wrap.find(".wms-mon-hu-number").val() || undefined,
-      status: $wrap.find(".wms-mon-hu-status").val() || undefined,
-      stock_status: $wrap.find(".wms-mon-hu-stock-status").val() || undefined,
-      hu_type: $wrap.find(".wms-mon-hu-type").val() || undefined,
-      current_bin: $wrap.find(".wms-mon-hu-bin").val() || undefined,
-      work_center: $wrap.find(".wms-mon-hu-workcenter").val() || undefined,
-      outbound_delivery: $wrap.find(".wms-mon-hu-obd").val() || undefined,
-      modified_by: $wrap.find(".wms-mon-hu-modified-by").val() || undefined,
-      from_date: $wrap.find(".wms-mon-hu-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-hu-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_handling_units", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-hu-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No handling units found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("HU"), (row) => `<a href="#" class="wms-hu-open" data-hu="${frappe.utils.escape_html(row.name)}">${frappe.utils.escape_html(row.name)}</a>`],
-      ["hu_type", __("Type")], ["current_bin", __("Bin")],
-      ["parent_hu", __("Parent HU")], ["top_hu", __("Top HU")],
-      ["status", __("Status")], ["stock_status", __("Stock Status")], ["outbound_delivery", __("Outbound Delivery")],
-      ["shipment", __("Shipment")], ["closed", __("Closed")], ["loaded", __("Loaded")],
-      ["gross_weight", __("Gross Weight")], ["net_weight", __("Net Weight")], ["seal_number", __("Seal")],
-      ["external_reference", __("External Ref")], ["creation", __("Created")], ["modified", __("Last Modified")],
-    ], "Handling Unit", { actions: this.hu_quick_actions() }));
-    $table.find(".wms-hu-open").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
-  }
+  search_handling_units() { return this.execute_selection("hu"); }
 
   hu_quick_actions() {
     return [
@@ -1170,6 +1033,18 @@ class WMSMonitor {
     }
     (node.children || []).forEach((child) => $wrap.append(this.render_hu_node(child, depth + 1)));
     return $wrap;
+  }
+
+  // ---------- Repack Center: the SAP EWM packing work center /SCWM/PACK (public/js/wms_packing_station.js) ----------
+  async load_packing_station() {
+    const $wrap = this.body_for("packing");
+    if (!this.packing_station) this.packing_station = new WMSPackingStation($wrap, () => this.warehouse);
+    if (this.packing_station_wh !== this.warehouse) {
+      this.packing_station_wh = this.warehouse;
+      await this.packing_station.render();
+    } else if (this.packing_station.wc) {
+      await this.packing_station.load();
+    }
   }
 
   // ---------- Repack Center: modeled on SAP EWM's /SCWM/PACK repacking workstation - one
@@ -1987,53 +1862,16 @@ class WMSMonitor {
   // ---------- Stock Movements ----------
   async load_movements() {
     const $wrap = this.body_for("movements");
-    if (!$wrap.find(".wms-mon-ledger-filters").length) {
-      $wrap.html(`
-        <div class="wms-mon-ledger-filters form-inline" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-          <input class="form-control input-sm wms-mon-ledger-product" placeholder="${__("Product")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-ledger-bin" placeholder="${__("Storage Bin")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-ledger-hu" placeholder="${__("Handling Unit")}" style="width:140px;">
-          <input class="form-control input-sm wms-mon-ledger-movement" placeholder="${__("Movement Type")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-ledger-batch" placeholder="${__("Batch No")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-ledger-serial" placeholder="${__("Serial No")}" style="width:120px;">
-          <input class="form-control input-sm wms-mon-ledger-user" placeholder="${__("Posted By")}" style="width:140px;">
-          <label class="text-muted" style="font-size:11px;">${__("Posted")} <input type="date" class="form-control input-sm wms-mon-ledger-from" style="width:145px;display:inline-block;"></label>
-          <label class="text-muted" style="font-size:11px;">${__("to")} <input type="date" class="form-control input-sm wms-mon-ledger-to" style="width:145px;display:inline-block;"></label>
-          <button class="btn btn-primary btn-sm wms-mon-ledger-search">${__("Execute")}</button>
-        </div>
-        ${sap_search_hint()}
-        <div class="wms-mon-ledger-table">${sap_unexecuted_html()}</div>
-      `);
-      $wrap.find(".wms-mon-ledger-search").on("click", () => this.search_ledger());
+    if (!$wrap.find(".wms-mon-ledger-sel").length) {
+      $wrap.html(`<div class="wms-mon-ledger-sel"></div><div class="wms-mon-ledger-table">${sap_unexecuted_html()}</div>`);
+      this.selection("movements", $wrap.find(".wms-mon-ledger-sel"), $wrap.find(".wms-mon-ledger-table"), {
+        renderers: { handling_unit: this.hu_link_cell("handling_unit") },
+        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
+      });
     }
   }
 
-  async search_ledger() {
-    if (!this.warehouse) return;
-    const $wrap = this.body_for("movements");
-    const args = {
-      warehouse: this.warehouse,
-      product: $wrap.find(".wms-mon-ledger-product").val() || undefined,
-      storage_bin: $wrap.find(".wms-mon-ledger-bin").val() || undefined,
-      handling_unit: $wrap.find(".wms-mon-ledger-hu").val() || undefined,
-      movement_type: $wrap.find(".wms-mon-ledger-movement").val() || undefined,
-      batch_no: $wrap.find(".wms-mon-ledger-batch").val() || undefined,
-      serial_no: $wrap.find(".wms-mon-ledger-serial").val() || undefined,
-      posting_user: $wrap.find(".wms-mon-ledger-user").val() || undefined,
-      from_date: $wrap.find(".wms-mon-ledger-from").val() || undefined,
-      to_date: $wrap.find(".wms-mon-ledger-to").val() || undefined,
-    };
-    const rows = await frappe.call("frappe_wms.api.monitor.search_ledger", args).then((r) => r.message || []);
-    const $table = $wrap.find(".wms-mon-ledger-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No movements found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
-      ["name", __("Entry")], ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["product", __("Product")],
-      ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["quantity", __("Qty")], ["stock_uom", __("UOM")],
-      ["storage_bin", __("Bin")], ["handling_unit", __("HU")], ["stock_type", __("Stock Type")],
-      ["reference_doctype", __("Reference Type")], ["reference_name", __("Reference")],
-      ["warehouse_task", __("Warehouse Task")], ["posting_user", __("Posted By")],
-    ], "WMS Stock Ledger Entry"));
-  }
+  search_ledger() { return this.execute_selection("movements"); }
 
   // ---------- Resources & Queues ----------
   async load_resources() {
@@ -2348,6 +2186,121 @@ class WMSMonitor {
     });
   }
 
+  // ---------- Yard & Doors (dock appointments, services/yard.py) ----------
+  async load_yard() {
+    const $wrap = this.body_for("yard");
+    if (!$wrap.find(".wms-mon-yard-bar").length) {
+      $wrap.html(`
+        <div class="wms-mon-yard-bar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center;">
+          <input type="date" class="form-control input-sm wms-mon-yard-date" style="width:160px;" value="${frappe.datetime.get_today()}">
+          <button class="btn btn-primary btn-sm wms-mon-yard-new">${__("New Appointment")}</button>
+          <button class="btn btn-default btn-sm wms-mon-yard-walkin">${__("Truck Without Appointment")}</button>
+          <button class="btn btn-default btn-sm wms-mon-yard-refresh">${__("Refresh")}</button>
+        </div>
+        <div class="wms-mon-yard-doors" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+        <div class="wms-mon-yard-table"></div>`);
+      $wrap.find(".wms-mon-yard-date").on("change", () => this.search_yard());
+      $wrap.find(".wms-mon-yard-refresh").on("click", () => this.search_yard());
+      $wrap.find(".wms-mon-yard-new").on("click", () => this.new_appointment_dialog());
+      $wrap.find(".wms-mon-yard-walkin").on("click", () => this.walk_in_dialog());
+    }
+    this.search_yard();
+  }
+
+  async search_yard() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("yard");
+    const esc = frappe.utils.escape_html;
+    const board = await frappe.call("frappe_wms.api.yard.yard_board", { warehouse: this.warehouse, date: $wrap.find(".wms-mon-yard-date").val() }).then((r) => r.message);
+    this.yard = board;
+    const byName = Object.fromEntries(board.appointments.map((a) => [a.name, a]));
+    $wrap.find(".wms-mon-yard-doors").html(board.doors.length ? board.doors.map((d) => {
+      const a = byName[d.occupied_by];
+      return `<div style="border:1px solid var(--border-color);border-radius:8px;padding:8px 12px;min-width:150px;background:${a ? "var(--bg-orange)" : "var(--bg-green)"};">
+        <div style="font-weight:600;">${esc(d.door)}</div>
+        <div class="text-muted" style="font-size:12px;">${a ? `${esc(a.vehicle_registration || a.name)} · ${__(a.direction)}` : __("Free")}</div></div>`;
+    }).join("") : `<div class="text-muted">${__("No doors: give a Storage Type the Door role and add bins to it.")}</div>`);
+    const $table = $wrap.find(".wms-mon-yard-table");
+    if (!board.appointments.length) { $table.html(`<div class="text-muted">${__("No appointments for this day")}</div>`); return; }
+    const actions = { "Planned": [["check_in", __("Check in")], ["to_door", __("To door")], ["cancel", __("Cancel")]],
+      "Checked In": [["to_door", __("To door")], ["check_out", __("Check out")]], "At Door": [["complete", __("Complete")], ["check_out", __("Check out")]],
+      "Completed": [["check_out", __("Check out")]] };
+    const time = (v) => (v ? frappe.datetime.str_to_user(v).split(" ").pop().slice(0, 5) : "");
+    $table.empty().append(this.render_table(board.appointments, [
+      ["planned_start", __("Slot"), (r) => `${time(r.planned_start)}–${time(r.planned_end)}`], ["name", __("Appointment")], ["direction", __("Direction")],
+      ["door", __("Door")], ["vehicle_registration", __("Vehicle")], ["carrier", __("Carrier")], ["status", __("Status")],
+      ["ref", __("Carries"), (r) => esc(r.inbound_delivery || r.shipment || "")],
+      ["arrival_delay_minutes", __("Arrival"), (r) => (r.checked_in_at ? (r.arrival_delay_minutes > 0 ? __("{0} min late", [r.arrival_delay_minutes]) : __("on time")) : "")],
+      ["actions", "", (r) => (actions[r.status] || []).map(([m, l]) => `<button type="button" class="btn btn-xs btn-default wms-mon-yard-act" data-m="${m}" data-a="${esc(r.name)}">${l}</button>`).join(" ")],
+    ], "WMS Dock Appointment"));
+    $table.find(".wms-mon-yard-act").on("click", (e) => this.yard_action(e.currentTarget.dataset.m, e.currentTarget.dataset.a));
+  }
+
+  async yard_action(method, appointment) {
+    const call = (args) => frappe.call(`frappe_wms.api.yard.${method}`, Object.assign({ appointment }, args || {}))
+      .then(() => { frappe.show_alert({ message: __("Done"), indicator: "green" }); this.search_yard(); });
+    if (method === "check_in") {
+      const d = new frappe.ui.Dialog({ title: __("Check in {0}", [appointment]), fields: [
+        { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat(this.yard.yard_spots || []) }],
+        primary_action_label: __("Check in"), primary_action: (v) => { d.hide(); frappe.call("frappe_wms.api.yard.check_in", { warehouse: this.warehouse, appointment, yard_bin: v.yard_bin || undefined })
+          .then(() => { frappe.show_alert({ message: __("Checked in"), indicator: "green" }); this.search_yard(); }); } });
+      d.show(); return;
+    }
+    if (method === "to_door") {
+      const free = (this.yard.doors || []).filter((x) => !x.occupied_by).map((x) => x.door);
+      const d = new frappe.ui.Dialog({ title: __("Send {0} to a door", [appointment]), fields: [
+        { fieldname: "door", fieldtype: "Select", label: __("Door"), options: [""].concat(free), description: __("Empty: its booked door, or the first free one") }],
+        primary_action_label: __("Send"), primary_action: (v) => { d.hide(); call({ door: v.door || undefined }); } });
+      d.show(); return;
+    }
+    if (method === "cancel") { frappe.confirm(__("Cancel appointment {0}?", [appointment]), () => call()); return; }
+    call();
+  }
+
+  new_appointment_dialog() {
+    if (!this.warehouse) { frappe.show_alert({ message: __("Select a warehouse first"), indicator: "orange" }); return; }
+    const d = new frappe.ui.Dialog({ title: __("New dock appointment"), fields: [
+      { fieldname: "direction", fieldtype: "Select", label: __("Direction"), options: "Inbound\nOutbound", reqd: 1, default: "Inbound" },
+      { fieldname: "planned_start", fieldtype: "Datetime", label: __("Start"), reqd: 1 },
+      { fieldname: "planned_end", fieldtype: "Datetime", label: __("End"), description: __("Empty: the warehouse's default slot length") },
+      { fieldname: "door", fieldtype: "Select", label: __("Door"), options: [""].concat((this.yard && this.yard.doors || []).map((x) => x.door)), description: __("Empty: the first free door") },
+      { fieldtype: "Column Break" },
+      { fieldname: "vehicle_registration", fieldtype: "Data", label: __("Vehicle") },
+      { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") },
+      { fieldname: "trailer_number", fieldtype: "Data", label: __("Trailer / Container") },
+      { fieldname: "driver_name", fieldtype: "Data", label: __("Driver") },
+      { fieldtype: "Section Break" },
+      { fieldname: "inbound_delivery", fieldtype: "Link", options: "Inbound Delivery", label: __("Inbound Delivery"), depends_on: "eval:doc.direction=='Inbound'",
+        get_query: () => ({ filters: { warehouse: this.warehouse } }) },
+      { fieldname: "shipment", fieldtype: "Link", options: "WMS Shipment", label: __("Shipment"), depends_on: "eval:doc.direction=='Outbound'",
+        get_query: () => ({ filters: { warehouse: this.warehouse } }) },
+    ], primary_action_label: __("Book"), primary_action: (v) => {
+      frappe.call("frappe_wms.api.yard.create_appointment", Object.assign({ warehouse: this.warehouse }, v)).then((r) => {
+        d.hide(); frappe.show_alert({ message: __("Booked {0}", [r.message]), indicator: "green" }); this.search_yard();
+      });
+    } });
+    d.show();
+  }
+
+  walk_in_dialog(confirmed) {
+    if (!this.warehouse) { frappe.show_alert({ message: __("Select a warehouse first"), indicator: "orange" }); return; }
+    const d = new frappe.ui.Dialog({ title: __("Truck without appointment"), fields: [
+      { fieldname: "vehicle_registration", fieldtype: "Data", label: __("Vehicle"), reqd: 1 },
+      { fieldname: "direction", fieldtype: "Select", label: __("Direction"), options: "Inbound\nOutbound", reqd: 1 },
+      { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") },
+      { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat((this.yard && this.yard.yard_spots) || []) },
+    ], primary_action_label: __("Check in"), primary_action: async (v) => {
+      const args = Object.assign({ warehouse: this.warehouse }, v, { yard_bin: v.yard_bin || undefined });
+      let r = (await frappe.call("frappe_wms.api.yard.check_in", args)).message;
+      if (r.needs_confirmation) {
+        if (!(await new Promise((res) => frappe.confirm(r.needs_confirmation, () => res(true), () => res(false))))) return;
+        r = (await frappe.call("frappe_wms.api.yard.check_in", Object.assign(args, { confirm_without_appointment: 1 }))).message;
+      }
+      d.hide(); frappe.show_alert({ message: __("Checked in as {0}", [r.appointment]), indicator: "green" }); this.search_yard();
+    } });
+    d.show();
+  }
+
   // ---------- Billing ----------
   async load_billing() {
     const $wrap = this.body_for("billing");
@@ -2418,6 +2371,14 @@ class WMSMonitor {
     const alerts = await frappe.call("frappe_wms.api.monitor.get_alerts", { warehouse: this.warehouse }).then((r) => r.message || {});
     $wrap.html(`
       <div style="margin-bottom:24px;">
+        <h6>${__("ERPNext Postings Not Yet Done")}</h6>
+        <div class="wms-mon-alert-erp-sync"></div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <h6>${__("Warehouse Requests Without Tasks")}</h6>
+        <div class="wms-mon-alert-unplanned"></div>
+      </div>
+      <div style="margin-bottom:24px;">
         <h6>${__("Counts Awaiting Approval")}</h6>
         <div class="wms-mon-alert-approval"></div>
       </div>
@@ -2447,6 +2408,31 @@ class WMSMonitor {
       </div>
     `);
     this.render_pending_approval_alerts(alerts.pending_approval_counts || []);
+    this.render_alert_table($wrap.find(".wms-mon-alert-erp-sync"), alerts.erp_sync_problems || [],
+      [["name", __("Log")], ["operation", __("Operation")], ["status", __("Status")], ["reference_doctype", __("Document Type")],
+       ["reference_name", __("Document")], ["attempts", __("Attempts")], ["next_retry_at", __("Next Retry")],
+       ["last_error", __("Last Error"), (row) => `<span title="${frappe.utils.escape_html(row.last_error || "")}">${frappe.utils.escape_html((row.last_error || "").split("\n").filter(Boolean).pop() || "")}</span>`]],
+      "WMS ERP Sync Log", __("Nothing waiting - every posting reached ERPNext"), { actions: [{
+        label: __("Retry now"), appliesTo: (row) => ["Failed", "Queued"].includes(row.status),
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) { try { const r = await frappe.call("frappe_wms.api.erp_integration.retry_erp_posting", { log_name: row.name }); if (r.message === "Done") ok++; } catch (e) { /* shown by frappe */ } }
+          frappe.show_alert({ message: __("{0} of {1} posted to ERPNext", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        } }] });
+    this.render_alert_table($wrap.find(".wms-mon-alert-unplanned"), alerts.unplanned_requests || [],
+      [["name", __("Request")], ["request_type", __("Type")], ["product", __("Product")], ["requested_quantity", __("Quantity")],
+       ["source_bin", __("Source Bin")], ["source_hu", __("HU")], ["reference_doctype", __("Reference Type")], ["reference_name", __("Reference")],
+       ["creation", __("Since")]],
+      "Warehouse Request", __("Every request has its tasks"), { actions: [{
+        label: __("Create tasks"), appliesTo: () => true,
+        run: async (rows) => {
+          const r = await frappe.call("frappe_wms.api.monitor.plan_warehouse_requests", { names: rows.map((row) => row.name) });
+          const out = r.message || {};
+          frappe.show_alert({ message: __("{0} of {1} planned", [out.planned || 0, rows.length]) + (out.errors && out.errors.length ? ` - ${out.errors[0]}` : ""),
+            indicator: out.planned === rows.length ? "green" : "orange" });
+          this.load_alerts();
+        } }] });
     this.render_differences_alerts(alerts.open_differences || []);
     this.render_alert_table($wrap.find(".wms-mon-alert-exceptions"), alerts.aged_exceptions || [],
       [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["source_bin", __("Source Bin")],

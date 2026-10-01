@@ -125,3 +125,19 @@ class TestRemovalRules(IntegrationTestCase):
         self._seed(item, self.bins[1], 5, first_receipt_date=add_days(now_datetime(), -1), shelf_life_expiry_date=add_days(now_datetime(), 2))
         result = _candidate_balances(self._row(item), self.warehouse)
         self.assertEqual(result[0].storage_bin, self.bins[1], "with no configured Removal Rule, FEFO-then-FIFO must remain the default")
+
+    def test_customer_minimum_shelf_life_excludes_short_dated_stock(self):
+        from frappe_wms.setup.custom_fields import ensure_custom_fields
+        from frappe_wms.tests.bootstrap import TEST_CUSTOMER
+        ensure_custom_fields()
+        item = self._make_item("TEST-RR-CUST-MSL")
+        self._seed(item, self.bins[0], 5, shelf_life_expiry_date=add_days(now_datetime(), 10))
+        self._seed(item, self.bins[1], 5, shelf_life_expiry_date=add_days(now_datetime(), 90))
+        self.assertEqual(len(_candidate_balances(self._row(item), self.warehouse, TEST_CUSTOMER)), 2)
+        frappe.db.set_value("Customer", TEST_CUSTOMER, "wms_minimum_remaining_shelf_life", 60)
+        try:
+            result = _candidate_balances(self._row(item), self.warehouse, TEST_CUSTOMER)
+            self.assertEqual([b.storage_bin for b in result], [self.bins[1]], "stock with 10 days left is not offered to a customer demanding 60")
+            self.assertEqual(len(_candidate_balances(self._row(item), self.warehouse)), 2, "other customers still get it")
+        finally:
+            frappe.db.set_value("Customer", TEST_CUSTOMER, "wms_minimum_remaining_shelf_life", 0)

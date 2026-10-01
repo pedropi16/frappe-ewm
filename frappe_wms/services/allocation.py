@@ -1,7 +1,7 @@
 import json
 import frappe
 from frappe import _
-from frappe.utils import add_days, flt, getdate, nowdate
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 from frappe_wms.services.removal_rules import apply_strategy, match_removal_rule, strategy_fefo
 from frappe_wms.services.task import task_names_for_allocations
 from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
@@ -13,7 +13,7 @@ from frappe_wms.utils import require_role
 # mid-repack. None of that should be up for grabs by a delivery's FIFO allocation just because
 # the ledger still shows it as "available" there - nothing else marks staged/received stock as
 # reserved or in-transit once it physically arrives at that bin.
-NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing")
+NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing", "Yard")
 
 # A balance row's own storage-role/bin-flag exclusion above says nothing about the Handling
 # Unit it's tied to - a Blocked HU (an operator's own "don't touch this" flag, e.g. Repack
@@ -44,7 +44,7 @@ def _required_characteristics(row):
     raw = row.get("required_characteristics")
     return json.loads(raw) if raw else {}
 
-def _candidate_balances(row, warehouse):
+def _candidate_balances(row, warehouse, customer=None):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
     requirements = _required_characteristics(row)
@@ -67,7 +67,10 @@ def _candidate_balances(row, warehouse):
         # last, FIFO among ties/unset expiries).
         balances = strategy_fefo(balances, {})
 
-    min_remaining = frappe.db.get_value("WMS Product", row.item, "minimum_remaining_shelf_life")
+    # The stricter of the product's and the customer's minimum remaining shelf life (a retailer
+    # that accepts nothing with under 60 days left - SAP's customer-material setting).
+    min_remaining = max(cint(frappe.db.get_value("WMS Product", row.item, "minimum_remaining_shelf_life")),
+                        cint(frappe.db.get_value("Customer", customer, "wms_minimum_remaining_shelf_life")) if customer else 0)
     if min_remaining:
         cutoff = add_days(nowdate(), min_remaining)
         balances = [b for b in balances if not b.shelf_life_expiry_date or getdate(b.shelf_life_expiry_date) >= getdate(cutoff)]
@@ -94,7 +97,7 @@ def allocate_delivery(delivery_name):
     created=[]
     for row in doc.items:
         needed=flt(row.requested_quantity)-flt(row.allocated_quantity)
-        for stock in _candidate_balances(row,doc.warehouse):
+        for stock in _candidate_balances(row,doc.warehouse,doc.get("customer")):
             if needed<=0: break
             # One locking read, not "lock, then plain get_value": at REPEATABLE READ the plain read
             # returns this transaction's older snapshot, so two deliveries allocating the same

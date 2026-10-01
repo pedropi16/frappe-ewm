@@ -18,7 +18,29 @@
     "default_picking_staging_bin",
     "default_stock_type",
     "allow_negative_stock",
-    "active"
+    "active",
+    "erp_integration_section",
+    "inbound_replication",
+    "outbound_replication",
+    "release_replicated_deliveries",
+    "outbound_follow_up",
+    "column_break_erp1",
+    "erp_change_policy",
+    "close_short_orders",
+    "erp_sync_mode",
+    "kitting_section",
+    "kitting_stage_components",
+    "kitting_putaway_output",
+    "column_break_kit1",
+    "kitting_output_hu_required",
+    "loading_section",
+    "load_sequence_check",
+    "yard_section",
+    "dock_slot_minutes",
+    "dock_changeover_minutes",
+    "column_break_yard1",
+    "appointment_check",
+    "no_show_after_minutes"
   ],
   "fields": [
     {
@@ -97,6 +119,160 @@
       "default": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "erp_integration_section",
+      "label": "ERP Integration (ERPNext)",
+      "fieldtype": "Section Break",
+      "collapsible": 1,
+      "description": "How ERPNext documents reach this warehouse and how the warehouse reports back - the SAP ECC -> EWM delivery replication model. ERPNext keeps orders, valuation and accounting; this warehouse executes."
+    },
+    {
+      "fieldname": "inbound_replication",
+      "label": "Inbound Replication",
+      "fieldtype": "Select",
+      "options": "Manual\nPurchase Order Submitted\nPurchase Receipt Draft",
+      "default": "Manual",
+      "description": "Manual: a user creates the Inbound Delivery (button on the Purchase Order). Purchase Order Submitted: every submitted PO line for this warehouse becomes an Inbound Delivery automatically. Purchase Receipt Draft: a draft Purchase Receipt (an ASN) becomes the Inbound Delivery and the Goods Receipt later submits that same Purchase Receipt."
+    },
+    {
+      "fieldname": "outbound_replication",
+      "label": "Outbound Replication",
+      "fieldtype": "Select",
+      "options": "Manual\nSales Order Submitted\nDelivery Note Draft",
+      "default": "Manual",
+      "description": "Manual: a user creates the Outbound Delivery (button on the Sales Order). Sales Order Submitted: every submitted SO line for this warehouse becomes an Outbound Delivery automatically. Delivery Note Draft: a draft Delivery Note (the ECC delivery) becomes the Outbound Delivery and the Goods Issue later submits that same Delivery Note."
+    },
+    {
+      "fieldname": "release_replicated_deliveries",
+      "label": "Release Replicated Deliveries",
+      "fieldtype": "Check",
+      "default": "1",
+      "description": "Submit deliveries created by replication so they are ready for execution straight away."
+    },
+    {
+      "fieldname": "outbound_follow_up",
+      "label": "Outbound Follow-up on Release",
+      "fieldtype": "Select",
+      "options": "None\nAllocate\nAllocate and Create Pick Tasks",
+      "default": "None",
+      "description": "What happens to a released Outbound Delivery without a wave: nothing (a planner allocates later), allocate stock, or allocate and create pick tasks."
+    },
+    {
+      "fieldname": "column_break_erp1",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "erp_change_policy",
+      "label": "Order Change Policy",
+      "fieldtype": "Select",
+      "options": "Adapt Until Execution Starts\nBlock Changes After Replication",
+      "default": "Adapt Until Execution Starts",
+      "description": "What an edit or cancellation of the ERPNext order does once it has been replicated: follow it into the WMS delivery while nothing has been allocated/received yet, or refuse it."
+    },
+    {
+      "fieldname": "close_short_orders",
+      "label": "Close Order Remainder on Short Completion",
+      "fieldtype": "Check",
+      "default": "0",
+      "description": "When a delivery is completed short (supplier under-delivered, or the warehouse closed it short), close the ERPNext Purchase/Sales Order so the remainder is not delivered again."
+    },
+    {
+      "fieldname": "erp_sync_mode",
+      "label": "ERPNext Posting Mode",
+      "fieldtype": "Select",
+      "options": "Synchronous\nQueued with Retry",
+      "default": "Synchronous",
+      "description": "Synchronous: the ERPNext document posts inside the warehouse transaction, and an ERPNext error stops the warehouse posting. Queued with Retry: the warehouse posts first and the ERPNext document follows in the background, retried automatically and listed in WMS ERP Sync Log if it keeps failing."
+    },
+    {
+      "fieldname": "kitting_section",
+      "fieldtype": "Section Break",
+      "label": "Kitting",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "kitting_stage_components",
+      "fieldtype": "Select",
+      "label": "Stage Components",
+      "options": "Manually\nOn Order Creation",
+      "default": "Manually",
+      "description": "When the component (or kit) stock is moved from storage to the kitting work center by warehouse tasks. Manually: the operator starts it from the RF Kitting screen."
+    },
+    {
+      "fieldname": "kitting_putaway_output",
+      "fieldtype": "Check",
+      "label": "Put Away Kitting Output",
+      "default": "0",
+      "description": "After completion, the produced kits (or components when disassembling) get a putaway task from the work center."
+    },
+    {
+      "fieldname": "column_break_kit1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "kitting_output_hu_required",
+      "fieldtype": "Check",
+      "label": "Kitting Output HU Required",
+      "default": "0",
+      "description": "The operator must scan a Handling Unit to put the output on when completing a kitting order."
+    },
+    {
+      "fieldname": "loading_section",
+      "fieldtype": "Section Break",
+      "label": "Loading",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "load_sequence_check",
+      "fieldtype": "Select",
+      "label": "Load Sequence Check",
+      "options": "Off\nWarn\nBlock",
+      "default": "Off",
+      "description": "Loading a Handling Unit for an earlier stop while HUs for a later stop are still waiting (they belong deeper in the truck): Warn asks the loader to confirm, Block refuses it."
+    },
+    {
+      "fieldname": "yard_section",
+      "fieldtype": "Section Break",
+      "label": "Yard and Dock Appointments",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "dock_slot_minutes",
+      "fieldtype": "Int",
+      "label": "Default Slot (Minutes)",
+      "default": "60",
+      "non_negative": 1,
+      "description": "Length of a dock appointment when no end time is given."
+    },
+    {
+      "fieldname": "dock_changeover_minutes",
+      "fieldtype": "Int",
+      "label": "Door Changeover (Minutes)",
+      "default": "0",
+      "non_negative": 1,
+      "description": "Kept free between two appointments at the same door."
+    },
+    {
+      "fieldname": "column_break_yard1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "appointment_check",
+      "fieldtype": "Select",
+      "label": "Trucks Without Appointment",
+      "options": "Allow\nWarn\nBlock",
+      "default": "Allow",
+      "description": "At the gate: Allow checks a walk-in truck in, Warn asks to confirm, Block sends it away."
+    },
+    {
+      "fieldname": "no_show_after_minutes",
+      "fieldtype": "Int",
+      "label": "No Show After (Minutes)",
+      "default": "120",
+      "non_negative": 1,
+      "description": "A planned appointment not checked in this long after its start becomes No Show and frees its door. 0: never."
     }
   ],
   "autoname": "field:warehouse_code",
@@ -124,7 +300,10 @@
       "delete": 1,
       "submit": 1,
       "cancel": 1,
-      "amend": 1
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     },
     {
       "role": "WMS Operator",
@@ -133,7 +312,83 @@
       "create": 0,
       "delete": 0,
       "submit": 0,
-      "cancel": 0
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
     }
   ]
 }

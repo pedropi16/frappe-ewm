@@ -52,7 +52,9 @@ def before_tests():
         frappe.get_doc({"doctype": "Customer", "customer_name": TEST_CUSTOMER, "customer_type": "Company",
                         "customer_group": _first("Customer Group", {"is_group": 0}),
                         "territory": _first("Territory", {"is_group": 0})}).insert(ignore_permissions=True)
-    if not frappe.db.get_all("Item", filters={"is_stock_item": 1}, limit=1):
+    # Always present, even on a site that already has items: a plain stock item with no batch or
+    # serial control, for tests that need exactly that (the first item on a seeded site may not be).
+    if not frappe.db.exists("Item", TEST_ITEM):
         frappe.get_doc({"doctype": "Item", "item_code": TEST_ITEM, "item_name": TEST_ITEM, "stock_uom": "Nos",
                         "item_group": _first("Item Group", {"is_group": 0}) or "All Item Groups",
                         "is_stock_item": 1}).insert(ignore_permissions=True)

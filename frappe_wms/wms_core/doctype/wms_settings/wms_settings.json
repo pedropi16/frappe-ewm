@@ -18,7 +18,12 @@
   "default_handling_unit_type",
   "labeling_section",
   "gs1_company_prefix",
-  "sscc_next_serial"
+  "sscc_next_serial",
+  "alerts_section",
+  "alert_notifications",
+  "alert_recipients",
+  "archiving_section",
+  "ledger_retention_months"
  ],
  "fields": [
   {
@@ -103,6 +108,40 @@
    "fieldtype": "Int",
    "label": "SSCC Next Serial",
    "read_only": 1
+  },
+  {
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Alerts",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "alert_notifications",
+   "fieldtype": "Select",
+   "label": "Alert Notifications",
+   "options": "Off\nDesk Notification\nDesk Notification and Email",
+   "default": "Desk Notification",
+   "description": "Every hour, supervisors are told about what needs a person: ERPNext postings that keep failing, negative quants, aged task exceptions, requests without tasks, stalled warehouse orders. Only when something changed since the last digest."
+  },
+  {
+   "fieldname": "alert_recipients",
+   "fieldtype": "Small Text",
+   "label": "Alert Recipients",
+   "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
+  },
+  {
+   "fieldname": "archiving_section",
+   "fieldtype": "Section Break",
+   "label": "Ledger Archiving",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "ledger_retention_months",
+   "fieldtype": "Int",
+   "label": "Keep Stock Ledger Entries (Months)",
+   "default": "0",
+   "non_negative": 1,
+   "description": "0 keeps every entry forever. Otherwise, on the 1st of each month, entries older than this many months (at least 12) move to an archive file (WMS Ledger Archive Run) and each stock position keeps one carry-forward entry."
   }
  ],
  "icon": "icon-cog",
@@ -127,6 +166,30 @@
   {
    "read": 1,
    "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
   }
  ],
  "sort_field": "modified",

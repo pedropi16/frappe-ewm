@@ -13,9 +13,9 @@ RECEIVING_ROLES = ("WMS Operator", "WMS Receiver", "WMS Supervisor")
 def create_putaway(receipt_name):
     require_role(*RECEIVING_ROLES)
     request_names = create_putaway_requests(receipt_name)
-    batch_key = frappe.generate_hash(length=10)
-    task_names = [create_tasks_for_request(name, batch_key=batch_key) for name in request_names]
-    return {"warehouse_requests": request_names, "warehouse_tasks": task_names}
+    from frappe_wms.services.task import plan_requests
+    task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
+    return {"warehouse_requests": request_names, "warehouse_tasks": task_names, "unplanned_requests": unplanned}
 
 @frappe.whitelist()
 @retry_on_deadlock
@@ -28,6 +28,13 @@ def create_inbound_delivery_from_purchase_order(purchase_order_name, warehouse):
 def list_open_inbound_deliveries():
     require_role(*RECEIVING_ROLES)
     return _list_open_inbound_deliveries()
+
+@frappe.whitelist()
+@retry_on_deadlock
+def receiving_worklist(inbound_delivery):
+    require_role(*RECEIVING_ROLES)
+    from frappe_wms.services.receipt import receiving_worklist as _receiving_worklist
+    return _receiving_worklist(inbound_delivery)
 
 @frappe.whitelist()
 @retry_on_deadlock

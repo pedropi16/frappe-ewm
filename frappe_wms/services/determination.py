@@ -72,7 +72,7 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context):
     for b in bins: b.current_hu_count = live_hu_count(b.name) + reserved.get(b.name, 0)
     return [b for b in bins if not bin_violations(b.name, item=context.get("item"), stock_type=context.get("stock_type"),
         hu_type=context.get("hu_type"), batch_no=context.get("batch_no"), destination_hu=context.get("destination_hu"),
-        incoming_weight=context.get("incoming_weight"), incoming_hu_count=flt(context.get("incoming_hu_count", 1)) + reserved.get(b.name, 0))]
+        incoming_weight=context.get("incoming_weight"), incoming_volume=context.get("incoming_volume"), incoming_hu_count=flt(context.get("incoming_hu_count", 1)) + reserved.get(b.name, 0))]
 
 def determine_destination_bin(context):
     rules=frappe.get_all("Bin Determination Rule",filters={"active":1,"warehouse":context["warehouse"],"activity":context["activity"]},fields=["*"],order_by="priority asc")

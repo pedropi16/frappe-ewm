@@ -1,0 +1,17 @@
+{
+  "name": "WMS Scanner",
+  "short_name": "WMS",
+  "description": "Frappe WMS RF scanner app",
+  "id": "/wms",
+  "start_url": "/wms#/",
+  "scope": "/wms",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "icons": [
+    {"src": "/assets/frappe_wms/images/wms-icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/assets/frappe_wms/images/wms-icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/assets/frappe_wms/images/wms-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
