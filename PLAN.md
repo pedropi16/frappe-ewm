@@ -4,27 +4,33 @@ Last updated 2026-10-01. This tracks an ongoing engagement, separate from `app_g
 unrelated earlier SAP-EWM-parity roadmap) — this one is specifically about driving the `/wms` RF
 app under realistic, concurrent load against **production** and fixing whatever breaks.
 
-## 🚨 Current blocker — read this first
+## ⚠️ Operational hazard — `frappe_wms` is not durably installed on production
 
-Production's backend runs with only **`GUNICORN_WORKERS=2`, `GUNICORN_THREADS=4`** (8 concurrent
-request slots total, confirmed live via process inspection inside `frappe-backend-1`: exactly 1
-gunicorn master + 2 workers). A 2026-10-01 50-actor run (20 real RF browser sessions in safe waves
-of 6 + 30 lightweight API desk actors, full details in the findings doc) found this reliably stalls
-**every** Inbound Delivery page load under just 6-way concurrent RF traffic — 15-30+ second waits,
-zero receipts posted, the entire downstream cycle (putaway/pick/count/ship) never got to run. This
-is an infrastructure capacity finding, not an app bug.
+**Confirmed live 2026-10-01:** when Portainer recreated `frappe-backend-1` to apply a
+`GUNICORN_WORKERS` env change, the fresh container came up with `apps/frappe_wms` completely
+missing - the app was only ever `git clone`'d into the container's writable layer by hand during
+earlier deploys, never baked into the image or placed on a persistent volume. The site's own DB
+still listed `frappe_wms` as installed, so every WMS-touching request would have failed outright
+until it was manually re-cloned (`git clone https://github.com/pedropi16/frappe-ewm.git`, placed at
+`apps/frappe_wms`, remote renamed `origin`->`upstream` to match the other containers, then
+`./env/bin/pip install -e apps/frappe_wms`, cache clear, restart). **Any future container
+recreation - a Portainer redeploy, an image update, a host reboot that drops the container - will
+silently repeat this** until the backend image/volumes are changed to make the app persistent (bake
+it into a custom image, or mount `apps/frappe_wms` from a volume that survives recreation). Treat
+"site responds to `/api/method/ping` with 200" as necessary but **not sufficient** evidence WMS
+itself is working after any container-level change on production - verify with something that
+actually imports `frappe_wms` (e.g. `bench execute` against a function in it) before trusting the
+site.
 
-**This needs to be fixed before any further concurrent load testing is worth running.** The fix
-(bump `GUNICORN_WORKERS`, e.g. to 4) can't be applied from this repo or this checkout — the running
-stack is Portainer-managed (`docker inspect frappe-backend-1` shows
-`com.docker.compose.project.working_dir: /data/compose/22`, inside Portainer's own data volume, not
-`~/frappe_docker/docker-compose.yml` on disk, which was edited as a reference but does **not**
-drive the live containers). Apply it via Portainer's UI (or find the real compose source it deploys
-from), restart the backend service, then re-run
-`frappe_wms/tests/e2e/loadtest/scale_loadtest.cjs` (committed, wave-based, 20 RF + 30 desk actors)
-to get the full-cycle validation this was meant to deliver. 200 new products (`WH-*`), POs,
-Inbound Deliveries, Sales Orders and count documents are already seeded on production and ready for
-that re-run — see the findings doc's 2026-10-01 entries for full detail.
+## Resolved: gunicorn worker starvation
+
+Production's backend used to run with only `GUNICORN_WORKERS=2`, `GUNICORN_THREADS=4` (8 concurrent
+request slots total). A 2026-10-01 50-actor run (20 real RF browser sessions in safe waves of 6 + 30
+lightweight API desk actors) found this reliably stalled **every** Inbound Delivery page load under
+just 6-way concurrent RF traffic - 15-30+ second waits, zero receipts posted, the entire downstream
+cycle never got to run. Confirmed as an infrastructure capacity finding, not an app bug. **Fixed**
+by the user via Portainer (`GUNICORN_WORKERS` 2 -> 4, confirmed live: 1 master + 4 workers) - this
+is what triggered the container recreation that caused the hazard above.
 
 ## The standing task
 
