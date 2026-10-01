@@ -125,7 +125,7 @@ site only — see Known issues; not a regression, unchanged across all these com
 
 ## The load test script
 
-`frappe_wms/tests/e2e/loadtest/production_loadtest.js` — Playwright, drives the real `/wms` RF UI
+`frappe_wms/tests/e2e/loadtest/production_loadtest.cjs` — Playwright, drives the real `/wms` RF UI
 for 5 concurrent personas through receive → putaway (concurrent race) → ad-hoc move/repack →
 release-for-picking → pick (concurrent race) → pack setup → ship, logging every finding
 (`BUG`/`FLOW`/`PERF`/`INFO`) to console and to `<shots dir>/findings-*.json`, with a screenshot at
@@ -133,7 +133,7 @@ every major step.
 
 ```bash
 cd frappe_wms/tests/e2e/loadtest
-LOADTEST_PASSWORD='<the password>' node production_loadtest.js
+LOADTEST_PASSWORD='<the password>' node production_loadtest.cjs
 ```
 
 It needs Playwright's Chromium available; if the sandbox is missing system libs (this dev

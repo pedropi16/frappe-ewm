@@ -3,7 +3,7 @@
 // receive -> putaway -> move -> repack -> pick -> pack -> load -> ship day, with two deliberate
 // concurrency windows (putaway race, pick race) to stress pull_next_warehouse_order's atomic claim.
 //
-// Run from this directory: LOADTEST_PASSWORD=<password> node production_loadtest.js
+// Run from this directory: LOADTEST_PASSWORD=<password> node production_loadtest.cjs
 // See ../../../../PLAN.md for full context, current findings, and what to run next.
 //
 // Env vars:
