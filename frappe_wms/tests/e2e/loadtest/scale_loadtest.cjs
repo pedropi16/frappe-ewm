@@ -204,6 +204,15 @@ async function driveTaskWizard(page, persona) {
       await fillScanField(page, fieldName, expected);
     }
     hash = await waitForStepChange(page, before, 10000);
+    if (hash === before && step === "review" && /Destination Handling Unit/i.test(await noticeText(page))) {
+      // Confirming less than what a shared receiving tote holds needs a destination HU (see
+      // services/task.py's _resolve_partial_hu_move) - a real operator would just grab a fresh
+      // tote and scan it; confirm_task now auto-registers an unrecognized barcode the same way
+      // receiving does, so do that here instead of giving up on the whole wave over this one task.
+      await fillScanField(page, "hu", `LT-SPLIT-${persona.name}-${Date.now()}`);
+      await tapPrimary(page, "Confirm");
+      hash = await waitForStepChange(page, before, 10000);
+    }
     if (hash === before) { note("BUG", persona.name, `Task wizard stuck on step "${step}" (no change after 10s)`); return "stuck"; }
     // confirmTask() either unwinds to the tasks list (done) or, if confirming this task released
     // another in the same Warehouse Order, auto-chains straight to it (confirmTask's own

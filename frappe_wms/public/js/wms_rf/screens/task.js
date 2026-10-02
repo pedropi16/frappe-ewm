@@ -221,7 +221,7 @@ function stepView(wrap, step) {
     if (excess > 0) box.append(Hint(_("{0} more than planned ({1}) - the extra goes to the warehouse's difference bin, not here.", [fmtQty(excess), fmtQty(remaining(t))])));
     box.append(h("div", { style: { height: "14px" } }),
       Field({ name: "hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan or leave as suggested"), value: f.hu,
-        hint: _("Defaults to {0} if left as is.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
+        hint: _("Defaults to {0} if left as is. A fresh tote/carton barcode registers it automatically.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
         onCommit: () => { persist(); } }));
   }
   wrap.append(box);

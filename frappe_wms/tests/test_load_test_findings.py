@@ -14,6 +14,7 @@ from frappe.utils import flt
 from frappe_wms.api.inbound import create_and_submit_goods_receipt
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move
 from frappe_wms.services import concurrency
+from frappe_wms.services.determination import determine_process_type
 from frappe_wms.services.replenishment import request_direct_replenishment
 from frappe_wms.tests.bootstrap import empty_hu_like
 
@@ -191,6 +192,32 @@ class TestLoadTestFindings(IntegrationTestCase):
                                 source_bin=self.bulk_bin, source_hu=hu, destination_bin=self.rack_bin, destination_hu=tote)
         self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bulk_bin)
         self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"handling_unit": tote, "storage_bin": self.rack_bin}, "quantity")), 4)
+
+    def test_partial_move_into_a_brand_new_destination_hu_auto_registers_it(self):
+        # Reproduced under a scaled load test: every Putaway/Pick task confirming less than a
+        # shared receiving tote's full quantity hit this same wall, because the only way to supply
+        # a destination HU was to scan one that already existed - a never-before-seen barcode
+        # (what a real operator grabbing a fresh tote would scan, exactly like the RF task
+        # wizard's "Destination Handling Unit" field at the review step) made confirm_task throw
+        # LinkValidationError instead. get_or_create_handling_unit already does exactly this "may
+        # or may not exist yet" resolution for receiving; confirm_task should reuse it rather than
+        # require the destination to pre-exist. Unlike create_and_confirm_move (which bakes
+        # destination_hu into the task doc itself at creation, before confirm_task ever runs),
+        # a planned task's destination_hu is genuinely unset until an operator confirms it - so
+        # this builds one the same way directly, rather than through that helper.
+        hu = self._stock(self.item, 10, self.bulk_bin)
+        process_type = frappe.get_cached_doc("Warehouse Process Type", determine_process_type(WH, "Internal Move", item=self.item, stock_type="AVAILABLE", default="INTERNAL_MOVE"))
+        task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": WH, "product": self.item,
+            "planned_quantity": 4, "stock_uom": self.uom, "source_bin": self.bulk_bin, "destination_bin": self.rack_bin,
+            "source_hu": hu, "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": process_type.movement_type,
+            "priority": "Normal", "status": "Open"})
+        task.insert(ignore_permissions=True)
+        fresh_hu = frappe.generate_hash(length=10)
+        self.assertFalse(frappe.db.exists("Handling Unit", fresh_hu))
+        confirm_task(task.name, confirmed_quantity=4, destination_hu=fresh_hu)
+        self.assertEqual(frappe.db.get_value("Handling Unit", fresh_hu, "current_bin"), self.rack_bin)
+        self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"handling_unit": fresh_hu, "storage_bin": self.rack_bin}, "quantity")), 4)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bulk_bin)
 
     def test_whole_hu_still_travels_with_its_stock(self):
         hu = self._stock(self.item, 9, self.bulk_bin)

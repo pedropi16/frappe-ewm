@@ -451,6 +451,23 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         difference_bin_for_warehouse(task.warehouse)  # fail loud before anything posts, not after
     if destination_hu == _UNPACK:
         resolved_destination_hu = None
+    elif destination_hu and not frappe.db.exists("Handling Unit", destination_hu):
+        # The operator may have scanned a brand-new tote/carton rather than an already-registered
+        # one - reproduced under load: any task confirming less than a shared receiving tote's full
+        # quantity into an HU-managed bin requires naming a destination HU (see
+        # _resolve_partial_hu_move below), but there was no way to satisfy that with a fresh
+        # barcode - frappe.get_doc in _relocate_hu_for_task below would just throw
+        # DoesNotExistError, dead-ending the single most common split-putaway pattern (several
+        # serials/units received onto one dock tote, each then confirmed into its own destination).
+        # get_or_create_handling_unit already implements exactly this "scan a barcode that may or
+        # may not exist yet" auto-registration for receiving; reuse it here instead of requiring
+        # the destination to pre-exist. Only for a genuinely unregistered barcode, though - an
+        # already-existing destination_hu (e.g. a whole HU moving with its own stock, or a cluster
+        # tote a Pick already posted into) must resolve exactly as before: get_or_create_handling_unit's
+        # "already has stock" guard exists to stop a *receipt* from double-posting into an occupied
+        # HU, which does not apply to a task just relocating that same HU's own stock.
+        from frappe_wms.services.handling_unit import get_or_create_handling_unit
+        resolved_destination_hu = get_or_create_handling_unit(destination_hu, storage_bin=task.destination_bin, warehouse=task.warehouse)
     elif destination_hu:
         resolved_destination_hu = destination_hu
     elif task.unpack_at_destination:
