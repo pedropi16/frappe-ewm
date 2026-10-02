@@ -3,7 +3,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.services.warehouse_order import attach_task, join_queue, leave_queue, list_queues, pull_next_warehouse_order
+from frappe_wms.services.warehouse_order import attach_task, join_queue, leave_queue, list_queues, pull_next_warehouse_order, warehouse_order_detail
 from frappe_wms.services.bin_assignment import search_bins_for_assignment, mass_assign_activity_area
 from frappe_wms.services.task import list_my_tasks
 
@@ -187,6 +187,77 @@ class TestActivityAreaQueues(IntegrationTestCase):
                 "a resource's own assigned task must never be excluded by unrelated higher-ranked ones")
         finally:
             frappe.db.delete("Warehouse Task", {"name": ["in", crowd_names]})
+
+    def test_warehouse_order_detail_finds_a_just_assigned_task_that_list_my_tasks_cannot(self):
+        # Reproduced live, immediately after fixing list_my_tasks' global-top-200 crowding bug: a
+        # resource that has personally accumulated enough of its OWN open/on-hold work (reused
+        # across many consecutive load-test runs in one sitting; confirmed live at 330 for one
+        # resource) can still crowd its own "mine" query's own limit - a real, narrower thing than
+        # the global bug, and not something raising that limit indefinitely is a good answer to
+        # either. The RF app's pullWork() now falls back to warehouse_order_detail(wo) - scoped to
+        # just the one Warehouse Order pull_next_warehouse_order genuinely just assigned, with no
+        # dependency on the resource's unrelated backlog at all - whenever "mine" doesn't have the
+        # answer; this pins down that fallback's own data source is solid.
+        suffix = frappe.generate_hash(length=6)
+        other_user = frappe.session.user
+        # my_resource()'s own "most recently modified" tiebreak (for a user bound to more than one
+        # active WMS Resource) only disambiguates reliably across distinct modified timestamps -
+        # several sibling tests in this file bind their own fresh resource to this same
+        # `frappe.session.user`, with no rollback between methods, and running fast enough to land
+        # in the same second makes that tiebreak unreliable. Deactivating every pre-existing one
+        # removes the ambiguity outright rather than racing it.
+        frappe.db.set_value("WMS Resource", {"user": other_user, "active": 1}, "active", 0)
+        resource_code = f"AAQ-BACKLOG-RES-{suffix}"
+        resource = frappe.get_doc({"doctype": "WMS Resource", "resource_code": resource_code, "warehouse": self.warehouse,
+            "resource_type": "Operator", "user": other_user, "active": 1}).insert(ignore_permissions=True)
+        bin_backlog = f"{self.warehouse}-BACKLOGBIN-{suffix}"
+        frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_backlog, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        # This resource's OWN historical backlog - unlike the sibling test above, assigned to
+        # `resource` itself on purpose, since that is exactly the scenario being reproduced here.
+        backlog_names = []
+        for i in range(105):
+            t = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": self.warehouse,
+                "product": self.item, "planned_quantity": 1, "stock_uom": self.uom,
+                "source_bin": bin_backlog, "destination_bin": self.bin_dest,
+                "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "301",
+                "priority": "Urgent", "status": "On Hold", "assigned_resource": resource.name,
+            }).insert(ignore_permissions=True)
+            backlog_names.append(t.name)
+
+        # A dedicated source bin/storage type, not the shared class-level self.bin_plain - a
+        # sibling test's own queue already matches that one's storage type more specifically
+        # (same trap test_resource_group_fallback_when_no_current_queue_joined's own comment
+        # describes), which would route fresh_task into a queue other than the blank-fallback one
+        # below, and pull_next_warehouse_order (scoped to exactly what was joined) would never
+        # find it - reproduced live writing this test.
+        storage_type = f"{self.warehouse}-BACKLOG{suffix}"
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": self.warehouse, "storage_type_code": f"BACKLOG{suffix}", "storage_type_name": storage_type,
+            "storage_role": "Storage", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        fresh_bin = f"{self.warehouse}-FRESHBIN-{suffix}"
+        frappe.get_doc({"doctype": "Storage Bin", "bin_code": fresh_bin, "warehouse": self.warehouse, "storage_type": storage_type, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+
+        queue = f"AAQ-BACKLOG-Q-{suffix}"
+        frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": queue, "queue_name": queue,
+            "warehouse": self.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
+        join_queue(queue, user=other_user)
+        fresh_task = self._make_task(fresh_bin, batch_key=frappe.generate_hash(length=10))
+        wo_name = fresh_task.warehouse_order
+
+        try:
+            pulled = pull_next_warehouse_order(user=other_user)
+            self.assertEqual(pulled, wo_name)
+
+            result = list_my_tasks(user=other_user)
+            self.assertNotIn(fresh_task.name, [t["name"] for t in result["tasks"]],
+                "setup check: this resource's own 105-task backlog must be what's actually crowding 'mine' here")
+
+            detail = warehouse_order_detail(wo_name)
+            workable = [t for t in detail["tasks"] if t["status"] in ("Open", "Assigned")]
+            self.assertIn(fresh_task.name, [t["name"] for t in workable],
+                "warehouse_order_detail must find the just-assigned task regardless of the resource's unrelated backlog")
+        finally:
+            leave_queue(user=other_user)
+            frappe.db.delete("Warehouse Task", {"name": ["in", backlog_names]})
 
     def test_pull_and_list_queues_scoped_to_resource_group(self):
         group_a = f"AAQ-RGA-{frappe.generate_hash(length=6)}"

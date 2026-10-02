@@ -33,7 +33,17 @@ async function pullWork() {
   const wo = await run(() => api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {}), { label: _("Finding work…") });
   if (!wo) { notify.info(_("No work waiting right now.")); return; }
   await refreshSession();
-  const task = S.tasks.find((t) => t.warehouse_order === wo);
+  let task = S.tasks.find((t) => t.warehouse_order === wo);
+  if (!task) {
+    // "my tasks" is a capped, warehouse-wide view (list_my_tasks), not a per-Warehouse-Order one -
+    // a resource that has personally accumulated a large backlog of its own earlier open/on-hold
+    // work can rank that ahead of a task from a Warehouse Order genuinely just assigned to it this
+    // instant, so it's a real possibility this WO's own task isn't in that capped list at all yet.
+    // The WO itself was just confirmed assigned, though, so look at ITS tasks directly instead of
+    // leaving the operator with a toast confirming the assignment and no way to act on it.
+    const detail = await load(() => api("frappe_wms.api.warehouse_order.warehouse_order_detail", { wo_name: wo }, { read: true }));
+    task = detail && detail.tasks && detail.tasks.find((t) => t.status === "Open" || t.status === "Assigned");
+  }
   if (task) nav.go(href("task", task.name)); else notify.ok(_("Assigned {0}", [wo]));
 }
 
