@@ -273,24 +273,34 @@ def list_my_tasks(user=None):
     resource = my_resource(user)
     filters = {"status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
     if resource: filters["warehouse"] = resource.warehouse
-    tasks = frappe.get_list(
-        "Warehouse Task",
-        filters=filters,
-        fields=["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
-            "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
-            "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
-            "blocking_reason"],
-        order_by="priority desc, wave asc, sequence asc, creation asc",
-        limit=200,
-    )
-    if resource:
-        # Visible if it's mine, unrouted (no queue configured), or sitting unclaimed in any
-        # queue my Resource Group covers - not just one I manually joined (current_queue is
-        # still an optional narrowing eligible_queues respects when set).
-        eligible = _eligible_queues(resource)
-        tasks = [t for t in tasks if t.assigned_resource == resource.name
-            or (not t.assigned_resource and (not t.queue or t.queue in eligible))][:100]
-    return {"resource": resource, "tasks": tasks}
+    fields = ["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
+        "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
+        "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
+        "blocking_reason"]
+    order_by = "priority desc, wave asc, sequence asc, creation asc"
+    if not resource:
+        return {"resource": resource, "tasks": frappe.get_list("Warehouse Task", filters=filters, fields=fields, order_by=order_by, limit=200)}
+    # Used to fetch one global top-200 (by priority/wave/sequence/creation across the WHOLE
+    # warehouse) and filter down to "mine, unrouted, or in a queue I cover" in Python afterward -
+    # fine while the site-wide backlog stayed under ~200 rows, but reproduced live once it grew
+    # past that: a resource's own freshly-assigned Warehouse Order (pull_next_warehouse_order had
+    # genuinely just assigned it, seconds earlier) ranked behind thousands of older, unrelated
+    # tasks in that single global ordering and never made it into the top 200 at all - "my tasks"
+    # silently showed none of it, no error, nothing to indicate why. Query "mine" and "unclaimed,
+    # in a queue/unrouted work I'm eligible for" separately, each already bounded on its own,
+    # instead of one shared window the rest of the warehouse can crowd out.
+    eligible = _eligible_queues(resource)
+    mine = frappe.get_list("Warehouse Task", filters={**filters, "assigned_resource": resource.name}, fields=fields, order_by=order_by, limit=100)
+    or_filters = [["queue", "is", "not set"]]
+    if eligible: or_filters.append(["queue", "in", eligible])
+    unclaimed = frappe.get_list("Warehouse Task", filters={**filters, "assigned_resource": ["in", ("", None)]},
+        or_filters=or_filters, fields=fields, order_by=order_by, limit=100)
+    seen = set()
+    tasks = []
+    for t in mine + unclaimed:
+        if t.name in seen: continue
+        seen.add(t.name); tasks.append(t)
+    return {"resource": resource, "tasks": tasks[:100]}
 
 def _release_short_pick_reservation(task, shortfall):
     # Whatever this task will now never confirm (planned - revised, once it closes out below

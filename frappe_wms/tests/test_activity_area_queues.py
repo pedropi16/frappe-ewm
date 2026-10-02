@@ -129,6 +129,65 @@ class TestActivityAreaQueues(IntegrationTestCase):
         result = list_my_tasks(user=email)
         self.assertIn(task.name, [t["name"] for t in result["tasks"]])
 
+    def test_my_own_assigned_task_is_never_crowded_out_by_unrelated_higher_ranked_ones(self):
+        # Reproduced live: list_my_tasks used to fetch one global top-200 (ordered by priority
+        # desc, wave asc, sequence asc, creation asc across the WHOLE warehouse) and filter down
+        # to "mine" in Python afterward - fine while the warehouse-wide open-task count stayed
+        # under ~200, but once a large backlog built up (thousands of Putaway/Cross-Dock tasks
+        # from a scaled load test), a resource's own freshly-assigned task - genuinely assigned
+        # to them seconds earlier by pull_next_warehouse_order - could rank behind enough older/
+        # higher-priority unrelated tasks to never make it into that shared window at all. "My
+        # tasks" silently showed none of it: no error, no navigation, nothing to explain why.
+        # Four Urgent-priority tasks assigned to someone else stand in for "a large unrelated
+        # backlog that ranks ahead" - the fix queries "mine" independently of any such crowding,
+        # by construction, so the exact count doesn't matter; a handful demonstrates it.
+        suffix = frappe.generate_hash(length=6)
+        other_user = frappe.session.user
+        resource_code = f"AAQ-CROWD-RES-{suffix}"
+        resource = frappe.get_doc({"doctype": "WMS Resource", "resource_code": resource_code, "warehouse": self.warehouse,
+            "resource_type": "Operator", "user": other_user, "active": 1}).insert(ignore_permissions=True)
+        bin_other = f"{self.warehouse}-CROWDBIN-{suffix}"
+        frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_other, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        # The old global top-200 only actually starves "mine" out once the warehouse-wide count
+        # of higher-ranked rows exceeds that limit - confirmed by running this test against the
+        # pre-fix code: it passed right up until this loop's count crossed 200, proving a smaller
+        # count would not have caught the regression at all. Inserted directly (bypassing
+        # attach_task's own routing/WO-batching work) purely for speed; none of that machinery is
+        # what this test is about.
+        #
+        # Scoped to a queue nobody (not even `resource`) is eligible for, and unassigned - stands
+        # in for "the rest of the warehouse's unrelated backlog", invisible to anyone's "mine" or
+        # "unclaimed" query, old code's bug aside. Two things this must NOT be: (1) assigned to
+        # `resource` itself - that would flood `resource`'s OWN "mine" query with its own Urgent
+        # work ranking ahead of its one Low-priority task, a real but much narrower limit than
+        # this test is reproducing; (2) left with no queue at all - "unrouted" work is everyone's
+        # by design (see test_resource_group_fallback_when_no_current_queue_joined above), so 205
+        # of those would just as easily crowd out *other* tests' own single expected task from
+        # their own "unclaimed" window - reproduced live, while writing this test, as a sibling
+        # test failure one alphabetical slot away with no code of its own changed at all.
+        crowd_queue = f"AAQ-CROWD-Q-{suffix}"
+        frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": crowd_queue, "queue_name": crowd_queue,
+            "warehouse": self.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
+        crowd_names = []
+        for i in range(205):
+            t = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": self.warehouse,
+                "product": self.item, "planned_quantity": 1, "stock_uom": self.uom,
+                "source_bin": bin_other, "destination_bin": self.bin_dest,
+                "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "301",
+                "priority": "Urgent", "status": "Open", "queue": crowd_queue,
+            }).insert(ignore_permissions=True)
+            crowd_names.append(t.name)
+
+        mine = self._make_task(self.bin_plain)
+        frappe.db.set_value("Warehouse Task", mine.name, {"priority": "Low", "assigned_resource": resource.name})
+
+        try:
+            result = list_my_tasks(user=other_user)
+            self.assertIn(mine.name, [t["name"] for t in result["tasks"]],
+                "a resource's own assigned task must never be excluded by unrelated higher-ranked ones")
+        finally:
+            frappe.db.delete("Warehouse Task", {"name": ["in", crowd_names]})
+
     def test_pull_and_list_queues_scoped_to_resource_group(self):
         group_a = f"AAQ-RGA-{frappe.generate_hash(length=6)}"
         group_b = f"AAQ-RGB-{frappe.generate_hash(length=6)}"
