@@ -276,6 +276,66 @@ through dev** - this is a homelab test environment, not a protected customer pro
    not a regression. Count `stuck`/`guard-exceeded` specifically (zero this run) as the real
    health signal now, not raw `BUG` count.
 
+## Resolved 2026-10-02: Cross Dock tasks permanently unworkable (no queue, ever); added picking_status "Not Relevant"
+
+User asked to re-release the 15 Draft `OBD-*` for picking. All 15 calls succeeded with zero
+errors, but created zero Pick tasks - each delivery's `allocation_status` was already "Fully
+Allocated" with zero `Stock Allocation` rows anywhere on the site, which `release_delivery_for_
+picking` correctly reads as "already reserved by cross-docking, nothing to pick" and returns `[]`
+for. Digging into *why* surfaced a real, higher-impact bug: **no `Warehouse Queue` row for
+`activity='Cross Dock'` has ever existed on this site** - `attach_task` silently no-ops (by
+design, back-compat) when `determine_queue` finds nothing to match, so all 147 Cross Dock tasks
+landed with `warehouse_order`/`queue` blank. `pull_next_warehouse_order` can never serve an
+unqueued task, so every one of them - and every delivery depending on one - has been permanently
+unworkable via the RF app, silently, since whenever they were created. Exact same family as the
+already-fixed Putaway "never queued" bug (`dbf52d1`) and its backfill (`27e29e4`); this mirrors
+both.
+
+**Fixed** (`b492af0`, `0392e97`): a new patch (`backfill_unqueued_cross_dock_tasks`) creates the
+missing `Warehouse Queue` row(s) and reattaches every orphaned Cross Dock task to a Warehouse
+Order, following the exact `27e29e4` precedent. **First production migrate attempt failed
+outright**: 117 of the 147 tasks' `source_hu` points at a Handling Unit that no longer exists (a
+separate, pre-existing data problem - created fine originally, deleted later by an unrelated
+wipe/reseed) - `task.save()`'s own link validation threw and aborted the *entire* patch, leaving
+even the 30 healthy tasks unqueued. Fixed by wrapping each task's attach+save in its own
+savepoint, rolling back and logging just that one task on failure instead of the whole batch.
+**Verified on a clean second migrate**: queue created (`DC1-CROSSDOCK-Q`), 30 of 147 tasks now
+correctly queued (confirmed via direct query), 117 correctly left alone (their dangling `source_
+hu` is a real, separate problem - **not fixed here**, and these specific tasks can never be
+confirmed by a real operator either, since the barcode they'd need to scan doesn't exist; worth a
+dedicated investigation into how a wipe/reseed left WMS Stock Ledger/Warehouse Task rows pointing
+at Handling Units it deleted, next time someone runs one of those).
+
+**Also added** (same commits): a real "Not Relevant" value for Outbound Delivery's `picking_
+status` (previously only Not Started/Partially Picked/Picked), set the moment a Cross Dock
+reservation claims a delivery line - not only once (if ever) its task is confirmed - since no
+Pick task will ever exist for that quantity by design. Without this, a cross-docked delivery was
+indistinguishable in the Outbound Monitor from one whose picking was simply never started; this
+is what the user meant by wanting a document status that makes "no picking needed, something
+else is handling it" visually distinct from "pending". Backfilled for all 15 already-affected
+deliveries (now correctly showing "Not Relevant"); one delivery with genuinely mixed cross-dock +
+real pick demand correctly still shows "Not Started" for its real outstanding portion - covered
+by a dedicated test (`test_mixed_cross_dock_and_pick_demand_is_not_marked_not_relevant`).
+
+**Also fixed** (same cause as the user's other complaint, "missing Warehouse Orders on the
+Monitor"): the Outbound Monitor's delivery drill-down (`get_delivery_execution_status`) only ever
+derived Pick Tasks/Warehouse Orders from `Stock Allocation` rows - cross-docked stock never has
+one (it's claimed via `Warehouse Request` instead, and its task's Warehouse Order belongs to the
+*inbound* receipt side, not this delivery), so a cross-docked delivery showed "None yet" for Pick
+Tasks and no Warehouse Orders at all, with nothing to explain why. The drill-down now also shows
+the Cross Dock Warehouse Request(s)/Task(s)/Warehouse Order(s) actually fulfilling such a
+delivery.
+
+**Caution for next time**: desk-page JS (`wms_core/page/*`, like the Monitor) is served by Frappe
+reading the file straight from the app's install path on each page load - confirmed directly
+(`frappe.get_app_path(...)` resolves to the exact file git-pulled on the container, already
+containing a change with no further build step). It is **not** the same static-asset pipeline as
+`/wms`'s RF app (`public/js/wms_rf/...`, symlinked into `sites/assets/frappe_wms` and cache-busted
+via `index.py`'s per-file content hash) - don't go looking for a monitor-specific asset URL or run
+`bench build` expecting it to matter here; it doesn't hurt (confirmed harmless this session) but
+isn't the thing that makes a Monitor JS change live. Cache-clear + restart (the existing deploy
+routine) is enough.
+
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
 - Needs `LOADTEST_PASSWORD` (all 50 loadtest accounts now share one password — reset via
