@@ -534,8 +534,27 @@ async function receiveAll(page, persona, deliveryNames) {
       }
     }
     if (!added) { note("FLOW", persona.name, `${name}: no lines could be added to the receipt`); continue; }
+    // submit() (receive.js) on success calls finishFlow(..., "#/tasks/inbound", ...), which
+    // auto-navigates away - on failure (a validation error) it stays on this same #/receive/:name
+    // screen instead. A flat 1000ms sleep raced that under real concurrent load: the very next
+    // loop iteration's goto() to the NEXT delivery could fire while the app's OWN post-submit
+    // navigation to the Putaway queue was still in flight, so the next delivery's own queries
+    // occasionally picked up leftover Putaway-task ".card" elements mid-transition (surfacing as
+    // "Line X does not belong to Inbound Delivery Y" - a stale card, not a real app bug). Wait for
+    // either the hash to actually leave this delivery, or a new notice (failure, stays put).
+    const beforeNotice = await noticeText(page);
     let noticeTxt = "";
-    await timed(persona.name, `post receipt ${name}`, async () => { await tapPrimary(page, "Post receipt"); await page.waitForTimeout(1000); });
+    await timed(persona.name, `post receipt ${name}`, async () => {
+      await tapPrimary(page, "Post receipt");
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        const hash = await page.evaluate(() => location.hash);
+        if (!hash.includes(`/receive/${name}`)) break;
+        const nt = await noticeText(page);
+        if (nt && nt !== beforeNotice) break;
+        await page.waitForTimeout(250);
+      }
+    });
     noticeTxt = await noticeText(page);
     const looksLikeFailure = /error|fail|requires|does not have|not found|could not|permission|no matching/i.test(noticeTxt) && !/posted/i.test(noticeTxt);
     if (looksLikeFailure) note("BUG", persona.name, `${name}: error after posting: ${noticeTxt}`);
@@ -584,9 +603,23 @@ async function stageCount(page, persona) {
   const card = page.locator(".card").first();
   if (!(await card.count())) { note("FLOW", persona.name, "No open counts on #/count"); return; }
   await card.click();
-  // snapshot_count fires on open (count.js enter()) - wait for the real settled state, not a guess.
-  const settled = await waitForSettled(page, 15000);
-  if (settled === "timeout") { note("BUG", persona.name, "Count screen never settled (still showing a loading spinner after 15s)"); return; }
+  // snapshot_count fires on open (count.js enter()). On success it renders this screen's own
+  // ".line-head" lines - but on failure (e.g. "No stock found for the given count scope", a real,
+  // expected outcome whenever a bin's open counts outpace what's actually been put away yet) it
+  // redirects straight back to "#/count", the LIST screen, which renders through the shared
+  // listScreen() helper using ".card"/".empty", never ".line-head". Waiting on ".line-head" alone
+  // can't tell that apart from a genuine hang - it just runs out its own timeout either way.
+  const deadline = Date.now() + 15000;
+  let outcome = "timeout";
+  while (Date.now() < deadline) {
+    const hash = await page.evaluate(() => location.hash);
+    if (/#\/count\/[^/]+/.test(hash)) {
+      if (await page.locator(".line-head").count().catch(() => 0)) { outcome = "detail"; break; }
+    } else if (/#\/count\/?$/.test(hash)) { outcome = "redirected"; break; }
+    await page.waitForTimeout(250);
+  }
+  if (outcome === "timeout") { note("BUG", persona.name, "Count screen never settled (still showing a loading spinner after 15s)"); return; }
+  if (outcome === "redirected") { note("FLOW", persona.name, `Count redirected back to #/count (${(await noticeText(page)) || "snapshot likely found no stock in scope"})`); return; }
   const lineCount = await page.locator(".line-head").count();
   if (!lineCount) { note("FLOW", persona.name, "Count opened but shows no lines to count (snapshot found no stock in scope)"); return; }
   // Field names are c${i} (see count.js), not qty${i} - blind counting withholds book_quantity
