@@ -22,6 +22,28 @@ itself is working after any container-level change on production - verify with s
 actually imports `frappe_wms` (e.g. `bench execute` against a function in it) before trusting the
 site.
 
+**New symptom of the same root cause, hit live 2026-10-02:** after a routine `docker restart` of
+all 5 containers (deploying a code fix, no recreation involved), `frappe-frontend-1` went into a
+restart crash loop with `nginx: [emerg] host not found in upstream "backend:8000"`. `docker
+inspect frappe-backend-1`showed its network `Aliases` were `null` - the compose-defined `backend`
+alias was simply missing, so nginx's upstream hostname never resolved, on *every* restart attempt
+(not a one-off startup race - confirmed by retrying after backend had been up for a full minute).
+Root cause: `frappe-backend-1` was hand-recreated out-of-band from `docker-compose.yml` during the
+2026-10-01 recovery above (`docker run`/manual recreation, not `docker compose up`), so it never
+got the alias docker-compose would normally assign. **Fixed for this running container** (not a
+durable fix - recreating it again will drop the alias again, same as the missing-app hazard):
+```bash
+docker network disconnect frappe_docker_default frappe-backend-1
+docker network connect --alias backend frappe_docker_default frappe-backend-1
+docker restart frappe-frontend-1
+```
+A real fix requires the same thing as the hazard above: get `frappe-backend-1` back under
+`docker-compose.yml` management (a plain `docker compose up -d` from the compose project's
+directory should reconcile both the missing alias and the missing-app-on-recreate risk in one
+shot, if the compose file's own container definition already has `apps/frappe_wms` handled - not
+verified this session, don't assume). Until then, **after any restart of the backend container
+specifically, check `frappe-frontend-1`'s status before trusting the site**, not just ping.
+
 ## Resolved: gunicorn worker starvation
 
 Production's backend used to run with only `GUNICORN_WORKERS=2`, `GUNICORN_THREADS=4` (8 concurrent
@@ -166,6 +188,66 @@ session's many reruns — traced to this session's own reused test data (an HU n
 run, one delivery cancelled the day before in an earlier session) rather than anything newly
 broken. If they recur against genuinely fresh data, revisit; otherwise this is test-data staleness
 from running the same script many times in one sitting, not a finding.
+
+## Resolved 2026-10-02 (new session): dev baseline drift, then a real Putaway/Pick-stalling bug
+
+Picked up this engagement in a fresh session with no prior context beyond this file. **User
+clarified the standing policy further: work directly against production, don't gate data checks
+through dev** - this is a homelab test environment, not a protected customer prod.
+
+1. **Dev test baseline had drifted from the documented 7F+1E to 6F+13E** - traced to real data
+   corruption on `wms.local`, unrelated to any code change: `_Test WMS Stock Item` (the shared
+   fixture item nearly every test file does `frappe.get_all("Item", filters={"is_stock_item":1},
+   order_by="creation asc", limit=1)[0]` to find) had a duplicate `Nos` row in its own UOM
+   Conversion Table, which made `doc.save()` throw on ANY change to it, and had no
+   `item_defaults` at all, so `validate_stock_item_warehouse` threw "Warehouse is mandatory" for
+   any PO/SO built against it without an explicit warehouse. **Fixed**: deleted the duplicate
+   `UOM Conversion Detail` row, added an `item_defaults` row (`Test Company` /`Stores - TC`).
+   Back to the documented 6F+1E baseline (one fewer failure than the written 7F+1E, within
+   normal variance for this known pollution category - see Known issues). Not yet root-caused
+   *how* the duplicate UOM row got there; if it recurs, worth a closer look.
+2. **All 50 loadtest account passwords had drifted again** - same category as the stall-saga's
+   #1 finding, reset again via `frappe.utils.password.update_password` (not stored here; ask the
+   user or reset if ever unclear).
+3. **Confirmed the production catalog's receiving backlog from the prior session was already
+   fully drained** (all 17 `IBD-*` Fully Received or cancelled) but there was substantial real,
+   un-drained backlog left from that same prior session: 268 open/assigned Putaway tasks, 147
+   open Cross Dock tasks, 15 Outbound Deliveries already created from Sales Orders (Draft,
+   awaiting release-for-picking) - plenty of genuine work for a full-cycle run without needing to
+   seed brand-new IBDs/SOs.
+4. **The real finding**: running `scale_loadtest.cjs` against that backlog, Putaway/Pick
+   confirmations dropped to **zero across 4 of 5 waves** (only wave 1 confirmed a single task).
+   Root cause: this backlog's Putaway tasks are mostly one-unit-at-a-time (serial-controlled items
+   received multiple-to-a-tote during the prior session - see Pending item #6, still open), and
+   confirming less than a shared tote's full quantity into an HU-managed bin requires naming a
+   destination HU (`_resolve_partial_hu_move`, `services/task.py`) - but the only way to supply
+   one was to scan/type a barcode that was *already* a registered Handling Unit. A fresh,
+   never-before-seen barcode (exactly what a real operator grabbing a new tote would scan, and
+   exactly what Pending item #7 already flagged for the dedicated Move screen) made
+   `_relocate_hu_for_task`'s `frappe.get_doc("Handling Unit", hu)` throw `DoesNotExistError`
+   instead - this is the SAME gap as item #7, just hit through the generic task wizard's review
+   step instead of Move, and far higher-impact than that item's original framing suggested: it
+   silently stalled almost the entire Putaway/Pick stage, every wave, for this very common
+   "several units/serials landed on one shared dock tote" pattern. **Fixed** (`341dc3a`):
+   `confirm_task` now resolves a *genuinely unregistered* `destination_hu` through
+   `get_or_create_handling_unit` (the same "barcode may or may not exist yet" resolver receiving
+   already uses) instead of requiring it to pre-exist; an *already-existing* `destination_hu`
+   (a whole HU moving with its own stock, a cluster tote a Pick already posted into) still
+   resolves exactly as before - `get_or_create_handling_unit`'s "already has stock" guard is a
+   receiving-time check, wrongly applied here on the first attempt at this fix (caught by the
+   existing `test_whole_hu_still_travels_with_its_stock` regression test, which is exactly the
+   kind of case this file's own tests are for - see its header comment). Also fixed
+   `scale_loadtest.cjs`'s `driveTaskWizard` to react the way a real operator would to this error
+   (scan a fresh tote and retry) instead of giving up on the rest of the wave. **Dev suite back to
+   the 6F+1E baseline with this fix** (added `test_partial_move_into_a_brand_new_destination_hu_
+   auto_registers_it` to `test_load_test_findings.py`); deployed to all 5 production containers.
+5. **Hit the frontend/nginx network-alias symptom of the ephemeral-install hazard** while
+   deploying this fix (see the Operational hazard section at the top) - `frappe-frontend-1` went
+   into a restart crash loop because `frappe-backend-1`'s docker network alias `backend` was
+   missing. Fixed live by reconnecting the network with the alias explicit; not yet durable.
+6. **Not yet re-verified**: whether the destination-HU fix actually lets Putaway/Pick make real
+   progress against the backlog now (the fix was deployed right after discovering the stall, this
+   session hadn't re-run the full test against it yet as of this writing - do that next).
 
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
