@@ -702,6 +702,26 @@ class WMSMonitor {
           name: (row) => `<a href="/app/outbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>
             <button type="button" class="btn btn-xs btn-default wms-mon-obd-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("View")}</button>`,
         },
+        // Nothing anywhere - not the RF app, not this page until now - could create a WMS
+        // Shipment at all: confirm_hu_loaded/depart_shipment only ever LIST and ACT ON one that
+        // already exists (#/load), and post_goods_issue itself requires the HU's status to be
+        // "Loaded" (only a Shipment ever sets that) - so a picked delivery had no reachable path
+        // to Goods Issue whatsoever without this. A desk/supervisor action, same spirit as the
+        // Waves "Release" button just below: pick the deliveries for one truck run, create the
+        // Shipment, then an RF Loader takes it from #/load.
+        actions: [{
+          label: __("Create Shipment"), kind: "primary",
+          appliesTo: (row) => row.picking_status === "Picked" && row.loading_status !== "Loaded" && row.goods_issue_status !== "Posted",
+          run: async (rows) => {
+            try {
+              const shipment = await frappe.call("frappe_wms.api.shipping.create_shipment", {
+                warehouse: this.warehouse, outbound_deliveries: JSON.stringify(rows.map((r) => r.name)),
+              }).then((r) => r.message);
+              frappe.show_alert({ message: __("Shipment {0} created for {1} delivery(ies)", [shipment, rows.length]), indicator: "green" });
+              this.search_outbound_deliveries();
+            } catch (e) { /* frappe already shows the server error */ }
+          },
+        }],
         afterRender: ($res) => $res.find(".wms-mon-obd-view").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery)),
       });
       this.selection("waves", $wrap.find(".wms-mon-wave-sel"), $wrap.find(".wms-mon-wave-table"), {
