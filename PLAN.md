@@ -372,6 +372,25 @@ at the product level. **Next time**: either clean out/confirm-through each perso
 backlog before a fresh run, or raise `list_my_tasks`'s two query limits, or (lowest-effort) rotate
 in fresh never-before-used resource identities per run instead of reusing the same 20 indefinitely.
 
+**Actually fixed at the root** (`febb367`), rather than left as a test-data caveat: `pullWork()`
+(`tasks.js`) now falls back to `warehouse_order_detail(wo_name)` - already whitelisted, already
+scoped to just the one Warehouse Order just assigned, with zero dependency on the resource's
+unrelated backlog - whenever "my tasks" doesn't have the answer. This is the real operator-facing
+bug fix (a human hitting this exact wall would have been just as stuck as the test), not merely a
+test-script workaround. Added a regression test pinning the server-side contract this depends on
+(`list_my_tasks` can legitimately miss a just-assigned task; `warehouse_order_detail` never does).
+
+**Verified fully end-to-end after deploying**, independent of the load test's own identity-reuse
+noise: seeded one fresh Sales Order -> Outbound Delivery -> released for picking (2 genuine,
+correctly-queued, unassigned Pick tasks) -> logged in as a lightly-loaded persona (`loadtest.
+quinn`, only ~1 prior task) -> `pull_next_warehouse_order()` assigned the new Warehouse Order ->
+`list_my_tasks()` found both tasks immediately (no crowding for this resource) -> confirmed both
+via `confirm_task` (one needed a fresh destination HU for its own partial-tote split, handled
+correctly by today's earlier `confirm_task` fix) -> delivery's `picking_status` correctly advanced
+`Not Started` -> `Partially Picked` with real per-line `picked_quantity` posted. Every link in the
+chain - release, queue, pull, find, confirm, delivery progress - now genuinely works without any
+manual workaround, for a resource that isn't already carrying today's accumulated test debt.
+
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
 - Needs `LOADTEST_PASSWORD` (all 50 loadtest accounts now share one password — reset via
