@@ -204,7 +204,7 @@ async function driveTaskWizard(page, persona) {
       await fillScanField(page, fieldName, expected);
     }
     hash = await waitForStepChange(page, before, 10000);
-    if (hash === before && step === "review" && /Destination Handling Unit/i.test(await noticeText(page))) {
+    if (hash === before && step === "review" && /scan the Handling Unit \(tote, carton or new pallet\)/i.test(await noticeText(page))) {
       // Confirming less than what a shared receiving tote holds needs a destination HU (see
       // services/task.py's _resolve_partial_hu_move) - a real operator would just grab a fresh
       // tote and scan it; confirm_task now auto-registers an unrecognized barcode the same way

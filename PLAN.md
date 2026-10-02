@@ -245,9 +245,36 @@ through dev** - this is a homelab test environment, not a protected customer pro
    deploying this fix (see the Operational hazard section at the top) - `frappe-frontend-1` went
    into a restart crash loop because `frappe-backend-1`'s docker network alias `backend` was
    missing. Fixed live by reconnecting the network with the alias explicit; not yet durable.
-6. **Not yet re-verified**: whether the destination-HU fix actually lets Putaway/Pick make real
-   progress against the backlog now (the fix was deployed right after discovering the stall, this
-   session hadn't re-run the full test against it yet as of this writing - do that next).
+6. **Re-verified, confirmed working**: first rerun after deploying still showed the stall (0
+   confirmed again) - root cause was the *test script's own* retry condition
+   (`/Destination Handling Unit/i`), checked against `errorText()`'s rendered notice, which is
+   just `e.message` - the actual message never contains that phrase (it says "...scan the
+   Handling Unit (tote, carton or new pallet)..."), so the regex silently never matched and the
+   retry never fired. Fixed the regex to match the real message; a second rerun then confirmed
+   **zero stuck/guard-exceeded tasks across all 5 waves**, Putaway confirming 25-26 tasks per
+   wave (126 total that run; `Warehouse Task` Confirmed count went 79 -> 206, On Hold 3334 ->
+   3207, Open 189 -> 62, all exactly consistent with 127 real confirms across both post-fix runs
+   today). **Caution for next time interpreting findings dumps**: `dump(tag)` writes the
+   *cumulative* `findings` array every time, not just that stage's events - a file named e.g.
+   `findings-wave2-pick.json` also contains wave 2's Putaway race (and everything before it).
+   Spent real time chasing a phantom "Pick race silently eating successful confirms" bug before
+   realizing the HU names/confirm_task errors I was reading in that file were from the
+   *Putaway* stage moments earlier, not Pick - Pick's own "0 confirmed" every wave this session
+   was genuinely expected (immediate "No work waiting", not a stall): no `Pick`-type Warehouse
+   Task has ever existed on this site yet - `release_delivery_for_picking`'s desk-actor calls
+   succeeded (no errors) but allocation found no AVAILABLE (already-put-away) stock to allocate
+   against at release time, so zero Pick tasks were actually created. This is the same
+   already-documented "desk actors trying to allocate against stock that hasn't been put away
+   yet" finding, just now with hard evidence of *why* (zero `Pick` rows, confirmed via direct
+   query) - **next step for Pick**: re-run `release_delivery_for_picking` against the 15 Draft
+   `OBD-*` (or fresh ones) now that 127 more Putaway tasks have landed real stock in storage, or
+   interleave desk actors' release calls throughout a run instead of only once at the very start.
+   **BUG-count caveat going forward**: the retry fix means every real Putaway/Pick confirm now
+   legitimately logs one expected "HTTP 417 on confirm_task" line (the first attempt, by design,
+   before the retry silently succeeds) - this run's `BUG: 218` is *higher* than the earlier
+   clean run's `BUG: 36`, but almost entirely this expected-success-on-retry pattern (100 of 218),
+   not a regression. Count `stuck`/`guard-exceeded` specifically (zero this run) as the real
+   health signal now, not raw `BUG` count.
 
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
