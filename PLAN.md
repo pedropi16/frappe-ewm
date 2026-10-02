@@ -336,6 +336,42 @@ via `index.py`'s per-file content hash) - don't go looking for a monitor-specifi
 isn't the thing that makes a Monitor JS change live. Cache-clear + restart (the existing deploy
 routine) is enough.
 
+## Resolved 2026-10-02: `list_my_tasks` could crowd a resource's own newly-assigned work out entirely
+
+User asked to rerun the load test and confirm Pick actually gets real work. First rerun (after
+seeding fresh outbound demand, since the existing 15 deliveries were all cross-dock-satisfied and
+all 15 SOs fully consumed by them - created 2 new Sales Orders + released one for picking
+directly, confirmed 7 real Pick tasks got created and correctly queued) still showed the RF app's
+"Get next work" return a toast ("Assigned WO-xxx") and then nothing - no task, no error. Traced to
+a real, significant bug: **`list_my_tasks` fetched one global top-200 open tasks (ordered by
+priority desc, wave asc, sequence asc, creation asc, across the WHOLE warehouse) and only filtered
+down to "mine, unrouted, or in an eligible queue" in Python afterward** - fine while the site-wide
+backlog stayed under ~200 rows, but by this point in the engagement the warehouse had 3575 open
+tasks, so a resource's own freshly-assigned work (ranked behind thousands of older/higher-priority
+unrelated ones in that single global ordering) never made it into the shared window at all.
+**Fixed** (`c19d731`): queries "mine" (`assigned_resource = my resource`) and "unclaimed, in a
+queue I'm eligible for or unrouted" as two independently-bounded (`limit=100` each) queries
+instead of one shared global window the rest of the warehouse can crowd out. Added a regression
+test reproducing the exact threshold (205 unrelated higher-priority tasks elsewhere genuinely
+excluding a resource's own task) - verified it fails pre-fix, passes post-fix. Deployed; verified
+live (a task that was invisible before the fix showed up in `list_my_tasks` immediately after).
+
+**A second, narrower, separate thing surfaced immediately after** that fix, re-running the load
+test a third time: Pick race *still* showed 0 confirmed, same "Assigned WO-xxx" symptom. This time
+`list_my_tasks`'s "mine" query itself was correctly finding rows - just not the *right* ones: the
+loadtest personas are 20 fixed resource identities (`LOADTEST-RF1..20`) reused across every run
+in a single day, and by the fifth full run some of them (confirmed: `LOADTEST-RF5` had 330) had
+personally accumulated that many of their own open/on-hold tasks from earlier runs' incomplete
+Warehouse Orders (successor tasks within a WO only partially worked before the test's own
+`maxIterations=25` cap moved on) - enough to fill "mine"'s own `limit=100` before a brand-new task
+ever got a chance to rank in. **This is a test-data hygiene artifact from reusing the same 20
+identities across many runs in one sitting, not a product bug** - confirmed by directly calling
+`confirm_task` on one of the real, correctly-queued Pick tasks as Administrator: it posted
+correctly (`status: Confirmed`, the Outbound Delivery's own `status` advanced `Draft` -> `Picking`)
+at the product level. **Next time**: either clean out/confirm-through each persona's accumulated
+backlog before a fresh run, or raise `list_my_tasks`'s two query limits, or (lowest-effort) rotate
+in fresh never-before-used resource identities per run instead of reusing the same 20 indefinitely.
+
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
 - Needs `LOADTEST_PASSWORD` (all 50 loadtest accounts now share one password — reset via
