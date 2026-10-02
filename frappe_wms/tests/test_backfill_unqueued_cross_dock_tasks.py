@@ -62,6 +62,34 @@ class TestBackfillUnqueuedCrossDockTasks(IntegrationTestCase):
         self.assertEqual(task.queue, queue)
         self.assertIsNotNone(task.warehouse_order, "the backfill must attach an orphaned Cross Dock task to a Warehouse Order once a queue exists")
 
+    def test_backfill_skips_a_task_whose_source_hu_no_longer_exists_without_blocking_the_rest(self):
+        # Found live on production: 117 of 147 Cross Dock tasks' source_hu pointed at a Handling
+        # Unit that no longer exists (created fine originally, deleted later by an unrelated
+        # data wipe/reseed) - task.save()'s own link validation throws LinkValidationError for
+        # these, same as for any dangling Link field. One bad record must not abort the whole
+        # backfill and leave even the healthy tasks unqueued.
+        if not frappe.db.exists("Handling Unit Type", "BKFLCD-PALLET"):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "BKFLCD-PALLET", "hu_type_name": "Backfill CD Pallet"}).insert(ignore_permissions=True)
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "BKFLCD-PALLET",
+            "warehouse": self.warehouse, "current_bin": self.dock_bin, "status": "Open"})
+        hu.insert(ignore_permissions=True)
+        bad_task = frappe.get_doc({
+            "doctype": "Warehouse Task", "task_type": "Cross Dock", "warehouse": self.warehouse,
+            "product": self.item, "planned_quantity": 1, "stock_uom": "Nos",
+            "source_bin": self.dock_bin, "destination_bin": self.door_bin, "source_hu": hu.name,
+            "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE",
+            "movement_type": "101", "priority": "High", "status": "Open",
+        }).insert(ignore_permissions=True)
+        frappe.delete_doc("Handling Unit", hu.name, ignore_permissions=True, force=True)
+        good_task = self._make_orphan_task()
+
+        backfill_unqueued_cross_dock_tasks()
+
+        bad_task.reload()
+        self.assertFalse(bad_task.warehouse_order, "a task that can never actually save must not be left half-attached")
+        good_task.reload()
+        self.assertTrue(good_task.warehouse_order, "one bad record must not block every other orphan from being fixed")
+
     def test_backfill_is_idempotent_and_leaves_already_queued_tasks_untouched(self):
         task = self._make_orphan_task()
 

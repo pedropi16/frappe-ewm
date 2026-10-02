@@ -32,11 +32,30 @@ def execute():
         filters={"task_type": "Cross Dock", "docstatus": ["<", 2], "status": "Open", "warehouse_order": ["in", ("", None)]},
         pluck="name",
     )
+    failed = []
     for name in orphans:
-        task = frappe.get_doc("Warehouse Task", name)
-        attach_task(task, frappe.generate_hash(length=10), reference_doctype="Warehouse Request", reference_name=task.warehouse_request)
-        if task.warehouse_order:
-            task.save(ignore_permissions=True)
+        frappe.db.savepoint("cross_dock_backfill")
+        try:
+            task = frappe.get_doc("Warehouse Task", name)
+            attach_task(task, frappe.generate_hash(length=10), reference_doctype="Warehouse Request", reference_name=task.warehouse_request)
+            if task.warehouse_order:
+                task.save(ignore_permissions=True)
+        except Exception:
+            # Separate, pre-existing data problem on this site found while building this patch:
+            # most of these tasks' source_hu points at a Handling Unit that was never actually
+            # created (or was deleted after this task was) - a genuinely dangling link, nothing
+            # to do with queueing. A real operator could never confirm one of these either (there
+            # is no such barcode to scan), so letting one bad record's unrelated validation
+            # failure abort the whole backfill - leaving even the healthy tasks unqueued - would
+            # make this patch itself unreliable. Roll back just this one task's attempt (which
+            # may include a Warehouse Order attach_task already created/incremented before the
+            # save that actually failed) and keep going; see PLAN.md for what to do about the
+            # dangling references themselves.
+            frappe.db.rollback(save_point="cross_dock_backfill")
+            failed.append(name)
+            frappe.log_error(title="backfill_unqueued_cross_dock_tasks: could not attach", message=frappe.get_traceback())
+    if failed:
+        print(f"backfill_unqueued_cross_dock_tasks: {len(failed)} task(s) could not be attached (see Error Log): {failed}")
 
     # Every delivery with an open Cross Dock reservation has been sitting at picking_status
     # "Not Started" this whole time (that field only existed as Not Started/Partially Picked/
