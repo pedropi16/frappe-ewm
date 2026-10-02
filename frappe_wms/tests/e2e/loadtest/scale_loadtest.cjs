@@ -60,6 +60,16 @@ async function timed(persona, label, fn) {
 }
 async function shot(page, name) { try { await page.screenshot({ path: `${SHOT_DIR}/${name}.png` }); } catch (e) {} }
 
+function launchOptsFor() {
+  const launchOpts = { args: ["--no-sandbox"] };
+  if (!process.env.LOADTEST_SKIP_HAIRPIN_BYPASS) {
+    const bypassIP = process.env.LOADTEST_BYPASS_IP || "127.0.0.1";
+    launchOpts.args.push(`--host-resolver-rules=MAP ${TARGET_HOST} ${bypassIP}`);
+  }
+  if (process.env.CHROMIUM_EXECUTABLE_PATH) launchOpts.executablePath = process.env.CHROMIUM_EXECUTABLE_PATH;
+  return launchOpts;
+}
+
 async function newSession(browser, persona) {
   const context = await browser.newContext({ viewport: { width: 390, height: 780 } });
   const page = await context.newPage();
@@ -71,6 +81,20 @@ async function newSession(browser, persona) {
       note("BUG", persona.name, `HTTP ${res.status()} on ${res.url().replace(BASE, "")}`, { body });
     }
   });
+  if (DEBUG_TIMING) {
+    const apiStart = new Map();
+    page.on("request", (req) => { if (req.url().includes("/api/method/")) apiStart.set(req.url() + req.postData(), Date.now()); });
+    page.on("requestfinished", (req) => {
+      if (!req.url().includes("/api/method/")) return;
+      const k = req.url() + req.postData();
+      const t0 = apiStart.get(k);
+      if (t0) dbg(persona.name, `API ${req.url().replace(BASE, "")} finished after ${Date.now() - t0}ms`);
+    });
+    page.on("requestfailed", (req) => {
+      if (!req.url().includes("/api/method/")) return;
+      dbg(persona.name, `API ${req.url().replace(BASE, "")} FAILED: ${req.failure()?.errorText}`);
+    });
+  }
   return { context, page };
 }
 
@@ -105,41 +129,110 @@ async function focusField(page, name) { const el = page.locator(`[data-fk="${nam
 async function fillScanField(page, name, value) { const el = await focusField(page, name); await el.fill(""); await scan(page, value); }
 async function tapPrimary(page, label) { const btn = page.locator("#actionbar button, .actionbar button, button", { hasText: label }).first(); await btn.waitFor({ timeout: 8000 }); await btn.click(); await page.waitForTimeout(250); }
 async function tapButton(page, label) { const btn = page.locator("button", { hasText: label }).first(); await btn.waitFor({ timeout: 8000 }); await btn.click(); await page.waitForTimeout(350); }
-async function noticeText(page) { return (await page.locator("#notice, .notice").first().textContent().catch(() => "")) || ""; }
+// textContent() is an auto-waiting ACTION, not a presence check: on a locator matching zero
+// elements (the normal case - most of the time there's no notice showing) it retries for
+// Playwright's default 30s before giving up, which the .catch() here silently swallowed as "no
+// notice" while actually blocking the whole call for 30s. Measured live: this exact bug, not any
+// server/network issue, was the entire "~30s stall under concurrent load" this file kept
+// reporting - the server answered receiving_worklist in 37-57ms every time. count() first avoids
+// the auto-wait entirely.
+async function textOrEmpty(page, selector) {
+  const el = page.locator(selector).first();
+  if (!(await el.count().catch(() => 0))) return "";
+  return (await el.textContent().catch(() => "")) || "";
+}
+async function noticeText(page) { return textOrEmpty(page, "#notice, .notice"); }
 
 // Loading() and Empty() (ui/kit.js) both render a ".empty" div, so waiting for ".line-head, .empty"
 // alone can resolve the instant a spinner appears - indistinguishable from the screen actually
 // having settled. Poll until there are real lines, or an empty-state whose text isn't the loading
 // spinner's own placeholder text.
-async function waitForSettled(page, timeoutMs) {
+const DEBUG_TIMING = !!process.env.LOADTEST_DEBUG_TIMING;
+function dbg(persona, msg) { if (DEBUG_TIMING) console.log(`[TIMING ${new Date().toISOString()}] (${persona}) ${msg}`); }
+
+// lineSelector defaults to ".line-head" (count.js, ship.js render their detail lines with that
+// class directly) - but receive.js is the odd one out: its lines render through the shared Card()
+// component (ui/kit.js), so each line is ".card", not ".line-head". Confirmed live by dumping the
+// actual #app innerHTML mid-poll: with ".line-head" as the only selector, receive's screen was
+// settling correctly (lines fully rendered within ~1-2s, real product cards with real quantities)
+// every single time - this helper just never recognized it, so it ran to its own full timeoutMs on
+// EVERY call for receive, indistinguishable from a genuine hang until the DOM was inspected directly.
+async function waitForSettled(page, timeoutMs, persona, lineSelector = ".line-head") {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const lineCount = await page.locator(".line-head").count().catch(() => 0);
+    const lineCount = await page.locator(lineSelector).count().catch(() => 0);
     if (lineCount > 0) return "lines";
-    const emptyText = await page.locator(".empty").first().textContent().catch(() => null);
+    const emptyText = await textOrEmpty(page, ".empty");
     if (emptyText && !/loading/i.test(emptyText)) return "empty";
     await page.waitForTimeout(250);
   }
   return "timeout";
 }
 
-async function driveTaskWizard(page, persona) {
-  for (let guard = 0; guard < 6; guard++) {
-    await page.waitForTimeout(300);
+// Polls for the hash to move to a DIFFERENT #/task/:name/:step than lastHash, instead of a flat
+// sleep-then-read-once - the same family of bug every other "fixed sleep, then check" spot in this
+// file had: under real concurrent load, advance()'s nav.go() (client-side scan match) is near-
+// instant, but confirmTask()'s server round-trip on "review" is not, so a short flat wait can read
+// the SAME step twice, double-submitting a scan or a stale Confirm click and burning a guard
+// iteration without the wizard actually progressing.
+async function waitForStepChange(page, lastHash, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     const hash = await page.evaluate(() => location.hash);
+    if (hash !== lastHash) return hash;
+    await page.waitForTimeout(200);
+  }
+  return lastHash;
+}
+
+async function driveTaskWizard(page, persona) {
+  let hash = await page.evaluate(() => location.hash);
+  const initial = hash.match(/#\/task\/([^/]+)\//);
+  const initialTask = initial && initial[1];
+  for (let guard = 0; guard < 6; guard++) {
     const m = hash.match(/#\/task\/([^/]+)\/(\w+)/);
     if (!m) return hash;
     const step = m[2];
-    if (step === "review") { await tapPrimary(page, "Confirm"); await page.waitForTimeout(600); continue; }
-    if (step === "quantity") { await tapPrimary(page, "Next"); continue; }
-    const codeEl = page.locator(".expect .code").first();
-    if (!(await codeEl.count())) { note("BUG", persona.name, `Task wizard step "${step}" shows no expected code`); return hash; }
-    const expected = (await codeEl.textContent()).trim();
-    const fieldName = { source: "src", product: "prod", destination: "dst" }[step] || step;
-    await fillScanField(page, fieldName, expected);
+    const before = hash;
+    if (step === "review") { await tapPrimary(page, "Confirm"); }
+    else if (step === "quantity") { await tapPrimary(page, "Next"); }
+    else {
+      const codeEl = page.locator(".expect .code").first();
+      if (!(await codeEl.count())) { note("BUG", persona.name, `Task wizard step "${step}" shows no expected code`); return hash; }
+      const expected = (await codeEl.textContent()).trim();
+      const fieldName = { source: "src", product: "prod", destination: "dst" }[step] || step;
+      await fillScanField(page, fieldName, expected);
+    }
+    hash = await waitForStepChange(page, before, 10000);
+    if (hash === before) { note("BUG", persona.name, `Task wizard stuck on step "${step}" (no change after 10s)`); return "stuck"; }
+    // confirmTask() either unwinds to the tasks list (done) or, if confirming this task released
+    // another in the same Warehouse Order, auto-chains straight to it (confirmTask's own
+    // nav.unwind(..., href("task", nextTask.name))) - either way this ONE task is confirmed; let
+    // the outer pullAndWorkLoop's next "Get next work" pick up the chained task fresh rather than
+    // keep driving it here against the same 6-step guard meant for one task.
+    const next = hash.match(/#\/task\/([^/]+)\//);
+    if (step === "review" && (!next || next[1] !== initialTask)) return "confirmed";
   }
   note("BUG", persona.name, "Task wizard did not reach review/confirm within 6 steps");
   return "guard-exceeded";
+}
+
+// Waits for pullWork() (tasks.js) to actually resolve: either the hash moves to #/task/:name
+// (work was found and assigned), or the notice changes to something NEW. A fixed sleep here has
+// the exact same failure mode receive.js's screen had - every "stopped pulling" log in earlier
+// runs showed the notice of the PRIOR action ("Joined DC1 Putaway Queue", from joinQueue() minutes
+// earlier, sitting there on its own ~6s TTL) because the check ran before pull_next_warehouse_order
+// had a chance to reply under real concurrent load, not because the queue was ever actually empty.
+async function waitForPullResult(page, beforeNotice, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const hash = await page.evaluate(() => location.hash);
+    if (/#\/task\//.test(hash)) return { kind: "task", hash };
+    const nt = await noticeText(page);
+    if (nt && nt !== beforeNotice) return { kind: "notice", notice: nt };
+    await page.waitForTimeout(250);
+  }
+  return { kind: "timeout" };
 }
 
 async function pullAndWorkLoop(page, persona, group, maxIterations) {
@@ -150,16 +243,21 @@ async function pullAndWorkLoop(page, persona, group, maxIterations) {
       await page.waitForTimeout(350);
       const pullBtn = page.locator("button", { hasText: "Get next work" });
       if (!(await pullBtn.count())) break;
-      await timed(persona.name, `pull next (${group}) #${i + 1}`, async () => { await pullBtn.first().click(); await page.waitForTimeout(800); });
-      const hash = await page.evaluate(() => location.hash);
-      if (!/#\/task\//.test(hash)) {
-        const nt = await noticeText(page);
-        if (/No work waiting/i.test(nt)) note("INFO", persona.name, `${group} queue empty after confirming ${confirmed} task(s)`);
-        else if (nt) note("INFO", persona.name, `${group}: stopped pulling (notice="${nt}")`);
+      const beforeNotice = await noticeText(page);
+      let result;
+      await timed(persona.name, `pull next (${group}) #${i + 1}`, async () => {
+        await pullBtn.first().click();
+        result = await waitForPullResult(page, beforeNotice, 15000);
+      });
+      if (result.kind === "timeout") { note("BUG", persona.name, `${group}: "Get next work" neither assigned a task nor showed a new notice within 15s`); break; }
+      if (result.kind === "notice") {
+        if (/No work waiting/i.test(result.notice)) note("INFO", persona.name, `${group} queue empty after confirming ${confirmed} task(s)`);
+        else note("INFO", persona.name, `${group}: stopped pulling (notice="${result.notice}")`);
         break;
       }
-      await driveTaskWizard(page, persona);
-      confirmed++;
+      const outcome = await driveTaskWizard(page, persona);
+      if (outcome === "confirmed") confirmed++;
+      else break; // "stuck" / "guard-exceeded": already logged a BUG inside driveTaskWizard
     } catch (e) {
       // A single stuck task (e.g. a scan field that never appears) must not take down this
       // persona's whole race, let alone the Promise.all every concurrent racer shares.
@@ -181,7 +279,15 @@ async function joinQueue(page, persona, queueTextMatch) {
   const q = page.locator("button", { hasText: queueTextMatch }).first();
   if (!(await q.count())) { note("BUG", persona.name, `No queue matching "${queueTextMatch}" offered`); return; }
   await q.click();
-  await page.waitForTimeout(400);
+  // act() (session.js) only calls notify.ok() AFTER run()'s finally has cleared S.busy, so waiting
+  // for "Leave queue" to appear (which only renders once r.current_queue is set, i.e. act()'s own
+  // api()+refreshSession() round-trip has actually completed) guarantees S.busy is clear before
+  // this returns - a flat 400ms sleep does not: under real concurrent load that round-trip can
+  // outlast 400ms, leaving S.busy still 1 when the very next screen's own run() call (pullWork()'s
+  // "Get next work") hits its exclusive-busy guard and silently no-ops - no hash change, no notice,
+  // nothing to see, which is exactly what showed up as "Get next work" timeouts downstream.
+  const joined = await page.locator("button", { hasText: "Leave queue" }).first().waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+  if (!joined) note("BUG", persona.name, `Joining "${queueTextMatch}" never showed "Leave queue" within 10s`);
 }
 
 async function apiCall(page, method, args) {
@@ -230,31 +336,31 @@ async function deskActorRun(actor, task) {
   catch (e) { note("BUG", actor.name, `desk task failed: ${e.message}`); }
 }
 
-// 20 concurrent Chromium contexts measured ~7.2GB RSS on this 6.9GB host (production itself
-// included) - that's what actually caused Stage 1 to hang permanently on "Loading..." the first
-// time, not an app bug. Real RF concurrency now runs in waves of at most WAVE_SIZE personas, each
-// wave's contexts fully closed before the next opens, keeping peak browser memory well inside
-// what's left after production's own containers. Desk actors stay cheap (plain fetch, no
-// browser) so all 30 still run as genuine concurrent actors, just once, after the RF waves.
-const WAVE_SIZE = 6;
+// 20 concurrent Chromium CONTEXTS sharing one browser process measured ~7.2GB RSS on this 6.9GB
+// host - that caused Stage 1 to hang permanently on "Loading...", and a smaller-but-still-shared
+// 6-context wave reproduced a milder version of the same thing: real opens taking 30-60s even
+// though gunicorn/nginx/the app itself all answered the identical concurrent load in single-digit
+// milliseconds when driven directly (curl, raw HTTP/2) bypassing the browser. Confirmed directly:
+// giving one context per SEPARATE browser PROCESS instead (one per persona - what a real RF device
+// actually is, each with its own browser) made the stall disappear entirely, settling in <100ms
+// each. So each persona now gets its own `chromium.launch()`, not a shared context. Measured here:
+// ~607MB RSS per browser process, so WAVE_SIZE is sized to fit comfortably in what's left after
+// production's own containers, not to the 7.2GB/20-context ceiling that applied to the old
+// shared-process model. Desk actors stay cheap (plain fetch, no browser) so all 30 still run as
+// genuine concurrent actors, just once, after the RF waves.
+const WAVE_SIZE = 4;
 function chunk(arr, size) { const out = []; for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size)); return out; }
 const WAVES = chunk(RF_PERSONAS, WAVE_SIZE);
 const deliveryNames = (process.env.LOADTEST_IBD_NAMES || "").split(",").filter(Boolean);
 
 async function runWave(waveIndex, personas, { doReceive, doPutaway, doMoveRepack, doPick, doCount, doShip }) {
   console.log(`\n########## WAVE ${waveIndex + 1}/${WAVES.length}: ${personas.map((p) => p.name).join(", ")} ##########`);
-  const launchOpts = { args: ["--no-sandbox"] };
-  if (!process.env.LOADTEST_SKIP_HAIRPIN_BYPASS) {
-    const bypassIP = process.env.LOADTEST_BYPASS_IP || "127.0.0.1";
-    launchOpts.args.push(`--host-resolver-rules=MAP ${TARGET_HOST} ${bypassIP}`);
-  }
-  if (process.env.CHROMIUM_EXECUTABLE_PATH) launchOpts.executablePath = process.env.CHROMIUM_EXECUTABLE_PATH;
-  const browser = await chromium.launch(launchOpts);
   const sessions = {};
   try {
     for (const persona of personas) {
+      const browser = await chromium.launch(launchOptsFor());
       const { context, page } = await newSession(browser, persona);
-      sessions[persona.name] = { context, page, persona };
+      sessions[persona.name] = { browser, context, page, persona };
     }
 
     console.log(`=== Wave ${waveIndex + 1}: login + pick device (${personas.length} personas) ===`);
@@ -311,7 +417,7 @@ async function runWave(waveIndex, personas, { doReceive, doPutaway, doMoveRepack
       dump(`wave${waveIndex + 1}-ship`);
     }
   } finally {
-    await browser.close();
+    await Promise.all(Object.values(sessions).map((s) => s.browser.close().catch(() => {})));
   }
   console.log(`Wave ${waveIndex + 1} done. Findings so far:`, findings.length);
 }
@@ -375,47 +481,65 @@ async function receiveAll(page, persona, deliveryNames) {
   for (const name of deliveryNames) {
     await timed(persona.name, `open delivery for ${name}`, async () => {
       await page.goto(`${BASE}/wms#/receive/${name}`);
-      // A fixed sleep here is exactly the kind of test-script impatience that looks like a real
-      // app failure under genuine concurrent load: 8 receivers' page loads firing at once against
-      // one modest backend container can legitimately take longer than a sleep tuned for 1-2
-      // concurrent personas. Wait for the screen to actually settle (either real lines, or the
-      // app's own definitive "nothing left" state) instead of guessing a duration.
-      const settled = await waitForSettled(page, 15000);
-      if (settled === "timeout") note("BUG", persona.name, `${name}: screen never settled (still showing a loading spinner after 15s) - possible backend stall under concurrent load`);
+      // receive.js renders its lines through the shared Card() component, so they're ".card", not
+      // ".line-head" (see waitForSettled's own comment) - pass that explicitly here.
+      const settled = await waitForSettled(page, 20000, persona.name, ".card");
+      if (settled === "timeout") note("BUG", persona.name, `${name}: screen never settled (still showing a loading spinner after 20s) - possible backend stall under concurrent load`);
     });
-    const lineHeads = await page.locator(".line-head").allTextContents().catch(() => []);
+    const lineHeads = await page.locator(".card").allTextContents().catch(() => []);
     if (!lineHeads.length) {
-      const emptyText = await page.locator(".empty").first().textContent().catch(() => "");
+      const emptyText = await textOrEmpty(page, ".empty");
       note("FLOW", persona.name, `${name}: no open lines to receive (screen: "${(emptyText || "").trim() || "no empty-state text found"}")`);
       continue;
     }
     note("INFO", persona.name, `${name}: ${lineHeads.length} line(s): ${lineHeads.join(", ")}`);
+    // receive.js has no per-line inline fields (no "hu0"/"type0") - it's one line at a time: tap an
+    // open Card to select it (renders a single generic entryView with data-fk="hu"/"batch"/"serial"/
+    // "qty" for whichever line is active), fill what that line needs, "Add to receipt", then the
+    // list re-renders and the next open Card gets tapped. Only after every line wanted is queued
+    // does "Post receipt (N rows)" submit them all together - confirmed against receive.js's actual
+    // render()/entryView()/actions(), not guessed.
+    let added = 0;
     for (let i = 0; i < lineHeads.length; i++) {
-      const barcode = `SSCC${persona.resource.replace(/\D/g, "")}${String(Date.now()).slice(-7)}${i}`;
-      await fillScanField(page, `hu${i}`, barcode);
-      await page.locator(`[data-fk="type${i}"]`).selectOption("INBOUND").catch(() => {});
+      try {
+        const openCard = page.locator(".card[role=\"button\"]:not(.dim)").first();
+        if (!(await openCard.count().catch(() => 0))) break;
+        await openCard.click();
+        const huField = page.locator('[data-fk="hu"]').first();
+        if (!(await huField.waitFor({ timeout: 8000 }).then(() => true).catch(() => false))) {
+          note("BUG", persona.name, `${name}: line ${i}: entry view never opened after tapping a card`);
+          break;
+        }
+        const barcode = `SSCC${persona.resource.replace(/\D/g, "")}${String(Date.now()).slice(-7)}${i}`;
+        await fillScanField(page, "hu", barcode);
+        if (await page.locator('[data-fk="batch"]').count().catch(() => 0)) {
+          await page.locator('[data-fk="batch"]').fill(`LOT-${Date.now().toString().slice(-8)}`).catch(() => {});
+        }
+        if (await page.locator('[data-fk="serial"]').count().catch(() => 0)) {
+          // addEntry() only requires at least one serial scanned, not the full open quantity -
+          // one is a valid (partial) receipt line, same as a real operator who scans what's in hand.
+          await fillScanField(page, "serial", `SN-${Date.now().toString().slice(-9)}${i}`);
+        } else if (await page.locator('[data-fk="qty"]').count().catch(() => 0)) {
+          await page.locator('[data-fk="qty"]').fill("1").catch(() => {});
+        }
+        await tapPrimary(page, "Add to receipt");
+        if (await huField.count().catch(() => 0)) {
+          note("BUG", persona.name, `${name}: line ${i}: "Add to receipt" didn't clear the entry view (${await noticeText(page)})`);
+          break;
+        }
+        added++;
+      } catch (e) {
+        note("BUG", persona.name, `${name}: line ${i} threw: ${e.message}`);
+        break;
+      }
     }
+    if (!added) { note("FLOW", persona.name, `${name}: no lines could be added to the receipt`); continue; }
     let noticeTxt = "";
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await timed(persona.name, `post receipt ${name} (attempt ${attempt + 1})`, async () => { await tapPrimary(page, "Post receipt"); await page.waitForTimeout(1000); });
-      noticeTxt = (await page.locator("#notice, .notice").first().textContent().catch(() => "")) || "";
-      const batchNeeded = noticeTxt.match(/Row (\d+):.*requires a batch number/i);
-      const serialNeeded = noticeTxt.match(/Row (\d+):.*requires a serial number/i);
-      if (batchNeeded && attempt === 0) {
-        const rowIdx = parseInt(batchNeeded[1], 10) - 1;
-        await page.locator(`[data-fk="batch${rowIdx}"]`).fill(`LOT-${Date.now().toString().slice(-8)}`).catch(() => {});
-        continue;
-      }
-      if (serialNeeded && attempt === 0) {
-        const rowIdx = parseInt(serialNeeded[1], 10) - 1;
-        await page.locator(`[data-fk="serial${rowIdx}"]`).fill(`SN-${Date.now().toString().slice(-9)}${rowIdx}`).catch(() => {});
-        continue;
-      }
-      break;
-    }
+    await timed(persona.name, `post receipt ${name}`, async () => { await tapPrimary(page, "Post receipt"); await page.waitForTimeout(1000); });
+    noticeTxt = await noticeText(page);
     const looksLikeFailure = /error|fail|requires|does not have|not found|could not|permission|no matching/i.test(noticeTxt) && !/posted/i.test(noticeTxt);
     if (looksLikeFailure) note("BUG", persona.name, `${name}: error after posting: ${noticeTxt}`);
-    else note("INFO", persona.name, `${name}: receipt posted (${noticeTxt || "no confirmation text"})`);
+    else note("INFO", persona.name, `${name}: receipt posted (${added} line(s), ${noticeTxt || "no confirmation text"})`);
   }
 }
 

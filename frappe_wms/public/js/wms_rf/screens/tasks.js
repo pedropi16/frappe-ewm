@@ -22,8 +22,15 @@ async function refresh() {
 }
 
 async function pullWork() {
+  // run() returns undefined for two different reasons: its own exclusive-busy guard never called
+  // fn() at all (no notice shown), or fn() ran and genuinely resolved to undefined - which is
+  // exactly what happens here, because pull_next_warehouse_order() returning Python's None comes
+  // back as a response body with no "message" key at all (confirmed live: a raw request to it
+  // returns literally "{}"), and api()'s once() just returns data.message, i.e. undefined. Treating
+  // every undefined as "didn't run" meant the ordinary, extremely common "nothing to pull right
+  // now" case showed no notice, no navigation - nothing. An operator tapping "Get next work" with
+  // an empty queue saw the button do nothing and had no way to tell that from it being broken.
   const wo = await run(() => api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {}), { label: _("Finding work…") });
-  if (wo === undefined) return;
   if (!wo) { notify.info(_("No work waiting right now.")); return; }
   await refreshSession();
   const task = S.tasks.find((t) => t.warehouse_order === wo);
