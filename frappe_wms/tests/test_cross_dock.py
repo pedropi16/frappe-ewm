@@ -129,6 +129,31 @@ class TestCrossDock(IntegrationTestCase):
         gr2 = self._submit_gr(self._make_hu(), item, 5)
         self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr2.name)], ["Putaway"])
 
+    def test_cross_dock_reservation_marks_picking_not_relevant_before_any_task_is_confirmed(self):
+        # Reproduced live: 15 production deliveries sat at picking_status "Not Started"
+        # indefinitely with zero Pick tasks ever created for them - because nothing ever will be,
+        # the whole demand was already claimed by a Cross Dock reservation the moment the
+        # matching receipt landed. "Not Started" wrongly reads as "pick work is pending"; this
+        # must read "Not Relevant" the instant the reservation happens, not only once (if ever)
+        # its task gets confirmed.
+        item = self._make_item("TEST-XDOCK-ITEM-7")
+        obd = self._make_delivery(item, 5)
+        gr = self._submit_gr(self._make_hu(), item, 5)
+        create_putaway_requests(gr.name)
+        obd.reload()
+        self.assertEqual(obd.picking_status, "Not Relevant")
+
+    def test_mixed_cross_dock_and_pick_demand_is_not_marked_not_relevant(self):
+        # A delivery where only PART of the demand is cross-docked still genuinely needs picking
+        # for the rest - "Not Relevant" must not paper over real outstanding pick work.
+        item = self._make_item("TEST-XDOCK-ITEM-8")
+        obd = self._make_delivery(item, 10)
+        gr = self._submit_gr(self._make_hu(), item, 4)  # only 4 of the 10 requested get cross-docked
+        create_putaway_requests(gr.name)
+        obd.reload()
+        self.assertEqual(obd.items[0].allocated_quantity, 4)
+        self.assertEqual(obd.picking_status, "Not Started", "6 units still have no cross-dock coverage and no pick yet")
+
     def test_cross_docked_delivery_can_be_shipped_and_issued(self):
         # A cross-docked delivery has no Stock Allocation or Pick task, which is all shipping and
         # Goods Issue used to look at - it had "no staged Handling Unit" and could never leave.

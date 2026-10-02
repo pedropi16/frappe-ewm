@@ -636,11 +636,30 @@ def _update_allocations(task, qty):
 
 def _update_delivery_picking_status(delivery_name):
     if not delivery_name: return
-    rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name}, fields=["requested_quantity", "picked_quantity"])
+    rows = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery_name}, fields=["name", "requested_quantity", "picked_quantity"])
     if not rows: return
     fully_picked = all(flt(r.picked_quantity) >= flt(r.requested_quantity) for r in rows)
     any_picked = any(flt(r.picked_quantity) > 0 for r in rows)
-    picking_status = "Picked" if fully_picked else ("Partially Picked" if any_picked else "Not Started")
+    if fully_picked:
+        picking_status = "Picked"
+    elif any_picked:
+        picking_status = "Partially Picked"
+    else:
+        # Nothing picked yet - but if every line's outstanding quantity is already reserved
+        # against an open Cross Dock request, no Pick task will ever be created for any of it
+        # (see _apply_cross_dock_fulfillment below): "Not Started" would wrongly read as "pick
+        # work is pending" when there is none - something else (cross-docking, straight off the
+        # receiving dock) is delivering it instead. Reproduced live: 15 production deliveries
+        # sat at "Not Started" indefinitely with zero Pick tasks ever created for them, with
+        # nothing in the Outbound Monitor to explain why.
+        cross_dock_qty = {}
+        for wr in frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery",
+                "reference_name": delivery_name, "status": ["!=", "Cancelled"]}, fields=["reference_line", "requested_quantity"]):
+            cross_dock_qty[wr.reference_line] = cross_dock_qty.get(wr.reference_line, 0) + flt(wr.requested_quantity)
+        if cross_dock_qty and all(flt(r.requested_quantity) - flt(r.picked_quantity) <= cross_dock_qty.get(r.name, 0) + 0.000001 for r in rows):
+            picking_status = "Not Relevant"
+        else:
+            picking_status = "Not Started"
     values = {"picking_status": picking_status}
     if fully_picked: values["status"] = "Picked"
     frappe.db.set_value("Outbound Delivery", delivery_name, values)

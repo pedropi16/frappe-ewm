@@ -132,7 +132,7 @@
       "fieldname": "picking_status",
       "label": "Picking Status",
       "fieldtype": "Select",
-      "options": "Not Started\nPartially Picked\nPicked",
+      "options": "Not Started\nPartially Picked\nPicked\nNot Relevant",
       "reqd": 1,
       "default": "Not Started",
       "read_only": 1

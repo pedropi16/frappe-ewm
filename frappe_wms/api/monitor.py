@@ -33,6 +33,19 @@ def get_delivery_execution_status(delivery_name):
         "priority", "assigned_resource", "warehouse_order", "sequence",
     ], order_by="sequence asc, creation asc") if task_names else []
     warehouse_orders = sorted({t.warehouse_order for t in tasks if t.warehouse_order})
+    # Cross-docked demand (picking_status "Not Relevant") never shows up above - it's claimed via
+    # a Warehouse Request, not a Stock Allocation, and its task's own Warehouse Order belongs to
+    # the INBOUND side (the receipt that's feeding it), not this delivery's outbound one. Without
+    # this, the Monitor's drill-down for such a delivery looked identical to one that was simply
+    # never worked - "None yet" for Pick Tasks, no Warehouse Orders at all, with nothing to
+    # explain that something else (a receipt landing straight on this delivery's staging bin) is
+    # what will actually fulfill it.
+    cross_dock_requests = frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock",
+            "reference_doctype": "Outbound Delivery", "reference_name": delivery_name},
+        fields=["name", "status", "product", "requested_quantity", "stock_uom", "source_bin", "destination_bin", "reference_line"])
+    cross_dock_tasks = frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", [r.name for r in cross_dock_requests]]},
+        fields=["name", "status", "warehouse_order", "confirmed_quantity", "planned_quantity", "assigned_resource"]
+    ) if cross_dock_requests else []
     packing_orders = frappe.get_all("Packing Order", filters={"outbound_delivery": delivery_name}, fields=[
         "name", "status", "work_center_bin",
     ])
@@ -44,6 +57,8 @@ def get_delivery_execution_status(delivery_name):
         "allocations": allocations,
         "tasks": tasks,
         "warehouse_orders": warehouse_orders,
+        "cross_dock_requests": cross_dock_requests,
+        "cross_dock_tasks": cross_dock_tasks,
         "packing_orders": packing_orders,
         "goods_issues": goods_issues,
     }

@@ -19,3 +19,4 @@ frappe_wms.patches.v0_2.grant_inbound_delivery_wms_role_permissions
 frappe_wms.patches.v0_2.backfill_mirrored_return_quantities
 frappe_wms.patches.v0_2.backfill_partially_posted_count_mirrors
 frappe_wms.patches.v0_2.backfill_default_number_ranges
+frappe_wms.patches.v0_2.backfill_unqueued_cross_dock_tasks

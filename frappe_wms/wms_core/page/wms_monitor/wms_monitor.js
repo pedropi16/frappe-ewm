@@ -797,6 +797,30 @@ class WMSMonitor {
         `<a href="/app/warehouse-order/${encodeURIComponent(wo)}">${frappe.utils.escape_html(wo)}</a>`).join(", ")}</div>`);
     }
 
+    // picking_status "Not Relevant" means exactly this: no Pick Task/Warehouse Order above ever
+    // existed for (some or all of) this delivery because it's being fulfilled straight off a
+    // receipt instead - this section is where that work actually lives, so "no Pick Tasks" above
+    // doesn't read as "nothing is happening".
+    if (status.cross_dock_requests.length) {
+      $wrap.append(`<h6 style="margin-top:10px;">${__("Cross Dock (fulfilled from receiving, not picked)")}</h6>`);
+      $wrap.append(this.render_table(status.cross_dock_requests, [
+        ["name", __("Request")], ["status", __("Status")], ["product", __("Product")],
+        ["requested_quantity", __("Quantity")], ["stock_uom", __("UOM")],
+        ["source_bin", __("Source")], ["destination_bin", __("Destination")],
+      ], "Warehouse Request"));
+      if (status.cross_dock_tasks.length) {
+        $wrap.append(this.render_table(status.cross_dock_tasks, [
+          ["name", __("Task")], ["status", __("Status")], ["planned_quantity", __("Planned")],
+          ["confirmed_quantity", __("Confirmed")], ["assigned_resource", __("Resource")],
+        ], "Warehouse Task"));
+        const crossDockWos = Array.from(new Set(status.cross_dock_tasks.map((t) => t.warehouse_order).filter(Boolean)));
+        if (crossDockWos.length) {
+          $wrap.append(`<div><b>${__("Cross Dock Warehouse Orders")}:</b> ${crossDockWos.map((wo) =>
+            `<a href="/app/warehouse-order/${encodeURIComponent(wo)}">${frappe.utils.escape_html(wo)}</a>`).join(", ")}</div>`);
+        }
+      }
+    }
+
     $wrap.append(`<h6 style="margin-top:10px;">${__("Packing Orders")}</h6>`);
     if (!status.packing_orders.length) {
       $wrap.append(`<div class="text-muted">${__("None")}</div>`);

@@ -50,6 +50,12 @@ def reserve_cross_dock_demand(match):
     elif any(flt(r.allocated_quantity) > 0 for r in rows): status = "Partially Allocated"
     else: status = "Not Allocated"
     frappe.db.set_value("Outbound Delivery", parent, "allocation_status", status)
+    # The reservation alone (before its Cross Dock task is even created, let alone confirmed) is
+    # enough to know this delivery will never go through a normal Pick for this quantity - update
+    # picking_status right away instead of leaving it misleadingly at "Not Started" in the
+    # meantime (see _update_delivery_picking_status's own comment).
+    from frappe_wms.services.task import _update_delivery_picking_status
+    _update_delivery_picking_status(parent)
 
 
 def redirect_cross_dock_to_putaway(delivery_name):
