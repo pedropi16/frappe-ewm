@@ -393,6 +393,14 @@ manual workaround, for a resource that isn't already carrying today's accumulate
 
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
+- **Run `bench --site erp.pinohomelab.duckdns.org execute frappe_wms.tests.e2e.loadtest.reset_backlog.execute`
+  before every fresh run from here on** (added 2026-10-02, after one resource had personally
+  accumulated 1096 of its own half-finished tasks from being reused across six runs in one
+  sitting). Releases every Warehouse Order still assigned to a `LOADTEST-RF*` resource but not
+  finished back to "Open"/unassigned - doesn't touch confirmed progress or cancel anything, just
+  lets the remaining work be picked up fresh by whoever pulls next instead of staying stuck to
+  whoever grabbed it first. Not web-exposed on purpose (bulk reassignment needs more privilege
+  than any RF role should have) - an Administrator runs it directly.
 - Needs `LOADTEST_PASSWORD` (all 50 loadtest accounts now share one password — reset via
   `frappe.utils.password.update_password` if it ever drifts again; the password mismatch above is
   the single most time-expensive mistake in this whole engagement, worth checking *first* if
