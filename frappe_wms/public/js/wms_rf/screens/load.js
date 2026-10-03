@@ -9,8 +9,23 @@ import { finishFlow, enteredFresh, sectionCrumb, matchScan } from "#wms/screens/
 import { listScreen, findRow } from "#wms/screens/lists.js";
 import { matchExpected } from "#wms/core/util.js";
 
+// A loader usually already knows what they're after - the delivery that's loading, or the HU
+// already in hand - so the scan field above the list jumps straight to its shipment; the list
+// below stays for the "which door/truck is active" browse (shipments are few, not thousands).
+const findSt = { ref: "" };
+async function findShipment(reference) {
+  const shipment = await run(() => api("frappe_wms.api.shipping.find_shipment_for", { reference }, { read: true }), { label: _("Searching…") });
+  if (shipment === undefined) return false;
+  if (!shipment) return _("No open shipment found for {0}.", [reference]);
+  findSt.ref = "";
+  nav.go(href("load", shipment));
+}
+
 export const loadList = listScreen({
   id: "load", pattern: "load", title: _("Load"), section: "outbound", method: "frappe_wms.api.shipping.list_loadable_shipments", args: () => ({}), empty: _("Nothing ready to load."),
+  header: () => Section({ hint: _("Scan the Handling Unit you're loading, or an Outbound Delivery or Shipment number.") },
+    Field({ name: "ref", kind: "scan", label: _("Reference"), placeholder: _("Scan or type"), value: findSt.ref, autofocus: true,
+      onInput: (v) => { findSt.ref = v; }, onCommit: (v) => findShipment(v) })),
   card: (s) => Card({ title: s.shipment_number, right: StatusBadge(s.status), meta: [s.route || "-", s.door ? ` · ${_("Door")} ${s.door}` : ""], qty: _("{0} / {1} loaded", [s.loaded_count, s.total_count]), onClick: () => nav.go(href("load", s.name)) }),
 });
 

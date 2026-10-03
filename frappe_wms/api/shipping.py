@@ -3,6 +3,7 @@ from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.shipping import (
     create_shipment as _create_shipment,
     list_loadable_shipments as _list_loadable_shipments,
+    find_shipment_for as _find_shipment_for,
     confirm_hu_loaded as _confirm_hu_loaded,
     depart_shipment as _depart_shipment,
     complete_shipment as _complete_shipment,
@@ -18,6 +19,11 @@ def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, ve
 @retry_on_deadlock
 def list_loadable_shipments():
     return _list_loadable_shipments()
+
+@frappe.whitelist()
+@retry_on_deadlock
+def find_shipment_for(reference):
+    return _find_shipment_for(reference)
 
 @frappe.whitelist()
 @retry_on_deadlock

@@ -123,6 +123,24 @@ def list_loadable_shipments(user=None):
         s["total_count"] = len(rows)
     return shipments
 
+def find_shipment_for(reference, user=None):
+    """Resolves a scanned Outbound Delivery or Handling Unit straight to its open shipment - a
+    loader may already be holding the HU, or only know the delivery/shipment number, and
+    shouldn't have to browse the shipment list to find which door/truck it's on."""
+    require_role(*LOAD_ROLES)
+    resource = my_resource(user)
+    filters = {"status": ["in", ("Ready to Load", "Loading")]}
+    if resource: filters["warehouse"] = resource.warehouse
+    open_shipments = frappe.get_all("WMS Shipment", filters=filters, pluck="name")
+    if not open_shipments: return None
+    if reference in open_shipments: return reference
+    by_number = frappe.get_all("WMS Shipment", filters={"name": ["in", open_shipments], "shipment_number": reference}, pluck="name", limit=1)
+    if by_number: return by_number[0]
+    by_hu = frappe.get_all("Shipment Handling Unit", filters={"parent": ["in", open_shipments], "handling_unit": reference}, pluck="parent", limit=1)
+    if by_hu: return by_hu[0]
+    by_delivery = frappe.get_all("Shipment Delivery", filters={"parent": ["in", open_shipments], "outbound_delivery": reference}, pluck="parent", limit=1)
+    return by_delivery[0] if by_delivery else None
+
 def _route_hops(route_name, door_bin):
     # An HU travels the route's ordered stops (e.g. a marshalling/consolidation bin for
     # cross-dock, a yard checkpoint) before it reaches the shipment's door - the physical path

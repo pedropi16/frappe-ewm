@@ -7,7 +7,7 @@ from frappe_wms.services.receipt import OPEN_INBOUND_STATUSES
 from frappe_wms.api.outbound import allocate_delivery, create_pick_tasks, list_ready_to_ship
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, list_open_packing_orders, complete_packing_order
 from frappe_wms.api.inventory import list_open_counts, list_open_inspections
-from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded
+from frappe_wms.services.shipping import create_shipment, confirm_hu_loaded, find_shipment_for
 from frappe_wms.tests.bootstrap import pick_into_new_hu, empty_hu_like
 
 
@@ -268,6 +268,40 @@ class TestRfAppParity(IntegrationTestCase):
 
         ready_after = list_ready_to_ship()
         self.assertFalse(any(d["name"] == obd.name for d in ready_after))
+
+    def test_find_shipment_for_resolves_by_hu_delivery_and_number(self):
+        # The RF Load screen's scan-to-jump field: a loader who already knows the delivery or has
+        # the HU in hand shouldn't have to browse the shipment list to find which one it's on.
+        _ind, hu = self._receive_and_putaway(7)
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
+            "items": [{"line_number": 1, "item": self.item, "requested_quantity": 7, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        allocate_delivery(obd.name)
+        pick_tasks = create_pick_tasks(obd.name)
+        _result, picked_hu = pick_into_new_hu(pick_tasks[0], confirmed_quantity=7)
+        shipment = create_shipment(self.warehouse, [obd.name])
+
+        # find_shipment_for scopes by the caller's WMS Resource warehouse - run it as a resource
+        # dedicated to this test's own warehouse, rather than Administrator (who may carry an
+        # ambient resource from real manual RF usage on this shared test-site).
+        tester_email = "rfparity-loader-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "RF Parity Loader Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", tester_email).add_roles("WMS Loader")
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "active": 1}).insert(ignore_permissions=True)
+
+        frappe.set_user(tester_email)
+        try:
+            self.assertEqual(find_shipment_for(picked_hu), shipment)
+            self.assertEqual(find_shipment_for(obd.name), shipment)
+            self.assertEqual(find_shipment_for(shipment), shipment)
+            shipment_number = frappe.db.get_value("WMS Shipment", shipment, "shipment_number")
+            self.assertEqual(find_shipment_for(shipment_number), shipment)
+            self.assertIsNone(find_shipment_for("NONEXISTENT-REFERENCE"))
+        finally:
+            frappe.set_user("Administrator")
 
     def test_list_open_counts_and_inspections_are_warehouse_scoped_helpers(self):
         # Just exercises the endpoints end to end against real (possibly empty) data;

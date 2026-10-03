@@ -28,12 +28,16 @@ async function refresh() {
 export const huList = {
   id: "hu", pattern: "hu",
   title: () => _("Handling Units"), crumb: () => sectionCrumb("internal"), parent: () => "#/s/internal",
-  async enter() { await ensureTypes(); await refresh(); },
-  refresh,
+  // No default full list: a warehouse can hold thousands of HUs, and there's nothing for an
+  // operator to act on just by browsing them. This screen starts empty and only shows results
+  // once a barcode is actually scanned/typed.
+  async enter() { await ensureTypes(); st.search = ""; st.rows = []; st.loaded = false; },
+  refresh: () => (st.search ? refresh() : Promise.resolve()),
   render() {
-    const wrap = h("div", Section({}, Field({ name: "search", kind: "scan", label: _("Search by barcode"), placeholder: _("Scan or type an HU barcode"), value: st.search, autofocus: true, onInput: (v) => { st.search = v; }, onCommit: async (v) => { st.search = v; await refresh(); } })));
+    const wrap = h("div", Section({}, Field({ name: "search", kind: "scan", label: _("Scan a Handling Unit"), placeholder: _("Scan or type an HU barcode"), value: st.search, autofocus: true, onInput: (v) => { st.search = v; }, onCommit: async (v) => { st.search = v; await refresh(); } })));
     if (st.loading && !st.loaded) { wrap.append(Loading()); return wrap; }
-    if (!st.rows.length) { wrap.append(Empty(_("No handling units found."))); return wrap; }
+    if (!st.search) { return wrap; }
+    if (!st.rows.length) { wrap.append(Empty(_("No handling units found for {0}.", [st.search]))); return wrap; }
     st.rows.forEach((u) => wrap.append(Card({ title: u.hu_number, right: Badge(_(u.status), u.status === "Blocked" ? "High" : "Normal"), meta: [`${u.hu_type} · ${u.current_bin || "-"}`, u.parent_hu ? ` · ${_("in {0}", [u.parent_hu])}` : ""], qty: _(u.stock_status), onClick: () => nav.go(href("hu", u.name)) })));
     return wrap;
   },
