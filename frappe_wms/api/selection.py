@@ -79,6 +79,13 @@ VIEWS = {
                     "destination_storage_type": _bin_virtual("`tabWarehouse Task`.destination_bin", "Destination Storage Type"),
                     **_item_virtuals("`tabWarehouse Task`.product")},
     },
+    "warehouse_orders": {
+        "doctype": "Warehouse Order", "title": "Warehouse Orders",
+        "selection": ["name", "activity", "queue", "status", "assigned_resource", "priority", "wave", "reference_doctype", "reference_name"],
+        "columns": ["name", "activity", "queue", "priority", "status", "assigned_resource", "task_count", "confirmed_count",
+                    "wave", "batch_key", "reference_doctype", "reference_name", "started_at", "completed_at", "blocking_reason", "modified"],
+        "virtual": {},
+    },
     "hu": {
         "doctype": "Handling Unit", "title": "Handling Units",
         "selection": ["hu_number", "status", "hu_type", "current_bin", "storage_type", "outbound_delivery", "contains_product", "modified"],

@@ -18,6 +18,7 @@ const VIEWS = [
   { key: "yard", label: __("Yard & Doors") },
   { key: "stock", label: __("Stock Overview") },
   { key: "tasks", label: __("Warehouse Tasks") },
+  { key: "warehouse_orders", label: __("Warehouse Orders") },
   { key: "hu", label: __("Handling Units") },
   { key: "packing", label: __("Repack Center") },
   { key: "repack", label: __("HU Workbench") },
@@ -580,7 +581,7 @@ class WMSMonitor {
   reset_unexecuted_searches() {
     const selectors = [
       ".wms-mon-ind-table", ".wms-mon-obd-table", ".wms-mon-wave-table", ".wms-mon-stock-table",
-      ".wms-mon-task-table", ".wms-mon-hu-table", ".wms-mon-ledger-table",
+      ".wms-mon-task-table", ".wms-mon-wo-table", ".wms-mon-hu-table", ".wms-mon-ledger-table",
     ];
     selectors.forEach((sel) => { const $el = this.$body.find(sel); if ($el.length) $el.html(sap_unexecuted_html()); });
     this.$body.find(".wms-mon-obd-detail").empty();
@@ -600,6 +601,7 @@ class WMSMonitor {
       outbound: () => this.load_outbound(),
       stock: () => this.load_stock_overview(),
       tasks: () => this.load_tasks(),
+      warehouse_orders: () => this.load_warehouse_orders(),
       hu: () => this.load_handling_units(),
       packing: () => this.load_packing_station(),
       repack: () => this.load_repack_center(),
@@ -949,6 +951,59 @@ class WMSMonitor {
       // while keeping the Warehouse Order and its other tasks consistent - a raw field write
       // from here would silently desync them. Add a real service function first if this is
       // needed.
+    ];
+  }
+
+  // ---------- Warehouse Orders ----------
+  async load_warehouse_orders() {
+    const $wrap = this.body_for("warehouse_orders");
+    if (!$wrap.find(".wms-mon-wo-sel").length) {
+      $wrap.html(`<div class="wms-mon-wo-sel"></div><div class="wms-mon-wo-table">${sap_unexecuted_html()}</div>`);
+      this.selection("warehouse_orders", $wrap.find(".wms-mon-wo-sel"), $wrap.find(".wms-mon-wo-table"), {
+        actions: this.wo_quick_actions(),
+      });
+    }
+  }
+
+  search_warehouse_orders() { return this.execute_selection("warehouse_orders"); }
+
+  // Hold/Resume for the Warehouse Order Monitor - same bulk idiom as task_quick_actions. No
+  // separate drill-down into one WO's tasks here: filter the Warehouse Tasks tab by Warehouse
+  // Order instead, which is already a selectable field there.
+  wo_quick_actions() {
+    const TERMINAL = ["Completed", "Cancelled"];
+    return [
+      {
+        label: __("Put On Hold"), kind: "danger",
+        appliesTo: (row) => !TERMINAL.includes(row.status) && row.status !== "On Hold",
+        run: async (rows) => {
+          const values = await new Promise((resolve) => frappe.prompt(
+            [{ fieldname: "reason", label: __("Reason"), fieldtype: "Data" }],
+            (v) => resolve(v), __("Put {0} Warehouse Order(s) On Hold", [rows.length]),
+          ));
+          if (!values) return;
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.warehouse_order.block_warehouse_order", { wo_name: row.name, reason: values.reason || undefined }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Put {0} of {1} on hold", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_warehouse_orders();
+        },
+      },
+      {
+        label: __("Resume"),
+        appliesTo: (row) => row.status === "On Hold",
+        run: async (rows) => {
+          let ok = 0;
+          for (const row of rows) {
+            try { await frappe.call("frappe_wms.api.warehouse_order.resume_warehouse_order", { wo_name: row.name }); ok++; }
+            catch (e) { /* frappe already shows the server error */ }
+          }
+          frappe.show_alert({ message: __("Resumed {0} of {1}", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
+          this.search_warehouse_orders();
+        },
+      },
     ];
   }
 
