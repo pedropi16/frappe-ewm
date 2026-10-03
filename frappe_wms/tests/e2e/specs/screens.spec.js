@@ -26,6 +26,8 @@ test("Handling Units: create with a blank barcode, open it, back to the list", a
   await page.getByRole("button", { name: /Create$/ }).click();
   await expect(notice(page)).toContainText(/created/i);
   await expect(page).toHaveURL(/#\/hu$/);
+  // Handling Units starts empty (no default full list) - search for the one just created.
+  await scan(page, code);
   await view(page).getByText(code).click();
   await expect(page).toHaveURL(new RegExp(`#/hu/${code}$`));
   await expect(view(page)).toContainText("E2E-WH-A1");
@@ -64,7 +66,7 @@ test("every screen renders without a JS error (smoke over all routes)", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   const routes = ["", "s/inbound", "s/internal", "s/outbound", "lookup", "session", "tasks/inbound", "tasks/internal", "tasks/outbound", "receive", "ship", "pack", "count", "quality", "load",
-    "decon", "close-movement", "repack", "hu", "hu-new", "kitting", "consolidation", "picking", "picking-manual", "picking-find/hu", "vas", "vas-new", "move", "yard", "yard-new"];
+    "decon", "close-movement", "repack", "hu", "hu-new", "kitting", "consolidation", "picking", "picking-manual", "picking-find/hu", "vas", "vas-new", "move", "move-manual", "yard", "yard-new"];
   for (const r of routes) {
     await openApp(page, `#/${r}`);
     await page.waitForTimeout(350);

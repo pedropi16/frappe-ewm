@@ -3,6 +3,7 @@ from frappe.tests import IntegrationTestCase
 
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.slotting import analyze_slotting, generate_rearrangement_tasks
+from frappe_wms.services.warehouse_order import pull_next_warehouse_order, join_queue
 
 
 class TestSlotting(IntegrationTestCase):
@@ -92,3 +93,35 @@ class TestSlotting(IntegrationTestCase):
         self.assertEqual(task.source_bin, self.bulk_bin)
         self.assertEqual(task.destination_bin, self.pick_bin)
         self.assertEqual(task.status, "Open")
+
+    def test_rearrangement_task_is_pullable_from_its_queue(self):
+        # The RF Move screen's System Guided half: a rearrangement task Slotting generates is an
+        # ordinary queued Warehouse Task, so the same generic pull_next_warehouse_order already
+        # serves it once an Internal Move queue exists - no special-casing needed.
+        # The queue must exist before the task is created - attach_task resolves it at creation
+        # time (same as every other activity), not retroactively.
+        if not frappe.db.exists("Warehouse Queue", "SLOT-TEST-MOVE-QUEUE"):
+            frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": "SLOT-TEST-MOVE-QUEUE", "queue_name": "Slot Test Move Queue",
+                "warehouse": self.warehouse, "activity": "Internal Move", "active": 1}).insert(ignore_permissions=True)
+
+        item = self._make_item("D")
+        self._seed_in_bulk(item, 50)
+        self._post_picks(item, 6)
+        created = generate_rearrangement_tasks(self.warehouse, [r for r in analyze_slotting(self.warehouse, min_picks=5) if r["product"] == item])
+        task = frappe.get_doc("Warehouse Task", created[0])
+        self.assertEqual(task.queue, "SLOT-TEST-MOVE-QUEUE")
+        self.assertTrue(task.warehouse_order, "attach_task must have queued this onto a Warehouse Order")
+
+        tester_email = "slot-mover-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "Slot Mover Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", tester_email).add_roles("WMS Operator")
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "active": 1}).insert(ignore_permissions=True)
+
+        frappe.set_user(tester_email)
+        try:
+            join_queue("SLOT-TEST-MOVE-QUEUE")
+            self.assertEqual(pull_next_warehouse_order(), task.warehouse_order)
+        finally:
+            frappe.set_user("Administrator")

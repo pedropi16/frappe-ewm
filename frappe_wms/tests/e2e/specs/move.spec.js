@@ -9,8 +9,8 @@ test.beforeEach(async ({ page, request }) => {
 
 test("Move: scan item barcode, quantity, source, destination, confirm - stock moves once", async ({ page, request }) => {
   const s = seed();
-  await openApp(page, "#/move");
-  await expect(page).toHaveURL(/#\/move\/item$/);
+  await openApp(page, "#/move-manual");
+  await expect(page).toHaveURL(/#\/move-manual\/item$/);
   await scan(page, s.barcode);                                   // EAN -> item code + UOM, no typing
   await expect(page).toHaveURL(/\/quantity$/);
   await page.locator('[data-fk="quantity"]').fill("3");
@@ -28,7 +28,7 @@ test("Move: scan item barcode, quantity, source, destination, confirm - stock mo
 
 test("Move: a wrong-type scan is explained (an HU/item where a bin is needed)", async ({ page }) => {
   const s = seed();
-  await openApp(page, "#/move/item");
+  await openApp(page, "#/move-manual/item");
   await scan(page, "NO-SUCH-ITEM");
   await expect(view(page).locator(".field-error")).toContainText(/not a known code/i);
   await scan(page, s.item);
@@ -40,7 +40,7 @@ test("Move: a wrong-type scan is explained (an HU/item where a bin is needed)", 
 
 test("Move: unfinished work is saved - reload resumes, the menu offers it, Start over clears it", async ({ page }) => {
   const s = seed();
-  await openApp(page, "#/move");
+  await openApp(page, "#/move-manual");
   await scan(page, s.item);
   await page.locator('[data-fk="quantity"]').fill("7"); await enter(page);
   await scan(page, "E2E-WH-A1");
@@ -53,7 +53,7 @@ test("Move: unfinished work is saved - reload resumes, the menu offers it, Start
   await view(page).getByText(/Move ·/).click();
   await expect(page).toHaveURL(/\/destination$/);
   // the first step offers "Start over", which discards the draft everywhere
-  await openApp(page, "#/move/item");
+  await openApp(page, "#/move-manual/item");
   await expect(view(page)).toContainText(/Resumed your unfinished move/);
   await view(page).getByRole("button", { name: "Start over" }).click();
   await expect(page.locator('[data-fk="product"]')).toHaveValue("");
@@ -63,7 +63,7 @@ test("Move: unfinished work is saved - reload resumes, the menu offers it, Start
 
 test("Move: a lost response does not move twice (same idempotency key on resend)", async ({ page, request }) => {
   const s = seed();
-  await openApp(page, "#/move");
+  await openApp(page, "#/move-manual");
   await scan(page, s.item);
   await page.locator('[data-fk="quantity"]').fill("2"); await enter(page);
   await scan(page, "E2E-WH-A1"); await scan(page, "E2E-WH-B1");

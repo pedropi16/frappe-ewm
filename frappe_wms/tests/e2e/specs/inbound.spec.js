@@ -146,7 +146,7 @@ test("Count: start a count, enter quantities, Save posts it", async ({ page, req
   const t = await makeTask(request, { planned_quantity: 5 });
   await admin(request).method("frappe_wms.api.scanner.confirm_task", { task_name: t.name, confirmed_quantity: 5 });
   const c = await admin(request).post("/api/resource/WMS Physical Inventory Count", { doctype: "WMS Physical Inventory Count", warehouse: s.warehouse, storage_bin: "E2E-WH-B1", count_date: new Date().toISOString().slice(0, 10) });
-  await openApp(page, "#/count");
+  await openApp(page, "#/count-list");
   await view(page).getByText(c.data.name).click();
   await expect(page).toHaveURL(new RegExp(`#/count/${c.data.name}$`));
   const first = page.locator('[data-fk="c0"]');
