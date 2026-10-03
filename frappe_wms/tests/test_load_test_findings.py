@@ -11,11 +11,15 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
+from frappe.utils import nowdate
+
 from frappe_wms.api.inbound import create_and_submit_goods_receipt
 from frappe_wms.api.scanner import confirm_task, create_and_confirm_move
 from frappe_wms.services import concurrency
 from frappe_wms.services.determination import determine_process_type
+from frappe_wms.services.picking import release_delivery_for_picking
 from frappe_wms.services.replenishment import request_direct_replenishment
+from frappe_wms.services.shipping import confirm_hu_loaded, create_shipment
 from frappe_wms.tests.bootstrap import empty_hu_like
 
 WH = "LOADFIND-TEST-WH"
@@ -53,6 +57,18 @@ class TestLoadTestFindings(IntegrationTestCase):
                             "destination_storage_type": f"{WH}-BULK", "strategy": "Least Utilized Bin"}).insert(ignore_permissions=True)
         if not frappe.db.exists("Handling Unit Type", HU_TYPE):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": HU_TYPE, "hu_type_name": HU_TYPE}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Storage Type", f"{WH}-DOOR"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": WH, "storage_type_code": "DOOR", "storage_type_name": "DOOR",
+                            "storage_role": "Door", "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        cls.door_bin = f"{WH}-DOOR-1"
+        if not frappe.db.exists("Storage Bin", cls.door_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": cls.door_bin, "warehouse": WH, "storage_type": f"{WH}-DOOR",
+                            "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        cls.route = f"{WH}-ROUTE"
+        if not frappe.db.exists("WMS Route", cls.route):
+            frappe.get_doc({"doctype": "WMS Route", "route_code": cls.route, "route_name": cls.route, "origin_warehouse": WH,
+                            "default_staging_bin": cls.rack_bin, "default_door": cls.door_bin, "active": 1}).insert(ignore_permissions=True)
+        cls.customer = frappe.get_all("Customer", limit=1, pluck="name")[0]
         cls.item = cls._item("LOADFIND-ITEM")
         cls.batch_item = cls._item("LOADFIND-BATCH-ITEM", batch=True)
 
@@ -91,6 +107,14 @@ class TestLoadTestFindings(IntegrationTestCase):
                                     source_bin=landed, source_hu=hu, destination_bin=bin_name, destination_hu=hu)
         return hu
 
+    def _make_delivery(self, item, qty):
+        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": WH,
+            "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.rack_bin,
+            "items": [{"line_number": 1, "item": item, "requested_quantity": qty, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
+        obd.insert(ignore_permissions=True)
+        obd.submit()
+        return obd
+
     # --- batch/serial on Warehouse Request ------------------------------------------------------
 
     def test_batch_controlled_receipt_can_be_put_away(self):
@@ -119,6 +143,38 @@ class TestLoadTestFindings(IntegrationTestCase):
         self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"storage_bin": self.pick_bin, "product": self.batch_item, "batch_no": batch_no}, "quantity")), 5)
         self.assertFalse(frappe.db.get_value("WMS Stock Balance", {"storage_bin": self.pick_bin, "handling_unit": hu}, "name"))
         self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bulk_bin)
+
+    def test_goods_issue_for_a_batch_controlled_item_does_not_see_insufficient_stock(self):
+        # Same bug class as test_batch_controlled_receipt_can_be_put_away above, one stage later:
+        # neither the RF Ship screen nor the Monitor's one-tap post_goods_issue_for_delivery ever
+        # carried a picked line's batch_no into the Goods Issue it built, so post_goods_issue
+        # posted the decrement against an empty-batch WMS Stock Balance row that was never there
+        # instead of the real one that was - "Insufficient stock" for an item physically sitting
+        # right there on a Shipment that had just finished loading. Reproduced live: the first
+        # batch-controlled item this engagement's load test ever got as far as actually loading.
+        # A dedicated item, not the shared self.batch_item - a sibling test's own leftover stock
+        # of that product (IntegrationTestCase does not roll back between methods in one class)
+        # would otherwise get allocated here too, mixing in a second HU/batch and tripping the
+        # unrelated "needs a destination HU for a partial HU" guard instead of what this test is
+        # actually about.
+        item = self._item(f"LOADFIND-GI-{frappe.generate_hash(length=6)}", batch=True)
+        ind = self._delivery(item, 10)
+        result, hu = self._receive(ind, 10, batch_no=f"LF-GI-{frappe.generate_hash(length=6)}")
+        confirm_task(result["warehouse_tasks"][0], confirmed_quantity=10)
+        batch_no = frappe.db.get_value("WMS Stock Balance", {"handling_unit": hu, "storage_bin": self.bulk_bin}, "batch_no")
+        obd = self._make_delivery(item, 10)
+        tasks = release_delivery_for_picking(obd.name, strategy="Single Order")
+        self.assertEqual(len(tasks), 1)
+        confirm_task(tasks[0], confirmed_quantity=10)
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "picking_status"), "Picked")
+
+        shipment = create_shipment(WH, [obd.name], route=self.route)
+        result = confirm_hu_loaded(shipment, hu)
+        self.assertEqual(result["shipment_status"], "Loaded")
+
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", obd.name, "goods_issue_status"), "Posted")
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "status"), "Shipped")
+        self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"handling_unit": hu, "batch_no": batch_no}, "quantity")), 0)
 
     # --- receipt quantity validation and progress -------------------------------------------------
 

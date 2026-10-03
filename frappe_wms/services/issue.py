@@ -31,7 +31,24 @@ def post_goods_issue(doc):
         # The HU's actual current bin (the door it was loaded to), not the delivery's staging
         # bin - loading may have moved it on since staging, and the stock ledger only has a
         # balance wherever the HU physically is now.
-        entry={"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":hu.current_bin,"stock_type":row.stock_type,"quantity":-row.quantity,"stock_uom":row.stock_uom,"movement_type":"601","reference_line":row.name}
+        batch_no = row.batch_no
+        if not batch_no and product and product.batch_control:
+            # Every caller that builds a Goods Issue line (the RF Ship screen, the Monitor's
+            # one-tap post_goods_issue_for_delivery) worked from a line/quantity, not a batch -
+            # neither ever carried the batch_no of the stock they were actually about to move
+            # through. For a batch-controlled item that posted the decrement against an
+            # empty-batch WMS Stock Balance row that was never there instead of the real one
+            # that was - "Insufficient stock" for an item physically sitting right there on the
+            # loaded HU, reproduced live for the first batch-controlled item this engagement ever
+            # got as far as actually loading onto a Shipment. A scanned handling_unit determines
+            # its batch unambiguously (an HU never mixes batches - see services/receipt.py), so
+            # resolve it here rather than trust every caller to look it up and pass it through.
+            # Not done for serial_no: a required serial is deliberately validated above as
+            # something the caller must have actually scanned, not inferred.
+            batch_no = frappe.db.get_value("WMS Stock Balance", {
+                "handling_unit": row.handling_unit, "storage_bin": hu.current_bin, "product": row.item, "stock_type": row.stock_type,
+            }, "batch_no")
+        entry={"warehouse":doc.warehouse,"product":row.item,"batch_no":batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":hu.current_bin,"stock_type":row.stock_type,"quantity":-row.quantity,"stock_uom":row.stock_uom,"movement_type":"601","reference_line":row.name}
         post_entries([entry],doc.doctype,doc.name,f"GI:{doc.name}:{i}")
         hu.flags.wms_service_update=True; hu.status="Shipped"; hu.save(ignore_permissions=True)
         if row.outbound_delivery_item:
