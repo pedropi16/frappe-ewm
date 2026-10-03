@@ -248,6 +248,28 @@ test("exception: pick a code, comment is required, and nothing is blocked until 
   expect(done.blocking_reason).toContain("pallet crushed");
 });
 
+test("short pick: the quantity already typed carries straight into the exception's quantity-found field", async ({ page, request }) => {
+  // The SAP EWM comparison's "cheap, do it" gap: a short pick used to need picking a code first
+  // and then retyping the quantity on its own screen - this carries whatever was already typed
+  // on the quantity step through, so the common case is one fewer field to fill in.
+  const t = await makeTask(request, { planned_quantity: 5 });
+  await openTask(page, t);
+  await scan(page, "E2E-WH-A1");
+  await expect(page).toHaveURL(/\/quantity$/);
+  await page.locator('[data-fk="qty"]').fill("2");
+  await page.getByRole("button", { name: "Can't find it all - report short" }).click();
+  await expect(page).toHaveURL(/\/exception$/);
+  await expect(view(page)).toContainText(/Carrying over the 2/);
+  await view(page).getByRole("button", { name: /Damaged Product Found/ }).click();
+  await expect(page).toHaveURL(/\/exception\/DAMAGED$/);
+  await expect(page.locator('[data-fk="revised"]')).toHaveValue("2");
+  await page.locator('[data-fk="remarks"]').fill("found 2 good, rest damaged");
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Report exception" }).click();
+  await expect(page).toHaveURL(/#\/tasks\/internal$/);
+  expect((await getTask(request, t.name)).status).toBe("Exception");
+});
+
 test.describe("product verification (WMS Settings: require scan verification)", () => {
   test.beforeEach(async ({ request }) => { await setVerification(request, true); });
   test.afterEach(async ({ request }) => { await setVerification(request, false); });

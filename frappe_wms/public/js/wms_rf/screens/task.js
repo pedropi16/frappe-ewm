@@ -15,7 +15,7 @@ import { groupOfType } from "#wms/screens/tasks.js";
 
 // Task confirmation: one history entry per step (#/task/WT-1/quantity), so hardware Back steps back, reload lands on the
 // same step with everything scanned so far, and a completed task can never be re-entered by pressing Back.
-const st = { name: null, task: null, loading: false, form: null, fetchedAt: 0, codes: null, exc: { remarks: "", revised: "" } };
+const st = { name: null, task: null, loading: false, form: null, fetchedAt: 0, codes: null, exc: { remarks: "", revised: "" }, excPrefillQty: null };
 const draftKey = (name) => `task:${name}`;
 
 const STEP_LABEL = () => ({ source: _("Scan source"), product: _("Scan product"), quantity: _("Quantity"), destination: _("Scan destination"), review: _("Review & confirm") });
@@ -68,7 +68,7 @@ export default {
   async enter(ctx) {
     const name = ctx.params.name;
     if (st.name !== name) {
-      st.name = name; st.form = null; st.codes = null; st.fetchedAt = 0; st.exc = { remarks: "", revised: "" };
+      st.name = name; st.form = null; st.codes = null; st.fetchedAt = 0; st.exc = { remarks: "", revised: "" }; st.excPrefillQty = null;
       st.task = S.tasks.find((t) => t.name === name) || null; // paint the list row's data at once; refreshed below
     }
     st.loading = !st.task; update();
@@ -205,7 +205,11 @@ function stepView(wrap, step) {
         hint: unit.factor !== 1 && isNumeric(f.uqty) ? _("= {0} {1}", [fmtQty(round6(parseNum(f.uqty) * unit.factor)), t.stock_uom])
           : rem > 1 ? _("Confirming less than planned keeps the task open for the rest.") : null,
         onInput: (v) => { f.uqty = v; f.qtyOk = false; persist(); if (unit.factor !== 1) update(); } }),
-      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }));
+      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }),
+      // The common floor exception (SAP EWM's BIDP/BIDF: an empty or partial quantity denial) -
+      // carries what's already typed here straight into the exception entry as the found
+      // quantity, so the operator doesn't have to pick a code first and then retype it there.
+      Btn({ label: _("Can't find it all - report short"), small: true, kind: "danger", onClick: () => reportShort(t, f) }));
   } else if (step === "destination") {
     if (needsCheckDigits(t.destination_bin, t.destination_hu)) {
       box.append(Expect(_("Enter check digits for"), [t.destination_bin]),
@@ -261,6 +265,13 @@ function next(step) {
   if (field) { if (!field.input.value.trim()) return fail(field.name, _("Scan the code shown above.")); return field.spec.onCommit(field.input.value.trim()).then((err) => { if (err) fail(field.name, err); }); }
 }
 
+function reportShort(t, f) {
+  if (f.uqty == null) f.uqty = f.qty;
+  const typed = isNumeric(f.uqty) ? round6(parseNum(f.uqty) * unitOf(t, f).factor) : 0;
+  st.excPrefillQty = Math.max(0, typed);
+  nav.go(href("task", st.name, "exception"));
+}
+
 async function confirmTask() {
   const t = st.task, f = st.form;
   const qty = parseNum(f.qty);
@@ -302,9 +313,14 @@ function exceptionView(wrap, ctx) {
   const code = ctx.params.code;
   if (!code) {
     const box = Section({ title: _("Select exception"), hint: _("Reporting an exception blocks this task for a supervisor.") });
+    if (st.excPrefillQty != null) box.append(Hint(_("Carrying over the {0} {1} you already entered as the quantity found.", [fmtQty(st.excPrefillQty), t.stock_uom || ""])));
     if (!st.codes) box.append(Loading());
     else if (!st.codes.length) box.append(Hint(_("No exception codes are configured for this task type. Ask a supervisor to set one up under WMS Exception Code.")));
-    (st.codes || []).forEach((c) => box.append(Btn({ label: c.exception_name + (c.requires_supervisor ? " \u{1F512}" : ""), kind: "danger", onClick: () => { st.exc = { remarks: "", revised: fmtQty(remaining(t)) }; nav.go(href("task", st.name, "exception", c.name)); } })));
+    (st.codes || []).forEach((c) => box.append(Btn({ label: c.exception_name + (c.requires_supervisor ? " \u{1F512}" : ""), kind: "danger", onClick: () => {
+      st.exc = { remarks: "", revised: st.excPrefillQty != null ? fmtQty(st.excPrefillQty) : fmtQty(remaining(t)) };
+      st.excPrefillQty = null;
+      nav.go(href("task", st.name, "exception", c.name));
+    } })));
     wrap.append(box);
     return wrap;
   }
