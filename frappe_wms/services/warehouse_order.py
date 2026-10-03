@@ -43,7 +43,7 @@ def _task_weight_and_volume(task_doc):
     qty = flt(task_doc.planned_quantity)
     return flt(per_unit.gross_weight_per_unit) * qty, flt(per_unit.volume_per_unit) * qty
 
-def _batch_key_with_room(queue, batch_key, rule, weight_increment=0, volume_increment=0, minutes_increment=0):
+def _batch_key_with_room(warehouse, activity, queue, batch_key, rule, weight_increment=0, volume_increment=0, minutes_increment=0):
     # A WO Creation Rule caps how many tasks (and now, optionally, how much weight/volume/
     # estimated time) one Warehouse Order can hold. batch_key alone normally guarantees reuse of
     # the same WO; once a rule caps any of these, later tasks spill into a fresh WO under a
@@ -53,7 +53,11 @@ def _batch_key_with_room(queue, batch_key, rule, weight_increment=0, volume_incr
     suffix = 0
     while True:
         candidate = batch_key if suffix == 0 else f"{batch_key}#{suffix}"
-        existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": candidate, "status": ["in", OPEN_WO_STATUSES]},
+        # warehouse/activity scope this explicitly rather than leaning on queue alone - a
+        # queue-less Warehouse Order (no Warehouse Queue configured for this activity/area, see
+        # attach_task) still needs batching that can never merge across different activities.
+        existing = frappe.db.get_value("Warehouse Order",
+            {"warehouse": warehouse, "activity": activity, "queue": queue or ["in", ["", None]], "batch_key": candidate, "status": ["in", OPEN_WO_STATUSES]},
             ["task_count", "total_weight", "total_volume", "estimated_minutes"], as_dict=True)
         if not existing:
             return candidate
@@ -79,11 +83,15 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
     # Never auto-assigns a resource at creation - a Warehouse Order sits Open, scoped only to
     # its queue, until a resource explicitly claims it (pulling the next one, or confirming a
     # task on it manually). Resources only execute things; assignment is never the default.
+    # queue may be blank (attach_task calls this even when no Warehouse Queue is configured for
+    # this activity/area) - every task still gets a Warehouse Order, it just never surfaces for
+    # auto-pull (pull_next_warehouse_order only matches real queue names), only for a direct scan.
     if rule is None:
         rule = _matching_wo_creation_rule(warehouse, activity, item_group, stock_type)
     if rule and (rule.maximum_tasks or rule.maximum_weight or rule.maximum_volume or rule.maximum_minutes):
-        batch_key = _batch_key_with_room(queue, batch_key, rule, weight_increment, volume_increment, minutes_increment)
-    existing = frappe.db.get_value("Warehouse Order", {"queue": queue, "batch_key": batch_key, "status": ["in", OPEN_WO_STATUSES]}, "name")
+        batch_key = _batch_key_with_room(warehouse, activity, queue, batch_key, rule, weight_increment, volume_increment, minutes_increment)
+    existing = frappe.db.get_value("Warehouse Order",
+        {"warehouse": warehouse, "activity": activity, "queue": queue or ["in", ["", None]], "batch_key": batch_key, "status": ["in", OPEN_WO_STATUSES]}, "name")
     if existing: return existing
     wo = frappe.get_doc({
         "doctype": "Warehouse Order", "warehouse": warehouse, "activity": activity, "queue": queue,
@@ -119,7 +127,10 @@ DESTINATION_DRIVEN_TASK_TYPES = {"Putaway"}
 
 def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None):
     # Called on an unsaved Warehouse Task before insert; sets warehouse_order/queue/assigned_resource
-    # in place. No-op (task stays unqueued, back-compat) if no queue is configured for this activity.
+    # in place. Every task gets a Warehouse Order, queue or not - a task with no Warehouse Queue
+    # configured for its activity/area simply gets one with a blank queue, so it still batches
+    # with its siblings (batch_key) and shows up in the Warehouse Order Monitor; it just never
+    # surfaces for pull_next_warehouse_order's auto-pull, only for a direct scan (Manual).
     storage_type, activity_area = None, None
     bin_fields = ("destination_bin", "source_bin") if task_doc.task_type in DESTINATION_DRIVEN_TASK_TYPES else ("source_bin", "destination_bin")
     for bin_field in bin_fields:
@@ -128,7 +139,6 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
             storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])
             if storage_type: break
     queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area)
-    if not queue: return
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     stock_type = task_doc.get("stock_type_from")
     rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type)

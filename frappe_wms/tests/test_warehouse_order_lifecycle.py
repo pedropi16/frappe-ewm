@@ -64,6 +64,33 @@ class TestWarehouseOrderLifecycle(IntegrationTestCase):
         self.assertIn(wo.assigned_resource, ("", None))
         self.assertIn(task.assigned_resource, ("", None))
 
+    def test_task_with_no_matching_queue_still_gets_a_warehouse_order_and_batches(self):
+        # The point of the fix: a Warehouse Order is the backbone for every task, not an
+        # opportunistic bonus gated on complete queue setup. "Consolidation" has no Warehouse
+        # Queue configured anywhere in this warehouse (only Internal Move does, see setUpClass).
+        batch_key = frappe.generate_hash(length=10)
+
+        def _make_consolidation_task():
+            task = frappe.get_doc({
+                "doctype": "Warehouse Task", "task_type": "Consolidation", "warehouse": self.warehouse,
+                "product": self.item, "planned_quantity": 1, "stock_uom": self.uom,
+                "source_bin": self.bin_a, "destination_bin": self.bin_b,
+                "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE",
+                "movement_type": "301", "priority": "Normal", "status": "Open",
+            })
+            attach_task(task, batch_key)
+            task.insert(ignore_permissions=True)
+            return task
+
+        first = _make_consolidation_task()
+        second = _make_consolidation_task()
+        self.assertIn(first.queue, ("", None))
+        self.assertTrue(first.warehouse_order, "every task gets a Warehouse Order, queue or not")
+        self.assertEqual(first.warehouse_order, second.warehouse_order, "same batch_key still batches into one Warehouse Order without a queue")
+
+        pulled = pull_next_warehouse_order(user=self.picker_email)
+        self.assertNotEqual(pulled, first.warehouse_order, "a queue-less Warehouse Order must never surface for auto-pull")
+
     def test_pull_next_warehouse_order_still_claims_it(self):
         # A dedicated queue/bin (not the shared class-level ones) - other test methods in this
         # class leave their own Open, unassigned Warehouse Orders behind in WOL-TEST-QUEUE (no
