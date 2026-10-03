@@ -53,6 +53,15 @@ test("Device & session: preferences persist across reload; log off returns to lo
   await expect(page).toHaveURL(/#\/logon$/);
 });
 
+test("Device & session: queue is read-only - no self-service join/leave, just what the resource group covers", async ({ page }) => {
+  // Queue eligibility is a Resource Group setting a supervisor manages (Warehouse Queue.
+  // resource_group) - an operator was never meant to pick their own queue from the scanner app.
+  await openApp(page, "#/session");
+  await expect(view(page).getByRole("button", { name: /Join a queue/ })).toHaveCount(0);
+  await expect(view(page).getByRole("button", { name: "Leave queue" })).toHaveCount(0);
+  await expect(view(page)).toContainText(/No queues assigned to your resource group yet/i);
+});
+
 test("session expiry: the operator is sent to login, not shown a bare error", async ({ page, context }) => {
   await openApp(page, "#/tasks/internal");
   await context.clearCookies();

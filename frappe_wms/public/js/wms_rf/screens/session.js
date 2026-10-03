@@ -2,7 +2,7 @@ import { h } from "#wms/ui/dom.js";
 import { S, nav, run, load, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Btn, KV, Field, Hint } from "#wms/ui/kit.js";
+import { Section, Btn, KV, Field, Hint, Loading } from "#wms/ui/kit.js";
 import { prefs, setPref } from "#wms/core/prefs.js";
 import { refreshSession, clearDraft, draftMeta } from "#wms/screens/shared.js";
 import { drafts } from "#wms/app.js";
@@ -20,12 +20,20 @@ export default {
   id: "session", pattern: "session",
   title: () => _("Device & session"),
   parent: () => "#/",
-  enter() { st.queues = null; st.centers = null; },
+  async enter() {
+    st.queues = null; st.centers = null;
+    const r = S.resource || {};
+    if (!r.current_queue) {
+      const rows = await load(() => api("frappe_wms.api.warehouse_order.list_queues", { warehouse: r.warehouse }, { read: true }));
+      st.queues = rows || [];
+      update();
+    }
+  },
   render() {
     const r = S.resource || {};
     const wrap = h("div");
     wrap.append(Section({ title: _("Device") },
-      KV([[_("User"), window.WMS.fullname], [_("Resource"), r.name], [_("Warehouse"), r.warehouse], [_("Queue"), r.current_queue || _("Not joined")]]),
+      KV([[_("User"), window.WMS.fullname], [_("Resource"), r.name], [_("Resource group"), r.resource_group || _("None")], [_("Warehouse"), r.warehouse]]),
       h("div", { style: { height: "12px" } }),
       Btn({ label: _("Log off this device"), kind: "danger", onClick: async () => {
         if (!confirm(_("Log off this device?"))) return;
@@ -33,19 +41,19 @@ export default {
         if (ok !== undefined) { S.resource = null; nav.replace("#/logon"); }
       } })));
 
-    // Queue
-    const queueSection = Section({ title: _("Queue") });
+    // Queue: a resource-group setting, not something an operator picks for themselves (EWM-
+    // style - a resource group is pre-wired to the queues it serves; joining/leaving one is a
+    // supervisor action in the desk, never a scanner-app action). This is read-only information:
+    // either the one queue a supervisor pinned this resource to, or - more usually - every queue
+    // its resource group covers, any of which "Get next work" can pull from.
+    const queueSection = Section({ title: _("Queue"), hint: r.current_queue ? _("Pinned by a supervisor to this one queue.") : _("From your resource group - ask a supervisor to change it.") });
     if (r.current_queue) {
-      queueSection.append(h("div", "\u{1F4E1} " + r.current_queue), h("div", { style: { height: "10px" } }),
-        Btn({ label: _("Leave queue"), onClick: () => act("frappe_wms.api.warehouse_order.leave_queue", {}, _("Left queue"), _("Leaving…")) }));
+      queueSection.append(h("div", "\u{1F4E1} " + r.current_queue));
     } else if (st.queues) {
-      if (!st.queues.length) queueSection.append(Hint(_("No queues configured for your warehouse.")));
-      st.queues.forEach((q) => queueSection.append(Btn({ label: `${q.queue_name} (${_(q.activity)})`, onClick: async () => { if (await act("frappe_wms.api.warehouse_order.join_queue", { queue_name: q.name }, _("Joined {0}", [q.queue_name]), _("Joining…"))) { st.queues = null; update(); } } })));
+      if (!st.queues.length) queueSection.append(Hint(_("No queues assigned to your resource group yet.")));
+      st.queues.forEach((q) => queueSection.append(h("div", `\u{1F4E1} ${q.queue_name} (${_(q.activity)})`)));
     } else {
-      queueSection.append(Hint(_("Not joined to a queue")), Btn({ label: _("Join a queue"), kind: "primary", onClick: async () => {
-        const rows = await load(() => api("frappe_wms.api.warehouse_order.list_queues", { warehouse: r.warehouse }, { read: true }));
-        if (rows) { st.queues = rows; update(); }
-      } }));
+      queueSection.append(Loading());
     }
     wrap.append(queueSection);
 

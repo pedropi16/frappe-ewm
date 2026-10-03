@@ -104,6 +104,39 @@ class TestPickingEntry(IntegrationTestCase):
         finally:
             frappe.set_user("Administrator")
 
+    def test_find_pick_tasks_by_queue_is_scoped_to_the_resources_own_group(self):
+        # Queue eligibility is a Resource Group setting a supervisor manages, never something an
+        # operator self-assigns - searching "by queue" must only work for a queue the caller's
+        # own group actually covers, not any queue that happens to exist in the warehouse
+        # (confirmed live: WMS-TEST-PICKENTRY-PUTAWAY-QUEUE has no group at all, so it's exactly
+        # the "not assigned to you" case this guards against).
+        group = "WMS-TEST-PICKENTRY-GROUP"
+        queue = "WMS-TEST-PICKENTRY-QUEUE-GROUPED"
+        if not frappe.db.exists("WMS Resource Group", group):
+            frappe.get_doc({"doctype": "WMS Resource Group", "group_code": group, "group_name": group, "warehouse": self.warehouse, "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Warehouse Queue", queue):
+            frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": queue, "queue_name": queue, "warehouse": self.warehouse, "activity": "Pick", "resource_group": group, "active": 1}).insert(ignore_permissions=True)
+        task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Pick", "warehouse": self.warehouse, "product": self.item,
+            "planned_quantity": 1, "stock_uom": self.uom, "destination_bin": self.stage_bin, "queue": queue,
+            "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "601", "priority": "Normal", "status": "Open"})
+        task.insert(ignore_permissions=True)
+
+        tester_email = "pickentry-grouped-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "Pick Entry Grouped Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", tester_email).add_roles("WMS Picker")
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "resource_group": group, "active": 1}).insert(ignore_permissions=True)
+
+        frappe.set_user(tester_email)
+        try:
+            found = find_pick_tasks(queue)
+            self.assertEqual([t.name for t in found], [task.name])
+            with self.assertRaises(frappe.ValidationError):
+                find_pick_tasks("WMS-TEST-PICKENTRY-PUTAWAY-QUEUE")
+        finally:
+            frappe.set_user("Administrator")
+
     def test_find_putaway_tasks_by_warehouse_order_task_and_hu(self):
         source_hu, gr_name = self._receive(10)
         putaway = create_putaway(gr_name)

@@ -3,6 +3,7 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.allocation import allocate_delivery
 from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES, TASK_SUMMARY_FIELDS, task_names_for_allocations
+from frappe_wms.services.warehouse_order import _eligible_queues
 from frappe_wms.utils import require_role
 
 OPEN_RELEASE_STATUSES = ("Draft", "Open", "Allocated")
@@ -29,6 +30,12 @@ def find_pick_tasks(reference):
     elif frappe.db.exists("Warehouse Request", reference):
         tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_request": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Warehouse Queue", reference):
+        # Finding by queue is still a legitimate manual entry point (SAP EWM lets an operator key
+        # in a queue the same way) - but only a queue their own Resource Group actually covers,
+        # never any queue in the warehouse. Queue assignment is a supervisor setting, not
+        # something scanning a different queue's code should be able to search around.
+        if not resource or reference not in _eligible_queues(resource):
+            frappe.throw(_("{0} is not a queue your Resource Group is assigned to").format(reference))
         tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "queue": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Outbound Delivery", reference):
         allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": reference}, pluck="name")

@@ -2,8 +2,6 @@ import frappe
 from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.warehouse_order import (
     list_queues as _list_queues,
-    join_queue as _join_queue,
-    leave_queue as _leave_queue,
     list_my_warehouse_orders as _list_my_warehouse_orders,
     pull_next_warehouse_order as _pull_next_warehouse_order,
     warehouse_order_detail as _warehouse_order_detail,
@@ -11,20 +9,15 @@ from frappe_wms.services.warehouse_order import (
     resume_warehouse_order as _resume_warehouse_order,
 )
 
+# join_queue/leave_queue (services/warehouse_order.py) are deliberately not exposed here: queue
+# eligibility is a Resource Group setting a supervisor manages (Warehouse Queue.resource_group,
+# or pinning one Resource to one queue straight from its desk form), never something an operator
+# self-assigns from the scanner app - list_queues below stays read-only information for them.
+
 @frappe.whitelist()
 @retry_on_deadlock
 def list_queues(warehouse=None, activity=None):
     return _list_queues(warehouse, activity)
-
-@frappe.whitelist()
-@retry_on_deadlock
-def join_queue(queue_name):
-    return _join_queue(queue_name)
-
-@frappe.whitelist()
-@retry_on_deadlock
-def leave_queue():
-    return _leave_queue()
 
 @frappe.whitelist()
 @retry_on_deadlock
