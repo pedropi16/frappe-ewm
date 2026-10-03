@@ -13,7 +13,7 @@ import lookup from "#wms/screens/lookup.js";
 import tasks from "#wms/screens/tasks.js";
 import task from "#wms/screens/task.js";
 import move from "#wms/screens/move.js";
-import { putawayMenu, putawayManual } from "#wms/screens/putaway.js";
+import { putawayMenu } from "#wms/screens/putaway.js";
 import { receiveList, receiveDetail } from "#wms/screens/receive.js";
 import { shipList, shipDetail } from "#wms/screens/ship.js";
 import pack from "#wms/screens/pack.js";
@@ -32,7 +32,7 @@ import { yardList, yardNew, yardDetail } from "#wms/screens/yard.js";
 
 // Literal routes come before ":param" routes so "hu-new" / "vas-new" can never be read as a name.
 const SCREENS = [
-  logon, menu, section, session, lookup, tasks, task, move, putawayMenu, putawayManual,
+  logon, menu, section, session, lookup, tasks, task, move, putawayMenu,
   receiveList, receiveDetail, shipList, shipDetail, pack, countList, countDetail, qualityList, qualityDetail, loadList, loadDetail,
   deconScan, deconDetail, closeMovement, repackScan, repackDetail, huList, huNew, huDetail, kitting, kittingDetail, consolidationList, consolidationDetail,
   pickingMenu, pickingManual, pickingFind, vasList, vasNew, vasDetail, yardList, yardNew, yardDetail,
