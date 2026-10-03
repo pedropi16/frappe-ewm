@@ -126,11 +126,11 @@ def list_open_packing_orders():
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None, idempotency_key=None):
+def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None, idempotency_key=None, scanned_source=None, scanned_destination=None):
     return run_once(idempotency_key, lambda: _create_and_confirm_move(
         warehouse=warehouse, product=product, quantity=quantity, stock_uom=stock_uom, stock_type=stock_type,
         source_bin=source_bin, source_hu=source_hu, destination_bin=destination_bin, destination_hu=destination_hu,
-        batch_no=batch_no, serial_no=serial_no, device=device,
+        batch_no=batch_no, serial_no=serial_no, device=device, scanned_source=scanned_source, scanned_destination=scanned_destination,
     ))
 
 @frappe.whitelist()

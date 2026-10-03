@@ -2,11 +2,11 @@ import { h } from "#wms/ui/dom.js";
 import { S, nav, load, run, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, KV, Btn, Expect, Stepper, Empty, Loading, StatusBadge, Badge, Hint } from "#wms/ui/kit.js";
+import { Section, Field, KV, Btn, Expect, Stepper, Empty, Loading, StatusBadge, Badge, Hint, fail } from "#wms/ui/kit.js";
 import { fmtQty, flt, round6, parseNum, isNumeric, matchExpected } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
-import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb, matchScan } from "#wms/screens/shared.js";
+import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb, matchScan, needsCheckDigits, verifyCheckDigits } from "#wms/screens/shared.js";
 import { groupOfType } from "#wms/screens/tasks.js";
 
 // Generic Warehouse Task confirmation wizard - one step per history entry, shared by every task
@@ -140,10 +140,6 @@ function summary(t) {
   return box;
 }
 
-function fail(name, message) {
-  S.fieldErrors[name] = message; feedback.error(); S.focusRequest = name; update();
-}
-
 const KIND_LABEL = () => ({ bin: _("bin"), hu: _("Handling Unit"), item: _("item") });
 
 // Says what the wrong scan actually was, so the operator can tell "wrong bin" from "scanned a product" from "unreadable".
@@ -159,23 +155,6 @@ async function explainMismatch(value, expected, what) {
   return _("{0} is not a known code. Expected {1}.", [value, exp]);
 }
 
-// Check digits replace a bin scan only when there's no competing HU to also verify on that side -
-// same condition services/task.py's confirm_task applies server-side; checked here purely to
-// decide what the field asks for, never to compute or compare the actual secret value client-side.
-function needsCheckDigits(t, side) {
-  const bin = side === "source" ? t.source_bin : t.destination_bin;
-  const hu = side === "source" ? t.source_hu : t.destination_hu;
-  return !!(bin && !hu && S.settings.require_bin_check_digits);
-}
-
-async function verifyCheckDigits(binName, value, onOk) {
-  let ok = false;
-  try { ok = await api("frappe_wms.api.scanner.verify_check_digits", { bin_name: binName, value }, { read: true, timeoutMs: 6000 }); }
-  catch (e) { return _("Could not verify - check your connection and try again."); }
-  if (!ok) return _("Those check digits don't match. Make sure you're at the right bin.");
-  return onOk();
-}
-
 function stepView(wrap, step) {
   const t = st.task, f = st.form;
   const steps = buildSteps(t);
@@ -184,7 +163,7 @@ function stepView(wrap, step) {
   wrap.append(Stepper(steps.length, idx, steps.map((s) => STEP_LABEL()[s])));
   const box = Section({});
   if (step === "source") {
-    if (needsCheckDigits(t, "source")) {
+    if (needsCheckDigits(t.source_bin, t.source_hu)) {
       box.append(Expect(_("Enter check digits for"), [t.source_bin]),
         Field({ name: "src", kind: "scan", label: _("Check digits"), placeholder: _("From the bin's label"), value: f.src, autofocus: true,
           onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
@@ -230,7 +209,7 @@ function stepView(wrap, step) {
         onInput: (v) => { f.uqty = v; f.qtyOk = false; persist(); if (unit.factor !== 1) update(); } }),
       Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }));
   } else if (step === "destination") {
-    if (needsCheckDigits(t, "destination")) {
+    if (needsCheckDigits(t.destination_bin, t.destination_hu)) {
       box.append(Expect(_("Enter check digits for"), [t.destination_bin]),
         Field({ name: "dst", kind: "scan", label: _("Check digits"), placeholder: _("From the bin's label"), value: f.dst, autofocus: true,
           onInput: (v) => { f.dst = v; f.dstOk = false; persist(); },

@@ -41,6 +41,18 @@ export function Btn({ label, kind = "secondary", onClick, disabled, small, icon 
   return h("button.btn", { class: `btn-${kind}${small ? " small" : ""}`, type: "button", disabled: !!disabled, onclick: onClick }, icon ? h("span.btn-icon", icon) : null, label);
 }
 
+// A grid of menu-button tiles - the chooser screens (menu.js's root/section grids, Picking's
+// "search by kind", Count/Move/Picking's System Guided/Manual choosers) all render this same shape.
+export function MenuGrid(items) {
+  return h("div.menu-grid", items.map((i) => h("button.menu-btn", { type: "button", onclick: i.run }, h("span.icon", i.icon), h("span", i.label), i.badges && i.badges.length ? h("div", i.badges) : null)));
+}
+
+// Sets a field's error, gives feedback, and focuses it - the common tail of a manual/button-driven
+// (non-scan) validation failure, shared by every wizard-style screen (task.js, move.js, ...).
+export function fail(name, message) {
+  S.fieldErrors[name] = message; feedback.error(); S.focusRequest = name; update();
+}
+
 export function Stepper(total, index, labels) {
   return h("div.stepper", h("div.step-dots", Array.from({ length: total }, (_x, i) => h("div.dot", { class: i < index ? "done" : i === index ? "active" : "" }))),
     h("div.step-label", _("Step {0} of {1}", [index + 1, total]), labels ? [" · ", labels[index]] : null));

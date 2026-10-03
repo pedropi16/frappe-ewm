@@ -1,29 +1,16 @@
 import { h } from "#wms/ui/dom.js";
-import { S, nav, run, notify } from "#wms/app.js";
+import { nav, run } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, Btn } from "#wms/ui/kit.js";
+import { Section, Field, Btn, MenuGrid } from "#wms/ui/kit.js";
 import { href } from "#wms/core/routes.js";
-import { refreshSession, sectionCrumb } from "#wms/screens/shared.js";
+import { sectionCrumb, pullWorkAndOpen } from "#wms/screens/shared.js";
 import { setFoundTasks } from "#wms/screens/tasks.js";
-
-function menu(items) {
-  return h("div.menu-grid", items.map((i) => h("button.menu-btn", { type: "button", onclick: i.run }, h("span.icon", i.icon), h("span", i.label))));
-}
-
-async function autoPull() {
-  const wo = await run(() => api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {}), { label: _("Finding work…") });
-  if (wo === undefined) return;
-  if (!wo) { notify.info(_("No work waiting right now.")); return; }
-  await refreshSession();
-  const task = S.tasks.find((t) => t.warehouse_order === wo);
-  if (task) nav.go(href("task", task.name)); else nav.go("#/tasks/outbound");
-}
 
 export const pickingMenu = {
   id: "picking", pattern: "picking",
   title: () => _("Picking"), crumb: () => sectionCrumb("outbound"), parent: () => "#/s/outbound",
-  render: () => menu([{ icon: "⚡", label: _("Auto - get next task"), run: autoPull }, { icon: "\u{1F50D}", label: _("Manual - search"), run: () => nav.go("#/picking-manual") }]),
+  render: () => MenuGrid([{ icon: "⚡", label: _("Auto - get next task"), run: () => pullWorkAndOpen("#/tasks/outbound") }, { icon: "\u{1F50D}", label: _("Manual - search"), run: () => nav.go("#/picking-manual") }]),
 };
 
 const KINDS = () => [
@@ -48,7 +35,7 @@ export const pickingManual = {
         onInput: (v) => { manual.ref = v; }, onCommit: (v) => find(v) })),
     Btn({ label: _("Browse all pick tasks instead"), onClick: () => nav.go("#/tasks/outbound") }),
     h("div.hint", { style: { marginTop: "14px" } }, _("Search by a specific kind:")),
-    menu(KINDS().map((k) => ({ icon: k.icon, label: k.label, run: () => nav.go(href("picking-find", k.key)) })))),
+    MenuGrid(KINDS().map((k) => ({ icon: k.icon, label: k.label, run: () => nav.go(href("picking-find", k.key)) })))),
   actions: () => ({ primary: { label: _("Find pick task"), run: () => manual.ref.trim() && find(manual.ref.trim()) } }),
 };
 

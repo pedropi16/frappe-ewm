@@ -1,7 +1,8 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.api.scanner import confirm_task, verify_check_digits
+from frappe_wms.api.scanner import confirm_task, create_and_confirm_move, verify_check_digits
+from frappe_wms.services.task import reverse_task
 from frappe_wms.utils import CHECK_DIGIT_ALPHABET
 
 
@@ -82,6 +83,43 @@ class TestBinCheckDigits(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             confirm_task(task.name, scanned_source="ZZ", scanned_destination=dst_digits, confirmed_quantity=10)
         result = confirm_task(task.name, scanned_source=src_digits, scanned_destination=dst_digits, confirmed_quantity=10)
+        self.assertEqual(result["status"], "Confirmed")
+
+    def test_setting_on_omitting_scanned_source_entirely_is_rejected_not_silently_skipped(self):
+        # The exact bug create_and_confirm_move used to trigger: omitting scanned_source/
+        # scanned_destination altogether (not just sending a wrong value) must still be caught -
+        # confirm_task's check-digit branch used to only compare `if scanned_source:`, so a caller
+        # that never passed it at all sailed through with no verification at all.
+        self._set_check_digits(True)
+        task = self._make_task()
+        with self.assertRaises(frappe.ValidationError):
+            confirm_task(task.name, confirmed_quantity=10)
+
+    def test_create_and_confirm_move_enforces_check_digits_for_an_ad_hoc_internal_move(self):
+        # The gap this session's audit found: the RF app's ad-hoc Internal Move
+        # (create_and_confirm_move) created and confirmed its own Warehouse Task without ever
+        # passing scanned_source/scanned_destination, so an operator could type any destination
+        # bin without ever standing at it - check digits never ran for this path at all.
+        # source_hu carries stock out of bin_a (this storage type requires an HU on a move) while
+        # leaving destination_hu unset, so the destination side stays a pure-bin check-digit case.
+        self._set_check_digits(True)
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "CHKDIGIT-PALLET",
+            "warehouse": self.warehouse, "current_bin": self.bin_a, "status": "Open"}).insert(ignore_permissions=True)
+        dst_digits = frappe.db.get_value("Storage Bin", self.bin_b, "check_digits")
+        kwargs = dict(warehouse=self.warehouse, product=self.item, quantity=1, stock_uom=self.uom,
+            stock_type="AVAILABLE", source_bin=self.bin_a, source_hu=hu.name, destination_bin=self.bin_b)
+        with self.assertRaises(frappe.ValidationError):
+            create_and_confirm_move(**kwargs)
+        result = create_and_confirm_move(**kwargs, scanned_destination=dst_digits)
+        self.assertEqual(result["status"], "Confirmed")
+
+    def test_reverse_task_skips_check_digits_it_is_a_supervisor_ledger_correction_not_a_scan(self):
+        self._set_check_digits(True)
+        src_digits = frappe.db.get_value("Storage Bin", self.bin_a, "check_digits")
+        dst_digits = frappe.db.get_value("Storage Bin", self.bin_b, "check_digits")
+        task = self._make_task()
+        confirm_task(task.name, scanned_source=src_digits, scanned_destination=dst_digits, confirmed_quantity=10)
+        result = reverse_task(task.name)
         self.assertEqual(result["status"], "Confirmed")
 
     def test_setting_on_a_task_with_an_hu_also_present_keeps_scanning_by_name(self):

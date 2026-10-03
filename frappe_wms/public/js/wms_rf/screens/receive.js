@@ -2,7 +2,7 @@ import { h } from "#wms/ui/dom.js";
 import { S, nav, run, load, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, Card, StatusBadge, Empty, Loading, Btn } from "#wms/ui/kit.js";
+import { Section, Field, Card, StatusBadge, Empty, Loading, Btn, fail } from "#wms/ui/kit.js";
 import { parseGS1, gtinVariants } from "#wms/core/gs1.js";
 import { fmtQty, flt, parseNum, isNumeric, round6 } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
@@ -192,8 +192,6 @@ function pendingView() {
       meta: [`→ ${p.handling_unit}`, p.batch_no ? ` · ${_("batch")} ${p.batch_no}` : "", p.serial_no ? ` · SN ${p.serial_no}` : ""],
       right: h("button.icon-btn", { type: "button", "aria-label": _("Remove"), onclick: () => { st.pending.splice(i, 1); persist(); update(); } }, "✕") })));
 }
-
-function fail(name, message) { S.fieldErrors[name] = message; feedback.error(); S.focusRequest = name; update(); return false; }
 
 function addEntry() {
   const l = st.active && lineOf(st.active);

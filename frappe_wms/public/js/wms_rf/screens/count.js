@@ -2,16 +2,12 @@ import { h } from "#wms/ui/dom.js";
 import { S, nav, run, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, Card, StatusBadge, Loading, Hint, Empty, Btn } from "#wms/ui/kit.js";
+import { Section, Field, Card, StatusBadge, Loading, Hint, Empty, Btn, MenuGrid } from "#wms/ui/kit.js";
 import { fmtQty, parseNum, isNumeric } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
 import { saveDraft, loadDraft, clearDraft, finishFlow, enteredFresh, sectionCrumb } from "#wms/screens/shared.js";
 import { listScreen, findRow } from "#wms/screens/lists.js";
-
-function menu(items) {
-  return h("div.menu-grid", items.map((i) => h("button.menu-btn", { type: "button", onclick: i.run }, h("span.icon", i.icon), h("span", i.label))));
-}
 
 // Unlike Putaway, counting genuinely has a queue: a counter joins one for an area and gets the
 // next Draft count there auto-assigned (services/inventory_count.pull_next_count). So both
@@ -26,7 +22,7 @@ async function autoPull() {
 export const countMenu = {
   id: "count", pattern: "count",
   title: () => _("Count"), crumb: () => sectionCrumb("internal"), parent: () => "#/s/internal",
-  render: () => menu([
+  render: () => MenuGrid([
     { icon: "⚡", label: _("System Guided - get next count"), run: autoPull },
     { icon: "\u{1F50D}", label: _("Manual - scan to find"), run: () => nav.go("#/count-manual") },
   ]),
@@ -70,12 +66,12 @@ export const countDetail = {
     let count = await findRow(countList, name, ctx);
     if (count && count.status === "Draft") {
       const ok = await run(async () => { await api("frappe_wms.api.inventory.snapshot_count", { count_name: name }); return true; }, { busy: true, label: _("Starting count…") });
-      if (!ok) return { redirect: "#/count" };
+      if (!ok) return { redirect: "#/count-list" };
       await countList.refresh(ctx);
       count = countList.st.rows.find((c) => c.name === name);
-      if (!count) { notify.warn(_("Count could not be started - it may have no stock in scope.")); return { redirect: "#/count" }; }
+      if (!count) { notify.warn(_("Count could not be started - it may have no stock in scope.")); return { redirect: "#/count-list" }; }
     }
-    if (!count) { notify.warn(_("That count is no longer open.")); return { redirect: "#/count" }; }
+    if (!count) { notify.warn(_("That count is no longer open.")); return { redirect: "#/count-list" }; }
     st.name = name; st.count = count;
     const saved = loadDraft(key(name));
     st.items = (count.items || []).map((r) => { const d = saved && saved.items.find((x) => x.name === r.name); return { ...r, counted_quantity: d ? d.counted_quantity : r.counted_quantity != null ? String(r.counted_quantity) : "" }; });

@@ -2,7 +2,7 @@ import { h } from "#wms/ui/dom.js";
 import { S, run, load, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, Card, Badge, Btn, Empty, Loading, Hint } from "#wms/ui/kit.js";
+import { Section, Field, Card, Badge, Btn, Empty, Loading, Hint, fail } from "#wms/ui/kit.js";
 import { fmtQty, parseNum, isNumeric, round6 } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { parseGS1, gtinVariants } from "#wms/core/gs1.js";
@@ -176,9 +176,9 @@ async function station(method, args, okMsg) {
 
 async function packProduct() {
   const f = st.f;
-  if (!f.prod) { S.fieldErrors.prod = _("Scan the product."); feedback.error(); S.focusRequest = "prod"; update(); return false; }
-  if (!isNumeric(f.qty) || parseNum(f.qty) <= 0) { S.fieldErrors.qty = _("Enter a quantity greater than zero."); feedback.error(); S.focusRequest = "qty"; update(); return false; }
-  if (!f.dst) { S.fieldErrors.dst = _("Scan the destination HU."); feedback.error(); S.focusRequest = "dst"; update(); return false; }
+  if (!f.prod) { fail("prod", _("Scan the product.")); return false; }
+  if (!isNumeric(f.qty) || parseNum(f.qty) <= 0) { fail("qty", _("Enter a quantity greater than zero.")); return false; }
+  if (!f.dst) { fail("dst", _("Scan the destination HU.")); return false; }
   const idem = ensureKey(f, "RF-PACK");
   const stockQty = round6(parseNum(f.qty) * unitFor(f).factor);  // always packed in the stock unit
   const r = await station("pack_product", { product: f.prod, quantity: stockQty, destination_hu: f.dst, source_hu: f.src || undefined,
@@ -199,7 +199,7 @@ async function packHu() {
 
 async function createHu(label) {
   const f = st.f;
-  if (!f.type) { S.fieldErrors.type = _("Choose the HU type."); feedback.error(); S.focusRequest = "type"; update(); return false; }
+  if (!f.type) { fail("type", _("Choose the HU type.")); return false; }
   const r = await station("create_hu", { hu_type: f.type, hu_number: (label || "").trim() || undefined }, (x) => _("{0} created - it is the destination now", [x.name]));
   if (r === undefined) return false;
   f.dst = r.name; st.mode = "product"; S.focusRequest = f.src ? "prod" : "src"; update();
@@ -207,8 +207,8 @@ async function createHu(label) {
 
 async function closeHu() {
   const f = st.f;
-  if (!f.close) { S.fieldErrors.close = _("Scan the HU to close."); feedback.error(); S.focusRequest = "close"; update(); return false; }
-  if (f.weight && !isNumeric(f.weight)) { S.fieldErrors.weight = _("Enter a number."); feedback.error(); S.focusRequest = "weight"; update(); return false; }
+  if (!f.close) { fail("close", _("Scan the HU to close.")); return false; }
+  if (f.weight && !isNumeric(f.weight)) { fail("weight", _("Enter a number.")); return false; }
   const n = node(f.close);
   // Where the closed HU goes is the work center's "Close HU Follow-up" setting (server side).
   const args = { work_center: wc(), hu_name: f.close, gross_weight: f.weight ? parseNum(f.weight) : undefined };

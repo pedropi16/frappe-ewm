@@ -3,7 +3,6 @@ import { load, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { Empty, Loading } from "#wms/ui/kit.js";
 import { sectionCrumb, sectionHash } from "#wms/screens/shared.js";
-import { _ } from "#wms/core/i18n.js";
 
 // The "open items" list shared by Receive, Ship, Pack, Count, Quality, Load, Kitting, Consolidation, VAS, Handling Units.
 // Detail screens live at "<id>/:name" and find their row in the list by name, so reload and deep links work.
@@ -39,4 +38,3 @@ export async function findRow(list, name, ctx) {
   if (!list.st.rows.some((r) => r.name === name)) await list.refresh(ctx || {});
   return list.st.rows.find((r) => r.name === name) || null;
 }
-export { _ };

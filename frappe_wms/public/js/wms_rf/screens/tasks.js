@@ -1,9 +1,8 @@
 import { h } from "#wms/ui/dom.js";
-import { S, nav, load, run, notify, update } from "#wms/app.js";
-import { api } from "#wms/core/api.js";
+import { S, nav, load, update } from "#wms/app.js";
 import { _ } from "#wms/core/i18n.js";
 import { Section, Card, Empty, Loading, StatusBadge, Badge, Hint } from "#wms/ui/kit.js";
-import { TASK_TYPE_GROUPS, SECTIONS, refreshSession, sectionCrumb, sectionHash, taskLocation } from "#wms/screens/shared.js";
+import { TASK_TYPE_GROUPS, SECTIONS, refreshSession, sectionCrumb, sectionHash, taskLocation, pullWorkAndOpen } from "#wms/screens/shared.js";
 import { fmtQty } from "#wms/core/util.js";
 import { href } from "#wms/core/routes.js";
 
@@ -25,32 +24,6 @@ async function refresh() {
   st.loading = true; update();
   await load(refreshSession);
   st.loading = false; st.loaded = true; update();
-}
-
-async function pullWork() {
-  // run() returns undefined for two different reasons: its own exclusive-busy guard never called
-  // fn() at all (no notice shown), or fn() ran and genuinely resolved to undefined - which is
-  // exactly what happens here, because pull_next_warehouse_order() returning Python's None comes
-  // back as a response body with no "message" key at all (confirmed live: a raw request to it
-  // returns literally "{}"), and api()'s once() just returns data.message, i.e. undefined. Treating
-  // every undefined as "didn't run" meant the ordinary, extremely common "nothing to pull right
-  // now" case showed no notice, no navigation - nothing. An operator tapping "Get next work" with
-  // an empty queue saw the button do nothing and had no way to tell that from it being broken.
-  const wo = await run(() => api("frappe_wms.api.warehouse_order.pull_next_warehouse_order", {}), { label: _("Finding work…") });
-  if (!wo) { notify.info(_("No work waiting right now.")); return; }
-  await refreshSession();
-  let task = S.tasks.find((t) => t.warehouse_order === wo);
-  if (!task) {
-    // "my tasks" is a capped, warehouse-wide view (list_my_tasks), not a per-Warehouse-Order one -
-    // a resource that has personally accumulated a large backlog of its own earlier open/on-hold
-    // work can rank that ahead of a task from a Warehouse Order genuinely just assigned to it this
-    // instant, so it's a real possibility this WO's own task isn't in that capped list at all yet.
-    // The WO itself was just confirmed assigned, though, so look at ITS tasks directly instead of
-    // leaving the operator with a toast confirming the assignment and no way to act on it.
-    const detail = await load(() => api("frappe_wms.api.warehouse_order.warehouse_order_detail", { wo_name: wo }, { read: true }));
-    task = detail && detail.tasks && detail.tasks.find((t) => t.status === "Open" || t.status === "Assigned");
-  }
-  if (task) nav.go(href("task", task.name)); else notify.ok(_("Assigned {0}", [wo]));
 }
 
 function taskCard(task) {
@@ -102,5 +75,5 @@ export default {
     });
     return wrap;
   },
-  actions: () => (S.resource && S.resource.current_queue ? { primary: { label: _("Get next work"), icon: "⚡", run: pullWork } } : null),
+  actions: () => (S.resource && S.resource.current_queue ? { primary: { label: _("Get next work"), icon: "⚡", run: () => pullWorkAndOpen() } } : null),
 };
