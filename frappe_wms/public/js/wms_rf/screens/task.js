@@ -6,7 +6,8 @@ import { Section, Field, KV, Btn, Expect, Stepper, Empty, Loading, StatusBadge, 
 import { fmtQty, flt, round6, parseNum, isNumeric, matchExpected } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
-import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb, matchScan, needsCheckDigits, verifyCheckDigits } from "#wms/screens/shared.js";
+import { saveDraft, loadDraft, clearDraft, ensureKey, refreshSession, taskLocation, flushDrafts, sectionCrumb, matchScan, needsCheckDigits, verifyCheckDigits, finishFlow } from "#wms/screens/shared.js";
+import { guardStep } from "#wms/screens/wizard.js";
 import { groupOfType } from "#wms/screens/tasks.js";
 
 // Generic Warehouse Task confirmation wizard - one step per history entry, shared by every task
@@ -88,11 +89,8 @@ export default {
       if (!st.codes) st.codes = await load(() => api("frappe_wms.api.scanner.list_exception_codes", { task_type: t.task_type }, { read: true })) || [];
       update(); return;
     }
-    // Guard: never land on a step whose earlier steps are not done (deep link, stale history entry, reload).
-    const firstOpen = steps.find((s) => s !== "review" && !completed(s, st.form)) || "review";
-    const wanted = steps.includes(step) ? step : firstOpen;
-    if (steps.indexOf(wanted) > steps.indexOf(firstOpen)) return { redirect: href("task", name, firstOpen) };
-    if (wanted !== step) return { redirect: href("task", name, wanted) };
+    const guard = guardStep(steps, step, (s) => completed(s, st.form), (s) => href("task", name, s));
+    if (guard) return guard;
     update();
   },
 
@@ -287,9 +285,16 @@ async function confirmTask() {
   const excess = round6(qty - flt(result.quantity != null ? result.quantity : qty));
   if (excess > 0) msg += ` — ${_("{0} extra sent to the difference bin", [fmtQty(excess)])}`;
   if (result.sort_task) msg += ` — ${_("a Sort task was created to move it on")}`;
-  const steps = Math.max(0, nav.depth - (Number.isInteger(w0) ? w0 : nav.depth - 1));
-  if (nextTask) { notify.ok(`${msg} — ${_("next: {0} · {1}", [_(nextTask.task_type), taskLocation(nextTask, "src")])}`); nav.unwind(steps, href("task", nextTask.name)); }
-  else { notify.ok(msg); nav.unwind(steps + 1, `#/tasks/${groupOfType(type)}`); }
+  if (nextTask) {
+    // Chaining straight into the next task's own wizard: land exactly at w0 (not w0-1, the way
+    // finishFlow would for actually leaving the flow), since that next wizard's own newForm()
+    // will re-stamp w0 to this same depth the instant its enter() runs.
+    const steps = Math.max(0, nav.depth - (Number.isInteger(w0) ? w0 : nav.depth - 1));
+    notify.ok(`${msg} — ${_("next: {0} · {1}", [_(nextTask.task_type), taskLocation(nextTask, "src")])}`);
+    nav.unwind(steps, href("task", nextTask.name));
+  } else {
+    finishFlow(w0, `#/tasks/${groupOfType(type)}`, msg);
+  }
 }
 
 function exceptionView(wrap, ctx) {
@@ -336,8 +341,7 @@ async function reportException() {
   const w0 = st.form && st.form.w0;
   st.form = null; st.fetchedAt = 0;
   await run(refreshSession, { busy: false, exclusive: false });
-  notify.ok(_("{0} flagged as exception", [_(t.task_type)]));
-  nav.unwind(Math.max(0, nav.depth - (Number.isInteger(w0) ? w0 : nav.depth - 1)) + 1, `#/tasks/${groupOfType(t.task_type)}`);
+  finishFlow(w0, `#/tasks/${groupOfType(t.task_type)}`, _("{0} flagged as exception", [_(t.task_type)]));
 }
 const currentCode = () => (S.route && S.route.params.code) || null;
 const confirm_ = (msg) => window.confirm(msg);
