@@ -391,6 +391,52 @@ correctly by today's earlier `confirm_task` fix) -> delivery's `picking_status` 
 chain - release, queue, pull, find, confirm, delivery progress - now genuinely works without any
 manual workaround, for a resource that isn't already carrying today's accumulated test debt.
 
+## Resolved 2026-10-02: the outbound pipeline had never actually reached Load or Goods Issue
+
+User pointed out the engagement had never actually exercised Loading or Goods Issue - true: every
+delivery so far had either stayed "Partially Picked" or, once fully picked, had nowhere to go.
+Investigating turned up a genuine, significant capability gap, then a genuine backend bug once
+that gap was fixed enough to reach it.
+
+1. **Nothing anywhere could create a WMS Shipment.** `post_goods_issue` requires a line's HU
+   `status == "Loaded"`, which only `confirm_hu_loaded` (the RF `#/load` screen) ever sets - but
+   `#/load` (`list_loadable_shipments`, `confirm_hu_loaded`, `depart_shipment`) only ever lists and
+   acts on a Shipment that *already exists*; `create_shipment` was whitelisted but had zero UI
+   entry point, RF or desk. A fully picked delivery was a permanent dead end regardless of how
+   correctly picking itself worked - confirmed by seeding two deliveries to "Picked" and finding
+   `list_ready_to_ship` genuinely empty for both. **Fixed** (`bf36c38`): added a "Create Shipment"
+   action to the Outbound Monitor's delivery grid (desk/supervisor action, same spirit as the
+   adjacent Waves "Release" button) - select the deliveries for one truck run, create the
+   Shipment, then an RF Loader takes it from `#/load` as normal.
+2. **Goods Issue for any batch-controlled item threw "Insufficient stock," even with the exact
+   right quantity sitting right there on the loaded HU.** `post_goods_issue` builds its stock
+   ledger entry from the Goods Issue Item row's own `batch_no`/`serial_no` - but neither caller
+   that builds one (the RF Ship screen, the Monitor's one-tap `post_goods_issue_for_delivery`)
+   ever carried a picked line's batch_no through, so the decrement posted against an empty-batch
+   `WMS Stock Balance` row that was never there instead of the real one that was. Same bug class
+   as the already-fixed Warehouse Request/receipt-side version (`test_batch_controlled_receipt_
+   can_be_put_away`), just never caught at this later stage because nothing had loaded a
+   batch-controlled delivery this far before today. **Fixed** (`6c98b83`) centrally in
+   `post_goods_issue` itself: when a batch-controlled item's row has no `batch_no`, resolve it
+   from the `WMS Stock Balance` for the scanned HU's own `(bin, product, stock_type)` - an HU
+   never mixes batches, so this is unambiguous - rather than trust every caller to look it up and
+   pass it through (deliberately **not** done for `serial_no`: a required serial stays validated
+   as something the caller must have actually scanned, not inferred).
+
+**Verified end-to-end live** with a dedicated single-session probe (`tests/e2e/loadtest/load_ship_
+probe.cjs` - driven through the real `#/load` and `#/ship` RF screens, not simulated): two fresh
+deliveries picked -> two Shipments created via the new Monitor action -> both HUs loaded and both
+shipments departed through `#/load` -> one delivery's Goods Issue auto-posted on full load with no
+batch_no issue (non-batch item) -> the other's batch-controlled item's Goods Issue failed with
+exactly the predicted "Insufficient stock" error pre-fix, then posted correctly once the fix was
+deployed, confirmed by retrying the identical call.
+
+**Re-ran the whole probe a second time post-deploy, through the real browser end to end**, on a
+*third*, freshly-seeded batch-controlled delivery (`OBD-00000037`, `WH-SOLVENTE-001`): picked ->
+Shipment created -> loaded through the real `#/load` screen -> Goods Issue auto-posted on full
+load with zero errors (`goods_issue_status: Posted`, `status: Goods Issued`) - `0 BUG` for the
+whole run. The fix holds through the actual UI, not just the service-layer retry above.
+
 ## Test-script notes for next time (`scale_loadtest.cjs`)
 
 - **Run `bench --site erp.pinohomelab.duckdns.org execute frappe_wms.tests.e2e.loadtest.reset_backlog.execute`
