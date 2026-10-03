@@ -19,7 +19,7 @@ export const TASK_TYPE_GROUPS = {
 export const SECTIONS = {
   inbound: { label: "Inbound", icon: "\u{1F4E5}", items: [
     { icon: "\u{1F4E5}", label: "Receive", href: "#/receive" },
-    { icon: "\u{1F4CB}", label: "Putaway Tasks", href: "#/tasks/inbound", taskGroup: "inbound" },
+    { icon: "\u{1F4CB}", label: "Putaway", href: "#/putaway", taskGroup: "inbound" },
     { icon: "\u{1F4E6}", label: "Deconsolidate", href: "#/decon" },
     { icon: "✅", label: "Quality", href: "#/quality" },
     { icon: "\u{1F69A}", label: "Yard", href: "#/yard" },

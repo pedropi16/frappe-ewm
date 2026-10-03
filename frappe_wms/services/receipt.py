@@ -7,10 +7,41 @@ from frappe_wms.services.determination import determine_process_type, determine_
 from frappe_wms.services.storage_process import first_step
 from frappe_wms.services.cross_dock import find_cross_dock_demand, reserve_cross_dock_demand
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
-from frappe_wms.services.task import my_resource, create_tasks_for_request
+from frappe_wms.services.task import my_resource, create_tasks_for_request, OPEN_TASK_STATUSES, TASK_SUMMARY_FIELDS
 from frappe_wms.utils import require_role
 
 OPEN_INBOUND_STATUSES = ("Draft", "Expected", "Arrived", "Receiving", "Partially Received")
+
+# Same grouping the RF menu uses for its "Inbound" section (screens/shared.js TASK_TYPE_GROUPS.inbound).
+INBOUND_TASK_TYPES = ("Unload", "Putaway", "Deconsolidation", "Cross Dock")
+
+def find_putaway_tasks(reference):
+    # Mirrors picking.find_pick_tasks for the inbound side: jump straight into the task-confirm
+    # wizard by scanning the Warehouse Order, Warehouse Request, Warehouse Task, Queue, or the
+    # Handling Unit the operator is holding (the common case right after receiving) - no browsing
+    # the full open-tasks list required.
+    require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
+    reference = (reference or "").strip()
+    if not reference:
+        frappe.throw(_("Scan or enter a Warehouse Order, Warehouse Request, Warehouse Task, Queue, or Handling Unit"))
+    resource = my_resource()
+    base_filters = {"task_type": ["in", INBOUND_TASK_TYPES], "status": ["in", OPEN_TASK_STATUSES], "docstatus": 0}
+    if resource: base_filters["warehouse"] = resource.warehouse
+
+    if frappe.db.exists("Warehouse Task", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": reference}, fields=TASK_SUMMARY_FIELDS)
+    elif frappe.db.exists("Warehouse Order", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=TASK_SUMMARY_FIELDS)
+    elif frappe.db.exists("Warehouse Request", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_request": reference}, fields=TASK_SUMMARY_FIELDS)
+    elif frappe.db.exists("Warehouse Queue", reference):
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "queue": reference}, fields=TASK_SUMMARY_FIELDS)
+    else:
+        by_source = frappe.get_all("Warehouse Task", filters={**base_filters, "source_hu": reference}, fields=TASK_SUMMARY_FIELDS)
+        by_dest = frappe.get_all("Warehouse Task", filters={**base_filters, "destination_hu": reference}, fields=TASK_SUMMARY_FIELDS)
+        seen = {t.name for t in by_source}
+        tasks = by_source + [t for t in by_dest if t.name not in seen]
+    return sorted(tasks, key=lambda t: (t.sequence or 0, t.name))
 
 def post_goods_receipt(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype": doc.doctype, "reference_name": doc.name}): return

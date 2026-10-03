@@ -2,15 +2,10 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.allocation import allocate_delivery
-from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES, task_names_for_allocations
+from frappe_wms.services.task import create_pick_tasks, create_pick_tasks_for_wave, my_resource, OPEN_TASK_STATUSES, TASK_SUMMARY_FIELDS, task_names_for_allocations
 from frappe_wms.utils import require_role
 
 OPEN_RELEASE_STATUSES = ("Draft", "Open", "Allocated")
-
-PICK_TASK_FIELDS = ["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
-    "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
-    "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
-    "blocking_reason"]
 
 def find_pick_tasks(reference):
     # SAP EWM-style picking entry points: jump straight into the pick-task wizard by scanning
@@ -28,20 +23,20 @@ def find_pick_tasks(reference):
     if resource: base_filters["warehouse"] = resource.warehouse
 
     if frappe.db.exists("Warehouse Task", reference):
-        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": reference}, fields=PICK_TASK_FIELDS)
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Warehouse Order", reference):
-        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=PICK_TASK_FIELDS)
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_order": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Warehouse Request", reference):
-        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_request": reference}, fields=PICK_TASK_FIELDS)
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "warehouse_request": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Warehouse Queue", reference):
-        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "queue": reference}, fields=PICK_TASK_FIELDS)
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "queue": reference}, fields=TASK_SUMMARY_FIELDS)
     elif frappe.db.exists("Outbound Delivery", reference):
         allocation_names = frappe.get_all("Stock Allocation", filters={"outbound_delivery": reference}, pluck="name")
         task_names = list(task_names_for_allocations(allocation_names))
-        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": ["in", task_names]}, fields=PICK_TASK_FIELDS) if task_names else []
+        tasks = frappe.get_all("Warehouse Task", filters={**base_filters, "name": ["in", task_names]}, fields=TASK_SUMMARY_FIELDS) if task_names else []
     else:
-        by_source = frappe.get_all("Warehouse Task", filters={**base_filters, "source_hu": reference}, fields=PICK_TASK_FIELDS)
-        by_dest = frappe.get_all("Warehouse Task", filters={**base_filters, "destination_hu": reference}, fields=PICK_TASK_FIELDS)
+        by_source = frappe.get_all("Warehouse Task", filters={**base_filters, "source_hu": reference}, fields=TASK_SUMMARY_FIELDS)
+        by_dest = frappe.get_all("Warehouse Task", filters={**base_filters, "destination_hu": reference}, fields=TASK_SUMMARY_FIELDS)
         seen = {t.name for t in by_source}
         tasks = by_source + [t for t in by_dest if t.name not in seen]
     return sorted(tasks, key=lambda t: (t.sequence or 0, t.name))

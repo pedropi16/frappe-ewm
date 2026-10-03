@@ -242,6 +242,14 @@ def _create_pick_task_for_group(allocations, wave, batch_key):
 
 OPEN_TASK_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed")
 
+# Summary fields for the RF "find task by reference" lookups (picking.find_pick_tasks,
+# receipt.find_putaway_tasks, ...) and the task-list cards built from them - same shape
+# regardless of task_type, since the RF confirm wizard (screens/task.js) is generic too.
+TASK_SUMMARY_FIELDS = ["name", "task_type", "warehouse", "product", "planned_quantity", "confirmed_quantity",
+    "stock_uom", "source_bin", "destination_bin", "source_hu", "destination_hu",
+    "priority", "status", "movement_type", "sequence", "queue", "wave", "warehouse_order", "assigned_resource",
+    "blocking_reason"]
+
 def task_names_for_allocations(allocation_names):
     # Every Warehouse Task tied to a set of Stock Allocations, whether picked individually
     # (Warehouse Task.stock_allocation) or as part of a cluster pick (the Warehouse Task

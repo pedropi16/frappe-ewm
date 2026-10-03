@@ -5,6 +5,7 @@ from frappe.utils import nowdate
 from frappe_wms.api.inbound import create_putaway
 from frappe_wms.api.scanner import confirm_task
 from frappe_wms.services.picking import release_delivery_for_picking, find_pick_tasks
+from frappe_wms.services.receipt import find_putaway_tasks
 
 
 class TestPickingEntry(IntegrationTestCase):
@@ -44,8 +45,10 @@ class TestPickingEntry(IntegrationTestCase):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "TEST-PICKENTRY-PALLET", "hu_type_name": "Test Pick Entry Pallet"}).insert(ignore_permissions=True)
         if not frappe.db.exists("Warehouse Queue", "WMS-TEST-PICKENTRY-QUEUE"):
             frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": "WMS-TEST-PICKENTRY-QUEUE", "queue_name": "Test Pick Entry Queue", "warehouse": cls.warehouse, "activity": "Pick", "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("Warehouse Queue", "WMS-TEST-PICKENTRY-PUTAWAY-QUEUE"):
+            frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": "WMS-TEST-PICKENTRY-PUTAWAY-QUEUE", "queue_name": "Test Putaway Entry Queue", "warehouse": cls.warehouse, "activity": "Putaway", "active": 1}).insert(ignore_permissions=True)
 
-    def _receive_and_putaway(self, qty):
+    def _receive(self, qty):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "TEST-PICKENTRY-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
         hu.insert(ignore_permissions=True)
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
@@ -55,9 +58,13 @@ class TestPickingEntry(IntegrationTestCase):
             "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
         gr.insert(ignore_permissions=True)
         gr.submit()
-        putaway = create_putaway(gr.name)
+        return hu.name, gr.name
+
+    def _receive_and_putaway(self, qty):
+        hu, gr_name = self._receive(qty)
+        putaway = create_putaway(gr_name)
         confirm_task(putaway["warehouse_tasks"][0], confirmed_quantity=qty)
-        return hu.name
+        return hu
 
     def test_find_pick_tasks_by_warehouse_order_delivery_and_hu(self):
         source_hu = self._receive_and_putaway(10)
@@ -94,5 +101,36 @@ class TestPickingEntry(IntegrationTestCase):
             self.assertEqual([t.name for t in by_hu], [task.name])
 
             self.assertEqual(find_pick_tasks("NONEXISTENT-REFERENCE"), [])
+        finally:
+            frappe.set_user("Administrator")
+
+    def test_find_putaway_tasks_by_warehouse_order_task_and_hu(self):
+        source_hu, gr_name = self._receive(10)
+        putaway = create_putaway(gr_name)
+        task = frappe.get_doc("Warehouse Task", putaway["warehouse_tasks"][0])
+        self.assertEqual(task.source_hu, source_hu)
+        self.assertTrue(task.warehouse_order, "a Putaway queue is configured, so the task should be routed to a Warehouse Order")
+
+        # find_putaway_tasks scopes by the caller's WMS Resource warehouse - a dedicated tester,
+        # same reasoning as test_find_pick_tasks_by_warehouse_order_delivery_and_hu above.
+        tester_email = "putawayentry-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "Putaway Entry Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", tester_email).add_roles("WMS Receiver")
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "active": 1}).insert(ignore_permissions=True)
+
+        frappe.set_user(tester_email)
+        try:
+            by_task = find_putaway_tasks(task.name)
+            self.assertEqual([t.name for t in by_task], [task.name])
+
+            by_wo = find_putaway_tasks(task.warehouse_order)
+            self.assertEqual([t.name for t in by_wo], [task.name])
+
+            by_hu = find_putaway_tasks(source_hu)
+            self.assertEqual([t.name for t in by_hu], [task.name])
+
+            self.assertEqual(find_putaway_tasks("NONEXISTENT-REFERENCE"), [])
         finally:
             frappe.set_user("Administrator")

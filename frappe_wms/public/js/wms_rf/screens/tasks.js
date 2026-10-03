@@ -7,13 +7,19 @@ import { TASK_TYPE_GROUPS, SECTIONS, refreshSession, sectionCrumb, sectionHash, 
 import { fmtQty } from "#wms/core/util.js";
 import { href } from "#wms/core/routes.js";
 
-const st = { loading: false, loaded: false, found: [], foundLabel: "" };
+const st = { loading: false, loaded: false, found: [], foundLabel: "", foundTitle: "", foundSection: "outbound", foundParent: "#/picking" };
 
 export function groupOfType(taskType) {
   return Object.keys(TASK_TYPE_GROUPS).find((g) => TASK_TYPE_GROUPS[g].includes(taskType)) || "inbound";
 }
 
-export function setFoundTasks(tasks, label) { st.found = tasks; st.foundLabel = label; }
+// `meta` is where a multi-match "found" result returns to: Picking's and Putaway's manual-find
+// screens each call this before navigating to #/tasks/found, so this one results screen can serve
+// either flow instead of being hardcoded to Picking.
+export function setFoundTasks(tasks, label, meta = {}) {
+  st.found = tasks; st.foundLabel = label;
+  st.foundTitle = meta.title || _("Pick tasks"); st.foundSection = meta.section || "outbound"; st.foundParent = meta.parent || "#/picking";
+}
 
 async function refresh() {
   st.loading = true; update();
@@ -60,11 +66,11 @@ function taskCard(task) {
 
 export default {
   id: "tasks", pattern: "tasks/:group",
-  title: (ctx) => ctx.params.group === "found" ? _("Pick tasks") : ({ inbound: _("Putaway tasks"), internal: _("Internal tasks"), outbound: _("Pick tasks") })[ctx.params.group] || _("Tasks"),
-  crumb: (ctx) => sectionCrumb(ctx.params.group === "found" ? "outbound" : ctx.params.group),
-  parent: (ctx) => ctx.params.group === "found" ? "#/picking" : sectionHash(ctx.params.group),
+  title: (ctx) => ctx.params.group === "found" ? st.foundTitle : ({ inbound: _("Putaway tasks"), internal: _("Internal tasks"), outbound: _("Pick tasks") })[ctx.params.group] || _("Tasks"),
+  crumb: (ctx) => sectionCrumb(ctx.params.group === "found" ? st.foundSection : ctx.params.group),
+  parent: (ctx) => ctx.params.group === "found" ? st.foundParent : sectionHash(ctx.params.group),
   async enter(ctx) {
-    if (ctx.params.group === "found" && !st.found.length) return { redirect: "#/picking" };
+    if (ctx.params.group === "found" && !st.found.length) return { redirect: st.foundParent };
     if (!SECTIONS[ctx.params.group] && ctx.params.group !== "found") return { redirect: "#/" };
     if (ctx.params.group !== "found") await refresh();
   },

@@ -1,6 +1,6 @@
 import frappe
 from frappe_wms.services.concurrency import retry_on_deadlock
-from frappe_wms.services.receipt import create_putaway_requests, list_open_inbound_deliveries as _list_open_inbound_deliveries, create_and_submit_goods_receipt as _create_and_submit_goods_receipt, create_fg_receipt_from_work_order as _create_fg_receipt_from_work_order, create_return_inbound_delivery as _create_return_inbound_delivery
+from frappe_wms.services.receipt import create_putaway_requests, list_open_inbound_deliveries as _list_open_inbound_deliveries, create_and_submit_goods_receipt as _create_and_submit_goods_receipt, create_fg_receipt_from_work_order as _create_fg_receipt_from_work_order, create_return_inbound_delivery as _create_return_inbound_delivery, find_putaway_tasks as _find_putaway_tasks
 from frappe_wms.services.task import create_tasks_for_request
 from frappe_wms.services.procurement import create_inbound_delivery_from_purchase_order as _create_inbound_delivery_from_purchase_order
 from frappe_wms.utils import parse_json, require_role
@@ -16,6 +16,11 @@ def create_putaway(receipt_name):
     from frappe_wms.services.task import plan_requests
     task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
     return {"warehouse_requests": request_names, "warehouse_tasks": task_names, "unplanned_requests": unplanned}
+
+@frappe.whitelist()
+@retry_on_deadlock
+def find_putaway_tasks(reference):
+    return _find_putaway_tasks(reference)
 
 @frappe.whitelist()
 @retry_on_deadlock
