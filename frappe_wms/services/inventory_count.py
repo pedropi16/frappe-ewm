@@ -3,7 +3,11 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.task import OPEN_TASK_STATUSES, my_resource
+from frappe_wms.services.warehouse_order import _eligible_queues, determine_queue
 from frappe_wms.utils import require_role
+
+COUNT_ROLES = ("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
+OPEN_COUNT_STATUSES = ("Draft", "Counting", "Counted")
 
 def list_open_counts(user=None):
     require_role("WMS Operator", "WMS Inventory Controller", "WMS Supervisor")
@@ -24,6 +28,57 @@ def list_open_counts(user=None):
         count["items"] = frappe.get_all("WMS Physical Inventory Count Item", filters={"parent": count.name, "status": "Open"},
             fields=item_fields)
     return counts
+
+def pull_next_count(user=None):
+    # System Guided: a counter joined to a counting queue for an area gets the next Draft count
+    # in that area auto-assigned, same atomic-claim idiom as pull_next_warehouse_order - counting
+    # has no Warehouse Order of its own (see find_count_for), so this claims the Count row itself.
+    require_role(*COUNT_ROLES)
+    resource = my_resource(user)
+    if not resource: frappe.throw(_("No active WMS Resource is linked to your user"))
+    queues = _eligible_queues(resource)
+    if not queues: frappe.throw(_("Join a queue, or ask a supervisor to add your Resource Group to one, before pulling work"))
+    candidates = frappe.get_all("WMS Physical Inventory Count",
+        filters={"status": "Draft", "warehouse": resource.warehouse, "assigned_resource": ["in", ["", None]]},
+        fields=["name", "storage_bin", "storage_type"], order_by="count_date asc, creation asc")
+    for candidate in candidates:
+        # A count scoped to one bin takes that bin's own Storage Type/Activity Area (the real,
+        # narrow scope); a count spanning a whole Storage Type (no single bin) uses the field the
+        # count carries directly - same bin-field-driven resolution as attach_task.
+        storage_type, activity_area = candidate.storage_type, None
+        if candidate.storage_bin:
+            storage_type, activity_area = frappe.db.get_value("Storage Bin", candidate.storage_bin, ["storage_type", "activity_area"])
+        queue = determine_queue(resource.warehouse, "Inventory Count", storage_type, activity_area)
+        if queue not in queues: continue
+        # Same deadlock-safe atomic compare-and-set as pull_next_warehouse_order: a 0-row update
+        # means another counter claimed it first between the read above and this write.
+        try:
+            frappe.db.sql(
+                "update `tabWMS Physical Inventory Count` set assigned_resource=%s, modified=%s, modified_by=%s "
+                "where name=%s and (assigned_resource is null or assigned_resource='')",
+                (resource.name, now_datetime(), frappe.session.user, candidate.name),
+            )
+            claimed = bool(frappe.db.sql("select row_count()")[0][0])
+        except (frappe.QueryDeadlockError, frappe.QueryTimeoutError):
+            frappe.db.rollback()
+            return None
+        if claimed: return candidate.name
+    return None
+
+def find_count_for(reference, user=None):
+    # Manual: a counter who already has the HU in hand, or knows the bin or count number, jumps
+    # straight to it instead of browsing the open-count list. Counting has no Warehouse Order yet
+    # (unlike Pick/Putaway) to search by - only name, bin, and HU are resolvable today.
+    require_role(*COUNT_ROLES)
+    resource = my_resource(user)
+    filters = {"status": ["in", OPEN_COUNT_STATUSES]}
+    if resource: filters["warehouse"] = resource.warehouse
+    open_counts = frappe.get_all("WMS Physical Inventory Count", filters=filters, pluck="name")
+    if not open_counts: return []
+    if reference in open_counts: return [reference]
+    by_bin = frappe.get_all("WMS Physical Inventory Count", filters={"name": ["in", open_counts], "storage_bin": reference}, pluck="name")
+    if by_bin: return by_bin
+    return frappe.get_all("WMS Physical Inventory Count Item", filters={"parent": ["in", open_counts], "handling_unit": reference}, pluck="parent", distinct=True)
 
 def _release_blocked_bins(doc):
     names = [b for b in (doc.blocked_bins or "").split(",") if b]

@@ -1,6 +1,6 @@
 import frappe
 from frappe_wms.services.concurrency import retry_on_deadlock
-from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts, request_recount as _request_recount, approve_variance as _approve_variance, analyze_differences as _analyze_differences, add_found_line as _add_found_line, cancel_count as _cancel_count
+from frappe_wms.services.inventory_count import snapshot_count as _snapshot_count, record_counts as _record_counts, post_count as _post_count, list_open_counts as _list_open_counts, request_recount as _request_recount, approve_variance as _approve_variance, analyze_differences as _analyze_differences, add_found_line as _add_found_line, cancel_count as _cancel_count, pull_next_count as _pull_next_count, find_count_for as _find_count_for
 from frappe_wms.services.quality import complete_inspection as _complete_inspection, list_open_inspections as _list_open_inspections
 from frappe_wms.services.replenishment import check_replenishment_needs as _check_replenishment_needs, request_direct_replenishment as _request_direct_replenishment
 from frappe_wms.utils import parse_json
@@ -14,6 +14,16 @@ def list_open_counts():
 @retry_on_deadlock
 def list_open_inspections():
     return _list_open_inspections()
+
+@frappe.whitelist()
+@retry_on_deadlock
+def pull_next_count():
+    return _pull_next_count()
+
+@frappe.whitelist()
+@retry_on_deadlock
+def find_count_for(reference):
+    return _find_count_for(reference)
 
 @frappe.whitelist()
 @retry_on_deadlock

@@ -2,15 +2,58 @@ import { h } from "#wms/ui/dom.js";
 import { S, nav, run, notify, update } from "#wms/app.js";
 import { api } from "#wms/core/api.js";
 import { _ } from "#wms/core/i18n.js";
-import { Section, Field, Card, StatusBadge, Loading, Hint, Empty } from "#wms/ui/kit.js";
+import { Section, Field, Card, StatusBadge, Loading, Hint, Empty, Btn } from "#wms/ui/kit.js";
 import { fmtQty, parseNum, isNumeric } from "#wms/core/util.js";
 import { feedback } from "#wms/core/feedback.js";
 import { href } from "#wms/core/routes.js";
 import { saveDraft, loadDraft, clearDraft, finishFlow, enteredFresh, sectionCrumb } from "#wms/screens/shared.js";
 import { listScreen, findRow } from "#wms/screens/lists.js";
 
+function menu(items) {
+  return h("div.menu-grid", items.map((i) => h("button.menu-btn", { type: "button", onclick: i.run }, h("span.icon", i.icon), h("span", i.label))));
+}
+
+// Unlike Putaway, counting genuinely has a queue: a counter joins one for an area and gets the
+// next Draft count there auto-assigned (services/inventory_count.pull_next_count). So both
+// halves of the System Guided / Manual split are real here, not just Manual.
+async function autoPull() {
+  const name = await run(() => api("frappe_wms.api.inventory.pull_next_count", {}), { label: _("Finding work…") });
+  if (name === undefined) return;
+  if (!name) { notify.info(_("No counts waiting right now.")); return; }
+  nav.go(href("count", name));
+}
+
+export const countMenu = {
+  id: "count", pattern: "count",
+  title: () => _("Count"), crumb: () => sectionCrumb("internal"), parent: () => "#/s/internal",
+  render: () => menu([
+    { icon: "⚡", label: _("System Guided - get next count"), run: autoPull },
+    { icon: "\u{1F50D}", label: _("Manual - scan to find"), run: () => nav.go("#/count-manual") },
+  ]),
+};
+
+const manual = { ref: "" };
+export const countManual = {
+  id: "count-manual", pattern: "count-manual",
+  title: () => _("Find count"), crumb: () => sectionCrumb("internal"), parent: () => "#/count",
+  enter() { manual.ref = ""; },
+  render: () => h("div", Section({ hint: _("Scan the Handling Unit or bin you're counting, or a count number.") },
+      Field({ name: "ref", kind: "scan", label: _("Reference"), placeholder: _("Scan or type"), value: manual.ref, autofocus: true,
+        onInput: (v) => { manual.ref = v; }, onCommit: (v) => find(v) })),
+    Btn({ label: _("Browse all open counts instead"), onClick: () => nav.go("#/count-list") })),
+  actions: () => ({ primary: { label: _("Find count"), run: () => manual.ref.trim() && find(manual.ref.trim()) } }),
+};
+
+async function find(reference) {
+  const names = await run(() => api("frappe_wms.api.inventory.find_count_for", { reference }, { read: true }), { label: _("Searching…") });
+  if (names === undefined) return false;
+  if (!names.length) return _("No open count found for {0}.", [reference]);
+  if (names.length > 1) notify.info(_("{0} matched {1} open counts; opened the first.", [reference, names.length]));
+  nav.go(href("count", names[0]));
+}
+
 export const countList = listScreen({
-  id: "count", pattern: "count", title: _("Count"), section: "internal", method: "frappe_wms.api.inventory.list_open_counts", empty: _("No open counts."),
+  id: "count-list", pattern: "count-list", title: _("Count"), section: "internal", method: "frappe_wms.api.inventory.list_open_counts", empty: _("No open counts."),
   card: (c) => Card({ title: c.name, right: StatusBadge(c.status), meta: [c.warehouse, c.storage_bin ? ` / ${c.storage_bin}` : "", h("br"), c.status === "Draft" ? _("Tap to start counting") : _("{0} line(s) left to count", [(c.items || []).length])], onClick: () => nav.go(href("count", c.name)) }),
 });
 

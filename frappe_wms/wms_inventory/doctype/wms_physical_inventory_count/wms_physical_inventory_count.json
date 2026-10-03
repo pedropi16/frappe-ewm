@@ -14,6 +14,7 @@
     "product",
     "count_date",
     "status",
+    "assigned_resource",
     "items",
     "counted_by",
     "counted_at",
@@ -74,6 +75,15 @@
       "read_only": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "assigned_resource",
+      "label": "Assigned Resource",
+      "fieldtype": "Link",
+      "options": "WMS Resource",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "Claimed by a resource pulling from a counting queue (System Guided). Blank until claimed or when started by a direct scan (Manual)."
     },
     {
       "fieldname": "items",

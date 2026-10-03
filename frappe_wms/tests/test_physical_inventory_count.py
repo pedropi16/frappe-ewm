@@ -3,7 +3,8 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
 from frappe_wms.services.task import create_and_confirm_move
-from frappe_wms.services.inventory_count import snapshot_count, record_counts, post_count
+from frappe_wms.services.inventory_count import snapshot_count, record_counts, post_count, pull_next_count, find_count_for
+from frappe_wms.services.warehouse_order import join_queue
 from frappe_wms.tests.bootstrap import empty_hu_like
 
 
@@ -62,6 +63,47 @@ class TestPhysicalInventoryCount(IntegrationTestCase):
     def _make_count(self, item, storage_bin=None):
         return frappe.get_doc({"doctype": "WMS Physical Inventory Count", "warehouse": self.warehouse,
             "storage_bin": storage_bin, "product": item, "status": "Draft"}).insert(ignore_permissions=True)
+
+    def test_pull_next_count_claims_by_queue_and_find_count_for_resolves_by_bin_and_hu(self):
+        # System Guided (pull_next_count) and Manual (find_count_for) for the RF Count screen.
+        # Its own dedicated bin - sibling tests in this class also count self.bin_a and don't all
+        # post to completion, which left a second open count on it (count_a and bin_a are shared
+        # class fixtures) and made find_count_for's "exactly this one count" assertion flaky.
+        count_bin = f"{self.warehouse}-COUNTONLY"
+        if not frappe.db.exists("Storage Bin", count_bin):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": count_bin, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-ST", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+        item = self._make_item("PIC-COUNT-ITEM")
+        hu = self._receive(item, count_bin, 5)
+        count = self._make_count(item, storage_bin=count_bin)
+
+        if not frappe.db.exists("Warehouse Queue", "PIC-COUNT-QUEUE"):
+            frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": "PIC-COUNT-QUEUE", "queue_name": "PIC Count Queue",
+                "warehouse": self.warehouse, "activity": "Inventory Count", "storage_type": f"{self.warehouse}-ST", "active": 1}).insert(ignore_permissions=True)
+
+        tester_email = "pic-counter-tester@example.com"
+        if not frappe.db.exists("User", tester_email):
+            frappe.get_doc({"doctype": "User", "email": tester_email, "first_name": "PIC Counter Tester", "send_welcome_email": 0}).insert(ignore_permissions=True)
+            frappe.get_doc("User", tester_email).add_roles("WMS Operator")
+        if not frappe.db.exists("WMS Resource", {"user": tester_email}):
+            frappe.get_doc({"doctype": "WMS Resource", "resource_code": frappe.generate_hash(length=8), "user": tester_email, "warehouse": self.warehouse, "resource_type": "Operator", "active": 1}).insert(ignore_permissions=True)
+        resource_name = frappe.db.get_value("WMS Resource", {"user": tester_email}, "name")
+
+        frappe.set_user(tester_email)
+        try:
+            with self.assertRaises(frappe.ValidationError):
+                pull_next_count()
+            join_queue("PIC-COUNT-QUEUE")
+            claimed = pull_next_count()
+            self.assertEqual(claimed, count.name)
+            self.assertEqual(frappe.db.get_value("WMS Physical Inventory Count", count.name, "assigned_resource"), resource_name)
+            self.assertIsNone(pull_next_count())
+
+            self.assertEqual(find_count_for(count_bin), [count.name])
+            snapshot_count(count.name)
+            self.assertEqual(find_count_for(hu.name), [count.name])
+            self.assertEqual(find_count_for("NONEXISTENT-REFERENCE"), [])
+        finally:
+            frappe.set_user("Administrator")
 
     def test_negative_variance_posts_a_material_issue_and_closes_drift(self):
         item = self._make_item("TEST-PIC-ITEM-1")
