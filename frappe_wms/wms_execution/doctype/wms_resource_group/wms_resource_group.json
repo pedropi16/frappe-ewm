@@ -57,6 +57,18 @@
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
+  "links": [
+    {
+      "group": "Assignments",
+      "link_doctype": "Warehouse Queue",
+      "link_fieldname": "resource_group"
+    },
+    {
+      "group": "Assignments",
+      "link_doctype": "WMS Resource",
+      "link_fieldname": "resource_group"
+    }
+  ],
   "permissions": [
     {
       "role": "System Manager",
