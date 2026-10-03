@@ -104,3 +104,16 @@ def render_bin_label_zpl(bin_name):
         "^XZ",
     ]
     return "\n".join(lines)
+
+
+def bin_qr_data_uri(bin_name):
+    """A data: URI PNG of the bin's own code (same payload render_bin_label_zpl's ^BQ encodes),
+    for a Print Format (PDF/HTML) that can't draw a barcode natively the way a ZPL printer's own
+    ^BQ command does. Registered as a Jinja method (hooks.py) for WMS Bin Label to call."""
+    import base64
+    import io
+    import qrcode
+    bin_code = frappe.db.get_value("Storage Bin", bin_name, "bin_code") or bin_name
+    buf = io.BytesIO()
+    qrcode.make(bin_code).save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()

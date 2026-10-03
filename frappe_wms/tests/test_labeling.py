@@ -2,7 +2,7 @@ import unittest
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.services.labeling import _gs1_check_digit, generate_sscc, render_hu_label_zpl, render_bin_label_zpl
+from frappe_wms.services.labeling import _gs1_check_digit, generate_sscc, render_hu_label_zpl, render_bin_label_zpl, bin_qr_data_uri
 
 
 class TestGs1CheckDigit(unittest.TestCase):
@@ -70,3 +70,10 @@ class TestSscc(IntegrationTestCase):
         # inside it, or the whole "you have to physically read it" guarantee is gone.
         qr_payload = zpl.split("^FDQA,")[1].split("^FS")[0]
         self.assertEqual(qr_payload, self.bin)
+
+    def test_bin_qr_data_uri_is_a_real_png(self):
+        import base64
+        uri = bin_qr_data_uri(self.bin)
+        self.assertTrue(uri.startswith("data:image/png;base64,"))
+        png_bytes = base64.b64decode(uri.split(",", 1)[1])
+        self.assertEqual(png_bytes[:8], b"\x89PNG\r\n\x1a\n")

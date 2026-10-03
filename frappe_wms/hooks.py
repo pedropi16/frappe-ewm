@@ -33,7 +33,7 @@ after_install = "frappe_wms.install.after_install"
 after_migrate = ["frappe_wms.db_maintenance.ensure_indexes", "frappe_wms.setup.custom_fields.ensure_custom_fields",
                  "frappe_wms.setup.role_permissions.ensure_role_permissions"]
 before_tests = "frappe_wms.tests.bootstrap.before_tests"
-jinja = {"methods": ["frappe_wms.services.printing.packing_list_data"]}
+jinja = {"methods": ["frappe_wms.services.printing.packing_list_data", "frappe_wms.services.labeling.bin_qr_data_uri"]}
 
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 

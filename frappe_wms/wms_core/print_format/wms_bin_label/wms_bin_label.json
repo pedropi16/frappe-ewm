@@ -10,7 +10,7 @@
  "raw_printing": 0,
  "disabled": 0,
  "font_size": 10,
- "html": "<div style=\"border:2px solid #000;padding:12px;width:300px;font-family:sans-serif\">\n<div style=\"font-size:26px;font-weight:700\">{{ doc.bin_code }}</div>\n<div>{{ doc.warehouse or \"\" }}{% if doc.storage_type %} &middot; {{ doc.storage_type }}{% endif %}</div>\n<div style=\"margin-top:14px;font-size:13px;color:#555\">{{ _(\"Check digits\") }}</div>\n<div style=\"font-size:40px;font-weight:700;letter-spacing:6px\">{{ doc.check_digits or \"--\" }}</div>\n</div>",
+ "html": "<div style=\"border:2px solid #000;padding:12px;width:380px;font-family:sans-serif;display:flex;gap:14px;align-items:flex-start\">\n<img src=\"{{ bin_qr_data_uri(doc.name) }}\" style=\"width:110px;height:110px;flex:0 0 auto\">\n<div>\n<div style=\"font-size:26px;font-weight:700\">{{ doc.bin_code }}</div>\n<div>{{ doc.warehouse or \"\" }}{% if doc.storage_type %} &middot; {{ doc.storage_type }}{% endif %}</div>\n<div style=\"margin-top:14px;font-size:13px;color:#555\">{{ _(\"Check digits\") }}</div>\n<div style=\"font-size:40px;font-weight:700;letter-spacing:6px\">{{ doc.check_digits or \"--\" }}</div>\n</div>\n</div>",
  "css": "",
  "default_print_language": "en",
  "align_labels_right": 0,
