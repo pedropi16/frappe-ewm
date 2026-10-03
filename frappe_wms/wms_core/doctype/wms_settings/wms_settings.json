@@ -12,6 +12,7 @@
   "verification_section",
   "require_scan_verification",
   "column_break_verification",
+  "require_bin_check_digits",
   "inventory_section",
   "blind_counting",
   "defaults_section",
@@ -64,6 +65,13 @@
   {
    "fieldname": "column_break_verification",
    "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, confirming a task against a bin with no Handling Unit also involved (Putaway, Internal Move, Posting Change) asks for the bin's check digits instead of its barcode - a short code printed only on the bin's physical label, never shown in the RF app or any task list, so entering it correctly proves the operator is actually standing at that bin. Off by default: every Storage Bin needs its check digits label printed before this is safe to turn on.",
+   "fieldname": "require_bin_check_digits",
+   "fieldtype": "Check",
+   "label": "Require Bin Check Digits"
   },
   {
    "fieldname": "inventory_section",

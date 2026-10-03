@@ -1,0 +1,20 @@
+{
+ "doctype": "Print Format",
+ "name": "WMS Bin Label",
+ "doc_type": "Storage Bin",
+ "module": "WMS Core",
+ "standard": "Yes",
+ "custom_format": 1,
+ "print_format_type": "Jinja",
+ "print_format_builder": 0,
+ "raw_printing": 0,
+ "disabled": 0,
+ "font_size": 10,
+ "html": "<div style=\"border:2px solid #000;padding:12px;width:300px;font-family:sans-serif\">\n<div style=\"font-size:26px;font-weight:700\">{{ doc.bin_code }}</div>\n<div>{{ doc.warehouse or \"\" }}{% if doc.storage_type %} &middot; {{ doc.storage_type }}{% endif %}</div>\n<div style=\"margin-top:14px;font-size:13px;color:#555\">{{ _(\"Check digits\") }}</div>\n<div style=\"font-size:40px;font-weight:700;letter-spacing:6px\">{{ doc.check_digits or \"--\" }}</div>\n</div>",
+ "css": "",
+ "default_print_language": "en",
+ "align_labels_right": 0,
+ "show_section_headings": 0,
+ "line_breaks": 0,
+ "absolute_value": 0
+}

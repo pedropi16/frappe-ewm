@@ -18,7 +18,7 @@ from frappe.utils import add_to_date, cint, now_datetime
 from frappe_wms.utils import require_role
 
 PRINT_ROLES = ("WMS Operator", "WMS Supervisor", "WMS Process Engineer", "WMS Integration User", "WMS Packer")
-DEFAULT_PDF_FORMATS = {"Outbound Delivery": "WMS Packing List", "WMS Shipment": "WMS Shipment Manifest", "Handling Unit": "WMS HU Label"}
+DEFAULT_PDF_FORMATS = {"Outbound Delivery": "WMS Packing List", "WMS Shipment": "WMS Shipment Manifest", "Handling Unit": "WMS HU Label", "Storage Bin": "WMS Bin Label"}
 MAX_DIRECT_ATTEMPTS = 5
 
 

@@ -9,7 +9,7 @@ import { _ } from "#wms/core/i18n.js";
 export const S = {
   booted: false,
   resource: null,
-  settings: { require_scan_verification: 0 },
+  settings: { require_scan_verification: 0, require_bin_check_digits: 0 },
   tasks: [],
   route: null,
   prevRoute: null,

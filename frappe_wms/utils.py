@@ -1,7 +1,18 @@
 import json
+import secrets
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+# Excludes characters easily confused on a small printed label (0/O, 1/I/L) - these are
+# physical check digits a person reads off a sticker, not a machine-scanned barcode, so
+# legibility matters more than alphabet size. Two characters is the same length SAP EWM's own
+# check digits typically use; they only have to prove "I'm standing at this bin", not identify
+# it uniquely, so a small, occasionally-repeating alphabet is fine.
+CHECK_DIGIT_ALPHABET = "23456789ABCDEFGHJKMNPQRTUVWXY"
+
+def generate_check_digits(length=2):
+    return "".join(secrets.choice(CHECK_DIGIT_ALPHABET) for _i in range(length))
 
 def ensure_same_warehouse(*docs_or_names):
     warehouses = {getattr(x, "warehouse", None) for x in docs_or_names if getattr(x, "warehouse", None)}

@@ -10,6 +10,7 @@
   "field_order": [
     "bin_code",
     "bin_name",
+    "check_digits",
     "warehouse",
     "storage_type",
     "storage_section",
@@ -49,6 +50,16 @@
       "label": "Bin Name",
       "fieldtype": "Data",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "check_digits",
+      "label": "Check Digits",
+      "fieldtype": "Data",
+      "read_only": 1,
+      "no_copy": 1,
+      "in_list_view": 0,
+      "in_standard_filter": 0,
+      "description": "Auto-generated, printed on the bin's physical label only - never shown in the RF app or any task list, so confirming it proves the operator is actually at this bin (WMS Settings: Require Bin Check Digits)."
     },
     {
       "fieldname": "warehouse",

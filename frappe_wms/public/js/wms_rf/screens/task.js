@@ -159,6 +159,23 @@ async function explainMismatch(value, expected, what) {
   return _("{0} is not a known code. Expected {1}.", [value, exp]);
 }
 
+// Check digits replace a bin scan only when there's no competing HU to also verify on that side -
+// same condition services/task.py's confirm_task applies server-side; checked here purely to
+// decide what the field asks for, never to compute or compare the actual secret value client-side.
+function needsCheckDigits(t, side) {
+  const bin = side === "source" ? t.source_bin : t.destination_bin;
+  const hu = side === "source" ? t.source_hu : t.destination_hu;
+  return !!(bin && !hu && S.settings.require_bin_check_digits);
+}
+
+async function verifyCheckDigits(binName, value, onOk) {
+  let ok = false;
+  try { ok = await api("frappe_wms.api.scanner.verify_check_digits", { bin_name: binName, value }, { read: true, timeoutMs: 6000 }); }
+  catch (e) { return _("Could not verify - check your connection and try again."); }
+  if (!ok) return _("Those check digits don't match. Make sure you're at the right bin.");
+  return onOk();
+}
+
 function stepView(wrap, step) {
   const t = st.task, f = st.form;
   const steps = buildSteps(t);
@@ -167,14 +184,21 @@ function stepView(wrap, step) {
   wrap.append(Stepper(steps.length, idx, steps.map((s) => STEP_LABEL()[s])));
   const box = Section({});
   if (step === "source") {
-    box.append(Expect(_("Scan source"), [t.source_bin, t.source_hu]),
-      Field({ name: "src", kind: "scan", gs1: "sscc", label: _("Source bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
-        onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
-        onCommit: async (v) => {
-          const m = await matchScan(v, [t.source_bin, t.source_hu]);
-          if (!m) return explainMismatch(v, [t.source_bin, t.source_hu], _("source"));
-          f.src = m; f.srcOk = true; return advance("source");
-        } }));
+    if (needsCheckDigits(t, "source")) {
+      box.append(Expect(_("Enter check digits for"), [t.source_bin]),
+        Field({ name: "src", kind: "scan", label: _("Check digits"), placeholder: _("From the bin's label"), value: f.src, autofocus: true,
+          onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
+          onCommit: (v) => verifyCheckDigits(t.source_bin, v, () => { f.src = v; f.srcOk = true; return advance("source"); }) }));
+    } else {
+      box.append(Expect(_("Scan source"), [t.source_bin, t.source_hu]),
+        Field({ name: "src", kind: "scan", gs1: "sscc", label: _("Source bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
+          onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
+          onCommit: async (v) => {
+            const m = await matchScan(v, [t.source_bin, t.source_hu]);
+            if (!m) return explainMismatch(v, [t.source_bin, t.source_hu], _("source"));
+            f.src = m; f.srcOk = true; return advance("source");
+          } }));
+    }
   } else if (step === "product") {
     box.append(Expect(_("Scan product"), [t.product]),
       Field({ name: "prod", kind: "scan", gs1: "gtin", label: _("Product barcode or code"), placeholder: _("Scan the item"), value: f.prod, autofocus: true,
@@ -206,14 +230,21 @@ function stepView(wrap, step) {
         onInput: (v) => { f.uqty = v; f.qtyOk = false; persist(); if (unit.factor !== 1) update(); } }),
       Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }));
   } else if (step === "destination") {
-    box.append(Expect(_("Scan destination"), [t.destination_bin, t.destination_hu]),
-      Field({ name: "dst", kind: "scan", gs1: "sscc", label: _("Destination bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.dst, autofocus: true,
-        onInput: (v) => { f.dst = v; f.dstOk = false; persist(); },
-        onCommit: async (v) => {
-          const m = await matchScan(v, [t.destination_bin, t.destination_hu]);
-          if (!m) return explainMismatch(v, [t.destination_bin, t.destination_hu], _("destination"));
-          f.dst = m; f.dstOk = true; return advance("destination");
-        } }));
+    if (needsCheckDigits(t, "destination")) {
+      box.append(Expect(_("Enter check digits for"), [t.destination_bin]),
+        Field({ name: "dst", kind: "scan", label: _("Check digits"), placeholder: _("From the bin's label"), value: f.dst, autofocus: true,
+          onInput: (v) => { f.dst = v; f.dstOk = false; persist(); },
+          onCommit: (v) => verifyCheckDigits(t.destination_bin, v, () => { f.dst = v; f.dstOk = true; return advance("destination"); }) }));
+    } else {
+      box.append(Expect(_("Scan destination"), [t.destination_bin, t.destination_hu]),
+        Field({ name: "dst", kind: "scan", gs1: "sscc", label: _("Destination bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.dst, autofocus: true,
+          onInput: (v) => { f.dst = v; f.dstOk = false; persist(); },
+          onCommit: async (v) => {
+            const m = await matchScan(v, [t.destination_bin, t.destination_hu]);
+            if (!m) return explainMismatch(v, [t.destination_bin, t.destination_hu], _("destination"));
+            f.dst = m; f.dstOk = true; return advance("destination");
+          } }));
+    }
   } else if (step === "review") {
     const excess = round6(parseNum(f.qty) - remaining(t));
     const unit = unitOf(t, f);

@@ -423,6 +423,27 @@ def _claim_warehouse_order_if_unassigned(task, user=None):
         frappe.db.set_value("Warehouse Order", task.warehouse_order, updates)
         frappe.db.set_value("Warehouse Task", {"warehouse_order": task.warehouse_order, "assigned_resource": ["in", ["", None]]}, "assigned_resource", resource.name)
 
+def _check_digits_bin(task, side):
+    # Check digits replace a bin scan only when there's no competing HU to also verify on that
+    # side (a Pick with both source_bin and source_hu, say) - mixed bin+HU confirmation keeps
+    # today's "scan either" behavior unchanged; a pure-bin task (Putaway, Internal Move, Posting
+    # Change) is exactly the case a browsed task list makes it easy to fake, since the bin name is
+    # already sitting right there on screen. Returns the bin to validate against, or None if the
+    # ordinary scan-matching below should run instead.
+    bin_name = task.source_bin if side == "source" else task.destination_bin
+    hu_name = task.source_hu if side == "source" else task.destination_hu
+    if bin_name and not hu_name and frappe.db.get_single_value("WMS Settings", "require_bin_check_digits"):
+        return bin_name
+    return None
+
+def verify_check_digits(bin_name, value):
+    # Inline "wrong check digit, try again" feedback at the RF scan step - confirm_task (below)
+    # is the real, authoritative check; this exists only so a mistyped code is caught immediately
+    # instead of only surfacing when the whole task is confirmed.
+    require_role("WMS Operator", "WMS Supervisor")
+    actual = frappe.db.get_value("Storage Bin", bin_name, "check_digits")
+    return bool(actual) and str(value or "").strip().upper() == actual.upper()
+
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
     require_role("WMS Operator", "WMS Supervisor")
     # Locking read (for_update), not "select ... for update" then a plain get_doc: at Frappe's
@@ -444,8 +465,18 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         if (task.source_bin or task.source_hu) and not scanned_source: frappe.throw(_("Scan the source bin/HU before confirming"))
         if (task.destination_bin or task.destination_hu) and not scanned_destination: frappe.throw(_("Scan the destination bin/HU before confirming"))
         if task.product and not scanned_product: frappe.throw(_("Scan the product before confirming"))
-    if scanned_source and scanned_source not in {task.source_bin, task.source_hu}: frappe.throw(_("Scanned source does not match the task"))
-    if scanned_destination and scanned_destination not in {task.destination_bin, task.destination_hu}: frappe.throw(_("Scanned destination does not match the task"))
+    src_check_bin = _check_digits_bin(task, "source")
+    if src_check_bin:
+        if scanned_source and scanned_source.upper() != (frappe.db.get_value("Storage Bin", src_check_bin, "check_digits") or "").upper():
+            frappe.throw(_("Check digits do not match {0}").format(src_check_bin))
+    elif scanned_source and scanned_source not in {task.source_bin, task.source_hu}:
+        frappe.throw(_("Scanned source does not match the task"))
+    dst_check_bin = _check_digits_bin(task, "destination")
+    if dst_check_bin:
+        if scanned_destination and scanned_destination.upper() != (frappe.db.get_value("Storage Bin", dst_check_bin, "check_digits") or "").upper():
+            frappe.throw(_("Check digits do not match {0}").format(dst_check_bin))
+    elif scanned_destination and scanned_destination not in {task.destination_bin, task.destination_hu}:
+        frappe.throw(_("Scanned destination does not match the task"))
     if scanned_product and scanned_product != task.product: frappe.throw(_("Scanned product does not match the task"))
     already_confirmed = flt(task.confirmed_quantity)
     qty = flt(confirmed_quantity) if confirmed_quantity is not None else flt(task.planned_quantity) - already_confirmed

@@ -1,7 +1,7 @@
 import frappe
 from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe import _
-from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move
+from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move, verify_check_digits as _verify_check_digits
 from frappe_wms.services.packing import repack as _repack, repack_loose as _repack_loose, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
 from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.resource import RESOURCE_ROLES as RF_ROLES
@@ -38,9 +38,18 @@ def get_task(task_name):
 @retry_on_deadlock
 def my_tasks():
     result = _list_my_tasks()
-    # The RF app needs this up front to know whether to add a product-scan step to the confirm flow.
-    result["settings"] = {"require_scan_verification": int(frappe.db.get_single_value("WMS Settings", "require_scan_verification") or 0)}
+    # The RF app needs this up front to know whether to add a product-scan step to the confirm flow,
+    # and whether a pure-bin source/destination step should ask for check digits instead of a scan.
+    result["settings"] = {
+        "require_scan_verification": int(frappe.db.get_single_value("WMS Settings", "require_scan_verification") or 0),
+        "require_bin_check_digits": int(frappe.db.get_single_value("WMS Settings", "require_bin_check_digits") or 0),
+    }
     return result
+
+@frappe.whitelist()
+@retry_on_deadlock
+def verify_check_digits(bin_name, value):
+    return _verify_check_digits(bin_name, value)
 
 @frappe.whitelist()
 @retry_on_deadlock
@@ -76,13 +85,21 @@ def hu_overview(hu_number):
     children=frappe.get_all("Handling Unit",filters={"parent_hu":hu.name},fields=["name","hu_type","status","current_bin"])
     return {"handling_unit":hu.as_dict(),"stock":stock,"children":children}
 
+BIN_OVERVIEW_FIELDS = ["name", "bin_code", "bin_name", "warehouse", "storage_type", "storage_section", "bin_type",
+    "activity_area", "parent_bin", "bin_role", "aisle", "rack", "level", "position", "sequence",
+    "maximum_hus", "maximum_weight", "maximum_volume", "current_hu_count", "current_weight",
+    "putaway_blocked", "removal_blocked", "inventory_blocked", "active"]
+
 @frappe.whitelist()
 @retry_on_deadlock
 def bin_overview(bin_code):
     bin_doc=frappe.get_doc("Storage Bin",bin_code); bin_doc.check_permission("read")
     stock=frappe.get_all("WMS Stock Balance",filters={"storage_bin":bin_doc.name,"quantity":[">",0]},fields=["product","handling_unit","batch_no","serial_no","stock_type","quantity","stock_uom"])
     handling_units=frappe.get_all("Handling Unit",filters={"current_bin":bin_doc.name,"parent_hu":["is","not set"]},fields=["name","hu_type","status","stock_status"])
-    return {"storage_bin":bin_doc.as_dict(),"stock":stock,"handling_units":handling_units}
+    # Explicit field list, not as_dict() - check_digits must never reach the client (it would
+    # defeat the entire point: an operator could just scan/type the bin here instead of being
+    # the one person actually standing in front of its physical label).
+    return {"storage_bin": {f: bin_doc.get(f) for f in BIN_OVERVIEW_FIELDS}, "stock":stock,"handling_units":handling_units}
 
 @frappe.whitelist()
 @retry_on_deadlock
