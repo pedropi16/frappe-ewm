@@ -1,15 +1,15 @@
-import * as Schema from "./schema.js?v=383abd39dd";
-import * as Store from "./store.js?v=383abd39dd";
-import { el } from "./render.js?v=383abd39dd";
-import { exportProfile } from "./export_import.js?v=383abd39dd";
-import { applyProfileToSite } from "./push.js?v=383abd39dd";
-import { wipeSite } from "./wipe.js?v=383abd39dd";
-import * as ERP from "./erp.js?v=383abd39dd";
-import { findBroken, fixAll } from "./refs.js?v=383abd39dd";
-import { compareWithSite, pullAll } from "./sitesync.js?v=383abd39dd";
-import { toast } from "./render.js?v=383abd39dd";
-import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js?v=383abd39dd";
-import { goToStep, STEPS } from "./wizard.js?v=383abd39dd";
+import * as Schema from "./schema.js?v=a5c8c6a993";
+import * as Store from "./store.js?v=a5c8c6a993";
+import { el } from "./render.js?v=a5c8c6a993";
+import { exportProfile } from "./export_import.js?v=a5c8c6a993";
+import { applyProfileToSite } from "./push.js?v=a5c8c6a993";
+import { wipeSite } from "./wipe.js?v=a5c8c6a993";
+import * as ERP from "./erp.js?v=a5c8c6a993";
+import { findBroken, fixAll } from "./refs.js?v=a5c8c6a993";
+import { compareWithSite, pullAll } from "./sitesync.js?v=a5c8c6a993";
+import { toast } from "./render.js?v=a5c8c6a993";
+import { findMissingRequired, siteCompanies, fillCompany } from "./preflight.js?v=a5c8c6a993";
+import { goToStep, STEPS } from "./wizard.js?v=a5c8c6a993";
 
 export function renderReviewStep(container) {
   container.appendChild(requiredCard());

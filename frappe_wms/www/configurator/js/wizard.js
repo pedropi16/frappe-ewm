@@ -1,14 +1,14 @@
-import * as Schema from "./schema.js?v=383abd39dd";
-import * as Store from "./store.js?v=383abd39dd";
-import { renderRecordForm, el } from "./render.js?v=383abd39dd";
-import { renderPresetPicker } from "./presets.js?v=383abd39dd";
-import { renderBinGenerator } from "./binpattern.js?v=383abd39dd";
-import { renderReviewStep } from "./review.js?v=383abd39dd";
-import { renderMapStep } from "./diagram.js?v=383abd39dd";
-import { renderRecordTable } from "./listview.js?v=383abd39dd";
-import * as ERP from "./erp.js?v=383abd39dd";
-import { previewPull, commitPull } from "./sitesync.js?v=383abd39dd";
-import { toast } from "./render.js?v=383abd39dd";
+import * as Schema from "./schema.js?v=a5c8c6a993";
+import * as Store from "./store.js?v=a5c8c6a993";
+import { renderRecordForm, el } from "./render.js?v=a5c8c6a993";
+import { renderPresetPicker } from "./presets.js?v=a5c8c6a993";
+import { renderBinGenerator } from "./binpattern.js?v=a5c8c6a993";
+import { renderReviewStep } from "./review.js?v=a5c8c6a993";
+import { renderMapStep } from "./diagram.js?v=a5c8c6a993";
+import { renderRecordTable } from "./listview.js?v=a5c8c6a993";
+import * as ERP from "./erp.js?v=a5c8c6a993";
+import { previewPull, commitPull } from "./sitesync.js?v=a5c8c6a993";
+import { toast } from "./render.js?v=a5c8c6a993";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },

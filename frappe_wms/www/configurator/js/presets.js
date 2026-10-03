@@ -1,6 +1,6 @@
-import { autofillSingleCompany } from "./preflight.js?v=383abd39dd";
-import * as Store from "./store.js?v=383abd39dd";
-import { el } from "./render.js?v=383abd39dd";
+import { autofillSingleCompany } from "./preflight.js?v=a5c8c6a993";
+import * as Store from "./store.js?v=a5c8c6a993";
+import { el } from "./render.js?v=a5c8c6a993";
 
 export const PRESETS = [
   { id: "blank", name: "Blank", description: "Start empty and build the configuration from scratch.", file: null },
@@ -13,6 +13,21 @@ export const PRESETS = [
     id: "multi-stock-type-dc", name: "Multi-Stock-Type Distribution Center",
     description: "Extends the standard seed (stock types, movement types, process types, exception codes, number ranges) with receiving/bulk/pick/staging/ship/quality zones, generated bins, and a representative rule set.",
     file: "presets/multi-stock-type-dc.json",
+  },
+  {
+    id: "advanced-picking-packing", name: "Advanced Picking & Packing",
+    description: "Builds on the Distribution Center with two-step and pick-pack-pass picking, a weigh-and-verify pack station, VAS and quality work centers, inspection sampling, tighter count tolerances, and extra print/resource coverage.",
+    file: "presets/advanced-picking-packing.json",
+  },
+  {
+    id: "advanced-execution", name: "Advanced Execution: Kitting, Repack & Cross-Dock",
+    description: "Adds a second warehouse (Flow-Through Hub) running kitting, a repack center, and a deconsolidate-then-consolidate cross-dock flow, on top of everything in Advanced Picking & Packing.",
+    file: "presets/advanced-execution.json",
+  },
+  {
+    id: "enterprise-multi-site", name: "Enterprise Multi-Site",
+    description: "Adds a third warehouse (Regional DC) with yard & dock appointment rules, a multi-stop milk-run route, network and print-agent printers, and turns on hourly supervisor alerts and stock ledger archiving. The most complete, hardest-to-outgrow starting point - expects multiple companies, so warehouse-to-company assignment is left for you to fill in.",
+    file: "presets/enterprise-multi-site.json",
   },
 ];
 

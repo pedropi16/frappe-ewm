@@ -70,7 +70,7 @@ RUNTIME_DOCTYPES = [
     "Warehouse Request", "Warehouse Order", "Warehouse Task", "WMS Print Spool",
     "Consolidation Group", "Kitting Order",
     "Outbound Delivery", "Stock Allocation", "WMS Wave", "Packing Order", "VAS Order",
-    "Goods Issue", "WMS Shipment",
+    "Goods Issue", "WMS Shipment", "WMS Dock Appointment", "WMS Ledger Archive Run",
     "WMS Stock Balance", "WMS Stock Ledger Entry", "WMS Physical Inventory Count",
 ]
 

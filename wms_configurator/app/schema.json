@@ -3919,6 +3919,44 @@
     }
    ]
   },
+  "WMS Dock Appointment": {
+   "module": "WMS Shipping",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Door"
+    },
+    {
+     "target": "Inbound Delivery",
+     "label": "Inbound Delivery"
+    },
+    {
+     "target": "WMS Shipment",
+     "label": "Shipment"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Yard Spot"
+    }
+   ]
+  },
+  "WMS Ledger Archive Run": {
+   "module": "WMS Core",
+   "links": [
+    {
+     "target": "WMS Warehouse",
+     "label": "Warehouse"
+    },
+    {
+     "target": "User",
+     "label": "Started By"
+    }
+   ]
+  },
   "WMS Stock Balance": {
    "module": "WMS Inventory",
    "links": [

@@ -1,0 +1,2174 @@
+{
+  "formatVersion": 1,
+  "profileName": "Advanced Picking & Packing",
+  "records": {
+    "WMS Settings": [
+      {
+        "enforce_wms_only_stock_movements": 1,
+        "enforce_storage_type_rules": 1,
+        "require_scan_verification": 0,
+        "default_handling_unit_type": "INBOUND"
+      }
+    ],
+    "Bin Type": [
+      {
+        "bin_type_code": "PALLET-BIN",
+        "bin_type_name": "Pallet Bin",
+        "maximum_weight": 1000,
+        "maximum_volume": 1.8,
+        "length": 1.2,
+        "width": 1.0,
+        "height": 1.5,
+        "active": 1
+      },
+      {
+        "bin_type_code": "TOTE-BIN",
+        "bin_type_name": "Tote / Pick Bin",
+        "maximum_weight": 30,
+        "maximum_volume": 0.06,
+        "length": 0.4,
+        "width": 0.3,
+        "height": 0.25,
+        "active": 1
+      },
+      {
+        "bin_type_code": "DOOR-BIN",
+        "bin_type_name": "Dock Door",
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "length": 0,
+        "width": 0,
+        "height": 0,
+        "active": 1
+      }
+    ],
+    "Handling Unit Type": [
+      {
+        "hu_type_code": "PALLET",
+        "hu_type_name": "Standard Pallet",
+        "category": "Pallet",
+        "maximum_weight": 800,
+        "maximum_volume": 1.8,
+        "nestable": 0,
+        "reusable": 1,
+        "requires_seal": 0,
+        "numbering_mode": "Internal",
+        "active": 1
+      },
+      {
+        "hu_type_code": "TOTE",
+        "hu_type_name": "Pick Tote",
+        "category": "Tote",
+        "maximum_weight": 25,
+        "maximum_volume": 0.06,
+        "nestable": 1,
+        "reusable": 1,
+        "requires_seal": 0,
+        "numbering_mode": "Internal",
+        "active": 1
+      },
+      {
+        "hu_type_code": "INBOUND",
+        "hu_type_name": "Inbound Unit (Supplier-Barcoded)",
+        "category": "Other",
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "nestable": 0,
+        "reusable": 0,
+        "requires_seal": 0,
+        "numbering_mode": "External",
+        "active": 1
+      }
+    ],
+    "WMS Exception Code": [
+      {
+        "exception_code": "OOS",
+        "exception_name": "Out of Stock at Location",
+        "category": "Stock",
+        "requires_supervisor": 0,
+        "requires_comment": 0,
+        "allows_quantity_change": 1,
+        "allows_bin_change": 0,
+        "follow_up_action": "Create Follow-up Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Pick"
+          }
+        ]
+      },
+      {
+        "exception_code": "DAMAGED",
+        "exception_name": "Damaged Product Found",
+        "category": "Stock",
+        "requires_supervisor": 0,
+        "requires_comment": 1,
+        "allows_quantity_change": 1,
+        "allows_bin_change": 0,
+        "follow_up_action": "Create Difference Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Unload"
+          },
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Internal Move"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          }
+        ]
+      },
+      {
+        "exception_code": "BIN_BLOCKED",
+        "exception_name": "Bin Blocked or Inaccessible",
+        "category": "Bin",
+        "requires_supervisor": 0,
+        "requires_comment": 0,
+        "allows_quantity_change": 0,
+        "allows_bin_change": 1,
+        "follow_up_action": "Create Difference Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Internal Move"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          },
+          {
+            "task_type": "Stage"
+          }
+        ]
+      },
+      {
+        "exception_code": "HU_DAMAGED",
+        "exception_name": "Handling Unit Damaged",
+        "category": "Handling Unit",
+        "requires_supervisor": 0,
+        "requires_comment": 1,
+        "allows_quantity_change": 0,
+        "allows_bin_change": 0,
+        "follow_up_action": "Block HU",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Unload"
+          },
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Internal Move"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          },
+          {
+            "task_type": "Load"
+          }
+        ]
+      },
+      {
+        "exception_code": "WRONG_ITEM",
+        "exception_name": "Wrong Item Scanned",
+        "category": "Task",
+        "requires_supervisor": 0,
+        "requires_comment": 1,
+        "allows_quantity_change": 0,
+        "allows_bin_change": 0,
+        "follow_up_action": "Cancel Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Unload"
+          },
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Internal Move"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          },
+          {
+            "task_type": "Stage"
+          },
+          {
+            "task_type": "Load"
+          },
+          {
+            "task_type": "Posting Change"
+          },
+          {
+            "task_type": "Inventory Count"
+          }
+        ]
+      },
+      {
+        "exception_code": "QTY_MISMATCH",
+        "exception_name": "Quantity Mismatch",
+        "category": "Task",
+        "requires_supervisor": 0,
+        "requires_comment": 1,
+        "allows_quantity_change": 1,
+        "allows_bin_change": 0,
+        "follow_up_action": "Create Difference Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Unload"
+          },
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          },
+          {
+            "task_type": "Inventory Count"
+          }
+        ]
+      },
+      {
+        "exception_code": "ROUTE_ISSUE",
+        "exception_name": "Route Not Deliverable",
+        "category": "Route",
+        "requires_supervisor": 1,
+        "requires_comment": 1,
+        "allows_quantity_change": 0,
+        "allows_bin_change": 0,
+        "follow_up_action": "Create Follow-up Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Load"
+          },
+          {
+            "task_type": "Stage"
+          }
+        ]
+      },
+      {
+        "exception_code": "SYSTEM_ERROR",
+        "exception_name": "System or Scanner Error",
+        "category": "System",
+        "requires_supervisor": 1,
+        "requires_comment": 1,
+        "allows_quantity_change": 0,
+        "allows_bin_change": 0,
+        "follow_up_action": "Cancel Task",
+        "active": 1,
+        "allowed_task_types": [
+          {
+            "task_type": "Unload"
+          },
+          {
+            "task_type": "Putaway"
+          },
+          {
+            "task_type": "Pick"
+          },
+          {
+            "task_type": "Internal Move"
+          },
+          {
+            "task_type": "Deconsolidation"
+          },
+          {
+            "task_type": "Consolidation"
+          },
+          {
+            "task_type": "Stage"
+          },
+          {
+            "task_type": "Load"
+          },
+          {
+            "task_type": "Posting Change"
+          },
+          {
+            "task_type": "Inventory Count"
+          }
+        ]
+      }
+    ],
+    "WMS Movement Type": [
+      {
+        "movement_type_code": "101",
+        "movement_type_name": "Goods Receipt",
+        "movement_category": "Receipt",
+        "requires_source": 0,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Increase",
+        "reversal_movement_type": "102",
+        "active": 1
+      },
+      {
+        "movement_type_code": "102",
+        "movement_type_name": "Goods Receipt Reversal",
+        "movement_category": "Receipt Reversal",
+        "requires_source": 1,
+        "requires_destination": 0,
+        "updates_hu": 1,
+        "inventory_effect": "Decrease",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "201",
+        "movement_type_name": "Putaway",
+        "movement_category": "Putaway",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "301",
+        "movement_type_name": "Internal Movement",
+        "movement_category": "Internal Movement",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "401",
+        "movement_type_name": "Picking",
+        "movement_category": "Picking",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "402",
+        "active": 1
+      },
+      {
+        "movement_type_code": "402",
+        "movement_type_name": "Pick Reversal",
+        "movement_category": "Pick Reversal",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "501",
+        "movement_type_name": "Stock Type Change",
+        "movement_category": "Stock Type Change",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 0,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "601",
+        "movement_type_name": "Goods Issue",
+        "movement_category": "Goods Issue",
+        "requires_source": 1,
+        "requires_destination": 0,
+        "updates_hu": 1,
+        "inventory_effect": "Decrease",
+        "reversal_movement_type": "602",
+        "active": 1
+      },
+      {
+        "movement_type_code": "602",
+        "movement_type_name": "Goods Issue Reversal",
+        "movement_category": "Goods Issue Reversal",
+        "requires_source": 0,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Increase",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "701",
+        "movement_type_name": "Inventory Gain",
+        "movement_category": "Inventory Gain",
+        "requires_source": 0,
+        "requires_destination": 1,
+        "updates_hu": 0,
+        "inventory_effect": "Increase",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "702",
+        "movement_type_name": "Inventory Loss",
+        "movement_category": "Inventory Loss",
+        "requires_source": 1,
+        "requires_destination": 0,
+        "updates_hu": 0,
+        "inventory_effect": "Decrease",
+        "reversal_movement_type": "",
+        "active": 1
+      },
+      {
+        "movement_type_code": "801",
+        "movement_type_name": "Pack",
+        "movement_category": "Pack",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "802",
+        "active": 1
+      },
+      {
+        "movement_type_code": "802",
+        "movement_type_name": "Unpack",
+        "movement_category": "Unpack",
+        "requires_source": 1,
+        "requires_destination": 1,
+        "updates_hu": 1,
+        "inventory_effect": "Transfer",
+        "reversal_movement_type": "",
+        "active": 1
+      }
+    ],
+    "WMS Stock Type": [
+      {
+        "stock_type_code": "AVAILABLE",
+        "stock_type_name": "Available",
+        "availability_category": "Available",
+        "available_for_allocation": 1,
+        "picking_allowed": 1,
+        "shipping_allowed": 1,
+        "movement_allowed": 1,
+        "requires_release": 0,
+        "requires_reason": 0,
+        "active": 1
+      },
+      {
+        "stock_type_code": "QUALITY",
+        "stock_type_name": "Quality Inspection",
+        "availability_category": "Quality",
+        "available_for_allocation": 0,
+        "picking_allowed": 0,
+        "shipping_allowed": 0,
+        "movement_allowed": 1,
+        "requires_release": 1,
+        "requires_reason": 0,
+        "active": 1
+      },
+      {
+        "stock_type_code": "WAREHOUSE_BLOCKED",
+        "stock_type_name": "Warehouse Blocked",
+        "availability_category": "Blocked",
+        "available_for_allocation": 0,
+        "picking_allowed": 0,
+        "shipping_allowed": 0,
+        "movement_allowed": 1,
+        "requires_release": 1,
+        "requires_reason": 1,
+        "active": 1
+      },
+      {
+        "stock_type_code": "PRODUCTION_BLOCKED",
+        "stock_type_name": "Production Blocked",
+        "availability_category": "Blocked",
+        "available_for_allocation": 0,
+        "picking_allowed": 0,
+        "shipping_allowed": 0,
+        "movement_allowed": 1,
+        "requires_release": 1,
+        "requires_reason": 1,
+        "active": 1
+      },
+      {
+        "stock_type_code": "DAMAGED",
+        "stock_type_name": "Damaged",
+        "availability_category": "Damaged",
+        "available_for_allocation": 0,
+        "picking_allowed": 0,
+        "shipping_allowed": 0,
+        "movement_allowed": 1,
+        "requires_release": 0,
+        "requires_reason": 1,
+        "active": 1
+      },
+      {
+        "stock_type_code": "SCRAP",
+        "stock_type_name": "Scrap",
+        "availability_category": "Scrap",
+        "available_for_allocation": 0,
+        "picking_allowed": 0,
+        "shipping_allowed": 0,
+        "movement_allowed": 1,
+        "requires_release": 0,
+        "requires_reason": 1,
+        "active": 1
+      }
+    ],
+    "WMS Warehouse": [
+      {
+        "warehouse_code": "DC1",
+        "warehouse_name": "Distribution Center 1",
+        "company": "",
+        "erpnext_warehouse": "",
+        "default_receiving_bin": "DC1-RECEIVING-DOCK1",
+        "default_shipping_bin": "DC1-SHIP-DOOR1",
+        "default_difference_bin": "DC1-DAMAGE-D1",
+        "default_stock_type": "AVAILABLE",
+        "allow_negative_stock": 0,
+        "active": 1
+      }
+    ],
+    "Activity Area": [
+      {
+        "warehouse": "DC1",
+        "area_code": "ZONE-A",
+        "area_name": "Pick Zone A",
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "area_code": "PACK",
+        "area_name": "Pack Station Zone",
+        "active": 1
+      }
+    ],
+    "Storage Type": [
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "RECEIVING",
+        "storage_type_name": "Receiving Dock",
+        "storage_role": "Receiving",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "BULK",
+        "storage_type_name": "Bulk Storage",
+        "storage_role": "Storage",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "BULK2",
+        "storage_type_name": "Bulk Storage Overflow",
+        "storage_role": "Storage",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "PICK",
+        "storage_type_name": "Pick Face",
+        "storage_role": "Picking",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 0,
+        "hu_managed": 0,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "PACK",
+        "storage_type_name": "Packing Station",
+        "storage_role": "Packing",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 1,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "STAGING",
+        "storage_type_name": "Outbound Staging",
+        "storage_role": "Staging",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "SHIP",
+        "storage_type_name": "Shipping Door",
+        "storage_role": "Door",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "QUALITY",
+        "storage_type_name": "Quality Hold",
+        "storage_role": "Storage",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "storage_type_code": "DAMAGE",
+        "storage_type_name": "Damage / Blocked",
+        "storage_role": "Difference",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1
+      }
+    ],
+    "Storage Section": [
+      {
+        "storage_type": "DC1-BULK",
+        "section_code": "FAST",
+        "section_name": "Fast Movers",
+        "active": 1
+      },
+      {
+        "storage_type": "DC1-BULK",
+        "section_code": "SLOW",
+        "section_name": "Slow Movers",
+        "active": 1
+      }
+    ],
+    "Storage Bin": [
+      {
+        "bin_code": "DC1-RECEIVING-DOCK1",
+        "bin_name": "DC1-RECEIVING-DOCK1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-RECEIVING",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Receiving",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-RECEIVING-DOCK2",
+        "bin_name": "DC1-RECEIVING-DOCK2",
+        "warehouse": "DC1",
+        "storage_type": "DC1-RECEIVING",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Receiving",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-A01",
+        "bin_name": "DC1-BULK-A01",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "1",
+        "level": "1",
+        "position": "01",
+        "sequence": 10,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-A02",
+        "bin_name": "DC1-BULK-A02",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "1",
+        "level": "1",
+        "position": "02",
+        "sequence": 20,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-A03",
+        "bin_name": "DC1-BULK-A03",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "1",
+        "level": "1",
+        "position": "03",
+        "sequence": 30,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-A04",
+        "bin_name": "DC1-BULK-A04",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "1",
+        "level": "1",
+        "position": "04",
+        "sequence": 40,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-B01",
+        "bin_name": "DC1-BULK-B01",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "1",
+        "level": "1",
+        "position": "01",
+        "sequence": 50,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-B02",
+        "bin_name": "DC1-BULK-B02",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "1",
+        "level": "1",
+        "position": "02",
+        "sequence": 60,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-B03",
+        "bin_name": "DC1-BULK-B03",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "1",
+        "level": "1",
+        "position": "03",
+        "sequence": 70,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK-B04",
+        "bin_name": "DC1-BULK-B04",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK",
+        "storage_section": "DC1-BULK-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "1",
+        "level": "1",
+        "position": "04",
+        "sequence": 80,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK2-C01",
+        "bin_name": "DC1-BULK2-C01",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK2",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "1",
+        "level": "1",
+        "position": "01",
+        "sequence": 10,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-BULK2-C02",
+        "bin_name": "DC1-BULK2-C02",
+        "warehouse": "DC1",
+        "storage_type": "DC1-BULK2",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "1",
+        "level": "1",
+        "position": "02",
+        "sequence": 20,
+        "maximum_hus": 2,
+        "maximum_weight": 1600,
+        "maximum_volume": 3.6,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PICK-P01",
+        "bin_name": "DC1-PICK-P01",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PICK",
+        "storage_section": "",
+        "bin_type": "TOTE-BIN",
+        "activity_area": "DC1-ZONE-A",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "01",
+        "sequence": 10,
+        "maximum_hus": 1,
+        "maximum_weight": 30,
+        "maximum_volume": 0.06,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PICK-P02",
+        "bin_name": "DC1-PICK-P02",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PICK",
+        "storage_section": "",
+        "bin_type": "TOTE-BIN",
+        "activity_area": "DC1-ZONE-A",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "02",
+        "sequence": 20,
+        "maximum_hus": 1,
+        "maximum_weight": 30,
+        "maximum_volume": 0.06,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PICK-P03",
+        "bin_name": "DC1-PICK-P03",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PICK",
+        "storage_section": "",
+        "bin_type": "TOTE-BIN",
+        "activity_area": "DC1-ZONE-A",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "03",
+        "sequence": 30,
+        "maximum_hus": 1,
+        "maximum_weight": 30,
+        "maximum_volume": 0.06,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PICK-P04",
+        "bin_name": "DC1-PICK-P04",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PICK",
+        "storage_section": "",
+        "bin_type": "TOTE-BIN",
+        "activity_area": "DC1-ZONE-A",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "04",
+        "sequence": 40,
+        "maximum_hus": 1,
+        "maximum_weight": 30,
+        "maximum_volume": 0.06,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PACK-STATION1",
+        "bin_name": "DC1-PACK-STATION1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PACK",
+        "storage_section": "",
+        "bin_type": "",
+        "activity_area": "DC1-PACK",
+        "parent_bin": "",
+        "bin_role": "Packing",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-STAGING-S1",
+        "bin_name": "DC1-STAGING-S1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-STAGING",
+        "storage_section": "",
+        "bin_type": "",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Staging",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 10,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-SHIP-DOOR1",
+        "bin_name": "DC1-SHIP-DOOR1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-SHIP",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Door",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 10,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-QUALITY-Q1",
+        "bin_name": "DC1-QUALITY-Q1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-QUALITY",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "QUALITY"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-DAMAGE-D1",
+        "bin_name": "DC1-DAMAGE-D1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-DAMAGE",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Difference",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 1,
+        "inventory_blocked": 0,
+        "active": 1,
+        "allowed_stock_types": [
+          {
+            "stock_type": "DAMAGED"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          },
+          {
+            "stock_type": "SCRAP"
+          }
+        ],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-PACK-STATION2",
+        "bin_name": "DC1-PACK-STATION2",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PACK",
+        "bin_role": "Packing",
+        "sequence": 2,
+        "maximum_hus": 4,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      },
+      {
+        "bin_code": "DC1-VAS-STATION1",
+        "bin_name": "DC1-VAS-STATION1",
+        "warehouse": "DC1",
+        "storage_type": "DC1-PACK",
+        "bin_role": "Packing",
+        "sequence": 3,
+        "maximum_hus": 4,
+        "active": 1,
+        "allowed_stock_types": [],
+        "allowed_hu_types": []
+      }
+    ],
+    "Work Center": [
+      {
+        "warehouse": "DC1",
+        "work_center_code": "PACK1",
+        "work_center_name": "Pack Station 1",
+        "bin": "DC1-PACK-STATION1",
+        "active": 1
+      },
+      {
+        "warehouse": "DC1",
+        "work_center_code": "PACK2",
+        "work_center_name": "Pack Station 2 (Weigh & Verify)",
+        "bin": "DC1-PACK-STATION2",
+        "active": 1,
+        "work_center_type": "Packing",
+        "quantity_proposal": "One Unit per Scan",
+        "weigh_on_close": "Required",
+        "weight_tolerance_percent": 5,
+        "completeness_check": "Block",
+        "close_follow_up": "Move to Delivery Staging Bin",
+        "print_label_on_create": 1,
+        "print_label_on_close": 1,
+        "allow_differences": 1
+      },
+      {
+        "warehouse": "DC1",
+        "work_center_code": "VAS1",
+        "work_center_name": "VAS Station 1",
+        "bin": "DC1-VAS-STATION1",
+        "active": 1,
+        "work_center_type": "VAS"
+      },
+      {
+        "warehouse": "DC1",
+        "work_center_code": "QC1",
+        "work_center_name": "Quality Inspection Bench",
+        "bin": "DC1-QUALITY-Q1",
+        "active": 1,
+        "work_center_type": "Quality"
+      }
+    ],
+    "Warehouse Process Type": [
+      {
+        "process_type_code": "GR_UNLOAD",
+        "process_type_name": "Goods Receipt Unload",
+        "activity": "Unload",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "GR_PUTAWAY",
+        "process_type_name": "Goods Receipt Putaway",
+        "activity": "Putaway",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "201",
+        "active": 1
+      },
+      {
+        "process_type_code": "OB_PICK",
+        "process_type_name": "Outbound Picking",
+        "activity": "Pick",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "401",
+        "active": 1
+      },
+      {
+        "process_type_code": "OB_STAGE",
+        "process_type_name": "Outbound Staging",
+        "activity": "Stage",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "OB_LOAD",
+        "process_type_name": "Outbound Loading",
+        "activity": "Load",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "INTERNAL_MOVE",
+        "process_type_name": "Internal Movement",
+        "activity": "Internal Move",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "DECON",
+        "process_type_name": "Deconsolidation",
+        "activity": "Deconsolidation",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "CONSOL",
+        "process_type_name": "Consolidation Staging",
+        "activity": "Consolidation",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1
+      },
+      {
+        "process_type_code": "PACK_REPACK",
+        "process_type_name": "Packing and Repacking",
+        "activity": "Pack",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "801",
+        "active": 1
+      },
+      {
+        "process_type_code": "STOCK_TYPE_CHANGE",
+        "process_type_name": "Stock Type Change",
+        "activity": "Posting Change",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 0,
+        "stock_required": 1,
+        "confirmation_mode": "Product and Quantity",
+        "movement_type": "501",
+        "active": 1
+      },
+      {
+        "process_type_code": "REPLENISH",
+        "process_type_name": "Pick Face Replenishment",
+        "activity": "Putaway",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "201",
+        "active": 1
+      },
+      {
+        "process_type_code": "OB_PICK_2STEP",
+        "process_type_name": "Outbound Picking (Two-Step)",
+        "activity": "Pick",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "401",
+        "picking_strategy": "Two-Step",
+        "active": 1
+      },
+      {
+        "process_type_code": "OB_PICK_PPP",
+        "process_type_name": "Outbound Picking (Pick-Pack-Pass)",
+        "activity": "Pick",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "401",
+        "picking_strategy": "Pick-Pack-Pass",
+        "pick_pack_pass_hu_type": "TOTE",
+        "active": 1
+      }
+    ],
+    "Warehouse Process Type Determination Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Replenish",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "REPLENISH",
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "",
+        "activity": "Pick",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "Urgent",
+        "process_type_determination_indicator": "",
+        "process_type": "OB_PICK",
+        "active": 1
+      },
+      {
+        "priority": 50,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "stock_type": "AVAILABLE",
+        "priority_level": "Urgent",
+        "process_type": "OB_PICK_PPP",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "process_type": "OB_PICK_2STEP",
+        "active": 1
+      }
+    ],
+    "WO Creation Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "item_group": "",
+        "stock_type": "",
+        "maximum_tasks": 20,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "activity": "Putaway",
+        "item_group": "",
+        "stock_type": "",
+        "maximum_tasks": 15,
+        "active": 1
+      },
+      {
+        "priority": 150,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "maximum_tasks": 20,
+        "maximum_weight": 500,
+        "maximum_volume": 2,
+        "standard_minutes_per_task": 2.5,
+        "maximum_minutes": 240,
+        "active": 1
+      }
+    ],
+    "Storage Type Search Sequence": [
+      {
+        "warehouse": "DC1",
+        "direction": "Putaway",
+        "stock_type": "AVAILABLE",
+        "storage_types": [
+          {
+            "storage_type": "DC1-BULK",
+            "sequence": 1
+          },
+          {
+            "storage_type": "DC1-BULK2",
+            "sequence": 2
+          }
+        ],
+        "active": 1
+      }
+    ],
+    "Bin Determination Rule": [
+      {
+        "priority": 50,
+        "warehouse": "DC1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "QUALITY",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "DC1-QUALITY",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "AVAILABLE",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "DC1-BULK",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "DC1-PICK",
+        "destination_storage_type": "",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "Bin Sequence",
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "DC1-BULK",
+        "destination_storage_type": "",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "Bin Sequence",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Internal Move",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "DC1-BULK",
+        "destination_storage_type": "DC1-PICK",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Stage",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "DC1-STAGING",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "activity": "Load",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "DC1-STAGING",
+        "destination_storage_type": "DC1-SHIP",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "DC1-SHIP-DOOR1",
+        "strategy": "Fixed Bin",
+        "active": 1
+      }
+    ],
+    "Storage Process": [
+      {
+        "process_code": "GR_FLOW",
+        "process_name": "Goods Receipt Flow",
+        "process_category": "Inbound",
+        "warehouse": "DC1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "UNLOAD",
+            "process_type": "GR_UNLOAD",
+            "source_storage_type": "",
+            "destination_storage_type": "DC1-RECEIVING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 2,
+            "step_code": "PUTAWAY",
+            "process_type": "GR_PUTAWAY",
+            "source_storage_type": "DC1-RECEIVING",
+            "destination_storage_type": "DC1-BULK",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "OB_FLOW",
+        "process_name": "Outbound Flow",
+        "process_category": "Outbound",
+        "warehouse": "DC1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "PICK",
+            "process_type": "OB_PICK",
+            "source_storage_type": "DC1-BULK",
+            "destination_storage_type": "DC1-STAGING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 2,
+            "step_code": "STAGE",
+            "process_type": "OB_STAGE",
+            "source_storage_type": "",
+            "destination_storage_type": "DC1-STAGING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 3,
+            "step_code": "LOAD",
+            "process_type": "OB_LOAD",
+            "source_storage_type": "DC1-STAGING",
+            "destination_storage_type": "DC1-SHIP",
+            "destination_bin": "DC1-SHIP-DOOR1",
+            "require_hu_close": 1,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "REPL_FLOW",
+        "process_name": "Pick Face Replenishment Flow",
+        "process_category": "Internal",
+        "warehouse": "DC1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "REPLENISH",
+            "process_type": "REPLENISH",
+            "source_storage_type": "DC1-BULK",
+            "destination_storage_type": "DC1-PICK",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      }
+    ],
+    "Process Determination Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "document_type": "Outbound Delivery",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "",
+        "route": "DC1-ROUTE",
+        "storage_process": "OB_FLOW",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "document_type": "Internal Movement",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "DC1-BULK",
+        "destination_storage_type": "DC1-PICK",
+        "route": "",
+        "storage_process": "REPL_FLOW",
+        "active": 1
+      }
+    ],
+    "Removal Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "strategy": "FEFO",
+        "sort_fields": [
+          {
+            "field": "shelf_life_expiry_date",
+            "direction": "Asc"
+          },
+          {
+            "field": "first_receipt_date",
+            "direction": "Asc"
+          }
+        ],
+        "fixed_bin": "",
+        "active": 1
+      }
+    ],
+    "Inspection Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "sampling_percentage": 100,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "sampling_percentage": 10,
+        "active": 1
+      }
+    ],
+    "Count Tolerance Group": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "item_group": "",
+        "tolerance_percentage": 5,
+        "tolerance_quantity": 0,
+        "requires_recount": 1,
+        "requires_approval": 0,
+        "active": 1
+      },
+      {
+        "priority": 50,
+        "warehouse": "DC1",
+        "tolerance_percentage": 2,
+        "tolerance_quantity": 0,
+        "requires_recount": 1,
+        "requires_approval": 1,
+        "active": 1
+      }
+    ],
+    "Cycle Count Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "procedure_type": "ABC Cycle Count",
+        "abc_indicator": "A",
+        "storage_type": "DC1-PICK",
+        "frequency_days": 30,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "procedure_type": "Bin Check",
+        "abc_indicator": "",
+        "storage_type": "DC1-BULK",
+        "frequency_days": 90,
+        "active": 1
+      },
+      {
+        "priority": 300,
+        "warehouse": "DC1",
+        "procedure_type": "Zero Stock",
+        "storage_type": "DC1-PICK",
+        "frequency_days": 1,
+        "active": 1
+      },
+      {
+        "priority": 400,
+        "warehouse": "DC1",
+        "procedure_type": "Low Stock",
+        "storage_type": "DC1-PICK",
+        "frequency_days": 7,
+        "active": 1
+      }
+    ],
+    "WMS Number Range": [
+      {
+        "range_for": "Handling Unit",
+        "warehouse": "",
+        "hu_type": "PALLET",
+        "prefix": "HU-",
+        "number_length": 8,
+        "start_number": 1,
+        "end_number": 99999999,
+        "current_number": 0,
+        "active": 1
+      },
+      {
+        "range_for": "Handling Unit",
+        "warehouse": "",
+        "hu_type": "TOTE",
+        "prefix": "TOTE-",
+        "number_length": 6,
+        "start_number": 1,
+        "end_number": 999999,
+        "current_number": 0,
+        "active": 1
+      },
+      {
+        "range_for": "WMS Shipment",
+        "warehouse": "",
+        "hu_type": "",
+        "prefix": "SHIP-",
+        "number_length": 8,
+        "start_number": 1,
+        "end_number": 99999999,
+        "current_number": 0,
+        "active": 1
+      }
+    ],
+    "Packaging Material": [
+      {
+        "packaging_material_code": "PALLET_WRAP",
+        "packaging_material_name": "Pallet Stretch Wrap",
+        "hu_type": "PALLET",
+        "item": "",
+        "tare_weight": 0.5,
+        "length": 0,
+        "width": 0,
+        "height": 0,
+        "maximum_weight": 0,
+        "reusable": 0,
+        "active": 1
+      },
+      {
+        "packaging_material_code": "TOTE_LID",
+        "packaging_material_name": "Tote Lid",
+        "hu_type": "TOTE",
+        "item": "",
+        "tare_weight": 0.2,
+        "length": 0.4,
+        "width": 0.3,
+        "height": 0.02,
+        "maximum_weight": 0,
+        "reusable": 1,
+        "active": 1
+      }
+    ],
+    "WMS Route": [
+      {
+        "route_code": "DC1-ROUTE",
+        "route_name": "DC1 Main Route",
+        "origin_warehouse": "DC1",
+        "default_staging_bin": "DC1-STAGING-S1",
+        "default_door": "DC1-SHIP-DOOR1",
+        "carrier": "",
+        "stops": [
+          {
+            "sequence": 1,
+            "storage_bin": "DC1-STAGING-S1",
+            "stop_type": "Staging",
+            "description": "Outbound staging lane"
+          }
+        ],
+        "active": 1
+      }
+    ],
+    "WMS Resource Group": [
+      {
+        "group_code": "PICKERS",
+        "group_name": "DC1 Pickers",
+        "warehouse": "DC1",
+        "description": "RF pickers and pick trolleys working the pick face",
+        "active": 1
+      },
+      {
+        "group_code": "PRINTERS",
+        "group_name": "DC1 Printers",
+        "warehouse": "DC1",
+        "description": "Fixed label and document printers",
+        "active": 1
+      }
+    ],
+    "WMS Resource": [
+      {
+        "resource_code": "SCANNER-01",
+        "warehouse": "DC1",
+        "resource_group": "PICKERS",
+        "resource_type": "Scanner",
+        "device_id": "",
+        "user": "",
+        "current_queue": "",
+        "current_work_center": "",
+        "current_bin": "",
+        "active": 1
+      },
+      {
+        "resource_code": "PRINTER-01",
+        "warehouse": "DC1",
+        "resource_group": "PRINTERS",
+        "resource_type": "Printer",
+        "device_id": "",
+        "user": "",
+        "current_queue": "",
+        "current_work_center": "",
+        "current_bin": "",
+        "active": 1
+      },
+      {
+        "resource_code": "FORKLIFT-01",
+        "warehouse": "DC1",
+        "resource_group": "PICKERS",
+        "resource_type": "Forklift",
+        "active": 1
+      },
+      {
+        "resource_code": "TROLLEY-01",
+        "warehouse": "DC1",
+        "resource_group": "PICKERS",
+        "resource_type": "Picking Trolley",
+        "active": 1
+      }
+    ],
+    "Warehouse Queue": [
+      {
+        "queue_code": "DC1-PICK-Q",
+        "queue_name": "DC1 Picking Queue",
+        "warehouse": "DC1",
+        "activity": "Pick",
+        "storage_type": "DC1-PICK",
+        "activity_area": "DC1-ZONE-A",
+        "resource_group": "PICKERS",
+        "sequence_rule": "Priority Then FIFO",
+        "active": 1
+      },
+      {
+        "queue_code": "DC1-PUTAWAY-Q",
+        "queue_name": "DC1 Putaway Queue",
+        "warehouse": "DC1",
+        "activity": "Putaway",
+        "storage_type": "DC1-BULK",
+        "activity_area": "",
+        "resource_group": "PICKERS",
+        "sequence_rule": "FIFO",
+        "active": 1
+      }
+    ],
+    "WMS Print Determination Rule": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "event": "HU Created",
+        "output_device": "PRINTER-01",
+        "print_format": "",
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "event": "Goods Issue Posted",
+        "output_device": "PRINTER-01",
+        "print_format": "",
+        "active": 1
+      },
+      {
+        "priority": 300,
+        "warehouse": "DC1",
+        "event": "Putaway Confirmed",
+        "output_device": "PRINTER-01",
+        "active": 1
+      },
+      {
+        "priority": 400,
+        "warehouse": "DC1",
+        "event": "HU Closed",
+        "output_device": "PRINTER-01",
+        "active": 1
+      }
+    ],
+    "Wave Template": [
+      {
+        "template_code": "DC1-STANDARD",
+        "template_name": "Standard Daily Wave",
+        "warehouse": "DC1",
+        "route": "DC1-ROUTE",
+        "priority": "Normal",
+        "picking_strategy": "Single Order",
+        "cutoff_time": "14:00:00",
+        "auto_release": 1,
+        "active": 1
+      },
+      {
+        "template_code": "DC1-URGENT",
+        "template_name": "Urgent Same-Day Wave",
+        "warehouse": "DC1",
+        "route": "",
+        "priority": "Urgent",
+        "picking_strategy": "Single Order",
+        "cutoff_time": "16:30:00",
+        "auto_release": 1,
+        "active": 1
+      }
+    ],
+    "Labor Standard": [
+      {
+        "priority": 100,
+        "warehouse": "DC1",
+        "task_type": "Pick",
+        "item_group": "",
+        "standard_seconds_per_unit": 25,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "DC1",
+        "task_type": "Putaway",
+        "item_group": "",
+        "standard_seconds_per_unit": 35,
+        "active": 1
+      },
+      {
+        "priority": 300,
+        "warehouse": "DC1",
+        "task_type": "Load",
+        "item_group": "",
+        "standard_seconds_per_unit": 15,
+        "active": 1
+      }
+    ]
+  }
+}
