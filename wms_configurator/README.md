@@ -33,7 +33,24 @@ Every Link field is a searchable dropdown. It always suggests the records alread
 
 ## Using it
 
-1. Pick a starting preset (or Blank) on the first screen.
+1. Pick a starting preset (or Blank) on the first screen. Each tier builds on
+   the one before it:
+   - **Simple Single-Zone Warehouse** - one warehouse, one storage type, a
+     small generated bin range. A good starting point for a small site or a
+     demo.
+   - **Multi-Stock-Type Distribution Center** - receiving/bulk/pick/
+     staging/ship/quality zones, generated bins, a representative rule set.
+   - **Advanced Picking & Packing** - adds two-step and pick-pack-pass
+     picking, a weigh-and-verify pack station, VAS and quality work
+     centers, inspection sampling, tighter count tolerances.
+   - **Advanced Execution: Kitting, Repack & Cross-Dock** - adds a second
+     warehouse (Flow-Through Hub) running kitting, a repack center, and a
+     deconsolidate-then-consolidate cross-dock flow.
+   - **Enterprise Multi-Site** - adds a third warehouse (Regional DC) with
+     yard & dock appointment rules, a multi-stop milk-run route, network
+     and print-agent printers, hourly alerts, and ledger archiving. Expects
+     multiple companies, so warehouse-to-company assignment is left for you
+     to fill in.
 2. Walk the steps in the left sidebar - each one explains what it's for and
    any real dependency it has on an earlier step (e.g. Routes need a
    Door-role Storage Bin created two steps earlier).
