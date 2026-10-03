@@ -76,3 +76,31 @@ def render_hu_label_zpl(hu_name):
         "^XZ",
     ]
     return "\n".join(lines)
+
+
+def render_bin_label_zpl(bin_name):
+    # Same conventions as render_hu_label_zpl - a 4x6in ZPL-II label. ^BQ is ZPL's native QR
+    # command: the printer draws the symbol itself from raw data, no QR image library needed
+    # anywhere in this app. The QR encodes the bin's own code - exactly what every other
+    # scan-the-bin flow already matches against (Storage Bin.name, autonamed from bin_code) -
+    # so this one label is a full replacement for whatever (if anything) was on the bin before,
+    # not a second label alongside it. Check digits print as plain text only, never inside the
+    # QR: they must stay something a person reads standing at the bin, never something a photo
+    # or a remote scan could lift - that's the entire point of requiring them.
+    # No real printer is configured yet, so this has been validated as syntactically well-formed
+    # ZPL, not against physical hardware.
+    bin_doc = frappe.get_doc("Storage Bin", bin_name)
+    context = bin_doc.warehouse or ""
+    if bin_doc.storage_type: context = f"{context} - {bin_doc.storage_type}" if context else bin_doc.storage_type
+    lines = [
+        "^XA",
+        "^CI28",
+        f"^FO40,40^A0N,50,50^FD{bin_doc.bin_code}^FS",
+        f"^FO40,100^A0N,28,28^FD{context}^FS",
+        "^FO40,150^BQN,2,8",
+        f"^FDQA,{bin_doc.bin_code}^FS",
+        "^FO280,160^A0N,24,24^FDCheck digits^FS",
+        f"^FO280,195^A0N,80,80^FD{bin_doc.check_digits or ''}^FS",
+        "^XZ",
+    ]
+    return "\n".join(lines)

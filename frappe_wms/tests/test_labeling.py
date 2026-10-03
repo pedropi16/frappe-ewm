@@ -2,7 +2,7 @@ import unittest
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from frappe_wms.services.labeling import _gs1_check_digit, generate_sscc, render_hu_label_zpl
+from frappe_wms.services.labeling import _gs1_check_digit, generate_sscc, render_hu_label_zpl, render_bin_label_zpl
 
 
 class TestGs1CheckDigit(unittest.TestCase):
@@ -57,3 +57,16 @@ class TestSscc(IntegrationTestCase):
         hu.reload()
         self.assertIn(hu.hu_number, zpl)
         self.assertIn(hu.sscc, zpl)
+
+    def test_render_bin_label_zpl_embeds_the_qr_bin_code_and_check_digits(self):
+        zpl = render_bin_label_zpl(self.bin)
+        self.assertTrue(zpl.startswith("^XA"))
+        self.assertTrue(zpl.endswith("^XZ"))
+        self.assertIn("^BQ", zpl)
+        self.assertIn(self.bin, zpl)
+        check_digits = frappe.db.get_value("Storage Bin", self.bin, "check_digits")
+        self.assertIn(check_digits, zpl)
+        # The QR's own ^FD payload is the bin code alone - check digits must never ride along
+        # inside it, or the whole "you have to physically read it" guarantee is gone.
+        qr_payload = zpl.split("^FDQA,")[1].split("^FS")[0]
+        self.assertEqual(qr_payload, self.bin)

@@ -94,9 +94,11 @@ def render_spool(spool):
 
 
 def _zpl_for(doctype, name):
-    from frappe_wms.services.labeling import render_hu_label_zpl
+    from frappe_wms.services.labeling import render_hu_label_zpl, render_bin_label_zpl
     if doctype == "Handling Unit":
         return render_hu_label_zpl(name)
+    if doctype == "Storage Bin":
+        return render_bin_label_zpl(name)
     if doctype == "WMS Shipment":
         hus = frappe.get_all("Shipment Handling Unit", filters={"parent": name}, pluck="handling_unit", order_by="load_sequence asc")
         return "\n".join(render_hu_label_zpl(h) for h in hus)
