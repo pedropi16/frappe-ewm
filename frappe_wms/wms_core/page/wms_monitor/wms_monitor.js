@@ -109,8 +109,7 @@ function ensure_monitor_styles() {
     .wms-grid-table tbody tr:hover td { background:var(--bg-light-blue,#eff6ff); }
     .wms-grid-table tbody td.wms-grid-selected { background:rgba(59,130,246,.18) !important; }
     .wms-grid-actionbar { padding:2px 0; }
-    .wms-stock-split { margin:0; font-weight:normal; font-size:12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
-    .wms-stock-split input { margin:0; }
+    
     .wms-detail-panel { margin-top:14px; padding:10px 12px; border:1px solid var(--primary,#3b82f6); border-radius:10px; background:var(--card-bg,#fff); }
     .wms-detail-fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:6px 18px; font-size:12.5px; }
     .wms-detail-field > .text-muted { font-size:11px; }
@@ -553,7 +552,8 @@ class DataGrid {
     if (!actions.length) { this.$actionbar.empty(); return; }
     const rowIdx = Array.from(this._selectedRowIndices()).filter((r) => r >= 1 && r <= this._visRows.length);
     const seen = new Set(), selectedRows = [];
-    rowIdx.forEach((r) => { const row = this._visRows[r - 1]; (row._group ? row._lines : [row]).forEach((l) => { if (!seen.has(l)) { seen.add(l); selectedRows.push(l); } }); });
+    rowIdx.forEach((r) => { const row = this._visRows[r - 1]; const leaves = (x) => x._lines ? x._lines.flatMap(leaves) : [x];
+      leaves(row).forEach((l) => { if (!seen.has(l)) { seen.add(l); selectedRows.push(l); } }); });
     if (!selectedRows.length) { this.$actionbar.empty(); return; }
     this.$actionbar.empty().append(`<span class="wms-grid-selcount">${__("{0} selected", [selectedRows.length])}</span>`);
     actions.forEach((action) => {
@@ -1044,88 +1044,103 @@ class WMSMonitor {
     })));
   }
 
-  // One serial-numbered product is one balance row PER serial, so the raw list is mostly the same
-  // product over and over. The grid groups it as a tree (storage type > bin > product by default;
-  // the "Group by" boxes change that), the optional split gives allocated and free stock their
-  // own lines, and "Details" opens the underlying lines (serial numbers...) of the marked rows.
+  // Stock Overview in three steps, so one product's stock reads at a glance:
+  //  1. one row per product / bin / stock type / document / sales order (no HU split), with the
+  //     allocated part on its own row carrying the delivery and sales order that reserve it;
+  //  2. "Expand" on the marked rows: per handling unit, with its parent and top HU and GR date/time;
+  //  3. "Serial Numbers" on the marked HU rows: the serial numbers themselves.
+  // ponytail: rolled up client-side over the loaded hits (Max. hits); move to SQL if hits get huge.
   stock_decorate() {
-    const g = this.stock_group = this.stock_group || { split: true };
-    const pill = (v) => v ? wms_selection.pill(__(v), v === "Allocated" ? "blue" : "green") : "";
-    const docs = (row) => (row.documents || "").split(", ").filter(Boolean).map((d) =>
-      `<a href="/app/outbound-delivery/${encodeURIComponent(d)}" target="_blank" rel="noopener">${frappe.utils.escape_html(d)}</a>`).join(", ");
+    const esc = frappe.utils.escape_html;
+    const gr = (row) => esc(String(row.first_receipt_date || "").slice(0, 16));
     const R = {
-      storage_bin: this.link_cell("Storage Bin", "storage_bin"), product: this.link_cell("Item", "product"),
-      handling_unit: this.hu_link_cell("handling_unit"), alloc: (row) => pill(row.alloc), documents: docs,
-      batch_no: this.link_cell("Batch", "batch_no"), serial_no: this.link_cell("Serial No", "serial_no"),
+      product: this.link_cell("Item", "product"), storage_bin: this.link_cell("Storage Bin", "storage_bin"),
+      document: this.link_cell("Outbound Delivery", "document"), sales_order: this.link_cell("Sales Order", "sales_order"),
+      handling_unit: this.hu_link_cell("handling_unit"), parent_hu: this.hu_link_cell("parent_hu"), top_hu: this.hu_link_cell("top_hu"),
+      serial_no: this.link_cell("Serial No", "serial_no"), first_receipt_date: gr,
     };
-    const split = (rows) => rows.flatMap((r) => {
-      const q = flt(r.quantity), a = Math.min(flt(r.allocated_quantity), q), out = [];
-      if (a > 0) out.push({ ...r, quantity: a, allocated_quantity: a, available_quantity: 0, alloc: "Allocated" });
-      if (q - a > 1e-9) out.push({ ...r, quantity: q - a, allocated_quantity: 0, available_quantity: q - a, documents: "", alloc: "Free" });
+    const col = (f, l) => [f, l, R[f]];
+    // A balance row split by what reserves it: one part per allocation, the rest is free stock.
+    const parts = (rows) => rows.flatMap((r) => {
+      const out = [];
+      let rest = flt(r.quantity);
+      for (const a of r.allocs || []) {
+        const q = Math.min(flt(a.qty), rest);
+        if (q > 0) { out.push({ ...r, quantity: q, allocated_quantity: q, available_quantity: 0, document: a.delivery, sales_order: a.sales_order }); rest -= q; }
+      }
+      if (rest > 1e-9) out.push({ ...r, quantity: rest, allocated_quantity: 0, available_quantity: rest, document: "", sales_order: "" });
       return out;
     });
+    this.stock_roll = (lines, keys, carry) => {
+      const map = new Map();
+      for (const r of lines) {
+        const k = keys.map((f) => r[f] || "").join("\u0001");
+        let o = map.get(k);
+        if (!o) { o = { _lines: [], _seen: {}, quantity: 0, allocated_quantity: 0, available_quantity: 0 }; keys.forEach((f) => { o[f] = r[f] || ""; }); carry.forEach((f) => { o._seen[f] = new Set(); }); map.set(k, o); }
+        o._lines.push(r);
+        ["quantity", "allocated_quantity", "available_quantity"].forEach((f) => { o[f] += flt(r[f]); });
+        carry.forEach((f) => { if (r[f]) o._seen[f].add(r[f]); });
+      }
+      return Array.from(map.values()).map((o) => {
+        ["quantity", "allocated_quantity", "available_quantity"].forEach((f) => { o[f] = Math.round(o[f] * 1e6) / 1e6; });
+        carry.forEach((f) => { const v = Array.from(o._seen[f]).sort(); o[f] = f === "first_receipt_date" ? (v[0] || "") : v.length > 1 ? __("{0} values", [v.length]) : (v[0] || ""); });
+        delete o._seen;
+        return o;
+      }).sort((a, b) => keys.map((f) => String(a[f]).localeCompare(String(b[f]), undefined, { numeric: true })).find((c) => c) || 0);
+    };
     return {
-      groupBy: ["storage_type", "storage_bin", "product"],
-      toolbar: (sel) => $(`<label class="wms-stock-split"><input type="checkbox" ${g.split ? "checked" : ""}> ${__("Split allocated / free")}</label>`)
-        .on("change", "input", (e) => { g.split = e.target.checked; sel.drawResults(); }),
-      transform: (rows, columns) => {
-        const lines = g.split ? split(rows) : rows.map((r) => ({ ...r, alloc: flt(r.allocated_quantity) > 0 ? "Allocated" : "Free" }));
-        const cols = [["storage_type", __("Storage Type")]].concat(columns.filter(([f]) => f !== "name"));
-        const at = cols.findIndex(([f]) => f === "stock_type") + 1;
-        cols.splice(at, 0, ["alloc", __("Allocation")]);
-        cols.push(["documents", __("Document")]);
-        return { rows: lines, columns: cols.map(([f, l, fn]) => [f, l, R[f] || fn]),
-          numeric: ["quantity", "allocated_quantity", "available_quantity"], actions: this.stock_actions(), listFields: ["documents"] };
-      },
+      noDetails: true, totals: true,
+      transform: (rows) => ({
+        rows: this.stock_roll(parts(rows), ["product", "storage_bin", "stock_type", "document", "sales_order"], ["stock_uom"]),
+        columns: [col("product", __("Product")), col("storage_bin", __("Storage Bin")), ["stock_type", __("Stock Type")], col("document", __("Document")),
+          col("sales_order", __("Sales Order")), ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")], ["available_quantity", __("Available")], ["stock_uom", __("UoM")]],
+        numeric: ["quantity", "allocated_quantity", "available_quantity"],
+        actions: [
+          { label: __("Expand"), kind: "primary", run: (lines) => this.stock_expand(lines) },
+          { label: __("Movements"), run: (lines) => {
+            const uniq = (f) => Array.from(new Set(lines.map((l) => l[f]).filter(Boolean)));
+            return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin") });
+          } },
+        ],
+      }),
     };
   }
 
-  stock_actions() {
-    return [
-      { label: __("Details"), kind: "primary", run: (rows) => this.show_stock_details(rows) },
-      { label: __("Movements"), run: (rows) => {
-        const uniq = (f) => Array.from(new Set(rows.map((l) => l[f]).filter(Boolean)));
-        return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin"), handling_unit: uniq("handling_unit") });
-      } },
-    ];
+  // Step 2: the marked rows per handling unit - where it sits in the HU nesting and when it arrived.
+  stock_expand(lines) {
+    const $d = this.body_for("stock").find(".wms-mon-stock-detail").empty();
+    const rows = this.stock_roll(lines, ["product", "storage_bin", "stock_type", "handling_unit", "document", "sales_order"], ["parent_hu", "top_hu", "first_receipt_date", "batch_no", "stock_uom"]);
+    const gr = (r) => frappe.utils.escape_html(String(r.first_receipt_date || "").slice(0, 16));
+    const hu = (f) => this.hu_link_cell(f);
+    const $panel = $(`<div class="wms-detail-panel">
+      <div class="wms-detail-head"><b>${__("Expanded")}</b><span class="text-muted">${__("{0} row(s) by handling unit - mark rows and press Serial Numbers to go one level deeper", [rows.length])}</span>
+        <button type="button" class="btn btn-default btn-xs wms-detail-close">&times;</button></div>
+      <div class="wms-detail-lines"></div><div class="wms-detail-serials-host"></div></div>`).appendTo($d);
+    $panel.find(".wms-detail-close").on("click", () => $d.empty());
+    $panel.find(".wms-detail-lines").append(this.render_table(rows, [
+      ["product", __("Product"), this.link_cell("Item", "product")], ["storage_bin", __("Storage Bin"), this.link_cell("Storage Bin", "storage_bin")], ["stock_type", __("Stock Type")],
+      ["handling_unit", __("Handling Unit"), hu("handling_unit")], ["parent_hu", __("Higher HU"), hu("parent_hu")], ["top_hu", __("Highest HU"), hu("top_hu")],
+      ["first_receipt_date", __("GR Date / Time"), gr], ["batch_no", __("Batch")],
+      ["document", __("Document"), this.link_cell("Outbound Delivery", "document")], ["sales_order", __("Sales Order"), this.link_cell("Sales Order", "sales_order")],
+      ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")], ["available_quantity", __("Available")],
+    ], null, { numeric: ["quantity", "allocated_quantity", "available_quantity"], totals: true, noGroup: true, exportName: "stock-by-hu",
+      actions: [{ label: __("Serial Numbers"), kind: "primary", run: (l) => this.stock_serials($panel.find(".wms-detail-serials-host"), l) }] }));
+    $panel[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  // The panel under the grid for the marked rows: every underlying balance line (serial numbers,
-  // batches, which HU / bin / document), plus the last postings when the lines are one position.
-  async show_stock_details(rows) {
-    const lines = rows;
-    const $d = this.body_for("stock").find(".wms-mon-stock-detail").empty();
-    const serials = Array.from(new Set(lines.map((l) => l.serial_no).filter(Boolean)));
-    const sum = (f) => Math.round(lines.reduce((a, l) => a + flt(l[f]), 0) * 1e6) / 1e6;
-    const esc = frappe.utils.escape_html;
-    const $panel = $(`<div class="wms-detail-panel">
-      <div class="wms-detail-head"><b>${__("Details")}</b>
-        <span class="text-muted">${__("{0} line(s)", [lines.length])} &middot; ${__("{0} serial no(s)", [serials.length])} &middot; ${__("quantity {0}", [sum("quantity")])} &middot; ${__("allocated {0}", [sum("allocated_quantity")])}</span>
-        <button type="button" class="btn btn-default btn-xs wms-detail-close">&times;</button></div>
-      ${serials.length ? `<div class="wms-detail-serials"><span class="text-muted">${__("Serial Nos")}</span>
-        ${serials.slice(0, 300).map((x) => `<span class="wms-chip">${esc(x)}</span>`).join("")}${serials.length > 300 ? `<span class="text-muted">+${serials.length - 300}</span>` : ""}</div>` : ""}
-      <div class="wms-detail-lines"></div><div class="wms-detail-history"></div></div>`).appendTo($d);
-    $panel.find(".wms-detail-close").on("click", () => $d.empty());
-    if (serials.length) $panel.find(".wms-detail-serials").append(this.copy_btn(serials.join("\n")));
-    const cols = [["product", __("Product"), this.link_cell("Item", "product")], ["serial_no", __("Serial No"), this.link_cell("Serial No", "serial_no")],
-      ["batch_no", __("Batch"), this.link_cell("Batch", "batch_no")], ["handling_unit", __("Handling Unit"), this.hu_link_cell("handling_unit")],
-      ["storage_bin", __("Storage Bin"), this.link_cell("Storage Bin", "storage_bin")], ["storage_type", __("Storage Type")], ["stock_type", __("Stock Type")],
-      ["alloc", __("Allocation"), (r) => wms_selection.pill(__(r.alloc), r.alloc === "Allocated" ? "blue" : "green")],
+  // Step 3: the serial numbers behind the marked HU rows.
+  stock_serials($host, lines) {
+    $host.empty();
+    const serial = lines.filter((l) => l.serial_no);
+    if (!serial.length) { $host.html(`<div class="text-muted" style="margin-top:10px;">${__("No serial numbers on the marked rows.")}</div>`); return; }
+    const gr = (r) => frappe.utils.escape_html(String(r.first_receipt_date || "").slice(0, 16));
+    $host.append(`<h6 style="margin:12px 0 4px;">${__("Serial Numbers")} (${serial.length})</h6>`).append(this.render_table(serial, [
+      ["serial_no", __("Serial No"), this.link_cell("Serial No", "serial_no")], ["batch_no", __("Batch")], ["handling_unit", __("Handling Unit"), this.hu_link_cell("handling_unit")],
+      ["storage_bin", __("Storage Bin"), this.link_cell("Storage Bin", "storage_bin")], ["first_receipt_date", __("GR Date / Time"), gr],
+      ["document", __("Document"), this.link_cell("Outbound Delivery", "document")], ["sales_order", __("Sales Order"), this.link_cell("Sales Order", "sales_order")],
       ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
-      ["documents", __("Document"), (r) => (r.documents || "").split(", ").filter(Boolean).map((x) =>
-        `<a href="/app/outbound-delivery/${encodeURIComponent(x)}" target="_blank" rel="noopener">${esc(x)}</a>`).join(", ")],
-      ["shelf_life_expiry_date", __("Expiry")], ["last_movement_date", __("Last Movement")]];
-    $panel.find(".wms-detail-lines").append(this.render_table(lines, cols, null, { numeric: ["quantity", "allocated_quantity"], exportName: "stock-details", noGroup: true }));
-    $panel[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
-    const same = (f) => new Set(lines.map((l) => l[f] || "")).size === 1;
-    if (["product", "stock_type", "storage_bin", "handling_unit", "batch_no"].every(same)) {
-      const l = lines[0];
-      const hist = await frappe.call("frappe_wms.api.monitor.stock_line_history", { product: l.product, stock_type: l.stock_type,
-        storage_bin: l.storage_bin || undefined, handling_unit: l.handling_unit || undefined, batch_no: l.batch_no || undefined, limit: 15 }).then((r) => r.message || []);
-      if (hist.length) $panel.find(".wms-detail-history").append(`<h6 style="margin:12px 0 4px;">${__("Last postings")}</h6>`).append(this.render_table(hist, [
-        ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["quantity", __("Quantity")], ["reference_name", __("Document")],
-        ["warehouse_task", __("Task"), this.link_cell("Warehouse Task", "warehouse_task")], ["posting_user", __("User")]], null, { numeric: ["quantity"], noGroup: true }));
-    }
+    ], null, { numeric: ["quantity", "allocated_quantity"], noGroup: true, exportName: "stock-serials" }));
+    $host.find(".wms-grid-toolbar").append(this.copy_btn(serial.map((l) => l.serial_no).join("\n")));
   }
 
   search_stock_overview() { return this.execute_selection("stock"); }

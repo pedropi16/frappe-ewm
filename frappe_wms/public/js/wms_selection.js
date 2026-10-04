@@ -591,12 +591,12 @@ if (typeof frappe !== "undefined") (function () {
       let actions = dec.actions, listFields;
       if (dec.transform) ({ rows: shown, columns, numeric, actions, listFields } = dec.transform(rows, columns, numeric, dec.actions));
       // Every view gets a Details button: the full record of each marked line (a view may bring its own).
-      if (!(actions || []).some((a) => a.label === __("Details"))) actions = [{ label: __("Details"), kind: "primary", run: (r) => this.showDetails(r) }].concat(actions || []);
+      if (!dec.noDetails && !(actions || []).some((a) => a.label === __("Details"))) actions = [{ label: __("Details"), kind: "primary", run: (r) => this.showDetails(r) }].concat(actions || []);
       const $el = this.opts.makeGrid(shown, columns, {
         groupBy: (this.layout && this.layout.groupBy) || dec.groupBy || [], listFields,
         extraToolbar: dec.toolbar && dec.toolbar(this),
         actions, numeric, exportName: `${this.view}-${frappe.datetime.now_date()}`,
-        sort: this.layout && this.layout.sort, totals: this.layout && this.layout.totals,
+        sort: this.layout && this.layout.sort, totals: this.layout ? this.layout.totals : dec.totals,
         layoutBar: this.layoutBar(),
         onLayoutChange: (state) => { this.layout = state; this.$layoutSel && this.$layoutSel.find("option:selected").text(this.layoutLabel(true)); },
       }, this.meta.doctype);

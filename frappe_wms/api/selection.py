@@ -67,7 +67,7 @@ VIEWS = {
         "default_criteria": {"quantity": {"exclude": [{"op": "eq", "low": 0}]}},
         # The grouped presentation (storage type / allocation) needs these whatever layout is saved.
         "required": ["product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "quantity",
-                     "allocated_quantity", "available_quantity", "stock_uom", "last_movement_date"],
+                     "allocated_quantity", "available_quantity", "stock_uom", "first_receipt_date", "last_movement_date"],
         "columns": ["product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "quantity",
                     "allocated_quantity", "available_quantity", "stock_uom", "shelf_life_expiry_date", "last_movement_date"],
         "virtual": {"storage_type": _bin_virtual("`tabWMS Stock Balance`.storage_bin"), **_item_virtuals("`tabWMS Stock Balance`.product")},
@@ -164,18 +164,28 @@ ACTIVE_ALLOCATION = ("Allocated", "Partially Picked")
 
 
 def _enrich_stock(rows):
-    """Adds what a balance row cannot carry itself: its bin's storage type and the outbound
-    deliveries that currently reserve it (`documents`, comma separated)."""
-    bins = list({r.get("storage_bin") for r in rows if r.get("storage_bin")})
-    types = dict(frappe.get_all("Storage Bin", filters={"name": ["in", bins]}, fields=["name", "storage_type"], as_list=True)) if bins else {}
-    docs = {}
+    """Adds what a balance row cannot carry itself, for the Stock Overview drill-down: the bin's
+    storage type, its HU's parent and top HU, and the open allocations on it (`allocs`: outbound
+    delivery, sales order and the quantity still reserved)."""
+    def lookup(doctype, field_names, key_field, values):
+        values = list({v for v in values if v})
+        return {r[key_field]: r for r in frappe.get_all(doctype, filters={"name": ["in", values]}, fields=["name"] + field_names)} if values else {}
+    bins = lookup("Storage Bin", ["storage_type"], "name", (r.get("storage_bin") for r in rows))
+    hus = lookup("Handling Unit", ["parent_hu", "top_hu"], "name", (r.get("handling_unit") for r in rows))
+    allocs = {}
     if rows:
-        for a in frappe.get_all("Stock Allocation", filters={"stock_balance": ["in", [r["name"] for r in rows]], "status": ["in", ACTIVE_ALLOCATION]},
-                                fields=["stock_balance", "outbound_delivery"]):
-            docs.setdefault(a.stock_balance, set()).add(a.outbound_delivery)
+        found = frappe.get_all("Stock Allocation", filters={"stock_balance": ["in", [r["name"] for r in rows]], "status": ["in", ACTIVE_ALLOCATION]},
+                               fields=["stock_balance", "outbound_delivery", "outbound_delivery_item", "allocated_quantity", "picked_quantity"])
+        orders = lookup("Outbound Delivery Item", ["sales_order"], "name", (a.outbound_delivery_item for a in found))
+        for a in found:
+            qty = (a.allocated_quantity or 0) - (a.picked_quantity or 0)
+            if qty > 0:
+                allocs.setdefault(a.stock_balance, []).append({"delivery": a.outbound_delivery, "sales_order": (orders.get(a.outbound_delivery_item) or {}).get("sales_order") or "", "qty": qty})
     for r in rows:
-        r["storage_type"] = types.get(r.get("storage_bin")) or ""
-        r["documents"] = ", ".join(sorted(docs.get(r["name"], ())))
+        r["storage_type"] = (bins.get(r.get("storage_bin")) or {}).get("storage_type") or ""
+        hu = hus.get(r.get("handling_unit")) or {}
+        r["parent_hu"], r["top_hu"] = hu.get("parent_hu") or "", hu.get("top_hu") or ""
+        r["allocs"] = allocs.get(r["name"], [])
 
 
 # ---- variants and layouts ----

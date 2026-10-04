@@ -131,8 +131,9 @@ class TestSelectionScreen(IntegrationTestCase):
         res = execute_selection("stock", WH, {}, ["product"])  # a layout that hid everything else
         row = next(r for r in res["rows"] if r["name"] == bal.name)
         self.assertEqual(row["storage_type"], f"{WH}-BULK")
-        self.assertEqual(row["documents"], "")
-        self.assertTrue({"storage_bin", "handling_unit", "serial_no", "allocated_quantity"} <= set(row))
+        self.assertEqual(row["allocs"], [])
+        self.assertEqual((row["parent_hu"], row["top_hu"]), ("", ""))
+        self.assertTrue({"storage_bin", "handling_unit", "serial_no", "allocated_quantity", "first_receipt_date"} <= set(row))
 
     def test_variants_default_and_global_visibility(self):
         view = "hu"

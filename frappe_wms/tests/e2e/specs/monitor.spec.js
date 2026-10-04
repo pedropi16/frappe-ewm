@@ -24,28 +24,29 @@ test("stock overview: popup, grouping, details, links", async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(page.locator(".wms-sel-compact")).toBeVisible();
 
-  // grouped as a tree: storage type > bin > product, the product group still collapsed
+  // step 1: one row per product / bin / stock type / document - allocated part on its own row
   const rows = page.locator(".wms-mon-stock-table tbody tr");
-  await expect(rows).toHaveCount(3);
-  await rows.nth(2).locator(".wms-tree-caret").click();
-  await expect(rows).toHaveCount(9); // 6 serial lines (2 allocated, 4 free) under the product
-  await expect(page.locator(".wms-mon-stock-table tbody").getByText("Allocated").first()).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: "E2E-OBD-X" })).toHaveCount(1);
   await expect(page.locator(".wms-mon-stock-table tbody a[href^='/app/storage-bin/']").first()).toBeVisible();
+  await expect(page.locator(".wms-mon-stock-table tfoot")).toContainText("6");
 
-  // mark the top group, press Details -> all its serial numbers
-  await rows.first().locator("th.wms-grid-rowhead").click();
-  await page.locator(".wms-mon-stock-table .wms-grid-actionbar").getByRole("button", { name: "Details" }).click();
-  await expect(page.locator(".wms-detail-panel .wms-chip")).toHaveCount(6);
+  // step 2: mark both rows, Expand -> per HU (loose stock here), with GR date/time
+  await page.locator(".wms-mon-stock-table th.wms-grid-corner").click();
+  await page.locator(".wms-mon-stock-table .wms-grid-actionbar").getByRole("button", { name: "Expand" }).click();
+  const hu = page.locator(".wms-detail-lines");
+  await expect(hu.locator("tbody tr")).toHaveCount(2);
+  await expect(hu).toContainText("2026-10-01 08:30");
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/stock.png` });
 
-  // ungroup: back to one line per serial
-  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='0']").selectOption("");
-  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='1']").selectOption("");
-  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='2']").selectOption("");
-  await expect(rows).toHaveCount(6);
+  // step 3: mark them, Serial Numbers -> the 6 serials
+  await hu.locator("th.wms-grid-corner").click();
+  await hu.locator(".wms-grid-actionbar").getByRole("button", { name: "Serial Numbers" }).click();
+  await expect(page.locator(".wms-detail-serials-host tbody tr")).toHaveCount(6);
 
+  // step 1 again: mark a row -> Movements
+  await page.locator(".wms-mon-stock-table th.wms-grid-corner").click();
   // jump to Stock Movements for the marked rows (no popup)
-  await rows.first().locator("th.wms-grid-rowhead").click();
   await page.locator(".wms-mon-stock-table .wms-grid-actionbar").getByRole("button", { name: "Movements" }).click();
   await expect(page.locator(".wms-mon-nav-item.active")).toHaveText("Stock Movements");
   await expect(page.locator(".modal.show")).toHaveCount(0);

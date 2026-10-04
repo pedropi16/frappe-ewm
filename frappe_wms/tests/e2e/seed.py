@@ -101,6 +101,7 @@ def run():
 def cleanup():
     """Removes tasks/documents the browser tests created in the E2E warehouse (raw deletes - test data only)."""
     frappe.set_user("Administrator")
+    frappe.db.sql("delete from `tabStock Allocation` where stock_balance like 'E2EMON%%'")
     for dt in ("Warehouse Task", "WMS Stock Ledger Entry", "WMS Stock Balance", "WMS Physical Inventory Count"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
@@ -116,6 +117,11 @@ def monitor_stock():
     for i in range(6):
         frappe.get_doc({"doctype": "WMS Stock Balance", "name": f"E2EMON{i}", "warehouse": WAREHOUSE, "product": item, "storage_bin": bin_,
                         "serial_no": f"E2E-SN-{i}", "stock_type": "AVAILABLE", "quantity": 1, "allocated_quantity": 1 if i < 2 else 0,
-                        "available_quantity": 0 if i < 2 else 1, "stock_uom": uom}).insert(ignore_permissions=True, ignore_links=True)
+                        "available_quantity": 0 if i < 2 else 1, "stock_uom": uom,
+                        "first_receipt_date": "2026-10-01 08:30:00"}).insert(ignore_permissions=True, ignore_links=True)
+        if i < 2:
+            frappe.get_doc({"doctype": "Stock Allocation", "outbound_delivery": "E2E-OBD-X", "outbound_delivery_item": "E2E-ITEM-X", "product": item, "stock_balance": f"E2EMON{i}",
+                            "storage_bin": bin_, "serial_no": f"E2E-SN-{i}", "stock_type": "AVAILABLE", "allocated_quantity": 1, "picked_quantity": 0,
+                            "status": "Allocated"}).insert(ignore_permissions=True, ignore_links=True)
     frappe.db.commit()
     print("E2E_MONITOR " + json.dumps({"bin": bin_}))
