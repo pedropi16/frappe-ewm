@@ -771,6 +771,7 @@ class WMSMonitor {
       this.selections[view] = new wms_selection.SelectionScreen({
         view, $mount, $results, decorate: decorate || {},
         autoOpen: () => !this._jumping,
+        onExecute: () => { const panel = { outbound: ".wms-mon-obd-detail", stock: ".wms-mon-stock-detail" }[view]; if (panel) this.body_for(view).find(panel).empty(); },
         getWarehouse: () => this.warehouse,
         makeGrid: (rows, columns, opts, doctype) => this.render_table(rows, columns, doctype, opts),
       }).init();

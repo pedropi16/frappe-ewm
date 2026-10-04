@@ -545,6 +545,7 @@ if (typeof frappe !== "undefined") (function () {
       const $res = this.opts.$results;
       this.closeDialog();
       this.renderBar();
+      if (this.opts.onExecute) this.opts.onExecute(); // drill-down panels belong to the previous result
       $res.html(`<div class="text-muted">${__("Selecting…")}</div>`);
       let r;
       try {

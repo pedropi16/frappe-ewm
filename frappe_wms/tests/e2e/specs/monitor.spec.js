@@ -44,6 +44,11 @@ test("stock overview: popup, grouping, details, links", async ({ page }) => {
   await hu.locator(".wms-grid-actionbar").getByRole("button", { name: "Serial Numbers" }).click();
   await expect(page.locator(".wms-detail-serials-host tbody tr")).toHaveCount(6);
 
+  // a new search drops the expanded panels (they belong to the old result)
+  await page.getByRole("button", { name: /Refresh/ }).click();
+  await expect(page.locator(".wms-detail-panel")).toHaveCount(0);
+  await expect(rows).toHaveCount(2);
+
   // step 1 again: mark a row -> Movements
   await page.locator(".wms-mon-stock-table th.wms-grid-corner").click();
   // jump to Stock Movements for the marked rows (no popup)
