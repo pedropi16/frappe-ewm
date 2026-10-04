@@ -104,3 +104,18 @@ def cleanup():
     for dt in ("Warehouse Task", "WMS Stock Ledger Entry", "WMS Stock Balance", "WMS Physical Inventory Count"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
+
+
+def monitor_stock():
+    """Stock Overview fixture: 6 serial balances of one product in one bin (two of them allocated) plus one
+    plain row - so grouping has something to collapse. cleanup() removes them."""
+    frappe.set_user("Administrator")
+    item = frappe.get_all("Item", filters={"is_stock_item": 1}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    bin_ = f"{WAREHOUSE}-A1" if frappe.db.exists("Storage Bin", f"{WAREHOUSE}-A1") else frappe.get_all("Storage Bin", filters={"warehouse": WAREHOUSE}, limit=1, pluck="name")[0]
+    for i in range(6):
+        frappe.get_doc({"doctype": "WMS Stock Balance", "name": f"E2EMON{i}", "warehouse": WAREHOUSE, "product": item, "storage_bin": bin_,
+                        "serial_no": f"E2E-SN-{i}", "stock_type": "AVAILABLE", "quantity": 1, "allocated_quantity": 1 if i < 2 else 0,
+                        "available_quantity": 0 if i < 2 else 1, "stock_uom": uom}).insert(ignore_permissions=True, ignore_links=True)
+    frappe.db.commit()
+    print("E2E_MONITOR " + json.dumps({"bin": bin_}))

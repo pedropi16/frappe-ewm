@@ -40,7 +40,7 @@ function ensure_grid_styles() {
   $("<style>", { text: `
     .wms-grid-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
     .wms-grid-toolbar .wms-grid-hint { font-size:12px; }
-    .wms-grid-scroll { overflow:auto; max-height:65vh; border:1px solid var(--border-color); }
+    .wms-grid-scroll { overflow:auto; border:1px solid var(--border-color); }
     .wms-grid-table { margin-bottom:0; user-select:none; }
     .wms-grid-table th, .wms-grid-table td { white-space:nowrap; }
     .wms-grid-corner, .wms-grid-colhead, .wms-grid-rowhead { cursor:pointer; background:var(--control-bg,#f5f5f5); }
@@ -69,6 +69,48 @@ function ensure_grid_styles() {
     .wms-grid-table thead th { position:sticky; top:0; z-index:1; }
     .wms-grid-num { text-align:right; font-variant-numeric: tabular-nums; }
     .wms-grid-layoutbar { display:flex; align-items:center; gap:6px; }
+  ` }).appendTo("head");
+}
+
+let _monitor_styles_injected = false;
+function ensure_monitor_styles() {
+  if (_monitor_styles_injected) return;
+  _monitor_styles_injected = true;
+  $("<style>", { text: `
+    .wms-monitor-filters { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .wms-monitor-filters label { margin:0; color:var(--text-muted); font-size:12px; }
+    .wms-monitor-filters .wms-mon-warehouse { width:240px; }
+    .wms-monitor-shell { display:flex; gap:16px; align-items:flex-start; }
+    .wms-monitor-nav { flex:0 0 176px; position:sticky; top:70px; }
+    .wms-mon-nav-list { border:1px solid var(--border-color); border-radius:10px; overflow:hidden; background:var(--card-bg,#fff); }
+    .wms-mon-nav-item { display:block; padding:7px 14px; font-size:13px; color:var(--text-color); border-left:3px solid transparent; text-decoration:none; }
+    .wms-mon-nav-item:hover { background:var(--control-bg,#f5f5f5); text-decoration:none; }
+    .wms-mon-nav-item.active { background:var(--bg-light-blue,#eff6ff); border-left-color:var(--primary,#3b82f6); font-weight:600; color:var(--primary,#2563eb); }
+    .wms-monitor-content { flex:1; min-width:0; }
+    .wms-mon-title { font-size:16px; font-weight:700; margin:0 0 10px; }
+    .wms-mon-card { display:inline-block; min-width:140px; margin:0 10px 10px 0; padding:10px 16px; border:1px solid var(--border-color); border-radius:10px; background:var(--card-bg,#fff); }
+    .wms-mon-card.clickable { cursor:pointer; transition:box-shadow .15s, transform .15s; }
+    .wms-mon-card.clickable:hover { box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12)); transform:translateY(-1px); }
+    .wms-mon-card-value { font-size:22px; font-weight:700; line-height:1.2; }
+    .wms-mon-card-label { font-size:12px; color:var(--text-muted); }
+    .wms-mon-stock-summary { margin-bottom:8px; }
+    .wms-grid-scroll { max-height:calc(100vh - 270px); border-radius:8px; background:var(--card-bg,#fff); }
+    .wms-grid-table td, .wms-grid-table th { padding:4px 10px !important; font-size:12.5px; }
+    .wms-grid-table thead th { background:var(--control-bg,#f5f5f5); font-weight:600; border-bottom:2px solid var(--border-color); }
+    .wms-grid-table tbody tr:nth-child(even) td { background:var(--subtle-fg,rgba(0,0,0,.02)); }
+    .wms-grid-table tbody tr:hover td { background:var(--bg-light-blue,#eff6ff); }
+    .wms-grid-table tbody td.wms-grid-selected { background:rgba(59,130,246,.18) !important; }
+    .wms-grid-actionbar { padding:2px 0; }
+    .wms-stock-group { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; padding:4px 2px 8px; font-size:12px; }
+    .wms-stock-group label { margin:0; font-weight:normal; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+    .wms-stock-group input { margin:0; }
+    .wms-stock-group-sep { flex:0 0 1px; height:16px; background:var(--border-color); }
+    .wms-detail-panel { margin-top:14px; padding:10px 12px; border:1px solid var(--primary,#3b82f6); border-radius:10px; background:var(--card-bg,#fff); }
+    .wms-detail-head { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+    .wms-detail-head .wms-detail-close { margin-left:auto; }
+    .wms-detail-serials { display:flex; flex-wrap:wrap; align-items:center; gap:4px; max-height:96px; overflow:auto; margin-bottom:8px; }
+    .wms-chip { padding:0 8px; border-radius:10px; border:1px solid var(--border-color); font-size:11px; font-family:var(--font-stack-mono,monospace); }
+    .wms-detail-panel .wms-grid-scroll { max-height:40vh; }
   ` }).appendTo("head");
 }
 
@@ -507,15 +549,15 @@ class WMSMonitor {
 
     this.$body = $(`
       <div class="wms-monitor">
-        <div class="wms-monitor-filters form-inline" style="margin-bottom:16px;"></div>
-        <div class="wms-monitor-shell" style="display:flex; gap:20px; align-items:flex-start;">
-          <div class="wms-monitor-nav" style="flex:0 0 190px;">
+        <div class="wms-monitor-filters form-inline"></div>
+        <div class="wms-monitor-shell">
+          <div class="wms-monitor-nav">
             <div class="list-group wms-mon-nav-list"></div>
           </div>
-          <div class="wms-monitor-content" style="flex:1; min-width:0;">
+          <div class="wms-monitor-content">
             ${VIEWS.map((v) => `
               <div class="wms-mon-view" data-view="${v.key}" style="display:none;">
-                <h4>${frappe.utils.escape_html(v.label)}</h4>
+                <h4 class="wms-mon-title">${frappe.utils.escape_html(v.label)}</h4>
                 <div class="wms-mon-view-body" data-view-body="${v.key}"></div>
               </div>
             `).join("")}
@@ -524,6 +566,9 @@ class WMSMonitor {
       </div>
     `).appendTo(this.page.main);
 
+    ensure_monitor_styles();
+    // Every HU reference in every grid (any view, any dialog result) opens the contents viewer.
+    this.$body.on("click", ".wms-open-hu-viewer, .wms-hu-open", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); });
     this.render_nav();
     this.render_warehouse_filter();
   }
@@ -559,11 +604,15 @@ class WMSMonitor {
     const $filters = this.$body.find(".wms-monitor-filters");
     const options = warehouses.map((w) => `<option value="${frappe.utils.escape_html(w.name)}">${frappe.utils.escape_html(w.name)}</option>`).join("");
     $filters.html(`
-      <div>
-        <label>${__("Warehouse")}</label><br>
-        <select class="form-control wms-mon-warehouse"><option value="">${__("Select a warehouse")}</option>${options}</select>
-      </div>
+      <button type="button" class="btn btn-default btn-sm wms-mon-navtoggle" title="${__("Show / hide the menu")}">&#9776;</button>
+      <label>${__("Warehouse")}</label>
+      <select class="form-control input-sm wms-mon-warehouse"><option value="">${__("Select a warehouse")}</option>${options}</select>
     `);
+    $filters.find(".wms-mon-navtoggle").on("click", () => {
+      const hidden = this.$body.find(".wms-monitor-nav").toggle().is(":hidden");
+      try { localStorage.setItem("wms_monitor_nav_hidden", hidden ? "1" : ""); } catch (e) { /* storage blocked: the menu just reopens next time */ }
+    });
+    try { if (localStorage.getItem("wms_monitor_nav_hidden")) this.$body.find(".wms-monitor-nav").hide(); } catch (e) { /* ignore */ }
     $filters.find(".wms-mon-warehouse").on("change", (e) => {
       this.warehouse = e.target.value || null;
       this.reset_unexecuted_searches();
@@ -584,7 +633,7 @@ class WMSMonitor {
       ".wms-mon-task-table", ".wms-mon-wo-table", ".wms-mon-hu-table", ".wms-mon-ledger-table",
     ];
     selectors.forEach((sel) => { const $el = this.$body.find(sel); if ($el.length) $el.html(sap_unexecuted_html()); });
-    this.$body.find(".wms-mon-obd-detail").empty();
+    this.$body.find(".wms-mon-obd-detail, .wms-mon-stock-detail").empty();
     Object.values(this.selections || {}).forEach((p) => p.then((sel) => { sel.lastRows = null; }));
     if (this.repack.roots.length || this.repack.selected) {
       this.repack = { roots: [], expanded: new Set(), childrenOf: {}, selected: null, detail: null, target: null, hu_types: this.repack.hu_types, newDest: null, _drag: null, selectedRows: new Map() };
@@ -629,6 +678,7 @@ class WMSMonitor {
       $mount.html(`<div class="text-muted">${__("Loading selection screen…")}</div>`);
       this.selections[view] = new wms_selection.SelectionScreen({
         view, $mount, $results, decorate: decorate || {},
+        autoOpen: () => !this._jumping,
         getWarehouse: () => this.warehouse,
         makeGrid: (rows, columns, opts, doctype) => this.render_table(rows, columns, doctype, opts),
       }).init();
@@ -642,13 +692,30 @@ class WMSMonitor {
     return sel.execute();
   }
 
+  // Link between views: open `view` and run it for {field: [values]} (no selection popup).
+  async jump(view, values) {
+    this._jumping = true;
+    try {
+      this.show_view(view);
+      const sel = await this.selections[view];
+      await sel.runWith(values);
+    } finally { this._jumping = false; }
+  }
+
+  // A column renderer linking a Link field to its form (new tab: executed results stay put).
+  link_cell(doctype, fieldname) {
+    return (row) => row[fieldname]
+      ? `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(row[fieldname])}" target="_blank" rel="noopener">${frappe.utils.escape_html(row[fieldname])}</a>`
+      : "";
+  }
+
   render_cards($container, cards) {
     $container.empty();
     cards.forEach((card) => {
       const $card = $(`
-        <div class="wms-mon-card" style="border:1px solid var(--border-color);border-radius:8px;padding:10px 16px;min-width:140px;cursor:pointer;display:inline-block;margin:0 12px 12px 0;">
-          <div style="font-size:22px;font-weight:700;">${card.value}</div>
-          <div class="text-muted" style="font-size:12px;">${frappe.utils.escape_html(card.label)}</div>
+        <div class="wms-mon-card ${card.route ? "clickable" : ""}">
+          <div class="wms-mon-card-value">${card.value}</div>
+          <div class="wms-mon-card-label">${frappe.utils.escape_html(card.label)}</div>
         </div>
       `).appendTo($container);
       if (card.route) $card.on("click", () => frappe.set_route(...card.route));
@@ -871,20 +938,148 @@ class WMSMonitor {
     const $wrap = this.body_for("stock");
     if (!$wrap.find(".wms-mon-stock-sel").length) {
       $wrap.html(`
-        <div class="wms-mon-stock-summary" style="margin-bottom:16px;"></div>
+        <div class="wms-mon-stock-summary"></div>
         <div class="wms-mon-stock-sel"></div>
         <div class="wms-mon-stock-table">${sap_unexecuted_html()}</div>
+        <div class="wms-mon-stock-detail"></div>
       `);
-      this.selection("stock", $wrap.find(".wms-mon-stock-sel"), $wrap.find(".wms-mon-stock-table"), {
-        renderers: { handling_unit: this.hu_link_cell("handling_unit") },
-        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
-      });
+      this.selection("stock", $wrap.find(".wms-mon-stock-sel"), $wrap.find(".wms-mon-stock-table"), this.stock_decorate());
     }
     const summary = await frappe.call("frappe_wms.api.monitor.stock_overview_summary", { warehouse: this.warehouse }).then((r) => r.message || []);
     this.render_cards($wrap.find(".wms-mon-stock-summary"), summary.map((row) => ({
       label: __("{0} ({1} rows)", [row.stock_type || __("(no stock type)"), row.balance_rows]),
       value: `${flt(row.quantity)} / ${flt(row.available_quantity)} ${__("avail")}`,
     })));
+  }
+
+  // One serial-numbered product is one balance row PER serial, so the raw list is mostly the same
+  // product over and over. Here the hits are grouped by whatever the user ticks (storage type /
+  // bin / HU / product / batch / stock type), optionally with allocated and free stock split into
+  // their own lines, and "Details" opens the underlying lines (serial numbers...) of the marked rows.
+  // ponytail: grouped client-side over the loaded hits (Max. hits); move to SQL if hits get huge.
+  stock_decorate() {
+    const DIMS = [
+      ["storage_type", __("Storage Type")], ["storage_bin", __("Storage Bin")], ["handling_unit", __("Handling Unit")],
+      ["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")],
+    ];
+    const g = this.stock_group = this.stock_group || { dims: ["storage_type", "storage_bin", "product"], split: true };
+    const pill = (v) => v ? wms_selection.pill(__(v), v === "Allocated" ? "blue" : "green") : "";
+    const docs = (row) => (row.documents || "").split(", ").filter(Boolean).map((d) =>
+      `<a href="/app/outbound-delivery/${encodeURIComponent(d)}" target="_blank" rel="noopener">${frappe.utils.escape_html(d)}</a>`).join(", ");
+    const R = {
+      storage_bin: this.link_cell("Storage Bin", "storage_bin"), product: this.link_cell("Item", "product"),
+      handling_unit: this.hu_link_cell("handling_unit"), alloc: (row) => pill(row.alloc), documents: docs,
+      batch_no: this.link_cell("Batch", "batch_no"), serial_no: this.link_cell("Serial No", "serial_no"),
+    };
+    const label = Object.fromEntries(DIMS);
+    const split = (rows) => rows.flatMap((r) => {
+      const q = flt(r.quantity), a = Math.min(flt(r.allocated_quantity), q), out = [];
+      if (a > 0) out.push({ ...r, quantity: a, allocated_quantity: a, available_quantity: 0, alloc: "Allocated" });
+      if (q - a > 1e-9) out.push({ ...r, quantity: q - a, allocated_quantity: 0, available_quantity: q - a, documents: "", alloc: "Free" });
+      return out;
+    });
+    const group = (lines) => {
+      const map = new Map();
+      for (const r of lines) {
+        const k = g.dims.map((d) => r[d] || "").concat(r.alloc || "").join("\u0001");
+        let o = map.get(k);
+        if (!o) {
+          o = { alloc: r.alloc, lines: 0, quantity: 0, allocated_quantity: 0, available_quantity: 0, stock_uom: r.stock_uom,
+            last_movement_date: "", _lines: [], _docs: new Set(), _serials: new Set() };
+          g.dims.forEach((d) => { o[d] = r[d]; });
+          map.set(k, o);
+        }
+        o.lines++; o._lines.push(r);
+        ["quantity", "allocated_quantity", "available_quantity"].forEach((f) => { o[f] += flt(r[f]); });
+        (r.documents || "").split(", ").filter(Boolean).forEach((d) => o._docs.add(d));
+        if (r.serial_no) o._serials.add(r.serial_no);
+        if ((r.last_movement_date || "") > o.last_movement_date) o.last_movement_date = r.last_movement_date;
+      }
+      const rows = Array.from(map.values());
+      rows.forEach((o) => { o.serials = o._serials.size; o.documents = Array.from(o._docs).sort().join(", "); });
+      const key = (o) => g.dims.map((d) => o[d] || "").join("\u0001");
+      return rows.sort((a, b) => key(a).localeCompare(key(b), undefined, { numeric: true }) || String(a.alloc).localeCompare(String(b.alloc)));
+    };
+    return {
+      toolbar: (sel) => {
+        const $t = $(`<div class="wms-stock-group">
+          <span class="text-muted">${__("Group by")}</span>
+          ${DIMS.map(([f, l]) => `<label><input type="checkbox" data-dim="${f}" ${g.dims.includes(f) ? "checked" : ""}> ${l}</label>`).join("")}
+          <span class="wms-stock-group-sep"></span>
+          <label><input type="checkbox" class="wms-stock-split" ${g.split ? "checked" : ""}> ${__("Split allocated / free")}</label>
+        </div>`);
+        $t.on("change", "input", () => {
+          g.dims = DIMS.map(([f]) => f).filter((f) => $t.find(`[data-dim="${f}"]`).prop("checked"));
+          g.split = $t.find(".wms-stock-split").prop("checked");
+          sel.drawResults();
+        });
+        return $t;
+      },
+      transform: (rows, columns, numeric) => {
+        const lines = (g.split ? split(rows) : rows.map((r) => ({ ...r, alloc: flt(r.allocated_quantity) > 0 ? "Allocated" : "Free" }))).map((r) => ({ ...r, _lines: [r] }));
+        const actions = this.stock_actions();
+        const num = ["quantity", "allocated_quantity", "available_quantity"];
+        if (!g.dims.length) {
+          const cols = columns.filter(([f]) => f !== "name").concat([["storage_type", __("Storage Type")]]);
+          if (g.split) cols.push(["alloc", __("Allocation"), R.alloc]);
+          cols.push(["documents", __("Document"), R.documents]);
+          return { rows: lines, columns: cols.map(([f, l, fn]) => [f, l, R[f] || fn]), numeric: num, actions };
+        }
+        const cols = g.dims.map((d) => [d, label[d], R[d]]);
+        if (g.split) cols.push(["alloc", __("Allocation"), R.alloc]);
+        cols.push(["lines", __("Lines")], ["serials", __("Serial Nos")], ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
+          ["available_quantity", __("Available")], ["stock_uom", __("UoM")], ["documents", __("Document"), R.documents], ["last_movement_date", __("Last Movement")]);
+        return { rows: group(lines), columns: cols, numeric: ["lines", "serials"].concat(num), actions };
+      },
+    };
+  }
+
+  stock_actions() {
+    return [
+      { label: __("Details"), kind: "primary", run: (rows) => this.show_stock_details(rows) },
+      { label: __("Movements"), run: (rows) => {
+        const uniq = (f) => Array.from(new Set(rows.flatMap((r) => r._lines.map((l) => l[f])).filter(Boolean)));
+        return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin"), handling_unit: uniq("handling_unit") });
+      } },
+    ];
+  }
+
+  // The panel under the grid for the marked rows: every underlying balance line (serial numbers,
+  // batches, which HU / bin / document), plus the last postings when the lines are one position.
+  async show_stock_details(rows) {
+    const lines = rows.flatMap((r) => r._lines);
+    const $d = this.body_for("stock").find(".wms-mon-stock-detail").empty();
+    const serials = Array.from(new Set(lines.map((l) => l.serial_no).filter(Boolean)));
+    const sum = (f) => Math.round(lines.reduce((a, l) => a + flt(l[f]), 0) * 1e6) / 1e6;
+    const esc = frappe.utils.escape_html;
+    const $panel = $(`<div class="wms-detail-panel">
+      <div class="wms-detail-head"><b>${__("Details")}</b>
+        <span class="text-muted">${__("{0} line(s)", [lines.length])} &middot; ${__("{0} serial no(s)", [serials.length])} &middot; ${__("quantity {0}", [sum("quantity")])} &middot; ${__("allocated {0}", [sum("allocated_quantity")])}</span>
+        <button type="button" class="btn btn-default btn-xs wms-detail-close">&times;</button></div>
+      ${serials.length ? `<div class="wms-detail-serials"><span class="text-muted">${__("Serial Nos")}</span>
+        ${serials.slice(0, 300).map((x) => `<span class="wms-chip">${esc(x)}</span>`).join("")}${serials.length > 300 ? `<span class="text-muted">+${serials.length - 300}</span>` : ""}</div>` : ""}
+      <div class="wms-detail-lines"></div><div class="wms-detail-history"></div></div>`).appendTo($d);
+    $panel.find(".wms-detail-close").on("click", () => $d.empty());
+    if (serials.length) $panel.find(".wms-detail-serials").append(this.copy_btn(serials.join("\n")));
+    const cols = [["product", __("Product"), this.link_cell("Item", "product")], ["serial_no", __("Serial No"), this.link_cell("Serial No", "serial_no")],
+      ["batch_no", __("Batch"), this.link_cell("Batch", "batch_no")], ["handling_unit", __("Handling Unit"), this.hu_link_cell("handling_unit")],
+      ["storage_bin", __("Storage Bin"), this.link_cell("Storage Bin", "storage_bin")], ["storage_type", __("Storage Type")], ["stock_type", __("Stock Type")],
+      ["alloc", __("Allocation"), (r) => wms_selection.pill(__(r.alloc), r.alloc === "Allocated" ? "blue" : "green")],
+      ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
+      ["documents", __("Document"), (r) => (r.documents || "").split(", ").filter(Boolean).map((x) =>
+        `<a href="/app/outbound-delivery/${encodeURIComponent(x)}" target="_blank" rel="noopener">${esc(x)}</a>`).join(", ")],
+      ["shelf_life_expiry_date", __("Expiry")], ["last_movement_date", __("Last Movement")]];
+    $panel.find(".wms-detail-lines").append(this.render_table(lines, cols, null, { numeric: ["quantity", "allocated_quantity"], exportName: "stock-details" }));
+    $panel[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const same = (f) => new Set(lines.map((l) => l[f] || "")).size === 1;
+    if (["product", "stock_type", "storage_bin", "handling_unit", "batch_no"].every(same)) {
+      const l = lines[0];
+      const hist = await frappe.call("frappe_wms.api.monitor.stock_line_history", { product: l.product, stock_type: l.stock_type,
+        storage_bin: l.storage_bin || undefined, handling_unit: l.handling_unit || undefined, batch_no: l.batch_no || undefined, limit: 15 }).then((r) => r.message || []);
+      if (hist.length) $panel.find(".wms-detail-history").append(`<h6 style="margin:12px 0 4px;">${__("Last postings")}</h6>`).append(this.render_table(hist, [
+        ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["quantity", __("Quantity")], ["reference_name", __("Document")],
+        ["warehouse_task", __("Task"), this.link_cell("Warehouse Task", "warehouse_task")], ["posting_user", __("User")]], null, { numeric: ["quantity"] }));
+    }
   }
 
   search_stock_overview() { return this.execute_selection("stock"); }
@@ -897,7 +1092,6 @@ class WMSMonitor {
       this.selection("tasks", $wrap.find(".wms-mon-task-sel"), $wrap.find(".wms-mon-task-table"), {
         renderers: { source_hu: this.hu_link_cell("source_hu"), destination_hu: this.hu_link_cell("destination_hu") },
         actions: this.task_quick_actions(),
-        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
       });
     }
   }
@@ -1022,7 +1216,6 @@ class WMSMonitor {
           parent_hu: this.hu_link_cell("parent_hu"), top_hu: this.hu_link_cell("top_hu"),
         },
         actions: this.hu_quick_actions(),
-        afterRender: ($res) => $res.find(".wms-hu-open, .wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
       });
     }
   }
@@ -1965,7 +2158,6 @@ class WMSMonitor {
       $wrap.html(`<div class="wms-mon-ledger-sel"></div><div class="wms-mon-ledger-table">${sap_unexecuted_html()}</div>`);
       this.selection("movements", $wrap.find(".wms-mon-ledger-sel"), $wrap.find(".wms-mon-ledger-table"), {
         renderers: { handling_unit: this.hu_link_cell("handling_unit") },
-        afterRender: ($res) => $res.find(".wms-open-hu-viewer").on("click", (e) => { e.preventDefault(); this.open_hu_detail($(e.currentTarget).data("hu")); }),
       });
     }
   }

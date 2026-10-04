@@ -30,7 +30,9 @@ export default defineConfig({
   projects: [
     // iPhone-sized viewport; Chromium engine (WebKit is not installed here) - iOS-specific behaviour is covered by the
     // manual checklist in README "Testing the scanner app".
-    { name: "phone", testIgnore: /camera/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 780 } } },
+    { name: "phone", testIgnore: /camera|monitor/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 780 } } },
+    // Desktop WMS Monitor (Frappe desk page).
+    { name: "desktop", testMatch: /monitor/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     // Camera scanning: Chromium's fake camera plays back a QR code (made in global-setup).
     { name: "camera", testMatch: /camera/, use: { ...devices["Pixel 7"], viewport: { width: 390, height: 780 },
       launchOptions: { env: libEnv, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${CAMERA_FILE}`] } } },

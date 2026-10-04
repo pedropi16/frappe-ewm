@@ -65,6 +65,9 @@ VIEWS = {
         "doctype": "WMS Stock Balance", "title": "Stock Overview", "order_by": "`tabWMS Stock Balance`.storage_bin asc, `tabWMS Stock Balance`.product asc",
         "selection": ["product", "storage_bin", "storage_type", "stock_type", "handling_unit", "batch_no", "quantity", "item_group"],
         "default_criteria": {"quantity": {"exclude": [{"op": "eq", "low": 0}]}},
+        # The grouped presentation (storage type / allocation) needs these whatever layout is saved.
+        "required": ["product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "quantity",
+                     "allocated_quantity", "available_quantity", "stock_uom", "last_movement_date"],
         "columns": ["product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "quantity",
                     "allocated_quantity", "available_quantity", "stock_uom", "shelf_life_expiry_date", "last_movement_date"],
         "virtual": {"storage_type": _bin_virtual("`tabWMS Stock Balance`.storage_bin"), **_item_virtuals("`tabWMS Stock Balance`.product")},
@@ -135,6 +138,7 @@ def get_selection_screen(view):
 def _valid_columns(spec, columns):
     allowed = {f["fieldname"] for f in selectable_fields(spec["doctype"]) if not f.get("virtual")}
     cols = [c for c in (columns or spec["columns"]) if c in allowed]
+    cols += [c for c in spec.get("required", []) if c not in cols]
     if "name" not in cols:
         cols.insert(0, "name")
     return cols
@@ -151,7 +155,27 @@ def execute_selection(view, warehouse, criteria=None, columns=None, max_hits=500
     fields = _valid_columns(spec, columns)
     rows = run_selection(spec["doctype"], criteria or {}, fields, base_filters={"warehouse": warehouse},
                          virtual=spec.get("virtual"), order_by=spec.get("order_by"), max_hits=max_hits, start=start)
+    if view == "stock":
+        _enrich_stock(rows)
     return {"rows": rows, "start": cint(start), "max_hits": cint(max_hits) or 500, "truncated": len(rows) >= (cint(max_hits) or 500)}
+
+
+ACTIVE_ALLOCATION = ("Allocated", "Partially Picked")
+
+
+def _enrich_stock(rows):
+    """Adds what a balance row cannot carry itself: its bin's storage type and the outbound
+    deliveries that currently reserve it (`documents`, comma separated)."""
+    bins = list({r.get("storage_bin") for r in rows if r.get("storage_bin")})
+    types = dict(frappe.get_all("Storage Bin", filters={"name": ["in", bins]}, fields=["name", "storage_type"], as_list=True)) if bins else {}
+    docs = {}
+    if rows:
+        for a in frappe.get_all("Stock Allocation", filters={"stock_balance": ["in", [r["name"] for r in rows]], "status": ["in", ACTIVE_ALLOCATION]},
+                                fields=["stock_balance", "outbound_delivery"]):
+            docs.setdefault(a.stock_balance, set()).add(a.outbound_delivery)
+    for r in rows:
+        r["storage_type"] = types.get(r.get("storage_bin")) or ""
+        r["documents"] = ", ".join(sorted(docs.get(r["name"], ())))
 
 
 # ---- variants and layouts ----

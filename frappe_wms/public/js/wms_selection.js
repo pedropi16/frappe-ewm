@@ -104,11 +104,31 @@ if (typeof frappe !== "undefined") (function () {
   const API = "frappe_wms.api.selection";
   const MAX_ROWS_RENDERED = 300;
 
+  const TONES = [
+    ["green", /^(completed|confirmed|posted|picked|released|done|loaded|shipped|active|unrestricted|available|yes|full)/i],
+    ["orange", /(partial|in process|in progress|under review|pending|draft|planned|quality|started)/i],
+    ["red", /(exception|blocked|cancel|on hold|reversed|failed|rejected|error|difference)/i],
+    ["blue", /^(open|assigned|allocated|new|not started|scheduled|requested)/i],
+  ];
+  function pill(v, tone) {
+    if (v == null || v === "") return "";
+    const t = tone || (TONES.find(([, re]) => re.test(String(v))) || ["gray"])[0];
+    return `<span class="wms-pill ${t}">${esc(v)}</span>`;
+  }
+  S.pill = pill;
+
   let stylesDone = false;
   function styles() {
     if (stylesDone) return;
     stylesDone = true;
     $("<style>", { text: `
+      .wms-pill { display:inline-block; padding:1px 9px; border-radius:10px; font-size:11px; font-weight:600; line-height:18px; background:var(--gray-100,#f3f4f6); color:var(--gray-700,#374151); }
+      .wms-pill.green { background:var(--green-100,#dcfce7); color:var(--green-700,#15803d); }
+      .wms-pill.orange { background:var(--orange-100,#ffedd5); color:var(--orange-700,#c2410c); }
+      .wms-pill.red { background:var(--red-100,#fee2e2); color:var(--red-700,#b91c1c); }
+      .wms-pill.blue { background:var(--blue-100,#dbeafe); color:var(--blue-700,#1d4ed8); }
+      .wms-sel-compact { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:6px 10px; margin-bottom:8px; border:1px solid var(--border-color); border-radius:8px; background:var(--card-bg,#fff); }
+      .wms-sel-summary { font-size:12px; flex:1; min-width:200px; overflow:hidden; text-overflow:ellipsis; }
       .wms-sel { border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; margin-bottom:10px; background:var(--card-bg,#fff); }
       .wms-sel-bar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px; }
       .wms-sel-bar .wms-sel-spacer { flex:1; }
@@ -173,12 +193,12 @@ if (typeof frappe !== "undefined") (function () {
       if (defSel) this.applyVariant(defSel, false);
       if (defLay) { this.layout = defLay.layout; this.layoutVariant = defLay.name; }
       this.render();
+      if (!this.opts.autoOpen || this.opts.autoOpen()) this.openDialog();
       return this;
     }
 
     // ---------- rendering ----------
     render() {
-      const $m = this.opts.$mount.empty();
       const varOpts = [`<option value="">${__("(no variant)")}</option>`].concat(this.variants.filter((v) => v.variant_type === "Selection").map((v) =>
         `<option value="${esc(v.name)}" ${v.name === this.variant ? "selected" : ""}>${esc(v.variant_name)}${v.is_global ? " \u{1F310}" : ""}${v.is_default ? " ★" : ""}</option>`));
       this.$el = $(`
@@ -193,11 +213,10 @@ if (typeof frappe !== "undefined") (function () {
             <span class="wms-sel-spacer"></span>
             <span class="text-muted" style="font-size:12px;">${__("Max. hits")}</span>
             <input type="number" min="1" max="50000" class="form-control input-sm wms-sel-maxhits" style="width:90px;" value="${esc(this.maxHits)}">
-            <button type="button" class="btn btn-primary btn-sm wms-sel-exec" title="F8">${__("Execute")} <span class="text-muted" style="font-size:10px;opacity:.8">F8</span></button>
           </div>
           <div class="wms-sel-grid"></div>
           <div class="wms-sel-help">${__("Syntax")}: <code>A*</code> ${__("pattern")} · <code>&gt;=10</code> <code>&lt;&gt;X</code> · <code>10..20</code> ${__("range")} · <code>a;b;c</code> ${__("list")} · <code>!X</code> ${__("exclude")} · <code>=</code> ${__("blank")} · ${__("paste a column from Excel into any field")} · ${__("the arrow button opens multiple selection with include/exclude")}</div>
-        </div>`).appendTo($m);
+        </div>`);
       this.renderRows();
       this.$el.find(".wms-sel-variant").on("change", (e) => {
         const v = this.variants.find((x) => x.name === e.target.value);
@@ -208,8 +227,63 @@ if (typeof frappe !== "undefined") (function () {
       this.$el.find(".wms-sel-fields").on("click", () => this.fieldsDialog());
       this.$el.find(".wms-sel-clear").on("click", () => { this.criteria = {}; this.dirty.clear(); this.renderRows(); });
       this.$el.find(".wms-sel-maxhits").on("change", (e) => { this.maxHits = Math.max(1, Math.min(50000, parseInt(e.target.value, 10) || 500)); });
-      this.$el.find(".wms-sel-exec").on("click", () => this.execute());
       this.$el.on("keydown", (e) => { if (e.key === "F8") { e.preventDefault(); this.execute(); } });
+      if (this.$dlgBody) this.$dlgBody.empty().append(this.$el);
+      this.renderBar();
+    }
+
+    // The selection screen itself lives in a dialog; the page only keeps this one-line bar so the
+    // results get the whole monitor.
+    renderBar() {
+      const $m = this.opts.$mount.empty();
+      const v = this.variantDoc();
+      const $bar = $(`
+        <div class="wms-sel-compact">
+          <button type="button" class="btn btn-primary btn-sm wms-sel-open">${__("Selection…")}</button>
+          <button type="button" class="btn btn-default btn-sm wms-sel-run" title="${__("Run the current selection again")}">&#8635; ${__("Refresh")}</button>
+          ${v ? `<span class="wms-pill blue">${esc(v.variant_name)}</span>` : ""}
+          <span class="wms-sel-summary text-muted">${this.summaryHtml()}</span>
+        </div>`).appendTo($m);
+      $bar.find(".wms-sel-open").on("click", () => this.openDialog());
+      $bar.find(".wms-sel-run").on("click", () => this.execute());
+    }
+
+    summaryHtml() {
+      const parts = Object.entries(this.criteria).filter(([, c]) => S.countOf(c)).map(([f, c]) => {
+        const df = this.fields[f]; if (!df) return "";
+        const t = S.formatShortcut(c, df.fieldtype);
+        return `<b>${esc(df.label)}</b> ${t === null ? __("{0} values", [S.countOf(c)]) : esc(t)}`;
+      }).filter(Boolean);
+      return parts.length ? parts.join(" &middot; ") : __("No restrictions - everything in the warehouse");
+    }
+
+    openDialog() {
+      if (!this.dialog) {
+        this.dialog = new frappe.ui.Dialog({
+          title: __("Selection - {0}", [this.meta.title]), size: "extra-large",
+          fields: [{ fieldtype: "HTML", fieldname: "body" }],
+          primary_action_label: __("Execute") + " (F8)", primary_action: () => this.execute(),
+        });
+        this.$dlgBody = $(this.dialog.fields_dict.body.wrapper);
+        this.$dlgBody.append(this.$el);
+      }
+      this.dialog.show();
+    }
+
+    closeDialog() { if (this.dialog) this.dialog.hide(); }
+
+    // Programmatic search (links between monitor views): {field: [values]} -> equals-any criteria.
+    async runWith(values) {
+      this.criteria = {};
+      Object.entries(values).forEach(([f, vals]) => {
+        if (!this.fields[f] || !vals.length) return;
+        if (!this.selFields.includes(f)) this.selFields.push(f);
+        this.criteria[f] = { include: vals.map((low) => ({ op: "eq", low })), exclude: [] };
+      });
+      this.variant = "";
+      this.dirty.clear();
+      this.render();
+      return this.execute();
     }
 
     variantDoc() { return this.variants.find((v) => v.name === this.variant); }
@@ -469,11 +543,13 @@ if (typeof frappe !== "undefined") (function () {
       const criteria = this.activeCriteria();
       const columns = this.columnsToFetch();
       const $res = this.opts.$results;
+      this.closeDialog();
+      this.renderBar();
       $res.html(`<div class="text-muted">${__("Selecting…")}</div>`);
       let r;
       try {
         r = await frappe.call({ method: `${API}.execute_selection`, args: { view: this.view, warehouse: wh, criteria, columns, max_hits: this.maxHits } });
-      } catch (e) { $res.html(`<div class="text-danger">${__("The selection failed - check the values entered.")}</div>`); return; }
+      } catch (e) { $res.html(`<div class="text-danger">${__("The selection failed - check the values entered.")}</div>`); this.openDialog(); return; }
       const res = r.message;
       this.lastRows = res.rows;
       this.fetchedColumns = columns;
@@ -508,16 +584,39 @@ if (typeof frappe !== "undefined") (function () {
       if (!rows.length) return;
       const dec = this.opts.decorate || {};
       const renderers = dec.renderers || {};
-      const columns = this.fetchedColumns.map((f) => [f, (this.fields[f] && this.fields[f].label) || f, renderers[f]]).concat(dec.extraColumns || []);
-      const numeric = this.fetchedColumns.filter((f) => this.fields[f] && ["Int", "Float", "Currency", "Percent"].includes(this.fields[f].fieldtype));
-      const $el = this.opts.makeGrid(rows, columns, {
-        actions: dec.actions, numeric, exportName: `${this.view}-${frappe.datetime.now_date()}`,
+      let shown = rows;
+      let columns = this.fetchedColumns.map((f) => [f, (this.fields[f] && this.fields[f].label) || f, renderers[f] || this.cellRenderer(f)]).concat(dec.extraColumns || []);
+      let numeric = this.fetchedColumns.filter((f) => this.fields[f] && ["Int", "Float", "Currency", "Percent"].includes(this.fields[f].fieldtype));
+      if (dec.toolbar) $res.append(dec.toolbar(this));
+      // transform(rows, columns) -> {rows, columns, numeric, actions}: a view may present the hits
+      // differently (the Stock Overview groups them) while keeping the same grid.
+      let actions = dec.actions;
+      if (dec.transform) ({ rows: shown, columns, numeric, actions } = dec.transform(rows, columns, numeric, dec.actions));
+      const $el = this.opts.makeGrid(shown, columns, {
+        actions, numeric, exportName: `${this.view}-${frappe.datetime.now_date()}`,
         sort: this.layout && this.layout.sort, totals: this.layout && this.layout.totals,
         layoutBar: this.layoutBar(),
         onLayoutChange: (state) => { this.layout = state; this.$layoutSel && this.$layoutSel.find("option:selected").text(this.layoutLabel(true)); },
       }, this.meta.doctype);
       $res.append($el);
       if (dec.afterRender) dec.afterRender($res, rows);
+    }
+
+    // Every Link column becomes a link: an HU opens the contents viewer, anything else opens its
+    // form in a new tab (the executed results stay where they are). Status-like selects get a pill.
+    cellRenderer(f) {
+      const df = this.fields[f];
+      if (!df) return null;
+      if (df.fieldtype === "Link" && df.options) {
+        return (row) => {
+          const v = row[f];
+          if (v == null || v === "") return "";
+          if (df.options === "Handling Unit") return `<a href="#" class="wms-open-hu-viewer" data-hu="${esc(v)}">${esc(v)}</a>`;
+          return `<a href="/app/${frappe.router.slug(df.options)}/${encodeURIComponent(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+        };
+      }
+      if (df.fieldtype === "Select" && /status|state$/.test(f)) return (row) => pill(row[f]);
+      return null;
     }
 
     // ---------- layouts ----------

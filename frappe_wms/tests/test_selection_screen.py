@@ -123,6 +123,17 @@ class TestSelectionScreen(IntegrationTestCase):
             if not page["truncated"]: break
         self.assertEqual(paged, everything)
 
+    def test_stock_view_adds_storage_type_and_grouping_columns(self):
+        item = frappe.get_all("Item", filters={"is_stock_item": 1}, limit=1, pluck="name")[0]
+        bal = frappe.get_doc({"doctype": "WMS Stock Balance", "name": frappe.generate_hash(length=20), "warehouse": WH, "product": item, "storage_bin": f"{WH}-A-01",
+                              "stock_type": "AVAILABLE", "quantity": 3, "available_quantity": 3,
+                              "stock_uom": frappe.db.get_value("Item", item, "stock_uom")}).insert(ignore_permissions=True)
+        res = execute_selection("stock", WH, {}, ["product"])  # a layout that hid everything else
+        row = next(r for r in res["rows"] if r["name"] == bal.name)
+        self.assertEqual(row["storage_type"], f"{WH}-BULK")
+        self.assertEqual(row["documents"], "")
+        self.assertTrue({"storage_bin", "handling_unit", "serial_no", "allocated_quantity"} <= set(row))
+
     def test_variants_default_and_global_visibility(self):
         view = "hu"
         for v in list_variants(view):
