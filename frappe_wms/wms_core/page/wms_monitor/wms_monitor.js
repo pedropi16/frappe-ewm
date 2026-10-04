@@ -87,7 +87,15 @@ function ensure_monitor_styles() {
     .wms-mon-nav-item:hover { background:var(--control-bg,#f5f5f5); text-decoration:none; }
     .wms-mon-nav-item.active { background:var(--bg-light-blue,#eff6ff); border-left-color:var(--primary,#3b82f6); font-weight:600; color:var(--primary,#2563eb); }
     .wms-monitor-content { flex:1; min-width:0; }
-    .wms-mon-title { font-size:16px; font-weight:700; margin:0 0 10px; }
+    .wms-mon-title { display:none; }
+    .wms-grid-toolbar { gap:6px 8px; padding:6px 8px; border:1px solid var(--border-color); border-bottom:0; border-radius:8px 8px 0 0; background:var(--card-bg,#fff); margin-bottom:0; }
+    .wms-grid-scroll { border-radius:0 0 8px 8px; }
+    .wms-grid-groupbar, .wms-grid-extra { display:inline-flex; align-items:center; gap:4px; font-size:12px; }
+    .wms-grid-group { height:24px; width:110px; font-size:12px; padding:0 4px; }
+    .wms-tree-caret { border:0; background:none; padding:0 4px; cursor:pointer; color:var(--text-muted); }
+    .wms-grid-table tbody tr.wms-grp td { background:var(--control-bg,#f3f4f6) !important; font-weight:600; }
+    .wms-grid-table tbody tr.wms-grp-0 td { background:var(--bg-light-blue,#e8f0fe) !important; }
+    .wms-grid-table tbody tr.wms-grp td.wms-grid-selected { background:rgba(59,130,246,.25) !important; }
     .wms-mon-card { display:inline-block; min-width:140px; margin:0 10px 10px 0; padding:10px 16px; border:1px solid var(--border-color); border-radius:10px; background:var(--card-bg,#fff); }
     .wms-mon-card.clickable { cursor:pointer; transition:box-shadow .15s, transform .15s; }
     .wms-mon-card.clickable:hover { box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.12)); transform:translateY(-1px); }
@@ -101,11 +109,12 @@ function ensure_monitor_styles() {
     .wms-grid-table tbody tr:hover td { background:var(--bg-light-blue,#eff6ff); }
     .wms-grid-table tbody td.wms-grid-selected { background:rgba(59,130,246,.18) !important; }
     .wms-grid-actionbar { padding:2px 0; }
-    .wms-stock-group { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; padding:4px 2px 8px; font-size:12px; }
-    .wms-stock-group label { margin:0; font-weight:normal; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
-    .wms-stock-group input { margin:0; }
-    .wms-stock-group-sep { flex:0 0 1px; height:16px; background:var(--border-color); }
+    .wms-stock-split { margin:0; font-weight:normal; font-size:12px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+    .wms-stock-split input { margin:0; }
     .wms-detail-panel { margin-top:14px; padding:10px 12px; border:1px solid var(--primary,#3b82f6); border-radius:10px; background:var(--card-bg,#fff); }
+    .wms-detail-fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:6px 18px; font-size:12.5px; }
+    .wms-detail-field > .text-muted { font-size:11px; }
+    .wms-sel-detail .wms-detail-panel { margin-top:12px; }
     .wms-detail-head { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
     .wms-detail-head .wms-detail-close { margin-left:auto; }
     .wms-detail-serials { display:flex; flex-wrap:wrap; align-items:center; gap:4px; max-height:96px; overflow:auto; margin-bottom:8px; }
@@ -156,6 +165,10 @@ class DataGrid {
     this.sortDir = (this.opts.sort && this.opts.sort[1]) || 0; // 1 asc, -1 desc
     this.showTotals = !!this.opts.totals;
     this.numeric = new Set(this.opts.numeric || []);
+    this.groupBy = (this.opts.groupBy || []).filter((f) => this.columns.some(([c]) => c === f));
+    this.expanded = new Set(); // keys of open group rows
+    this._expandInit = false;
+    this._applyGroupOrder();
     this.sels = []; // [{r0,r1,c0,c1}, ...] - r0 includes the header row (0); c0 excludes the gutter (starts at 1)
     this.anchor = null;
     this.$el = $(`<div class="wms-grid"></div>`);
@@ -187,6 +200,10 @@ class DataGrid {
         return allowed.has(key);
       });
     }
+    if (this.groupBy.length && !(this.sortField && this.sortDir)) {
+      const gb = this.groupBy; // no explicit sort: keep each group's lines together, in group order
+      rows = rows.slice().sort((a, b) => { for (const f of gb) { const c = String(a[f] ?? "").localeCompare(String(b[f] ?? ""), undefined, { numeric: true }); if (c) return c; } return 0; });
+    }
     if (this.sortField && this.sortDir) {
       const field = this.sortField, dir = this.sortDir;
       rows = rows.slice().sort((a, b) => {
@@ -201,6 +218,49 @@ class DataGrid {
       });
     }
     return rows;
+  }
+
+  // Group fields come first, so a group row sits in the column of the field it groups by.
+  _applyGroupOrder() {
+    if (!this.groupBy.length) return;
+    const head = this.groupBy.map((f) => this.columns.find(([c]) => c === f));
+    this.columns = head.concat(this.columns.filter(([c]) => !this.groupBy.includes(c)));
+  }
+
+  // Flat list of visible rows of the group tree: group rows (aggregated) interleaved with their
+  // lines, a collapsed group hiding everything beneath it.
+  _tree(leaves) {
+    const gb = this.groupBy, out = [], parentOf = new Map(), keys = [];
+    const listFields = new Set(this.opts.listFields || []);
+    const aggregate = (f, v, list, depth, pkey, key) => {
+      const g = { _group: true, _depth: depth, _key: key, _pkey: pkey, _gfield: f, _lines: list, _multi: new Set() };
+      for (const [field] of this.columns) {
+        if (this.numeric.has(field)) { g[field] = Math.round(list.reduce((a, r) => a + (parseFloat(r[field]) || 0), 0) * 1e6) / 1e6; continue; }
+        let vals = list.map((r) => r[field]).filter((x) => x !== null && x !== undefined && x !== "");
+        if (listFields.has(field)) vals = vals.flatMap((x) => String(x).split(", "));
+        const set = Array.from(new Set(vals));
+        if (set.length <= 1) g[field] = set[0] ?? "";
+        else if (listFields.has(field) && set.length <= 3) g[field] = set.sort().join(", ");
+        else { g[field] = __("{0} values", [set.length]); g._multi.add(field); }
+      }
+      return g;
+    };
+    const make = (items, depth, pkey) => {
+      if (depth === gb.length) { items.forEach((r) => { r._group = false; r._pkey = pkey; out.push(r); }); return; }
+      const f = gb[depth], groups = new Map();
+      for (const r of items) { const v = r[f] ?? ""; if (!groups.has(v)) groups.set(v, []); groups.get(v).push(r); }
+      for (const [v, list] of groups) {
+        const key = `${pkey}\u0001${f}=${v}`;
+        parentOf.set(key, pkey); keys.push([key, depth]);
+        out.push(aggregate(f, v, list, depth, pkey, key));
+        make(list, depth + 1, key);
+      }
+    };
+    make(leaves, 0, "");
+    if (!this._expandInit) { keys.filter(([, d]) => d < gb.length - 1).forEach(([k]) => this.expanded.add(k)); this._expandInit = true; }
+    this._allKeys = keys.map(([k]) => k);
+    const open = (pkey) => { while (pkey) { if (!this.expanded.has(pkey)) return false; pkey = parentOf.get(pkey) || ""; } return true; };
+    return out.filter((r) => open(r._pkey));
   }
 
   // Every row index (1-based, matching data-r) touched by any selected rectangle.
@@ -220,7 +280,15 @@ class DataGrid {
         <button type="button" class="btn btn-default btn-xs wms-grid-copy">${__("Copy")}</button>
         <button type="button" class="btn btn-default btn-xs wms-grid-csv" title="${__("Download the visible rows and columns as CSV")}">${__("Export")}</button>
         <button type="button" class="btn btn-default btn-xs wms-grid-totals" title="${__("Totals of numeric columns")}">&Sigma;</button>
-        <span class="wms-grid-layoutbar"></span>
+        <span class="wms-grid-groupbar">
+          <span class="text-muted">${__("Group by")}</span>
+          ${[0, 1, 2].map((i) => `<select class="form-control input-xs wms-grid-group" data-lvl="${i}"><option value="">${i ? "› " + __("then") + "…" : __("(none)")}</option>${this.columns.map(([f, l]) => `<option value="${frappe.utils.escape_html(f)}" ${this.groupBy[i] === f ? "selected" : ""}>${frappe.utils.escape_html(l)}</option>`).join("")}</select>`).join("")}
+          <button type="button" class="btn btn-default btn-xs wms-grid-expand" title="${__("Expand all groups")}">&#9662; ${__("all")}</button>
+          <button type="button" class="btn btn-default btn-xs wms-grid-collapse" title="${__("Collapse all groups")}">&#9656; ${__("all")}</button>
+        </span>
+        <span class="wms-grid-extra"></span>
+        <button type="button" class="btn btn-default btn-xs wms-grid-layout-toggle" title="${__("Layouts, columns")}">${__("Layout")} &#9662;</button>
+        <span class="wms-grid-layoutbar" style="display:none;"></span>
         <button type="button" class="btn btn-default btn-xs wms-grid-clear-filters" style="display:none;">${__("Clear filters/sort")}</button>
         <span class="text-muted wms-grid-hint"></span>
         <div class="wms-grid-actionbar"></div>
@@ -238,6 +306,22 @@ class DataGrid {
       this.showTotals = !this.showTotals; $(e.currentTarget).toggleClass("active", this.showTotals); this._render(); this._layoutChanged();
     });
     if (this.opts.layoutBar) $toolbar.find(".wms-grid-layoutbar").append(this.opts.layoutBar);
+    else $toolbar.find(".wms-grid-layout-toggle").hide();
+    $toolbar.find(".wms-grid-layout-toggle").on("click", () => $toolbar.find(".wms-grid-layoutbar").toggle());
+    if (this.opts.noGroup) $toolbar.find(".wms-grid-groupbar").remove();
+    if (this.opts.extraToolbar) $toolbar.find(".wms-grid-extra").append(this.opts.extraToolbar);
+    $toolbar.find(".wms-grid-group").on("change", () => {
+      this.groupBy = Array.from(new Set($toolbar.find(".wms-grid-group").map((_, el) => el.value).get().filter(Boolean)));
+      this._applyGroupOrder(); this.expanded = new Set(); this._expandInit = false; this.sels = [];
+      this._render(); this._layoutChanged();
+    });
+    $toolbar.find(".wms-grid-expand").on("click", () => { this.expanded = new Set(this._allKeys || []); this.sels = []; this._render(); });
+    $toolbar.find(".wms-grid-collapse").on("click", () => { this.expanded = new Set(); this.sels = []; this._render(); });
+    this.$el.on("click", ".wms-tree-caret", (e) => {
+      const key = e.currentTarget.dataset.key;
+      if (this.expanded.has(key)) this.expanded.delete(key); else this.expanded.add(key);
+      this.sels = []; this._render();
+    });
     $toolbar.find(".wms-grid-clear-filters").on("click", () => { this.colFilters = {}; this.sortField = null; this.sortDir = 0; this.sels = []; this._render(); this._layoutChanged(); });
     this._bindSelection();
     this.$el.on("keydown", (e) => {
@@ -248,7 +332,8 @@ class DataGrid {
   }
 
   _render() {
-    const rows = this._visibleRows();
+    this._leaves = this._visibleRows();
+    const rows = this.groupBy.length ? this._tree(this._leaves) : this._leaves;
     this._visRows = rows;
     const maxR = rows.length, maxC = this.columns.length;
     const head = [`<th class="wms-grid-corner" data-r="0" data-c="0"></th>`].concat(
@@ -272,7 +357,12 @@ class DataGrid {
         this.columns.map(([field, , renderFn], ci) => {
           const raw = row[field];
           let inner;
-          if (renderFn) {
+          if (row._group) {
+            const base = raw === "" || raw === null || raw === undefined ? "" : (renderFn && !row._multi.has(field) ? renderFn(row, ri) : frappe.utils.escape_html(String(raw)));
+            if (row._gfield === field) {
+              inner = `<button type="button" class="wms-tree-caret" data-key="${frappe.utils.escape_html(row._key)}">${this.expanded.has(row._key) ? "&#9662;" : "&#9656;"}</button> <b>${base || __("(blank)")}</b> <span class="text-muted">(${row._lines.length})</span>`;
+            } else inner = ci < row._depth ? "" : base;
+          } else if (renderFn) {
             inner = renderFn(row, ri);
           } else if ((field === "name" || field === "reference_name") && raw) {
             const target_doctype = field === "reference_name" ? row.reference_doctype : this.doctype;
@@ -285,21 +375,22 @@ class DataGrid {
           return `<td class="wms-grid-cell${this.numeric.has(field) ? " wms-grid-num" : ""}" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
         })
       ).join("");
-      return `<tr>${cells}</tr>`;
+      return `<tr${row._group ? ` class="wms-grp wms-grp-${Math.min(row._depth, 2)}"` : ""}>${cells}</tr>`;
     }).join("");
     let foot = "";
-    if (this.showTotals && rows.length) {
+    if (this.showTotals && this._leaves.length) {
       const cells = this.columns.map(([field]) => {
         if (!this.numeric.has(field)) return `<td></td>`;
-        const total = rows.reduce((acc, row) => acc + (parseFloat(row[field]) || 0), 0);
+        const total = this._leaves.reduce((acc, row) => acc + (parseFloat(row[field]) || 0), 0);
         return `<td class="wms-grid-num">${frappe.utils.escape_html(String(Math.round(total * 1e6) / 1e6))}</td>`;
       });
       foot = `<tfoot><tr><th class="wms-grid-rowhead">&Sigma;</th>${cells.join("")}</tr></tfoot>`;
     }
     this.$table.html(`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}`);
     this._maxR = maxR; this._maxC = maxC;
-    this.$el.find(".wms-grid-hint").text(rows.length === this.rows.length ? __("{0} row(s)", [rows.length]) : __("{0} of {1} row(s)", [rows.length, this.rows.length]));
+    this.$el.find(".wms-grid-hint").text(this._leaves.length === this.rows.length ? __("{0} row(s)", [this._leaves.length]) : __("{0} of {1} row(s)", [this._leaves.length, this.rows.length]));
     this.$el.find(".wms-grid-clear-filters").toggle(!!(this.sortField || Object.keys(this.colFilters).length));
+    this.$el.find(".wms-grid-expand, .wms-grid-collapse").toggle(this.groupBy.length > 0);
     this._bindHeaderControls();
     this._applyHighlight();
     this._renderActionBar();
@@ -461,7 +552,8 @@ class DataGrid {
     const actions = this.opts.actions || [];
     if (!actions.length) { this.$actionbar.empty(); return; }
     const rowIdx = Array.from(this._selectedRowIndices()).filter((r) => r >= 1 && r <= this._visRows.length);
-    const selectedRows = rowIdx.map((r) => this._visRows[r - 1]);
+    const seen = new Set(), selectedRows = [];
+    rowIdx.forEach((r) => { const row = this._visRows[r - 1]; (row._group ? row._lines : [row]).forEach((l) => { if (!seen.has(l)) { seen.add(l); selectedRows.push(l); } }); });
     if (!selectedRows.length) { this.$actionbar.empty(); return; }
     this.$actionbar.empty().append(`<span class="wms-grid-selcount">${__("{0} selected", [selectedRows.length])}</span>`);
     actions.forEach((action) => {
@@ -479,7 +571,7 @@ class DataGrid {
   }
 
   layoutState() {
-    return { columns: this.columns.map(([f]) => f), sort: this.sortField ? [this.sortField, this.sortDir] : null, totals: this.showTotals };
+    return { columns: this.columns.map(([f]) => f), sort: this.sortField ? [this.sortField, this.sortDir] : null, totals: this.showTotals, groupBy: this.groupBy };
   }
 
   _layoutChanged() { if (this.opts.onLayoutChange) this.opts.onLayoutChange(this.layoutState()); }
@@ -953,16 +1045,11 @@ class WMSMonitor {
   }
 
   // One serial-numbered product is one balance row PER serial, so the raw list is mostly the same
-  // product over and over. Here the hits are grouped by whatever the user ticks (storage type /
-  // bin / HU / product / batch / stock type), optionally with allocated and free stock split into
-  // their own lines, and "Details" opens the underlying lines (serial numbers...) of the marked rows.
-  // ponytail: grouped client-side over the loaded hits (Max. hits); move to SQL if hits get huge.
+  // product over and over. The grid groups it as a tree (storage type > bin > product by default;
+  // the "Group by" boxes change that), the optional split gives allocated and free stock their
+  // own lines, and "Details" opens the underlying lines (serial numbers...) of the marked rows.
   stock_decorate() {
-    const DIMS = [
-      ["storage_type", __("Storage Type")], ["storage_bin", __("Storage Bin")], ["handling_unit", __("Handling Unit")],
-      ["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")],
-    ];
-    const g = this.stock_group = this.stock_group || { dims: ["storage_type", "storage_bin", "product"], split: true };
+    const g = this.stock_group = this.stock_group || { split: true };
     const pill = (v) => v ? wms_selection.pill(__(v), v === "Allocated" ? "blue" : "green") : "";
     const docs = (row) => (row.documents || "").split(", ").filter(Boolean).map((d) =>
       `<a href="/app/outbound-delivery/${encodeURIComponent(d)}" target="_blank" rel="noopener">${frappe.utils.escape_html(d)}</a>`).join(", ");
@@ -971,65 +1058,24 @@ class WMSMonitor {
       handling_unit: this.hu_link_cell("handling_unit"), alloc: (row) => pill(row.alloc), documents: docs,
       batch_no: this.link_cell("Batch", "batch_no"), serial_no: this.link_cell("Serial No", "serial_no"),
     };
-    const label = Object.fromEntries(DIMS);
     const split = (rows) => rows.flatMap((r) => {
       const q = flt(r.quantity), a = Math.min(flt(r.allocated_quantity), q), out = [];
       if (a > 0) out.push({ ...r, quantity: a, allocated_quantity: a, available_quantity: 0, alloc: "Allocated" });
       if (q - a > 1e-9) out.push({ ...r, quantity: q - a, allocated_quantity: 0, available_quantity: q - a, documents: "", alloc: "Free" });
       return out;
     });
-    const group = (lines) => {
-      const map = new Map();
-      for (const r of lines) {
-        const k = g.dims.map((d) => r[d] || "").concat(r.alloc || "").join("\u0001");
-        let o = map.get(k);
-        if (!o) {
-          o = { alloc: r.alloc, lines: 0, quantity: 0, allocated_quantity: 0, available_quantity: 0, stock_uom: r.stock_uom,
-            last_movement_date: "", _lines: [], _docs: new Set(), _serials: new Set() };
-          g.dims.forEach((d) => { o[d] = r[d]; });
-          map.set(k, o);
-        }
-        o.lines++; o._lines.push(r);
-        ["quantity", "allocated_quantity", "available_quantity"].forEach((f) => { o[f] += flt(r[f]); });
-        (r.documents || "").split(", ").filter(Boolean).forEach((d) => o._docs.add(d));
-        if (r.serial_no) o._serials.add(r.serial_no);
-        if ((r.last_movement_date || "") > o.last_movement_date) o.last_movement_date = r.last_movement_date;
-      }
-      const rows = Array.from(map.values());
-      rows.forEach((o) => { o.serials = o._serials.size; o.documents = Array.from(o._docs).sort().join(", "); });
-      const key = (o) => g.dims.map((d) => o[d] || "").join("\u0001");
-      return rows.sort((a, b) => key(a).localeCompare(key(b), undefined, { numeric: true }) || String(a.alloc).localeCompare(String(b.alloc)));
-    };
     return {
-      toolbar: (sel) => {
-        const $t = $(`<div class="wms-stock-group">
-          <span class="text-muted">${__("Group by")}</span>
-          ${DIMS.map(([f, l]) => `<label><input type="checkbox" data-dim="${f}" ${g.dims.includes(f) ? "checked" : ""}> ${l}</label>`).join("")}
-          <span class="wms-stock-group-sep"></span>
-          <label><input type="checkbox" class="wms-stock-split" ${g.split ? "checked" : ""}> ${__("Split allocated / free")}</label>
-        </div>`);
-        $t.on("change", "input", () => {
-          g.dims = DIMS.map(([f]) => f).filter((f) => $t.find(`[data-dim="${f}"]`).prop("checked"));
-          g.split = $t.find(".wms-stock-split").prop("checked");
-          sel.drawResults();
-        });
-        return $t;
-      },
-      transform: (rows, columns, numeric) => {
-        const lines = (g.split ? split(rows) : rows.map((r) => ({ ...r, alloc: flt(r.allocated_quantity) > 0 ? "Allocated" : "Free" }))).map((r) => ({ ...r, _lines: [r] }));
-        const actions = this.stock_actions();
-        const num = ["quantity", "allocated_quantity", "available_quantity"];
-        if (!g.dims.length) {
-          const cols = columns.filter(([f]) => f !== "name").concat([["storage_type", __("Storage Type")]]);
-          if (g.split) cols.push(["alloc", __("Allocation"), R.alloc]);
-          cols.push(["documents", __("Document"), R.documents]);
-          return { rows: lines, columns: cols.map(([f, l, fn]) => [f, l, R[f] || fn]), numeric: num, actions };
-        }
-        const cols = g.dims.map((d) => [d, label[d], R[d]]);
-        if (g.split) cols.push(["alloc", __("Allocation"), R.alloc]);
-        cols.push(["lines", __("Lines")], ["serials", __("Serial Nos")], ["quantity", __("Quantity")], ["allocated_quantity", __("Allocated")],
-          ["available_quantity", __("Available")], ["stock_uom", __("UoM")], ["documents", __("Document"), R.documents], ["last_movement_date", __("Last Movement")]);
-        return { rows: group(lines), columns: cols, numeric: ["lines", "serials"].concat(num), actions };
+      groupBy: ["storage_type", "storage_bin", "product"],
+      toolbar: (sel) => $(`<label class="wms-stock-split"><input type="checkbox" ${g.split ? "checked" : ""}> ${__("Split allocated / free")}</label>`)
+        .on("change", "input", (e) => { g.split = e.target.checked; sel.drawResults(); }),
+      transform: (rows, columns) => {
+        const lines = g.split ? split(rows) : rows.map((r) => ({ ...r, alloc: flt(r.allocated_quantity) > 0 ? "Allocated" : "Free" }));
+        const cols = [["storage_type", __("Storage Type")]].concat(columns.filter(([f]) => f !== "name"));
+        const at = cols.findIndex(([f]) => f === "stock_type") + 1;
+        cols.splice(at, 0, ["alloc", __("Allocation")]);
+        cols.push(["documents", __("Document")]);
+        return { rows: lines, columns: cols.map(([f, l, fn]) => [f, l, R[f] || fn]),
+          numeric: ["quantity", "allocated_quantity", "available_quantity"], actions: this.stock_actions(), listFields: ["documents"] };
       },
     };
   }
@@ -1038,7 +1084,7 @@ class WMSMonitor {
     return [
       { label: __("Details"), kind: "primary", run: (rows) => this.show_stock_details(rows) },
       { label: __("Movements"), run: (rows) => {
-        const uniq = (f) => Array.from(new Set(rows.flatMap((r) => r._lines.map((l) => l[f])).filter(Boolean)));
+        const uniq = (f) => Array.from(new Set(rows.map((l) => l[f]).filter(Boolean)));
         return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin"), handling_unit: uniq("handling_unit") });
       } },
     ];
@@ -1047,7 +1093,7 @@ class WMSMonitor {
   // The panel under the grid for the marked rows: every underlying balance line (serial numbers,
   // batches, which HU / bin / document), plus the last postings when the lines are one position.
   async show_stock_details(rows) {
-    const lines = rows.flatMap((r) => r._lines);
+    const lines = rows;
     const $d = this.body_for("stock").find(".wms-mon-stock-detail").empty();
     const serials = Array.from(new Set(lines.map((l) => l.serial_no).filter(Boolean)));
     const sum = (f) => Math.round(lines.reduce((a, l) => a + flt(l[f]), 0) * 1e6) / 1e6;
@@ -1069,7 +1115,7 @@ class WMSMonitor {
       ["documents", __("Document"), (r) => (r.documents || "").split(", ").filter(Boolean).map((x) =>
         `<a href="/app/outbound-delivery/${encodeURIComponent(x)}" target="_blank" rel="noopener">${esc(x)}</a>`).join(", ")],
       ["shelf_life_expiry_date", __("Expiry")], ["last_movement_date", __("Last Movement")]];
-    $panel.find(".wms-detail-lines").append(this.render_table(lines, cols, null, { numeric: ["quantity", "allocated_quantity"], exportName: "stock-details" }));
+    $panel.find(".wms-detail-lines").append(this.render_table(lines, cols, null, { numeric: ["quantity", "allocated_quantity"], exportName: "stock-details", noGroup: true }));
     $panel[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
     const same = (f) => new Set(lines.map((l) => l[f] || "")).size === 1;
     if (["product", "stock_type", "storage_bin", "handling_unit", "batch_no"].every(same)) {
@@ -1078,7 +1124,7 @@ class WMSMonitor {
         storage_bin: l.storage_bin || undefined, handling_unit: l.handling_unit || undefined, batch_no: l.batch_no || undefined, limit: 15 }).then((r) => r.message || []);
       if (hist.length) $panel.find(".wms-detail-history").append(`<h6 style="margin:12px 0 4px;">${__("Last postings")}</h6>`).append(this.render_table(hist, [
         ["posting_datetime", __("Posted")], ["movement_type", __("Movement")], ["quantity", __("Quantity")], ["reference_name", __("Document")],
-        ["warehouse_task", __("Task"), this.link_cell("Warehouse Task", "warehouse_task")], ["posting_user", __("User")]], null, { numeric: ["quantity"] }));
+        ["warehouse_task", __("Task"), this.link_cell("Warehouse Task", "warehouse_task")], ["posting_user", __("User")]], null, { numeric: ["quantity"], noGroup: true }));
     }
   }
 

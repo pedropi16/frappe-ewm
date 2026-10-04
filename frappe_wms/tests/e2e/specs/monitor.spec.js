@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { seed } from "../helpers.js";
+import { seed, makeTask } from "../helpers.js";
 
 // Desktop WMS Monitor: selection popup, grouped Stock Overview, details panel, cross links.
 const bench = (fn) => execFileSync("bench", ["--site", process.env.SITE || "wms.local", "execute", `frappe_wms.tests.e2e.seed.${fn}`],
@@ -24,21 +24,24 @@ test("stock overview: popup, grouping, details, links", async ({ page }) => {
   await expect(dialog).toBeHidden();
   await expect(page.locator(".wms-sel-compact")).toBeVisible();
 
-  // 6 serial lines collapse into one row per allocated/free state
+  // grouped as a tree: storage type > bin > product, the product group still collapsed
   const rows = page.locator(".wms-mon-stock-table tbody tr");
-  await expect(rows).toHaveCount(2);
-  await expect(page.locator(".wms-mon-stock-table tbody").getByText("Allocated")).toBeVisible();
+  await expect(rows).toHaveCount(3);
+  await rows.nth(2).locator(".wms-tree-caret").click();
+  await expect(rows).toHaveCount(9); // 6 serial lines (2 allocated, 4 free) under the product
+  await expect(page.locator(".wms-mon-stock-table tbody").getByText("Allocated").first()).toBeVisible();
   await expect(page.locator(".wms-mon-stock-table tbody a[href^='/app/storage-bin/']").first()).toBeVisible();
 
-  // mark a row, press Details -> serial numbers
+  // mark the top group, press Details -> all its serial numbers
   await rows.first().locator("th.wms-grid-rowhead").click();
   await page.locator(".wms-mon-stock-table .wms-grid-actionbar").getByRole("button", { name: "Details" }).click();
-  await expect(page.locator(".wms-detail-panel .wms-chip")).toHaveCount(2);
-
+  await expect(page.locator(".wms-detail-panel .wms-chip")).toHaveCount(6);
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/stock.png` });
 
   // ungroup: back to one line per serial
-  for (const dim of ["storage_type", "storage_bin", "product"]) await page.locator(`.wms-stock-group [data-dim=${dim}]`).uncheck();
+  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='0']").selectOption("");
+  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='1']").selectOption("");
+  await page.locator(".wms-mon-stock-table .wms-grid-group[data-lvl='2']").selectOption("");
   await expect(rows).toHaveCount(6);
 
   // jump to Stock Movements for the marked rows (no popup)
@@ -47,4 +50,20 @@ test("stock overview: popup, grouping, details, links", async ({ page }) => {
   await expect(page.locator(".wms-mon-nav-item.active")).toHaveText("Stock Movements");
   await expect(page.locator(".modal.show")).toHaveCount(0);
   await page.screenshot({ path: `${process.env.SHOT_DIR || "test-results"}/monitor.png`, fullPage: false });
+});
+
+test("every view: Details shows the whole record", async ({ page, request }) => {
+  const s = seed();
+  const task = await makeTask(request);
+  await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
+  await page.goto("/app/wms-monitor");
+  await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
+  await page.locator(".wms-mon-nav-item", { hasText: "Warehouse Tasks" }).click();
+  const dialog = page.locator(".modal.show", { hasText: "Selection - Warehouse Tasks" });
+  await dialog.getByRole("button", { name: /Execute/ }).click();
+  const row = page.locator(".wms-mon-task-table tbody tr", { hasText: task.name });
+  await row.locator("th.wms-grid-rowhead").click();
+  await page.locator(".wms-mon-task-table .wms-grid-actionbar").getByRole("button", { name: "Details" }).click();
+  await expect(page.locator(".wms-sel-detail .wms-detail-panel", { hasText: task.name })).toBeVisible();
+  await expect(page.locator(".wms-sel-detail .wms-detail-panel").getByText("Planned Quantity")).toBeVisible();
 });

@@ -576,8 +576,7 @@ if (typeof frappe !== "undefined") (function () {
       const $res = this.opts.$results.empty();
       const rows = this.lastRows || [];
       const status = rows.length
-        ? (this.truncated ? `<div class="wms-sel-status text-warning">${__("{0} hits so far - there are more.", [rows.length])} <button class="btn btn-xs btn-default wms-sel-more">${__("Load next {0}", [this.maxHits])}</button></div>`
-          : `<div class="wms-sel-status text-muted">${__("{0} hit(s)", [rows.length])}</div>`)
+        ? (this.truncated ? `<div class="wms-sel-status text-warning">${__("{0} hits so far - there are more.", [rows.length])} <button class="btn btn-xs btn-default wms-sel-more">${__("Load next {0}", [this.maxHits])}</button></div>` : "")
         : `<div class="wms-sel-status text-muted">${__("No data found for this selection.")}</div>`;
       $res.append(status);
       $res.find(".wms-sel-more").on("click", () => this.loadMore());
@@ -587,18 +586,21 @@ if (typeof frappe !== "undefined") (function () {
       let shown = rows;
       let columns = this.fetchedColumns.map((f) => [f, (this.fields[f] && this.fields[f].label) || f, renderers[f] || this.cellRenderer(f)]).concat(dec.extraColumns || []);
       let numeric = this.fetchedColumns.filter((f) => this.fields[f] && ["Int", "Float", "Currency", "Percent"].includes(this.fields[f].fieldtype));
-      if (dec.toolbar) $res.append(dec.toolbar(this));
-      // transform(rows, columns) -> {rows, columns, numeric, actions}: a view may present the hits
-      // differently (the Stock Overview groups them) while keeping the same grid.
-      let actions = dec.actions;
-      if (dec.transform) ({ rows: shown, columns, numeric, actions } = dec.transform(rows, columns, numeric, dec.actions));
+      // transform(rows, columns) -> {rows, columns, numeric, actions, listFields}: a view may present
+      // the hits differently (the Stock Overview adds columns and splits lines) in the same grid.
+      let actions = dec.actions, listFields;
+      if (dec.transform) ({ rows: shown, columns, numeric, actions, listFields } = dec.transform(rows, columns, numeric, dec.actions));
+      // Every view gets a Details button: the full record of each marked line (a view may bring its own).
+      if (!(actions || []).some((a) => a.label === __("Details"))) actions = [{ label: __("Details"), kind: "primary", run: (r) => this.showDetails(r) }].concat(actions || []);
       const $el = this.opts.makeGrid(shown, columns, {
+        groupBy: (this.layout && this.layout.groupBy) || dec.groupBy || [], listFields,
+        extraToolbar: dec.toolbar && dec.toolbar(this),
         actions, numeric, exportName: `${this.view}-${frappe.datetime.now_date()}`,
         sort: this.layout && this.layout.sort, totals: this.layout && this.layout.totals,
         layoutBar: this.layoutBar(),
         onLayoutChange: (state) => { this.layout = state; this.$layoutSel && this.$layoutSel.find("option:selected").text(this.layoutLabel(true)); },
       }, this.meta.doctype);
-      $res.append($el);
+      $res.append($el, `<div class="wms-sel-detail"></div>`);
       if (dec.afterRender) dec.afterRender($res, rows);
     }
 
@@ -617,6 +619,50 @@ if (typeof frappe !== "undefined") (function () {
       }
       if (df.fieldtype === "Select" && /status|state$/.test(f)) return (row) => pill(row[f]);
       return null;
+    }
+
+    // ---------- details: the whole record of each marked line ----------
+    showDetails(rows) {
+      const $host = this.opts.$results.find(".wms-sel-detail").empty();
+      const picked = rows.filter((r) => r.name).slice(0, 5);
+      if (!picked.length) return;
+      const doctype = this.meta.doctype;
+      return new Promise((resolve) => frappe.model.with_doctype(doctype, async () => {
+        for (const r of picked) {
+          const doc = (await frappe.call("frappe.client.get", { doctype, name: r.name })).message;
+          $host.append(this.docSheet(doctype, doc));
+        }
+        if (rows.length > picked.length) $host.append(`<div class="text-muted" style="font-size:12px;">${__("Showing the first {0} of {1} marked lines.", [picked.length, rows.length])}</div>`);
+        $host[0].scrollIntoView({ behavior: "smooth", block: "nearest" });
+        resolve();
+      }));
+    }
+
+    docSheet(doctype, doc) {
+      const meta = frappe.get_meta(doctype);
+      const SKIP = new Set(["Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Image", "Attach Image", "Table", "Table MultiSelect", "Geolocation", "Code", "JSON"]);
+      const shown = meta.fields.filter((df) => !df.hidden && !SKIP.has(df.fieldtype) && doc[df.fieldname] !== null && doc[df.fieldname] !== undefined && doc[df.fieldname] !== "");
+      const value = (df) => {
+        const v = doc[df.fieldname];
+        if (df.fieldtype === "Link" && df.options) return this.cellRenderer(df.fieldname) ? this.cellRenderer(df.fieldname)(doc) : esc(v);
+        if (df.fieldtype === "Select" && /status|state$/.test(df.fieldname)) return pill(v);
+        if (df.fieldtype === "Check") return v ? "\u2713" : "";
+        return frappe.format(v, df, { inline: true }, doc);
+      };
+      const $d = $(`<div class="wms-detail-panel">
+        <div class="wms-detail-head"><b>${esc(doc.name)}</b>
+          <a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(doc.name)}" target="_blank" rel="noopener">${__("Open form")}</a>
+          <button type="button" class="btn btn-default btn-xs wms-detail-close">&times;</button></div>
+        <div class="wms-detail-fields">${shown.map((df) => `<div class="wms-detail-field"><div class="text-muted">${esc(__(df.label))}</div><div>${value(df)}</div></div>`).join("")}</div>
+      </div>`);
+      $d.find(".wms-detail-close").on("click", () => $d.remove());
+      meta.fields.filter((df) => df.fieldtype === "Table" && (doc[df.fieldname] || []).length).forEach((df) => {
+        const cm = frappe.get_meta(df.options);
+        const cf = (cm ? cm.fields : []).filter((c) => !c.hidden && !SKIP.has(c.fieldtype));
+        const cols = (cf.some((c) => c.in_list_view) ? cf.filter((c) => c.in_list_view) : cf).slice(0, 9).map((c) => [c.fieldname, __(c.label || c.fieldname)]);
+        $d.append(`<h6 style="margin:12px 0 4px;">${esc(__(df.label))} (${doc[df.fieldname].length})</h6>`).append(this.opts.makeGrid(doc[df.fieldname], cols, { noGroup: true }, df.options));
+      });
+      return $d;
     }
 
     // ---------- layouts ----------
