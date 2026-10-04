@@ -427,6 +427,10 @@ def _claim_warehouse_order_if_unassigned(task, user=None):
         frappe.db.set_value("Warehouse Order", task.warehouse_order, updates)
         frappe.db.set_value("Warehouse Task", {"warehouse_order": task.warehouse_order, "assigned_resource": ["in", ["", None]]}, "assigned_resource", resource.name)
 
+# Stock sits under an HU from receiving on, so a task with a source HU is started by scanning that HU, never its bin.
+# Exceptions: ad hoc moves/repack (Internal Move), Posting Change and counts, which work on bins.
+BIN_SOURCE_TYPES = ("Internal Move", "Posting Change", "Inventory Count")
+
 def _check_digits_bin(task, side):
     # Check digits replace a bin scan only when there's no competing HU to also verify on that
     # side (a Pick with both source_bin and source_hu, say) - mixed bin+HU confirmation keeps
@@ -484,7 +488,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         if not scanned_source: frappe.throw(_("Enter the check digits for {0} before confirming").format(src_check_bin))
         if scanned_source.upper() != (frappe.db.get_value("Storage Bin", src_check_bin, "check_digits") or "").upper():
             frappe.throw(_("Check digits do not match {0}").format(src_check_bin))
-    elif scanned_source and scanned_source not in {task.source_bin, task.source_hu}:
+    elif scanned_source and scanned_source not in {None if task.task_type not in BIN_SOURCE_TYPES and task.source_hu else task.source_bin, task.source_hu}:
         frappe.throw(_("Scanned source does not match the task"))
     dst_check_bin = _check_digits_bin(task, "destination") if verify else None
     if dst_check_bin:

@@ -18,6 +18,8 @@ import { groupOfType } from "#wms/screens/tasks.js";
 const st = { name: null, task: null, loading: false, form: null, fetchedAt: 0, codes: null, exc: { remarks: "", revised: "" }, excPrefillQty: null };
 const draftKey = (name) => `task:${name}`;
 
+// ponytail: keep in sync with BIN_SOURCE_TYPES in services/task.py
+const BIN_SOURCE_TYPES = ["Internal Move", "Posting Change", "Inventory Count"];
 const STEP_LABEL = () => ({ source: _("Scan source"), product: _("Scan product"), quantity: _("Quantity"), destination: _("Scan destination"), review: _("Review & confirm") });
 
 function buildSteps(task) {
@@ -167,12 +169,14 @@ function stepView(wrap, step) {
           onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
           onCommit: (v) => verifyCheckDigits(t.source_bin, v, () => { f.src = v; f.srcOk = true; return advance("source"); }) }));
     } else {
-      box.append(Expect(_("Scan source"), [t.source_bin, t.source_hu]),
-        Field({ name: "src", kind: "scan", gs1: "sscc", label: _("Source bin or Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
+      // Stock sits under an HU from receiving on: the HU is what you take, a bin is only confirmed as destination.
+      const srcBin = !BIN_SOURCE_TYPES.includes(t.task_type) && t.source_hu ? null : t.source_bin;
+      box.append(Expect(_("Scan source"), [srcBin, t.source_hu]),
+        Field({ name: "src", kind: "scan", gs1: "sscc", label: srcBin ? _("Source bin or Handling Unit") : _("Source Handling Unit"), placeholder: _("Scan barcode"), value: f.src, autofocus: true,
           onInput: (v) => { f.src = v; f.srcOk = false; persist(); },
           onCommit: async (v) => {
-            const m = await matchScan(v, [t.source_bin, t.source_hu]);
-            if (!m) return explainMismatch(v, [t.source_bin, t.source_hu], _("source"));
+            const m = await matchScan(v, [srcBin, t.source_hu]);
+            if (!m) return explainMismatch(v, [srcBin, t.source_hu], _("source"));
             f.src = m; f.srcOk = true; return advance("source");
           } }));
     }
