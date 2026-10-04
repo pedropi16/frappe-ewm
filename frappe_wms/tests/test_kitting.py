@@ -149,8 +149,8 @@ class TestKitting(IntegrationTestCase):
         self.assertEqual(staged["short"], [])
         self.assertEqual({i["item"]: i["in_transit"] for i in get_kitting_order(name)["inputs"]}, {rm1: 8, rm2: 12})
         self.assertEqual(stage_kitting_components(name)["requests"], [], "nothing is staged twice")
-        for task in frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", staged["requests"]], "docstatus": 0}, fields=["name", "source_bin", "destination_bin"]):
-            confirm_task(task.name, scanned_source=task.source_bin, scanned_destination=task.destination_bin)
+        for task in frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", staged["requests"]], "docstatus": 0}, fields=["name", "source_bin", "source_hu", "destination_bin"]):
+            confirm_task(task.name, scanned_source=task.source_hu or task.source_bin, scanned_destination=task.destination_bin)
         view = get_kitting_order(name)
         self.assertTrue(view["ready"], view["inputs"])
 

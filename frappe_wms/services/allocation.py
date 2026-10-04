@@ -136,7 +136,8 @@ def cancel_allocations_for_delivery(delivery_name):
     task_names = task_names_for_allocations([a.name for a in allocations])
     warehouse_orders = set()
     for task_name in task_names:
-        task = frappe.db.get_value("Warehouse Task", task_name, ["docstatus", "warehouse_order"], as_dict=True)
+        # Locking read: a confirm that committed meanwhile must not be overwritten with Cancelled.
+        task = frappe.db.get_value("Warehouse Task", task_name, ["docstatus", "warehouse_order"], as_dict=True, for_update=True)
         if task and task.docstatus == 0:
             frappe.db.set_value("Warehouse Task", task_name, {"status": "Cancelled", "docstatus": 2}, update_modified=True)
             if task.warehouse_order: warehouse_orders.add(task.warehouse_order)

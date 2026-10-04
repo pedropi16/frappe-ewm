@@ -134,3 +134,17 @@ class TestBinCheckDigits(IntegrationTestCase):
             confirm_task(task.name, scanned_source="not-the-hu", scanned_destination=frappe.db.get_value("Storage Bin", self.bin_b, "check_digits"), confirmed_quantity=10)
         result = confirm_task(task.name, scanned_source=hu.name, scanned_destination=frappe.db.get_value("Storage Bin", self.bin_b, "check_digits"), confirmed_quantity=10)
         self.assertEqual(result["status"], "Confirmed")
+
+    def test_wire_confirm_needs_a_key_and_the_source_hu_whatever_the_settings(self):
+        # Over HTTP the HU-not-bin rule and the idempotency key are enforced even with require_scan_verification off.
+        from frappe_wms.api.scanner import confirm_task as api_confirm
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "CHKDIGIT-PALLET",
+            "warehouse": self.warehouse, "current_bin": self.bin_a, "status": "Open"}).insert(ignore_permissions=True)
+        task = self._make_task(source_hu=hu.name, task_type="Putaway")
+        frappe.local.request = frappe._dict(method="POST")
+        try:
+            with self.assertRaises(frappe.ValidationError): api_confirm(task.name, confirmed_quantity=10)
+            with self.assertRaises(frappe.ValidationError): api_confirm(task.name, confirmed_quantity=10, idempotency_key="K1")
+            with self.assertRaises(frappe.ValidationError): api_confirm(task.name, scanned_source=self.bin_a, confirmed_quantity=10, idempotency_key="K1")
+        finally:
+            frappe.local.request = None

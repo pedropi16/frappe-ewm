@@ -230,6 +230,9 @@ def _close_staging(order):
             if t.warehouse_order: orders.add(t.warehouse_order)
         if not frappe.db.exists("Warehouse Task", {"warehouse_request": r.name, "docstatus": 1}):
             frappe.db.set_value("Warehouse Request", r.name, "status", "Cancelled", update_modified=True)
+        else:
+            from frappe_wms.services.task import _update_request
+            _update_request(r.name)  # some of it was confirmed: the request is complete as it stands, not still "In Process"
     for wo in orders:
         release_next_in_sequence(wo)
         sync_warehouse_order(wo)

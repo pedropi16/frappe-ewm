@@ -194,6 +194,9 @@ def relocate_handling_unit(hu_name, destination_bin):
         frappe.throw(_("{0} is already in {1}").format(hu_name, destination_bin))
     destination = frappe.get_doc("Storage Bin", destination_bin)
     if destination.warehouse != hu.warehouse: frappe.throw(_("Destination bin must be in the same warehouse"))
+    # An open task keeps the HU's old bin as its source (and its allocation the old bin): moving it underneath would make that task fail on stock.
+    if frappe.db.exists("Warehouse Task", {"source_hu": hu.name, "docstatus": 0, "status": ["!=", "Cancelled"]}) and hu.current_bin != destination_bin:
+        frappe.throw(_("{0} has open warehouse tasks - confirm or cancel them instead of moving the Handling Unit directly").format(hu_name))
     incoming_weight, incoming_volume = hu_load(hu.name) if hu.current_bin != destination_bin else (None, None)
     validate_destination_bin(destination_bin, hu_type=hu.hu_type, destination_hu=hu.name, incoming_weight=incoming_weight, incoming_volume=incoming_volume)
     before = {"parent_hu_before": hu.parent_hu, "bin_before": hu.current_bin}

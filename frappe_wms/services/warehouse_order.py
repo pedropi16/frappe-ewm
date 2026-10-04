@@ -215,7 +215,8 @@ def release_next_in_sequence(wo_name):
 
 def sync_warehouse_order(wo_name):
     if not wo_name: return
-    tasks = frappe.get_all("Warehouse Task", filters={"warehouse_order": wo_name}, fields=["status", "sequence", "blocking_reason"])
+    # Locking read: a plain one sees this transaction's older snapshot and misses a task a concurrent confirm just committed.
+    tasks = frappe.db.sql("select status, sequence, blocking_reason from `tabWarehouse Task` where warehouse_order=%s for update", wo_name, as_dict=True)
     if not tasks: return
     wo = frappe.get_doc("Warehouse Order", wo_name)
     if wo.status == "On Hold": return  # a deliberate Supervisor pause always wins over the automatic recompute

@@ -65,6 +65,7 @@ def request_print(reference_doctype, reference_name, output_device=None, print_f
     explicit printer, the warehouse's Print Determination Rule for event "Manual" decides."""
     require_role(*PRINT_ROLES)
     doc = frappe.get_doc(reference_doctype, reference_name)
+    doc.check_permission("read")  # the spool is rendered with ignore_permissions: only print what the caller may read
     warehouse = doc.get("warehouse")
     if not output_device:
         rule = _matching_rule(warehouse, "Manual")

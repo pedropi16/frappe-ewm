@@ -130,7 +130,11 @@ export const moveManual = {
           } }),
           Field({ name: "destination_hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan HU barcode"), value: f.destination_hu,
             onInput: (v) => { f.destination_hu = v; persist(); },
-            onCommit: async (v) => { const m = await resolve(v, "hu"); if (!m.name) return wrong(v, m, _("a Handling Unit")); f.destination_hu = m.name; persist(); } }));
+            onCommit: async (v) => {
+              const m = await resolve(v, "hu");
+              if (m.other) return wrong(v, m, _("a Handling Unit"));
+              f.destination_hu = m.name || v.trim(); persist(); // an unknown barcode is a new HU, registered when the move is confirmed
+            } }));
       }
     } else {
       box.append(KV([[_("Product"), `${f.product} · ${fmtQty(parseNum(f.quantity))} ${f.stock_uom}`], [_("Stock type"), _(f.stock_type)], [_("From"), f.source_bin + (f.source_hu ? ` / ${f.source_hu}` : "")], [_("To"), f.destination_bin + (f.destination_hu ? ` / ${f.destination_hu}` : "")]]));

@@ -7,24 +7,26 @@ def _mixing_rules_enforced():
     return bool(frappe.get_cached_value("WMS Settings", "WMS Settings", "enforce_storage_type_rules"))
 
 
-def live_hu_count(bin_name):
+# lock=True makes every read a locking one (FOR UPDATE): a plain read at REPEATABLE READ returns the transaction's older
+# snapshot, so two putaways to one bin would both see it as having room. Used where the answer gates a write.
+def live_hu_count(bin_name, lock=False):
     # Storage Bin.current_hu_count is a cached counter only refreshed hourly
     # (tasks.recalculate_stale_bin_capacity) - two putaways landing in the same "first empty
     # bin" within that hour both passed the capacity check against the same stale number
     # (reproduced by reading the code: nothing here ever queried Handling Unit directly). Counts
     # only TOP-LEVEL HUs: a nested HU shares its parent's current_bin but isn't a second pallet
     # taking up a second slot - the cached counter used to charge it as one anyway.
-    return frappe.db.count("Handling Unit", {
-        "current_bin": bin_name, "parent_hu": ["in", ["", None]], "status": ["not in", ["Shipped", "Cancelled"]],
-    })
+    return len(frappe.db.sql("select name from `tabHandling Unit` where current_bin=%s and (parent_hu is null or parent_hu='') and status not in ('Shipped', 'Cancelled')"
+        + (" for update" if lock else ""), bin_name))
 
 
-def _bin_load(bin_name, hu_field, per_unit_field):
+def _bin_load(bin_name, hu_field, per_unit_field, lock=False):
     """What a bin holds, in weight or volume: a top-level HU counts with its own measured value
     (gross weight / volume) when it has one, otherwise by its contents; loose stock counts as
     quantity x the product's per-unit value."""
-    hus = {h.name: h for h in frappe.get_all("Handling Unit", filters={"current_bin": bin_name, "status": ["not in", ["Shipped", "Cancelled"]]},
-                                             fields=["name", "parent_hu", hu_field])}
+    suffix = " for update" if lock else ""
+    hus = {h.name: h for h in frappe.db.sql(f"select name, parent_hu, {hu_field} from `tabHandling Unit` where current_bin=%s and status not in ('Shipped', 'Cancelled'){suffix}",
+                                            bin_name, as_dict=True)}
 
     def root(name):
         seen = set()
@@ -35,7 +37,7 @@ def _bin_load(bin_name, hu_field, per_unit_field):
     measured = {n for n, h in hus.items() if not h.parent_hu and flt(h.get(hu_field)) > 0}
     total = sum(flt(hus[n].get(hu_field)) for n in measured)
     per_unit = {}
-    for b in frappe.get_all("WMS Stock Balance", filters={"storage_bin": bin_name, "quantity": [">", 0]}, fields=["product", "quantity", "handling_unit"]):
+    for b in frappe.db.sql(f"select product, quantity, handling_unit from `tabWMS Stock Balance` where storage_bin=%s and quantity>0{suffix}", bin_name, as_dict=True):
         if b.handling_unit and root(b.handling_unit) in measured: continue
         if b.product not in per_unit:
             per_unit[b.product] = flt(frappe.db.get_value("WMS Product", b.product, per_unit_field))
@@ -43,12 +45,12 @@ def _bin_load(bin_name, hu_field, per_unit_field):
     return total
 
 
-def live_weight(bin_name):
-    return _bin_load(bin_name, "gross_weight", "gross_weight_per_unit")
+def live_weight(bin_name, lock=False):
+    return _bin_load(bin_name, "gross_weight", "gross_weight_per_unit", lock)
 
 
-def live_volume(bin_name):
-    return _bin_load(bin_name, "volume", "volume_per_unit")
+def live_volume(bin_name, lock=False):
+    return _bin_load(bin_name, "volume", "volume_per_unit", lock)
 
 
 def incoming_load(product, quantity):
@@ -79,8 +81,8 @@ def hu_load(hu_name):
 
 
 def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_no=None,
-                    destination_hu=None, incoming_weight=None, incoming_hu_count=1, incoming_volume=None):
-    bin_doc = frappe.get_doc("Storage Bin", bin_name)
+                    destination_hu=None, incoming_weight=None, incoming_hu_count=1, incoming_volume=None, lock=False, require_hu=True):
+    bin_doc = frappe.get_doc("Storage Bin", bin_name, for_update=lock)
     storage_type = frappe.get_cached_doc("Storage Type", bin_doc.storage_type)
     if not bin_doc.active or bin_doc.putaway_blocked:
         return [_("bin is inactive or blocked for putaway")]
@@ -95,21 +97,21 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
 
     method = storage_type.capacity_check_method
     if method == "HU Count" and bin_doc.maximum_hus:
-        if live_hu_count(bin_name) + flt(incoming_hu_count) > flt(bin_doc.maximum_hus):
+        if live_hu_count(bin_name, lock) + flt(incoming_hu_count) > flt(bin_doc.maximum_hus):
             reasons.append(_("HU count capacity exceeded"))
     elif method == "Weight" and bin_doc.maximum_weight and incoming_weight:
-        if live_weight(bin_name) + flt(incoming_weight) > flt(bin_doc.maximum_weight):
+        if live_weight(bin_name, lock) + flt(incoming_weight) > flt(bin_doc.maximum_weight):
             reasons.append(_("weight capacity exceeded"))
     elif method == "Volume" and bin_doc.maximum_volume and incoming_volume:
-        if live_volume(bin_name) + flt(incoming_volume) > flt(bin_doc.maximum_volume):
+        if live_volume(bin_name, lock) + flt(incoming_volume) > flt(bin_doc.maximum_volume):
             reasons.append(_("volume capacity exceeded"))
 
-    if storage_type.hu_managed and not destination_hu:
+    if require_hu and storage_type.hu_managed and not destination_hu:
         reasons.append(_("storage type requires a Handling Unit"))
 
     if _mixing_rules_enforced():
-        occupants = frappe.get_all("WMS Stock Balance", filters={"storage_bin": bin_name, "quantity": [">", 0]},
-            fields=["product", "stock_type", "batch_no"])
+        occupants = frappe.db.sql("select product, stock_type, batch_no from `tabWMS Stock Balance` where storage_bin=%s and quantity>0" + (" for update" if lock else ""),
+            bin_name, as_dict=True)
         if item and not storage_type.allow_mixed_products and any(o.product != item for o in occupants):
             reasons.append(_("bin already holds a different product"))
         if stock_type and not storage_type.allow_mixed_stock_types and any(o.stock_type != stock_type for o in occupants):
@@ -120,6 +122,6 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
 
 
 def validate_destination_bin(bin_name, **kwargs):
-    reasons = bin_violations(bin_name, **kwargs)
+    reasons = bin_violations(bin_name, lock=True, **kwargs)  # every caller writes next: serialize on the bin
     if reasons:
         frappe.throw(_("Storage Bin {0} cannot be used as a destination: {1}").format(bin_name, "; ".join(reasons)))

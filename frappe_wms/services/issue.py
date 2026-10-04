@@ -10,9 +10,10 @@ READY_TO_SHIP_STATUSES = ("Picking", "Picked", "Packing", "Packed", "Staging", "
 
 def post_goods_issue(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype":doc.doctype,"reference_name":doc.name}): return
+    shipped=set()  # an HU holding several issue lines is marked Shipped once, after its last line
     for i,row in enumerate(doc.items,1):
         hu=frappe.get_doc("Handling Unit",row.handling_unit)
-        if hu.status != "Loaded": frappe.throw(_("HU {0} must be loaded (via a Shipment) before Goods Issue can be posted").format(hu.name))
+        if hu.status != "Loaded" and hu.name not in shipped: frappe.throw(_("HU {0} must be loaded (via a Shipment) before Goods Issue can be posted").format(hu.name))
         # Mirrors SAP EWM: Goods Issue may only be posted out of a Door bin - configure which
         # Storage Bins are doors via their Storage Type's "Door" role (see WMS Route/Shipment
         # default_door, which are validated against the same role on save).
@@ -50,10 +51,12 @@ def post_goods_issue(doc):
             }, "batch_no")
         entry={"warehouse":doc.warehouse,"product":row.item,"batch_no":batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":hu.current_bin,"stock_type":row.stock_type,"quantity":-row.quantity,"stock_uom":row.stock_uom,"movement_type":"601","reference_line":row.name}
         post_entries([entry],doc.doctype,doc.name,f"GI:{doc.name}:{i}")
-        hu.flags.wms_service_update=True; hu.status="Shipped"; hu.save(ignore_permissions=True)
+        shipped.add(hu.name)
         if row.outbound_delivery_item:
-            current = flt(frappe.db.get_value("Outbound Delivery Item", row.outbound_delivery_item, "issued_quantity"))
-            frappe.db.set_value("Outbound Delivery Item", row.outbound_delivery_item, "issued_quantity", current + flt(row.quantity))
+            frappe.db.sql("update `tabOutbound Delivery Item` set issued_quantity=issued_quantity+%s where name=%s", (flt(row.quantity), row.outbound_delivery_item))
+    for name in shipped:
+        hu=frappe.get_doc("Handling Unit",name)
+        hu.flags.wms_service_update=True; hu.status="Shipped"; hu.save(ignore_permissions=True)
     doc.db_set("status","Posted")
     _update_delivery_issue_status(doc.outbound_delivery)
     create_print_spool("Goods Issue", doc.name, "Goods Issue Posted", doc.warehouse)

@@ -1,7 +1,7 @@
 import frappe
 from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe import _
-from frappe_wms.services.task import confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move, verify_check_digits as _verify_check_digits
+from frappe_wms.services.task import BIN_SOURCE_TYPES, confirm_task as _confirm_task, list_my_tasks as _list_my_tasks, raise_exception as _raise_exception, reverse_task as _reverse_task, create_and_confirm_move as _create_and_confirm_move, verify_check_digits as _verify_check_digits
 from frappe_wms.services.packing import repack as _repack, repack_loose as _repack_loose, complete_packing_order as _complete_packing_order, list_open_packing_orders as _list_open_packing_orders
 from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.resource import RESOURCE_ROLES as RF_ROLES
@@ -54,6 +54,12 @@ def verify_check_digits(bin_name, value):
 @frappe.whitelist()
 @retry_on_deadlock
 def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
+    # Over HTTP (not for in-process callers such as the tests) the "take stock from an HU, never a bin" rule and replay safety hold whatever
+    # the require_scan_verification setting says: a source HU has to be scanned and a client key sent (the RF app does both).
+    if frappe.request:
+        if not idempotency_key: frappe.throw(_("An idempotency key is required to confirm a task"))
+        hu, task_type = frappe.db.get_value("Warehouse Task", task_name, ["source_hu", "task_type"]) or (None, None)
+        if hu and task_type not in BIN_SOURCE_TYPES and not scanned_source: frappe.throw(_("Scan the source Handling Unit before confirming"))
     return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key,scanned_product)
 
 @frappe.whitelist()

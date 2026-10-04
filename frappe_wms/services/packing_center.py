@@ -264,6 +264,8 @@ def post_differences(warehouse, items, remarks, idempotency_key):
     goes to the warehouse's difference bin, with a WMS Task Difference for the Difference Analyzer
     (same booking the packing station makes, without needing a work center). Stock picked for a
     delivery is not handled here - complete that delivery short or reverse the pick."""
+    from frappe_wms.utils import require_role
+    require_role("WMS Supervisor", "WMS Inventory Controller", "WMS Packer")  # writes stock off: not for the read-only roles
     posted, errors = 0, []
     for n, item in enumerate(items, 1):
         savepoint = f"pc_diff_{n}"

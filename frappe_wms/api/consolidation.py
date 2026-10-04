@@ -15,6 +15,9 @@ from frappe_wms.services.task import my_resource
 @frappe.whitelist()
 @retry_on_deadlock
 def list_open_consolidation_groups(user=None):
+    from frappe_wms.utils import require_wms_access
+    require_wms_access()
+    if user and user != frappe.session.user and "WMS Supervisor" not in frappe.get_roles(): user = None  # only a Supervisor may look through another user's eyes
     resource = my_resource(user)
     filters = {"status": ["in", ("Draft", "Open")]}
     if resource: filters["warehouse"] = resource.warehouse
