@@ -532,7 +532,20 @@ if (typeof frappe !== "undefined") (function () {
     }
 
     // ---------- execute + results ----------
+    // A view with its own result presentation (dec.catalog: [{fieldname,label}], dec.defaultColumns)
+    // lets the user pick/order columns from that catalog; the server then only has to find the hits.
+    catalog() { return (this.opts.decorate || {}).catalog || null; }
+
+    shownColumns() {
+      const cat = this.catalog();
+      if (!cat) return this.columnsToFetch();
+      const known = new Set(cat.map((c) => c.fieldname));
+      const picked = ((this.layout && this.layout.columns) || this.opts.decorate.defaultColumns).filter((f) => known.has(f));
+      return picked.length ? picked : this.opts.decorate.defaultColumns;
+    }
+
     columnsToFetch() {
+      if (this.catalog()) return ["name"];
       const base = (this.layout && this.layout.columns && this.layout.columns.length) ? this.layout.columns : this.meta.columns;
       return base.filter((c) => this.fields[c] && !this.fields[c].virtual);
     }
@@ -581,8 +594,9 @@ if (typeof frappe !== "undefined") (function () {
         : `<div class="wms-sel-status text-muted">${__("No data found for this selection.")}</div>`;
       $res.append(status);
       $res.find(".wms-sel-more").on("click", () => this.loadMore());
-      if (!rows.length) return;
       const dec = this.opts.decorate || {};
+      if (!rows.length) return;
+      if (dec.render) { dec.render(this, rows, $res); return; } // the view draws its own results (Packing Center)
       const renderers = dec.renderers || {};
       let shown = rows;
       let columns = this.fetchedColumns.map((f) => [f, (this.fields[f] && this.fields[f].label) || f, renderers[f] || this.cellRenderer(f)]).concat(dec.extraColumns || []);
@@ -599,7 +613,7 @@ if (typeof frappe !== "undefined") (function () {
         actions, numeric, exportName: `${this.view}-${frappe.datetime.now_date()}`,
         sort: this.layout && this.layout.sort, totals: this.layout ? this.layout.totals : dec.totals,
         layoutBar: this.layoutBar(),
-        onLayoutChange: (state) => { this.layout = state; this.$layoutSel && this.$layoutSel.find("option:selected").text(this.layoutLabel(true)); },
+        onLayoutChange: (state) => this.gridLayoutChanged(state),
       }, this.meta.doctype);
       $res.append($el, `<div class="wms-sel-detail"></div>`);
       if (dec.afterRender) dec.afterRender($res, rows);
@@ -666,6 +680,8 @@ if (typeof frappe !== "undefined") (function () {
       return $d;
     }
 
+    gridLayoutChanged(state) { this.layout = state; this.$layoutSel && this.$layoutSel.find("option:selected").text(this.layoutLabel(true)); }
+
     // ---------- layouts ----------
     layoutLabel(changed) {
       const v = this.variants.find((x) => x.name === this.layoutVariant);
@@ -705,6 +721,7 @@ if (typeof frappe !== "undefined") (function () {
     // Columns already fetched -> just redraw; a newly shown column -> fetch again.
     applyLayoutToResults() {
       if (!this.lastRows) return;
+      if (this.catalog()) { this.drawResults(); return; }
       const want = this.columnsToFetch();
       const have = new Set(this.fetchedColumns || []);
       if (want.every((c) => have.has(c))) { this.fetchedColumns = want; this.drawResults(); }
@@ -712,10 +729,11 @@ if (typeof frappe !== "undefined") (function () {
     }
 
     columnsDialog() {
-      const all = Object.values(this.fields).filter((f) => !f.virtual);
-      const order = this.columnsToFetch().slice();
+      const all = this.catalog() || Object.values(this.fields).filter((f) => !f.virtual);
+      const labelOf = Object.fromEntries(all.map((f) => [f.fieldname, f.label]));
+      const order = this.shownColumns().slice();
       all.forEach((f) => { if (!order.includes(f.fieldname)) order.push(f.fieldname); });
-      const shown = new Set(this.columnsToFetch());
+      const shown = new Set(this.shownColumns());
       const d = new frappe.ui.Dialog({
         title: __("Change Layout - Columns"),
         fields: [{ fieldtype: "HTML", fieldname: "list" }],
@@ -733,7 +751,7 @@ if (typeof frappe !== "undefined") (function () {
           <div class="wms-cols-list">${order.map((f, i) => `
           <div class="wms-cols-item" data-i="${i}">
             <input type="checkbox" ${shown.has(f) ? "checked" : ""} data-f="${esc(f)}">
-            <label>${esc(this.fields[f] ? this.fields[f].label : f)} <span class="text-muted">${esc(f)}</span></label>
+            <label>${esc(labelOf[f] || f)} <span class="text-muted">${esc(f)}</span></label>
             <span class="wms-cols-move" data-d="-1">▲</span><span class="wms-cols-move" data-d="1">▼</span>
           </div>`).join("")}</div>`);
         $list.find("input[type=checkbox]").on("change", (e) => { if (e.target.checked) shown.add(e.target.dataset.f); else shown.delete(e.target.dataset.f); });
@@ -755,7 +773,7 @@ if (typeof frappe !== "undefined") (function () {
         { fieldname: "is_default", fieldtype: "Check", label: __("Default layout for me"), default: cur && cur.mine ? cur.is_default : 1 },
         { fieldname: "is_global", fieldtype: "Check", label: __("Global - visible to every user (supervisors only)"), default: cur && cur.mine ? cur.is_global : 0 },
       ], async (v) => {
-        const layout = Object.assign({ columns: this.columnsToFetch() }, this.layout || {});
+        const layout = Object.assign({ columns: this.shownColumns() }, this.layout || {});
         const r = await frappe.call(`${API}.save_variant`, { view: this.view, variant_type: "Layout", variant_name: v.variant_name, layout, is_default: v.is_default, is_global: v.is_global });
         await this.reloadVariants();
         this.layoutVariant = r.message;

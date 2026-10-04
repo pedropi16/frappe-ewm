@@ -26,7 +26,7 @@ def list_handling_units(search=None, warehouse=None, storage_bin=None):
         fields=["name", "hu_number", "hu_type", "warehouse", "current_bin", "parent_hu", "status", "stock_status"],
         order_by="modified desc", limit=50)
 
-def create_handling_unit(hu_number, hu_type, storage_bin=None, parent_hu=None, warehouse=None):
+def create_handling_unit(hu_number, hu_type, storage_bin=None, parent_hu=None, warehouse=None, packaging_material=None):
     # Numbering, warehouse derivation, bin-vs-parent resolution and the "Created" HU Event all
     # live in the Handling Unit controller (before_insert/after_insert) so every creation path -
     # this API, Goods Receipt auto-registration, and a plain Desk "New Handling Unit" - behaves
@@ -35,7 +35,7 @@ def create_handling_unit(hu_number, hu_type, storage_bin=None, parent_hu=None, w
     resource = my_resource()
     warehouse = warehouse or (resource.warehouse if resource else None)
     hu = frappe.get_doc({
-        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type,
+        "doctype": "Handling Unit", "hu_number": hu_number, "hu_type": hu_type, "packaging_material": packaging_material,
         "warehouse": warehouse, "current_bin": storage_bin, "parent_hu": parent_hu,
     })
     hu.flags.wms_service_update = True

@@ -102,6 +102,9 @@ def cleanup():
     """Removes tasks/documents the browser tests created in the E2E warehouse (raw deletes - test data only)."""
     frappe.set_user("Administrator")
     frappe.db.sql("delete from `tabStock Allocation` where stock_balance like 'E2EMON%%'")
+    for dt in ("Handling Unit Event",):
+        frappe.db.sql(f"delete from `tab{dt}` where handling_unit like 'E2EPC%%' or handling_unit like 'E2EH%%'")
+    frappe.db.sql("delete from `tabHandling Unit` where hu_number like 'E2EPC%%' or hu_number like 'E2EH%%'")
     for dt in ("Warehouse Task", "WMS Stock Ledger Entry", "WMS Stock Balance", "WMS Physical Inventory Count"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
@@ -125,3 +128,30 @@ def monitor_stock():
                             "status": "Allocated"}).insert(ignore_permissions=True, ignore_links=True)
     frappe.db.commit()
     print("E2E_MONITOR " + json.dumps({"bin": bin_}))
+
+
+def packing_stock():
+    """Packing Center fixture: two empty-ish HUs in bin A1 (6 units of the item in the first), an internally
+    numbered HU type with a packing material, and a number range - cleanup() removes the HUs and stock."""
+    from frappe_wms.services.stock import post_entries
+    frappe.set_user("Administrator")
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    for code, mode in (("E2E-PAL", "External"), ("E2E-BOX", "Internal")):
+        if not frappe.db.exists("Handling Unit Type", code):
+            frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": code, "hu_type_name": code, "numbering_mode": mode, "nestable": 1}).insert(ignore_permissions=True)
+    if not frappe.db.exists("Packaging Material", "E2E-CARTON"):
+        frappe.get_doc({"doctype": "Packaging Material", "packaging_material_code": "E2E-CARTON", "packaging_material_name": "E2E carton", "hu_type": "E2E-BOX", "active": 1}).insert(ignore_permissions=True)
+    if not frappe.db.exists("WMS Number Range", {"range_for": "Handling Unit", "warehouse": WAREHOUSE}):
+        frappe.get_doc({"doctype": "WMS Number Range", "range_for": "Handling Unit", "warehouse": WAREHOUSE, "prefix": "E2EH", "start_number": 1, "end_number": 99999,
+                        "number_length": 6, "current_number": 0, "active": 1}).insert(ignore_permissions=True)
+    bin_ = f"{WAREHOUSE}-A1"
+    hus = []
+    for n in ("E2EPC1", "E2EPC2"):
+        name = frappe.db.get_value("Handling Unit", {"hu_number": n}) or frappe.get_doc({"doctype": "Handling Unit", "hu_number": n, "hu_type": "E2E-PAL",
+            "warehouse": WAREHOUSE, "current_bin": bin_, "status": "Open"}).insert(ignore_permissions=True).name
+        hus.append(name)
+    post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": bin_, "handling_unit": hus[0], "stock_type": "AVAILABLE", "stock_uom": uom,
+                   "quantity": 6, "movement_type": "701"}], "Storage Bin", bin_, f"e2e-pc:{frappe.generate_hash(length=8)}")
+    frappe.db.commit()
+    print("E2E_PACKING " + json.dumps({"hus": hus, "item": item}))

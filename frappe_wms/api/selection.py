@@ -72,6 +72,28 @@ VIEWS = {
                     "allocated_quantity", "available_quantity", "stock_uom", "shelf_life_expiry_date", "last_movement_date"],
         "virtual": {"storage_type": _bin_virtual("`tabWMS Stock Balance`.storage_bin"), **_item_virtuals("`tabWMS Stock Balance`.product")},
     },
+    # The Packing Center: searches Storage Bins (what the tree is rooted at), by the bin itself or by
+    # what is in it - an HU, an HU type or packing material, a product, a batch, a serial number.
+    "packing": {
+        "doctype": "Storage Bin", "title": "Packing Center", "order_by": "`tabStorage Bin`.name asc",
+        "labels": {"name": "Storage Bin"},
+        "selection": ["name", "storage_type", "storage_section", "handling_unit", "hu_type", "packaging_material", "contains_product", "contains_batch", "contains_serial"],
+        "columns": ["name"],  # the tree's own columns are a catalog on the client; this only finds the bins
+        "virtual": {
+            "handling_unit": {"label": "Handling Unit", "fieldtype": "Link", "options": "Handling Unit", "column": "`sel_hu`.`name`",
+                              "sql": "`tabStorage Bin`.name in (select `sel_hu`.current_bin from `tabHandling Unit` `sel_hu` where {cond})"},
+            "hu_type": {"label": "HU Type", "fieldtype": "Link", "options": "Handling Unit Type", "column": "`sel_hu`.`hu_type`",
+                        "sql": "`tabStorage Bin`.name in (select `sel_hu`.current_bin from `tabHandling Unit` `sel_hu` where {cond})"},
+            "packaging_material": {"label": "Packing Material", "fieldtype": "Link", "options": "Packaging Material", "column": "`sel_hu`.`packaging_material`",
+                                   "sql": "`tabStorage Bin`.name in (select `sel_hu`.current_bin from `tabHandling Unit` `sel_hu` where {cond})"},
+            "contains_product": {"label": "Contains Product", "fieldtype": "Link", "options": "Item", "column": "`sel_bal`.`product`",
+                                 "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
+            "contains_batch": {"label": "Contains Batch", "fieldtype": "Link", "options": "Batch", "column": "`sel_bal`.`batch_no`",
+                               "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
+            "contains_serial": {"label": "Contains Serial No", "fieldtype": "Link", "options": "Serial No", "column": "`sel_bal`.`serial_no`",
+                                "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
+        },
+    },
     "tasks": {
         "doctype": "Warehouse Task", "title": "Warehouse Tasks",
         "selection": ["name", "task_type", "status", "product", "source_bin", "destination_bin", "assigned_resource", "warehouse_order", "queue", "wave", "confirmed_at"],
@@ -128,7 +150,8 @@ def get_selection_screen(view):
     frappe.has_permission(spec["doctype"], "read", throw=True)
     return {
         "view": view, "doctype": spec["doctype"], "title": _(spec["title"]),
-        "fields": selectable_fields(spec["doctype"], spec.get("virtual")),
+        "fields": [{**f, "label": _(spec["labels"][f["fieldname"]])} if f["fieldname"] in spec.get("labels", {}) else f
+                   for f in selectable_fields(spec["doctype"], spec.get("virtual"))],
         "selection": spec["selection"], "columns": spec["columns"],
         "default_criteria": spec.get("default_criteria") or {},
         "variants": list_variants(view),

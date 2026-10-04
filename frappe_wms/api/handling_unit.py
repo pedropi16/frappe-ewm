@@ -18,8 +18,8 @@ def list_handling_units(search=None, warehouse=None, storage_bin=None):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_handling_unit(hu_type, hu_number=None, storage_bin=None, parent_hu=None, warehouse=None):
-    return _create_handling_unit(hu_number, hu_type, storage_bin, parent_hu, warehouse)
+def create_handling_unit(hu_type=None, hu_number=None, storage_bin=None, parent_hu=None, warehouse=None, packaging_material=None):
+    return _create_handling_unit(hu_number, hu_type, storage_bin, parent_hu, warehouse, packaging_material)
 
 @frappe.whitelist()
 @retry_on_deadlock

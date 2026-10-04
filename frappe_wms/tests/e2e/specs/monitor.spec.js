@@ -73,3 +73,43 @@ test("every view: Details shows the whole record", async ({ page, request }) => 
   await expect(page.locator(".wms-sel-detail .wms-detail-panel", { hasText: task.name })).toBeVisible();
   await expect(page.locator(".wms-sel-detail .wms-detail-panel").getByText("Planned Quantity")).toBeVisible();
 });
+
+test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
+  const s = seed();
+  bench("cleanup"); bench("packing_stock");
+  await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
+  await page.goto("/app/wms-monitor");
+  await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
+  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
+  const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
+  await expect(dialog).toBeVisible();
+  await dialog.locator(".wms-sel-row[data-field='name'] .wms-sel-from").fill(`${s.warehouse}-A1`);
+  await dialog.getByRole("button", { name: /Execute/ }).click();
+  await expect(dialog).toBeHidden();
+
+  // bin > HU > product, everything open
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toHaveCount(2);
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(1);
+
+  // mark the product line -> side panel shows it; drag it onto the other HU, repack 2 of the 6
+  const product = page.locator(".wms-pc-grid tbody tr.wms-hier-product");
+  await product.locator("th.wms-grid-rowhead").click();
+  await expect(page.locator(".wms-pc-side")).toContainText("Open form");
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing-details.png` });
+  await product.locator(".wms-row-grip").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
+  const qdialog = page.locator(".modal.show", { hasText: "Repack into" });
+  await expect(qdialog).toBeVisible();
+  await qdialog.locator("input").fill("2");
+  await qdialog.getByRole("button", { name: "Repack" }).click();
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(2);
+
+  // create 2 HUs from a packing material in the bin
+  await page.locator(".wms-pc-tab", { hasText: "Create HU" }).click();
+  await page.locator(".wms-pc-material").selectOption("E2E-CARTON");
+  await page.locator(".wms-pc-bin input").fill(`${s.warehouse}-A1`);
+  await page.locator(".wms-pc-qty").fill("2");
+  await page.locator(".wms-pc-create").click();
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-pc-new")).toHaveCount(2);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing.png` });
+  bench("cleanup");
+});
