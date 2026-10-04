@@ -98,12 +98,22 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   await product.locator("th.wms-grid-rowhead").click();
   await expect(page.locator(".wms-pc-side")).toContainText("Open form");
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing-details.png` });
-  await product.locator(".wms-row-drag").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
+  const pc2 = page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" });
+  // right button: asks how much - 2 of the 6
+  const from = await product.locator(".wms-row-drag").boundingBox(), to = await pc2.boundingBox();
+  await page.mouse.move(from.x + 8, from.y + 8);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(to.x + 60, to.y + 8, { steps: 8 });
+  await page.mouse.up({ button: "right" });
   const qdialog = page.locator(".modal.show", { hasText: "Repack into" });
   await expect(qdialog).toBeVisible();
   await qdialog.locator("input").fill("2");
   await qdialog.getByRole("button", { name: "Repack" }).click();
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(2);
+  // left button: everything that is left, no dialog
+  await page.locator(".wms-pc-grid tbody tr.wms-hier-product").first().locator(".wms-row-drag").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(1);
+  await expect(page.locator(".modal.show", { hasText: "Repack into" })).toHaveCount(0);
 
   // Difference tab: 1 unit of the 2 now in E2EPC2 is missing
   const moved = page.locator(".wms-pc-grid tbody tr.wms-hier-product").last();

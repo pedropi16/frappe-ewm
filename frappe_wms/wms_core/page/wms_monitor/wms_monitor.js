@@ -129,6 +129,7 @@ function ensure_monitor_styles() {
     .wms-grid-treebar { display:none; align-items:center; gap:4px; }
     .wms-tree-nocaret { display:inline-block; width:22px; }
     .wms-row-drag { cursor:grab; }
+    .wms-drag-ghost { position:fixed; top:0; z-index:3000; pointer-events:none; }
     .wms-drag-image { position:absolute; top:-100px; padding:4px 10px; border-radius:6px; background:var(--primary,#3b82f6); color:#fff; font-size:12px; font-weight:600; }
     .wms-row-grip { cursor:grab; opacity:.5; font-size:10px; letter-spacing:-2px; margin-right:4px; }
     .wms-row-grip:hover { opacity:1; }
@@ -278,12 +279,51 @@ class DataGrid {
     this.sels = []; this._render();
   }
 
+  // The rows a drag starting at row `r` takes along: the marked rows if `r` is one of them, else just `r`.
+  _dragSet(r) {
+    const marked = this._selectedRowIndices();
+    let rows = (marked.has(r) ? Array.from(marked) : [r]).map((i) => this._visRows[i - 1]).filter((x) => x && (!this.opts.draggable || this.opts.draggable(x)));
+    const ids = new Set(rows.map((x) => x.id));
+    // a node whose ancestor travels as well goes along with that ancestor already
+    return rows.filter((x) => { for (let p = x.pid; p; p = this.parentOf.get(p)) if (ids.has(p)) return false; return true; });
+  }
+
+  // Right-button drag (the browser's own drag-and-drop is left-button only): same rows, same targets,
+  // but the drop is reported with {ask: true} - the caller asks how much to move.
+  _rightDrag(e, r) {
+    const rows = this._dragSet(r);
+    if (!rows.length) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY;
+    let moved = false, $ghost = null;
+    const rowAt = (ev) => {
+      const tr = $(document.elementFromPoint(ev.clientX, ev.clientY)).closest("tbody tr");
+      const at = tr.length ? this.$table.find("tbody tr").index(tr[0]) : -1;
+      const row = at >= 0 ? this._visRows[at] : null;
+      return row && (!this.opts.droppable || this.opts.droppable(row)) ? { row, tr } : null;
+    };
+    $(document).on("mousemove.rdrag", (ev) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (!moved) { moved = true; $ghost = $(`<div class="wms-drag-image wms-drag-ghost">${__("{0} row(s) - choose quantity", [rows.length])}</div>`).appendTo("body"); }
+      $ghost.css({ left: ev.clientX + 14, top: ev.clientY + 14 });
+      this.$table.find(".wms-drop").removeClass("wms-drop");
+      const hit = rowAt(ev);
+      if (hit) hit.tr.addClass("wms-drop");
+    }).on("mouseup.rdrag", (ev) => {
+      $(document).off(".rdrag");
+      if ($ghost) $ghost.remove();
+      this.$table.find(".wms-drop").removeClass("wms-drop");
+      const hit = moved ? rowAt(ev) : null;
+      if (hit) this.opts.onDrop(rows, hit.row, { ask: true });
+    });
+  }
+
   _bindDrag() {
     if (!this.hier || !this.opts.onDrop) return;
     const rowOf = (el) => this._visRows[$(el).closest("tr").index()];
     const handles = this.$table.find(".wms-row-grip, .wms-row-drag");
     const rowNo = (el) => $(el).closest("tr").index() + 1;
-    handles.on("mousedown", (e) => e.stopPropagation())
+    handles.on("mousedown", (e) => { e.stopPropagation(); if (e.button === 2) this._rightDrag(e, rowNo(e.currentTarget)); })
       .on("click", (e) => { // a click on a handle marks the row (ctrl/cmd adds or removes it)
         const r = rowNo(e.currentTarget), marked = this._selectedRowIndices(), rect = { r0: r, r1: r, c0: 1, c1: this._maxC };
         if (e.ctrlKey || e.metaKey) {
@@ -294,14 +334,10 @@ class DataGrid {
         this.anchor = { r, c: 1 };
         this._applyHighlight(); this._renderActionBar();
       })
+      .on("contextmenu", (e) => e.preventDefault())
       .on("dragstart", (e) => {
-        const r = rowNo(e.currentTarget);
-        const marked = this._selectedRowIndices();
-        let rows = (marked.has(r) ? Array.from(marked) : [r]).map((i) => this._visRows[i - 1]).filter((x) => x && (!this.opts.draggable || this.opts.draggable(x)));
-        const ids = new Set(rows.map((x) => x.id));
-        // a node whose ancestor travels as well goes along with that ancestor already
-        rows = rows.filter((x) => { for (let p = x.pid; p; p = this.parentOf.get(p)) if (ids.has(p)) return false; return true; });
-        this._dragRows = rows;
+        this._dragRows = this._dragSet(rowNo(e.currentTarget));
+        const rows = this._dragRows;
         const dt = e.originalEvent.dataTransfer;
         dt.effectAllowed = "move";
         dt.setData("text/plain", rows.map((x) => x.name).join(", "));
@@ -322,7 +358,7 @@ class DataGrid {
         $(e.currentTarget).removeClass("wms-drop");
         if (!rows || !row || (this.opts.droppable && !this.opts.droppable(row))) return;
         e.preventDefault(); this._dragRows = null;
-        this.opts.onDrop(rows, row);
+        this.opts.onDrop(rows, row, { ask: false }); // left button: everything, no questions
       });
   }
 
@@ -489,7 +525,7 @@ class DataGrid {
           }
           if (this.hier && ci === 0) {
             const pad = this._flat ? 0 : (row.depth || 0) * 16;
-            if (this.opts.onDrop && (!this.opts.draggable || this.opts.draggable(row))) inner = `<span class="wms-row-drag" draggable="true" title="${__("Drag to repack")}">${inner}</span>`;
+            if (this.opts.onDrop && (!this.opts.draggable || this.opts.draggable(row))) inner = `<span class="wms-row-drag" draggable="true" title="${__("Drag to repack everything - drag with the right mouse button to choose the quantity")}">${inner}</span>`;
             inner = `<span style="display:inline-block;width:${pad}px"></span>${row.has_kids && !this._flat ? `<button type="button" class="wms-tree-caret" data-key="${frappe.utils.escape_html(row.id)}">${this.expanded.has(row.id) ? "&#9662;" : "&#9656;"}</button>` : `<span class="wms-tree-nocaret"></span>`}${inner}`;
           }
           return `<td class="wms-grid-cell${this.numeric.has(field) ? " wms-grid-num" : ""}" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
@@ -1704,7 +1740,7 @@ class WMSMonitor {
       numeric: PACK_COLUMNS.filter((c) => c[2]).map((c) => c[0]), totalFilter: (r) => r.kind === "product",
       sort: sel.layout && sel.layout.sort, totals: sel.layout ? sel.layout.totals : false,
       layoutBar: sel.layoutBar(), onLayoutChange: (state) => sel.gridLayoutChanged(state),
-      draggable: (r) => r.kind === "hu" || r.kind === "product", droppable: (r) => r.kind !== "section", onDrop: (rows, target) => this.pack_drop(rows, target),
+      draggable: (r) => r.kind === "hu" || r.kind === "product", droppable: (r) => r.kind !== "section", onDrop: (rows, target, opts) => this.pack_drop(rows, target, opts),
       onSelect: (rows) => this.pack_selected(rows), rowClass: (r) => (this.pack.newIds.has(r.id) ? "wms-pc-new" : ""),
       actions: this.pack_actions(),
     });
@@ -1967,9 +2003,11 @@ class WMSMonitor {
     return row.handling_unit ? { kind: "hu", name: row.handling_unit } : { kind: "bin", name: row.storage_bin };
   }
 
-  pack_drop(rows, target) {
+  // Left-button drag moves everything; right-button drag (opts.ask) asks how much of each product line.
+  pack_drop(rows, target, opts) {
     const dest = this.pack_dest_of(target);
-    return this.pack_move(rows, dest.kind, dest.name);
+    const full = opts && opts.ask === false ? new Map(rows.filter((r) => r.kind === "product").map((r) => [r.id, flt(r.quantity)])) : undefined;
+    return this.pack_move(rows, dest.kind, dest.name, full);
   }
 
   pack_move_dialog(rows) {
