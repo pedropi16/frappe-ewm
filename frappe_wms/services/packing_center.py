@@ -26,6 +26,11 @@ BALANCE_FIELDS = ["name", "product", "batch_no", "serial_no", "handling_unit", "
                   "allocated_quantity", "available_quantity", "stock_uom", "first_receipt_date", "shelf_life_expiry_date", "last_movement_date"]
 
 
+def _date_time(value):
+    text = str(value or "")
+    return (text[:10], text[11:19]) if len(text) > 10 else (text, "")
+
+
 def _join(values, limit=3):
     vals = sorted({v for v in values if v})
     return ", ".join(vals) if len(vals) <= limit else _("{0} values").format(len(vals))
@@ -47,7 +52,11 @@ def packing_tree(warehouse, bins):
     truncated = len(balances) > MAX_BALANCE_ROWS
     balances = balances[:MAX_BALANCE_ROWS]
     _enrich_stock(balances)
-    items = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", list({b.product for b in balances})]}, fields=["name", "item_name", "item_group"])} if balances else {}
+    names = list({b.product for b in balances})
+    items = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", names]}, fields=["name", "item_name", "item_group", "country_of_origin"])} if names else {}
+    serial_control = {p.item: p.serial_control for p in frappe.get_all("WMS Product", filters={"item": ["in", names]}, fields=["item", "serial_control"])} if names else {}
+    stock_types = {t.name: t.stock_type_name for t in frappe.get_all("WMS Stock Type", fields=["name", "stock_type_name"])}
+    hu_categories = {t.name: t.category for t in frappe.get_all("Handling Unit Type", fields=["name", "category"])}
 
     hu_by_name = {h.name: h for h in hus}
     kids = {}  # container id -> child HU rows
@@ -69,7 +78,8 @@ def packing_tree(warehouse, bins):
         for h in kids.get(container, []):
             cid = f"hu:{h.name}"
             add({"id": cid, "pid": pid, "kind": "hu", "depth": depth, "name": h.hu_number, "handling_unit": h.name,
-                 "storage_bin": h.current_bin, "storage_type": ctx["storage_type"], "hu_status": h.status,
+                 "storage_bin": h.current_bin, "storage_type": ctx["storage_type"], "storage_section": ctx["storage_section"], "hu_status": h.status,
+                 "hu_category": hu_categories.get(h.hu_type), "creation_date": _date_time(h.creation)[0], "creation_time": _date_time(h.creation)[1],
                  **{k: h.get(k) for k in HU_FIELDS if k not in ("name", "status", "current_bin")}}, cid)
             walk(cid, depth + 1, cid, ctx)
         for (product, batch, stock_type), lines in sorted(products.get(container, {}).items()):
@@ -79,8 +89,11 @@ def packing_tree(warehouse, bins):
             out.append({
                 "id": f"p:{container}:{product}:{batch}:{stock_type}", "pid": pid, "kind": "product", "depth": depth, "has_kids": False,
                 "name": product, "product": product, "product_name": item.get("item_name"), "product_group": item.get("item_group"),
-                "batch_no": batch, "stock_type": stock_type, "stock_uom": first.stock_uom, "storage_bin": first.storage_bin,
-                "storage_type": ctx["storage_type"], "handling_unit": first.handling_unit,
+                "country_of_origin": item.get("country_of_origin"), "serial_control": serial_control.get(product) or "",
+                "batch_no": batch, "stock_type": stock_type, "stock_type_name": stock_types.get(stock_type), "stock_uom": first.stock_uom, "storage_bin": first.storage_bin,
+                "storage_type": ctx["storage_type"], "storage_section": ctx["storage_section"], "handling_unit": first.handling_unit,
+                "gr_date": _date_time(min((str(x.first_receipt_date) for x in lines if x.first_receipt_date), default=""))[0],
+                "gr_time": _date_time(min((str(x.first_receipt_date) for x in lines if x.first_receipt_date), default=""))[1],
                 "quantity": sum(flt(x.quantity) for x in lines), "allocated_quantity": sum(flt(x.allocated_quantity) for x in lines),
                 "available_quantity": sum(flt(x.available_quantity) for x in lines),
                 "serial_count": len({x.serial_no for x in lines if x.serial_no}),
@@ -93,12 +106,30 @@ def packing_tree(warehouse, bins):
                            "first_receipt_date": str(x.first_receipt_date or "")} for x in lines],
             })
 
+    # Section > bin > HU > product (SAP's "Section/Bin/HU/Item"); a bin without a section is listed apart.
+    by_section = {}
     for bin_name in bins:
-        b = bin_docs[bin_name]
-        cid = f"bin:{bin_name}"
-        add({"id": cid, "pid": None, "kind": "bin", "depth": 0, "name": bin_name, "storage_bin": bin_name,
-             **{k: b.get(k) for k in BIN_FIELDS if k not in ("name", "storage_type")}, "storage_type": b.storage_type}, cid)
-        walk(cid, 1, cid, {"storage_type": b.storage_type})
+        by_section.setdefault(bin_docs[bin_name].storage_section or "", []).append(bin_name)
+    for section in sorted(by_section, key=lambda x: (x == "", x)):
+        sid = f"sec:{section}"
+        out.append({"id": sid, "pid": None, "kind": "section", "depth": 0, "has_kids": True, "name": section or _("(no section)"), "storage_section": section})
+        for bin_name in by_section[section]:
+            b = bin_docs[bin_name]
+            cid = f"bin:{bin_name}"
+            add({"id": cid, "pid": sid, "kind": "bin", "depth": 1, "name": bin_name, "storage_bin": bin_name,
+                 "creation_date": _date_time(b.creation)[0], "creation_time": _date_time(b.creation)[1],
+                 **{k: b.get(k) for k in BIN_FIELDS if k not in ("name", "storage_type")}, "storage_type": b.storage_type}, cid)
+            walk(cid, 2, cid, {"storage_type": b.storage_type, "storage_section": b.storage_section})
+    # how much is inside each node: product lines and handling units (nested ones included)
+    index = {r["id"]: r for r in out}
+    for r in out:
+        r["product_items"] = 1 if r["kind"] == "product" else 0
+        r["hu_count"] = 0
+    for r in reversed(out):
+        parent = index.get(r["pid"])
+        if parent:
+            parent["product_items"] += r["product_items"]
+            parent["hu_count"] += r["hu_count"] + (1 if r["kind"] == "hu" else 0)
     return {"rows": out, "truncated": truncated}
 
 
@@ -195,3 +226,51 @@ def create_hus(warehouse, storage_bin, packaging_material=None, hu_type=None, hu
         hu = create_handling_unit(number, hu_type, storage_bin, parent_hu, warehouse, packaging_material)
         created.append({"name": hu["name"], "hu_number": hu["hu_number"], "hu_type": hu["hu_type"], "current_bin": hu["current_bin"]})
     return created
+
+
+def post_differences(warehouse, items, remarks, idempotency_key):
+    """The marked product lines are short of what the system shows: the missing quantity of each
+    goes to the warehouse's difference bin, with a WMS Task Difference for the Difference Analyzer
+    (same booking the packing station makes, without needing a work center). Stock picked for a
+    delivery is not handled here - complete that delivery short or reverse the pick."""
+    posted, errors = 0, []
+    for n, item in enumerate(items, 1):
+        savepoint = f"pc_diff_{n}"
+        frappe.db.savepoint(savepoint)
+        try:
+            for i, ln in enumerate(item["lines"], 1):
+                _post_difference(warehouse, ln, remarks, f"{idempotency_key}:{n}:{i}")
+            posted += 1
+        except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
+            frappe.db.rollback(save_point=savepoint)
+            errors.append({"item": item.get("label") or str(n), "error": _fail_text(e)})
+    return {"posted": posted, "errors": errors}
+
+
+def _post_difference(warehouse, ln, remarks, key):
+    from frappe_wms.services.difference import difference_bin_for_warehouse
+    from frappe_wms.services.packing_station import hu_deliveries
+    from frappe_wms.services.stock import transfer_stock
+    from frappe.utils import now_datetime
+    quantity = flt(ln["quantity"])
+    if quantity <= 0:
+        frappe.throw(_("Enter the missing quantity"))
+    source_hu = ln.get("source_hu") or None
+    if source_hu and hu_deliveries(source_hu):
+        frappe.throw(_("{0} holds stock picked for {1}. Complete the delivery short or reverse the pick instead of posting a difference here.")
+                     .format(source_hu, ", ".join(sorted(hu_deliveries(source_hu)))))
+    diff_bin = difference_bin_for_warehouse(warehouse)
+    src = {"warehouse": warehouse, "product": ln["product"], "batch_no": ln.get("batch_no") or None, "serial_no": ln.get("serial_no") or None,
+           "handling_unit": source_hu, "storage_bin": ln["source_bin"], "stock_type": ln["stock_type"], "stock_uom": ln["stock_uom"]}
+    task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Repack", "warehouse": warehouse, "product": ln["product"], "planned_quantity": quantity,
+                           "stock_uom": ln["stock_uom"], "batch_no": src["batch_no"], "serial_no": src["serial_no"], "source_bin": ln["source_bin"],
+                           "destination_bin": diff_bin, "source_hu": source_hu, "stock_type_from": ln["stock_type"], "stock_type_to": ln["stock_type"],
+                           "movement_type": "301", "priority": "Normal", "status": "Open"}).insert(ignore_permissions=True)
+    transfer_stock(source=src, destination={"handling_unit": None, "storage_bin": diff_bin, "stock_type": ln["stock_type"]}, quantity=quantity,
+                   movement_type="301", reference_doctype="Handling Unit" if source_hu else "Storage Bin", reference_name=source_hu or ln["source_bin"],
+                   idempotency_key=f"PCDIFF:{key}", warehouse_task=task.name)
+    task.db_set({"confirmed_quantity": quantity, "status": "Confirmed", "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "docstatus": 1})
+    frappe.get_doc({"doctype": "WMS Task Difference", "warehouse": warehouse, "warehouse_task": task.name, "task_type": "Repack", "product": ln["product"],
+                    "stock_uom": ln["stock_uom"], "batch_no": src["batch_no"], "serial_no": src["serial_no"], "direction": "Short", "planned_quantity": quantity,
+                    "difference_quantity": quantity, "stock_type": ln["stock_type"], "storage_bin": diff_bin,
+                    "clearance_remarks": remarks or _("Missing, posted from the Packing Center"), "status": "Open"}).insert(ignore_permissions=True)

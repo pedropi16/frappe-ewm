@@ -87,12 +87,14 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   await dialog.getByRole("button", { name: /Execute/ }).click();
   await expect(dialog).toBeHidden();
 
-  // bin > HU > product, everything open
+  // section > bin > HU > product
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-section")).toHaveCount(1);
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toHaveCount(2);
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(1);
 
   // mark the product line -> side panel shows it; drag it onto the other HU, repack 2 of the 6
   const product = page.locator(".wms-pc-grid tbody tr.wms-hier-product");
+  await page.locator(".wms-pc-tab", { hasText: "Details" }).click();
   await product.locator("th.wms-grid-rowhead").click();
   await expect(page.locator(".wms-pc-side")).toContainText("Open form");
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing-details.png` });
@@ -102,6 +104,15 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   await qdialog.locator("input").fill("2");
   await qdialog.getByRole("button", { name: "Repack" }).click();
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(2);
+
+  // Difference tab: 1 unit of the 2 now in E2EPC2 is missing
+  const moved = page.locator(".wms-pc-grid tbody tr.wms-hier-product").last();
+  await moved.locator("th.wms-grid-rowhead").click();
+  await page.locator(".wms-pc-tab", { hasText: "Difference" }).click();
+  await page.locator('[data-pane="difference"] .wms-pc-q').fill("1");
+  await page.locator('[data-pane="difference"] .wms-pc-go').click();
+  await page.locator(".modal.show").getByRole("button", { name: /Yes|OK/ }).click();
+  await expect(page.getByText("Posted 1 difference")).toBeVisible();
 
   // create 2 HUs from a packing material in the bin
   await page.locator(".wms-pc-tab", { hasText: "Create HU" }).click();

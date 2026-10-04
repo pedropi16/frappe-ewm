@@ -87,15 +87,19 @@ function ensure_monitor_styles() {
     .wms-mon-nav-item.active { background:var(--bg-light-blue,#eff6ff); border-left-color:var(--primary,#3b82f6); font-weight:600; color:var(--primary,#2563eb); }
     .wms-monitor-content { flex:1; min-width:0; }
     .wms-mon-title { display:none; }
-    .wms-pc-modes { display:flex; gap:6px; margin-bottom:8px; }
+    .wms-pc-modes { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px; }
+    .wms-pc-org { display:inline-flex; align-items:center; gap:6px; margin-left:auto; }
+    .wms-pc-org label { margin:0; font-size:12px; color:var(--text-muted); }
+    .wms-pc-defbin { width:200px; display:inline-block; }
+    .wms-pc-defbin .frappe-control, .wms-pc-defbin .form-group { margin:0; }
     .wms-pc-split { --wms-pc-side:380px; display:flex; align-items:flex-start; gap:0; }
     .wms-pc-main { flex:1 1 0; min-width:0; }
     .wms-pc-resizer { flex:0 0 8px; align-self:stretch; min-height:200px; cursor:col-resize; margin:0 2px; border-radius:4px; background:linear-gradient(to right, transparent 3px, var(--border-color) 3px, var(--border-color) 5px, transparent 5px); }
     .wms-pc-resizer:hover { background:var(--primary,#3b82f6); opacity:.5; }
     .wms-pc-side { flex:0 0 var(--wms-pc-side); width:var(--wms-pc-side); min-width:0; border:1px solid var(--border-color); border-radius:8px; background:var(--card-bg,#fff); max-height:calc(100vh - 230px); overflow:auto; }
     .wms-pc-collapsed .wms-pc-side { display:none; }
-    .wms-pc-tabs { display:flex; border-bottom:1px solid var(--border-color); position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
-    .wms-pc-tab { padding:8px 14px; cursor:pointer; font-size:12.5px; color:var(--text-muted); border-bottom:2px solid transparent; }
+    .wms-pc-tabs { overflow-x:auto; display:flex; border-bottom:1px solid var(--border-color); position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
+    .wms-pc-tab { white-space:nowrap; padding:8px 10px; cursor:pointer; font-size:12.5px; color:var(--text-muted); border-bottom:2px solid transparent; }
     .wms-pc-tab.active { color:var(--primary,#2563eb); border-bottom-color:var(--primary,#3b82f6); font-weight:600; }
     .wms-pc-pane { padding:10px 12px; }
     .wms-pc-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
@@ -726,7 +730,7 @@ function sap_unexecuted_html() {
   return `<div class="text-muted">${__("Not executed yet - set your criteria and click Execute.")}</div>`;
 }
 
-const PACK_ICON = { bin: "\u{1F5C4}", hu: "\u{1F4E6}", product: "\u{1F3F7}" };
+const PACK_ICON = { section: "\u{1F4C2}", bin: "\u{1F5C4}", hu: "\u{1F4E6}", product: "\u{1F3F7}" };
 // Everything the Packing Center tree can show: [field, label, numeric]. Columns are picked, ordered
 // and saved as layouts from here ("Layout" > Columns...), like in every other monitor.
 const PACK_COLUMNS = [
@@ -741,6 +745,9 @@ const PACK_COLUMNS = [
   ["outbound_delivery", __("Outbound Delivery")], ["shipment", __("Shipment")], ["seal_number", __("Seal No")], ["external_reference", __("External Reference")], ["sscc", __("SSCC")],
   ["closed", __("Closed")], ["loaded", __("Loaded")], ["owner", __("Created By")], ["creation", __("Created On")], ["modified", __("Modified")],
   ["storage_section", __("Storage Section")], ["bin_type", __("Bin Type")], ["maximum_hus", __("Max HUs"), 1], ["current_hu_count", __("HUs in Bin"), 1],
+  ["creation_date", __("Created On")], ["creation_time", __("Created At")], ["gr_date", __("GR Date")], ["gr_time", __("GR Time")],
+  ["stock_type_name", __("Description Stock Type")], ["country_of_origin", __("Country of Origin")], ["serial_control", __("Serial No. Requirement")],
+  ["hu_category", __("Handling Unit Category")], ["product_items", __("Number of Product Items"), 1], ["hu_count", __("Number of Handling Units"), 1],
   ["putaway_blocked", __("Putaway Blocked")], ["removal_blocked", __("Removal Blocked")], ["inventory_blocked", __("Inventory Blocked")], ["active", __("Active")],
 ];
 const PACK_DEFAULT_COLUMNS = ["name", "kind", "storage_type", "hu_type", "hu_status", "stock_status", "product", "product_name", "batch_no", "serial_count",
@@ -751,7 +758,7 @@ class WMSMonitor {
     this.page = page;
     this.warehouse = null;
     this.view = "overview";
-    this.pack = { roots: [], extraBins: new Set(), rows: [], expanded: new Set(), sel: [], tab: "details", newIds: new Set(), materials: null };
+    this.pack = { roots: [], extraBins: new Set(), rows: [], expanded: new Set(), sel: [], tab: "create", newIds: new Set(), materials: null };
 
     this.$body = $(`
       <div class="wms-monitor">
@@ -1515,6 +1522,8 @@ class WMSMonitor {
         <div class="wms-pc-modes">
           <button type="button" class="btn btn-sm btn-primary wms-pc-mode" data-mode="bench">${__("Workbench")}</button>
           <button type="button" class="btn btn-sm btn-default wms-pc-mode" data-mode="station">${__("Work Center Station")}</button>
+          <span class="wms-pc-org"><label>${__("Default Storage Bin")}</label><span class="wms-pc-defbin"></span>
+            <button type="button" class="btn btn-sm btn-default wms-pc-emptyhu" title="${__("Create a Handling Unit in the default storage bin")}">${__("Empty HU")}</button></span>
         </div>
         <div class="wms-pc-bench">
           <div class="wms-pc-sel"></div>
@@ -1529,8 +1538,27 @@ class WMSMonitor {
       this.selection("packing", $wrap.find(".wms-pc-sel"), $wrap.find(".wms-pc-main"), this.pack_decorate());
       this.pack_init_resizer($wrap);
       this.pack_render_side();
+      this.pack_build_default_bin($wrap);
     }
     if (this.pack_mode === "station") await this.pack_load_station();
+  }
+
+  // SAP's "default storage bin": new Handling Units are created there unless another bin is typed.
+  pack_build_default_bin($wrap) {
+    const key = () => `wms_pc_default_bin_${this.warehouse || ""}`;
+    this.pack.defBin = this.pack_link_ctl($wrap.find(".wms-pc-defbin"), "Storage Bin", __("Storage Bin"), () => {
+      const v = this.pack.defBin.get_value();
+      try { localStorage.setItem(key(), v || ""); } catch (e) { /* storage blocked: not remembered */ }
+      this.pack_prefill_create(true);
+    });
+    try { const v = localStorage.getItem(key()); if (v) this.pack.defBin.set_value(v); } catch (e) { /* ignore */ }
+    $wrap.find(".wms-pc-emptyhu").on("click", () => { this.pack.tab = "create"; this.pack_render_side(); this.pack_prefill_create(true); this.$body.find(".wms-pc-form .wms-pc-material").trigger("focus"); });
+  }
+
+  pack_link_ctl($parent, doctype, placeholder, onchange) {
+    return frappe.ui.form.make_control({ parent: $parent, only_input: true, render_input: true,
+      df: { fieldtype: "Link", options: doctype, fieldname: `pc_${doctype}`.replace(/\W/g, "_"), placeholder, change: onchange || (() => {}),
+        get_query: () => ({ filters: { warehouse: this.warehouse } }) } });
   }
 
   pack_set_mode(mode) {
@@ -1601,7 +1629,7 @@ class WMSMonitor {
     this.pack.byId = new Map(r.rows.map((x) => [x.id, x]));
     if (initial) {
       const all = r.rows.length <= 600; // a small result opens completely, a big one only to its bins
-      this.pack.expanded = new Set(r.rows.filter((x) => x.has_kids && (all || x.kind === "bin")).map((x) => x.id));
+      this.pack.expanded = new Set(r.rows.filter((x) => x.has_kids && (all || x.kind === "bin" || x.kind === "section")).map((x) => x.id));
     }
     this.pack_draw(fromRender);
   }
@@ -1615,7 +1643,8 @@ class WMSMonitor {
     const pill = (f) => (r) => wms_selection.pill(r[f]);
     const R = {
       name: (r) => `${PACK_ICON[r.kind]} ${r.kind === "product" ? esc(r.name) : `<b>${esc(r.name)}</b>`}`,
-      kind: (r) => wms_selection.pill(r.kind === "bin" ? __("Bin") : r.kind === "hu" ? __("HU") : __("Product"), r.kind === "bin" ? "blue" : r.kind === "hu" ? "orange" : "green"),
+      creation_date: (r) => esc(r.creation_date || ""), creation_time: (r) => esc(r.creation_time || ""), gr_date: (r) => esc(r.gr_date || ""), gr_time: (r) => esc(r.gr_time || ""),
+      kind: (r) => wms_selection.pill({ section: __("Section"), bin: __("Bin"), hu: __("HU"), product: __("Product") }[r.kind], { section: "gray", bin: "blue", hu: "orange", product: "green" }[r.kind]),
       storage_bin: this.link_cell("Storage Bin", "storage_bin"), handling_unit: this.hu_link_cell("handling_unit"),
       parent_hu: this.hu_link_cell("parent_hu"), top_hu: this.hu_link_cell("top_hu"),
       product: this.link_cell("Item", "product"), packaging_material: this.link_cell("Packaging Material", "packaging_material"),
@@ -1643,7 +1672,7 @@ class WMSMonitor {
       numeric: PACK_COLUMNS.filter((c) => c[2]).map((c) => c[0]), totalFilter: (r) => r.kind === "product",
       sort: sel.layout && sel.layout.sort, totals: sel.layout ? sel.layout.totals : false,
       layoutBar: sel.layoutBar(), onLayoutChange: (state) => sel.gridLayoutChanged(state),
-      draggable: (r) => r.kind !== "bin", onDrop: (rows, target) => this.pack_drop(rows, target),
+      draggable: (r) => r.kind === "hu" || r.kind === "product", droppable: (r) => r.kind !== "section", onDrop: (rows, target) => this.pack_drop(rows, target),
       onSelect: (rows) => this.pack_selected(rows), rowClass: (r) => (this.pack.newIds.has(r.id) ? "wms-pc-new" : ""),
       actions: this.pack_actions(),
     });
@@ -1662,15 +1691,22 @@ class WMSMonitor {
     const $side = this.$body.find(".wms-pc-side");
     if (!$side.length) return;
     if (!$side.find(".wms-pc-tabs").length) {
-      $side.html(`<div class="wms-pc-tabs"></div><div class="wms-pc-pane" data-pane="details"></div><div class="wms-pc-pane" data-pane="serials"></div><div class="wms-pc-pane" data-pane="create"></div>`);
+      $side.html(["details", "serials", "create", "repack_hu", "repack_product", "difference"].map((k) => `<div class="wms-pc-pane" data-pane="${k}"></div>`).join("").replace(/^/, `<div class="wms-pc-tabs"></div>`));
       this.pack_build_create($side.find('[data-pane="create"]'));
+      this.pack_build_repack_hu($side.find('[data-pane="repack_hu"]'));
+      this.pack_build_repack_product($side.find('[data-pane="repack_product"]'));
+      this.pack_build_difference($side.find('[data-pane="difference"]'));
     }
-    const tabs = [["details", __("Details")], ["serials", __("Serial Numbers")], ["create", __("Create HU")]];
+    const tabs = [["create", __("Create HU")], ["repack_hu", __("Repack HU")], ["repack_product", __("Repack Product")], ["difference", __("Difference")],
+      ["details", __("Details")], ["serials", __("Serial Numbers")]];
     $side.find(".wms-pc-tabs").html(tabs.map(([k, l]) => `<span class="wms-pc-tab ${this.pack.tab === k ? "active" : ""}" data-tab="${k}">${l}</span>`).join(""))
       .find(".wms-pc-tab").on("click", (e) => { this.pack.tab = e.currentTarget.dataset.tab; this.pack_render_side(); });
     $side.find(".wms-pc-pane").each((_, el) => $(el).toggle(el.dataset.pane === this.pack.tab));
     if (this.pack.tab === "details") this.pack_render_details($side.find('[data-pane="details"]').empty());
     else if (this.pack.tab === "serials") this.pack_render_serials($side.find('[data-pane="serials"]').empty());
+    else if (this.pack.tab === "repack_hu") this.pack_refresh_repack_hu();
+    else if (this.pack.tab === "repack_product") this.pack_refresh_repack_product();
+    else if (this.pack.tab === "difference") this.pack_refresh_difference();
     else this.pack_prefill_create();
   }
 
@@ -1681,7 +1717,7 @@ class WMSMonitor {
       const r = rows[0], R = this.pack_renderers();
       const form = { bin: ["Storage Bin", r.name], hu: ["Handling Unit", r.handling_unit], product: ["Item", r.product] }[r.kind];
       $pane.append(`<div class="wms-pc-head">${PACK_ICON[r.kind]} <b>${esc(r.name)}</b> ${R.kind(r)}
-        <a href="/app/${frappe.router.slug(form[0])}/${encodeURIComponent(form[1])}" target="_blank" rel="noopener">${__("Open form")}</a></div>`);
+        ${form ? `<a href="/app/${frappe.router.slug(form[0])}/${encodeURIComponent(form[1])}" target="_blank" rel="noopener">${__("Open form")}</a>` : ""}</div>`);
       $pane.find(".wms-pc-head").append(this.copy_btn(r.name));
       const $sheet = $(`<div class="wms-detail-fields wms-pc-sheet"></div>`).appendTo($pane);
       PACK_COLUMNS.forEach(([f, label]) => {
@@ -1693,7 +1729,7 @@ class WMSMonitor {
     }
     const count = (k) => rows.filter((r) => r.kind === k).length;
     $pane.append(`<div class="wms-pc-head"><b>${__("{0} rows marked", [rows.length])}</b>
-      <span class="text-muted">${__("{0} bin(s), {1} HU(s), {2} product line(s)", [count("bin"), count("hu"), count("product")])}</span></div>`);
+      <span class="text-muted">${__("{0} bin(s), {1} HU(s), {2} product line(s)", [count("bin") + count("section"), count("hu"), count("product")])}</span></div>`);
     const totals = new Map();
     rows.filter((r) => r.kind === "product").forEach((r) => { const k = `${r.product}\u0001${r.stock_uom || ""}`; totals.set(k, (totals.get(k) || 0) + flt(r.quantity)); });
     if (totals.size) {
@@ -1724,21 +1760,18 @@ class WMSMonitor {
   pack_build_create($pane) {
     $pane.html(`
       <div class="wms-pc-form">
-        <div><label>${__("Packing Material")}</label><select class="form-control input-sm wms-pc-material"><option value="">${__("Loading…")}</option></select>
+        <div><label>${__("Pack. Material")}</label><select class="form-control input-sm wms-pc-material"><option value="">${__("Loading…")}</option></select>
           <div class="text-muted wms-pc-mat-hint"></div></div>
         <div class="wms-pc-type-row" style="display:none;"><label>${__("HU Type")}</label><select class="form-control input-sm wms-pc-type"></select></div>
-        <div><label>${__("HU Number")}</label><input class="form-control input-sm wms-pc-num" placeholder="${__("Leave empty to generate a new number")}">
+        <div><label>${__("HU")}</label><input class="form-control input-sm wms-pc-num" placeholder="${__("Leave empty to generate a new number")}">
           <div class="text-muted wms-pc-num-hint"></div></div>
-        <div><label>${__("Storage Bin")}</label><div class="wms-pc-bin"></div>
+        <div><label>${__("HU / Storage Bin")}</label><div class="wms-pc-bin"></div>
           <div class="text-muted">${__("A Handling Unit is always created in a bin.")}</div></div>
         <div><label>${__("Inside HU (optional)")}</label><div class="wms-pc-parent"></div></div>
-        <div><label>${__("Amount")}</label><input type="number" min="1" max="200" value="1" class="form-control input-sm wms-pc-qty" style="width:100px;"></div>
+        <div><label>${__("Number of HUs")}</label><input type="number" min="1" max="200" value="1" class="form-control input-sm wms-pc-qty" style="width:100px;"></div>
         <button type="button" class="btn btn-primary btn-sm wms-pc-create">${__("Create")}</button>
       </div>`);
-    const ctl = (sel, doctype, extra) => frappe.ui.form.make_control({ parent: $pane.find(sel), only_input: true, render_input: true,
-      df: { fieldtype: "Link", options: doctype, fieldname: sel.slice(1), placeholder: doctype === "Storage Bin" ? __("Storage Bin") : __("Handling Unit"),
-        get_query: () => ({ filters: { warehouse: this.warehouse, ...extra } }) } });
-    this.pack.ctl = { bin: ctl(".wms-pc-bin", "Storage Bin"), parent: ctl(".wms-pc-parent", "Handling Unit") };
+    this.pack.ctl = { bin: this.pack_link_ctl($pane.find(".wms-pc-bin"), "Storage Bin", __("Storage Bin")), parent: this.pack_link_ctl($pane.find(".wms-pc-parent"), "Handling Unit", __("Handling Unit")) };
     const $mat = $pane.find(".wms-pc-material"), $num = $pane.find(".wms-pc-num"), $qty = $pane.find(".wms-pc-qty");
     const typeOf = () => { const m = (this.pack.materials || []).find((x) => x.name === $mat.val()); return m ? m : null; };
     const refresh = () => {
@@ -1797,11 +1830,108 @@ class WMSMonitor {
   }
 
   // The create form follows the marked row: its bin (and HU) as defaults, while the fields are still untouched.
-  pack_prefill_create() {
-    const r = this.pack.sel[0], ctl = this.pack.ctl;
-    if (!ctl || !r) return;
-    const bin = r.storage_bin || "";
-    if (bin && (!ctl.bin.get_value() || ctl.bin.get_value() === this.pack.autoBin)) { ctl.bin.set_value(bin); this.pack.autoBin = bin; }
+  pack_prefill_create(force) {
+    const ctl = this.pack.ctl;
+    if (!ctl) return;
+    const def = this.pack.defBin && this.pack.defBin.get_value();
+    const bin = def || (this.pack.sel[0] && this.pack.sel[0].storage_bin) || "";
+    if (bin && (force || !ctl.bin.get_value() || ctl.bin.get_value() === this.pack.autoBin)) { ctl.bin.set_value(bin); this.pack.autoBin = bin; }
+  }
+
+  // Where marked rows go: a Handling Unit (pack / nest into it) or a Storage Bin.
+  pack_dest_picker($host) {
+    $host.html(`<label>${__("Destination")}</label>
+      <select class="form-control input-sm wms-dp-kind" style="margin-bottom:4px;"><option value="hu">${__("Handling Unit")}</option><option value="bin">${__("Storage Bin")}</option></select>
+      <div class="wms-dp-hu"></div><div class="wms-dp-bin" style="display:none;"></div>`);
+    const hu = this.pack_link_ctl($host.find(".wms-dp-hu"), "Handling Unit", __("Handling Unit")), bin = this.pack_link_ctl($host.find(".wms-dp-bin"), "Storage Bin", __("Storage Bin"));
+    $host.find(".wms-dp-kind").on("change", (e) => { $host.find(".wms-dp-hu").toggle(e.target.value === "hu"); $host.find(".wms-dp-bin").toggle(e.target.value === "bin"); });
+    return () => { const kind = $host.find(".wms-dp-kind").val(); return { kind, name: (kind === "hu" ? hu : bin).get_value() }; };
+  }
+
+  // ---- Repack HU: the marked Handling Units go into an HU / a bin ----
+  pack_build_repack_hu($pane) {
+    $pane.html(`<div class="wms-pc-form"><div class="wms-pc-list"></div><div class="wms-pc-dest"></div>
+      <button type="button" class="btn btn-primary btn-sm wms-pc-go">${__("Repack")}</button></div>`);
+    const dest = this.pack_dest_picker($pane.find(".wms-pc-dest"));
+    $pane.find(".wms-pc-go").on("click", async () => {
+      const rows = this.pack.sel.filter((r) => r.kind === "hu"), d = dest();
+      if (!rows.length) { frappe.show_alert({ message: __("Mark the Handling Units to repack"), indicator: "orange" }); return; }
+      if (!d.name) { frappe.show_alert({ message: __("Choose the destination"), indicator: "orange" }); return; }
+      await this.pack_move(rows, d.kind, d.name);
+    });
+  }
+
+  pack_refresh_repack_hu() {
+    const rows = this.pack.sel.filter((r) => r.kind === "hu");
+    this.$body.find('[data-pane="repack_hu"] .wms-pc-list').html(rows.length
+      ? `<div class="text-muted">${__("Marked Handling Units")} (${rows.length})</div><div class="wms-detail-serials">${rows.map((r) => `<span class="wms-chip">${frappe.utils.escape_html(r.name)}</span>`).join("")}</div>`
+      : `<div class="text-muted">${__("Mark the Handling Units to repack in the tree.")}</div>`);
+  }
+
+  // The marked product lines with a quantity each (all of it by default) - shared by Repack Product and Difference.
+  pack_qty_table(rows, label, blank) {
+    const esc = frappe.utils.escape_html;
+    if (!rows.length) return `<div class="text-muted">${__("Mark product lines in the tree.")}</div>`;
+    return `<table class="table table-sm"><thead><tr><th>${__("Product")}</th><th>${__("In")}</th><th style="text-align:right;">${esc(label)}</th></tr></thead><tbody>
+      ${rows.map((r, i) => `<tr><td>${esc(r.product)}<div class="text-muted" style="font-size:11px;">${esc(r.batch_no || "")} ${esc(r.stock_type || "")}</div></td><td>${esc(r.handling_unit || r.storage_bin || "")}</td>
+        <td style="text-align:right;white-space:nowrap;"><input type="number" class="form-control input-sm wms-pc-q" style="width:90px;display:inline-block;" data-i="${i}" min="0" max="${r.quantity}"
+          step="${r.serial_count ? 1 : "any"}" value="${blank ? "" : r.quantity}"> / ${r.quantity} ${esc(r.stock_uom || "")}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  pack_read_qtys($pane, rows, requireAll) {
+    const out = new Map();
+    let bad = false;
+    $pane.find(".wms-pc-q").each((_, el) => {
+      const row = rows[Number(el.dataset.i)], q = parseFloat(el.value);
+      if (!el.value && !requireAll) return;
+      if (!(q > 0) || q > flt(row.quantity) + 1e-9 || (row.serial_count && q !== Math.floor(q))) bad = true; else out.set(row.id, q);
+    });
+    if (bad) { frappe.show_alert({ message: __("Enter a quantity above 0, at most what is there (whole numbers for serial numbers)"), indicator: "orange" }); return null; }
+    return out;
+  }
+
+  // ---- Repack Product ----
+  pack_build_repack_product($pane) {
+    $pane.html(`<div class="wms-pc-form"><div class="wms-pc-list"></div><div class="wms-pc-dest"></div>
+      <button type="button" class="btn btn-primary btn-sm wms-pc-go">${__("Repack")}</button></div>`);
+    const dest = this.pack_dest_picker($pane.find(".wms-pc-dest"));
+    $pane.find(".wms-pc-go").on("click", async () => {
+      const rows = this.pack.sel.filter((r) => r.kind === "product"), d = dest();
+      if (!rows.length) { frappe.show_alert({ message: __("Mark the product lines to repack"), indicator: "orange" }); return; }
+      if (!d.name) { frappe.show_alert({ message: __("Choose the destination"), indicator: "orange" }); return; }
+      const qtys = this.pack_read_qtys($pane, rows, true);
+      if (qtys) await this.pack_move(rows, d.kind, d.name, qtys);
+    });
+  }
+
+  pack_refresh_repack_product() {
+    const $pane = this.$body.find('[data-pane="repack_product"]');
+    $pane.find(".wms-pc-list").html(this.pack_qty_table(this.pack.sel.filter((r) => r.kind === "product"), __("Quantity"), false));
+  }
+
+  // ---- Difference: the marked lines are short - the missing quantity goes to the difference bin ----
+  pack_build_difference($pane) {
+    $pane.html(`<div class="wms-pc-form"><div class="wms-pc-list"></div>
+      <div><label>${__("Remarks")}</label><input class="form-control input-sm wms-pc-remarks"></div>
+      <button type="button" class="btn btn-danger btn-sm wms-pc-go">${__("Post difference")}</button></div>`);
+    $pane.find(".wms-pc-go").on("click", async () => {
+      const rows = this.pack.sel.filter((r) => r.kind === "product");
+      const qtys = this.pack_read_qtys($pane, rows, false);
+      if (!qtys) return;
+      if (!qtys.size) { frappe.show_alert({ message: __("Enter the missing quantity of at least one line"), indicator: "orange" }); return; }
+      frappe.confirm(__("Move the missing quantity of {0} line(s) to the difference bin?", [qtys.size]), async () => {
+        const items = rows.filter((r) => qtys.has(r.id)).map((r) => ({ label: r.product, lines: this.pack_take(r, qtys.get(r.id)) }));
+        const res = await frappe.call("frappe_wms.api.packing_center.post_differences", { warehouse: this.warehouse, items: JSON.stringify(items),
+          remarks: $pane.find(".wms-pc-remarks").val() || undefined, idempotency_key: `PCD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }).then((r) => r.message);
+        frappe.show_alert({ message: __("Posted {0} difference(s)", [res.posted]), indicator: res.errors.length ? "orange" : "green" });
+        if (res.errors.length) frappe.msgprint({ title: __("Not posted"), indicator: "orange", message: res.errors.map((e) => `<b>${frappe.utils.escape_html(e.item)}</b>: ${frappe.utils.escape_html(e.error)}`).join("<br>") });
+        await this.pack_reload(false);
+      });
+    });
+  }
+
+  pack_refresh_difference() {
+    this.$body.find('[data-pane="difference"] .wms-pc-list').html(this.pack_qty_table(this.pack.sel.filter((r) => r.kind === "product"), __("Missing"), true));
   }
 
   // ---- moving: drag & drop onto a node, or "Move to…" ----
@@ -1872,13 +2002,13 @@ class WMSMonitor {
     return out;
   }
 
-  async pack_move(rows, kind, name) {
-    rows = rows.filter((r) => r.kind !== "bin");
+  async pack_move(rows, kind, name, presetQtys) {
+    rows = rows.filter((r) => r.kind === "hu" || r.kind === "product");
     if (!rows.length) { frappe.show_alert({ message: __("Mark Handling Units or product lines to move"), indicator: "orange" }); return; }
     if (kind === "hu" && rows.some((r) => r.kind === "hu" && r.handling_unit === name)) { frappe.show_alert({ message: __("A Handling Unit cannot be packed into itself"), indicator: "orange" }); return; }
     const stockRows = rows.filter((r) => r.kind === "product");
     let qtys = new Map();
-    if (stockRows.length) { qtys = await this.pack_ask_quantities(stockRows, name); if (!qtys) return; }
+    if (stockRows.length) { qtys = presetQtys || await this.pack_ask_quantities(stockRows, name); if (!qtys) return; }
     const items = rows.map((r) => r.kind === "hu" ? { kind: "hu", name: r.handling_unit, label: r.name }
       : { kind: "stock", label: r.product, lines: this.pack_take(r, qtys.get(r.id)) });
     const res = await frappe.call("frappe_wms.api.packing_center.move_nodes", {
@@ -1907,7 +2037,7 @@ class WMSMonitor {
     };
     const allHu = (rows) => rows.every((r) => r.kind === "hu");
     return [
-      { label: __("Move to…"), kind: "primary", appliesTo: (r) => r.kind !== "bin", run: (rows) => this.pack_move_dialog(rows) },
+      { label: __("Move to…"), kind: "primary", appliesTo: (r) => r.kind === "hu" || r.kind === "product", run: (rows) => this.pack_move_dialog(rows) },
       { label: __("Block"), appliesTo: (r) => r.kind === "hu" && r.hu_status !== "Blocked", run: each("Block", "block_handling_unit", "Blocked {0} of {1} Handling Unit(s)") },
       { label: __("Unblock"), appliesTo: (r) => r.kind === "hu" && r.hu_status === "Blocked", run: each("Unblock", "unblock_handling_unit", "Unblocked {0} of {1} Handling Unit(s)") },
       { label: __("Unnest"), appliesTo: (r) => r.kind === "hu" && !!r.parent_hu, run: each("Unnest", "unnest_handling_unit", "Unnested {0} of {1} Handling Unit(s)") },

@@ -2,7 +2,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
-from frappe_wms.api.packing_center import create_hus, move_nodes, packing_materials, packing_tree
+from frappe_wms.api.packing_center import create_hus, move_nodes, packing_materials, packing_tree, post_differences
 from frappe_wms.services.stock import post_entries
 from frappe_wms.tests.bootstrap import TEST_ITEM
 
@@ -65,6 +65,11 @@ class TestPackingCenter(IntegrationTestCase):
         self.assertLess(ids.index(f"bin:{WH}-A"), ids.index(f"hu:{a['name']}"))
         row = next(r for r in tree if r["id"].startswith(f"p:hu:{a['name']}"))
         self.assertEqual((row["kind"], row["quantity"], row["pid"]), ("product", 10, f"hu:{a['name']}"))
+        # Section > bin > HU > product, with how much is inside each node
+        bin_row = next(r for r in tree if r["id"] == f"bin:{WH}-A")
+        self.assertEqual(next(r for r in tree if r["id"] == bin_row["pid"])["kind"], "section")
+        self.assertGreaterEqual(bin_row["hu_count"], 2)
+        self.assertEqual(next(r for r in tree if r["id"] == f"hu:{a['name']}")["product_items"], 1)
         self.assertTrue(next(r for r in tree if r["id"] == f"hu:{a['name']}")["has_kids"])
         self.assertFalse(next(r for r in tree if r["id"] == f"hu:{b['name']}")["has_kids"])
 
@@ -76,9 +81,10 @@ class TestPackingCenter(IntegrationTestCase):
         # ... and the rest of b to the other bin (a real move task)
         rows = packing_tree(WH, [f"{WH}-A"])["rows"]
         line_b = dict(next(r for r in rows if r["pid"] == f"hu:{b['name']}")["lines"][0])
+        before = qty(storage_bin=f"{WH}-B")
         res = move_nodes(WH, [{"kind": "stock", "label": "y", "lines": [line_b]}], "bin", f"{WH}-B", "pc-test-2")
         self.assertEqual(res["errors"], [])
-        self.assertEqual(qty(storage_bin=f"{WH}-B"), flt(line_b["quantity"]))
+        self.assertEqual(qty(storage_bin=f"{WH}-B") - before, flt(line_b["quantity"]))
 
         # an HU nests into another, and cannot be packed into itself / its own contents
         res = move_nodes(WH, [{"kind": "hu", "name": b["name"]}], "hu", a["name"], "pc-test-3")
@@ -91,3 +97,15 @@ class TestPackingCenter(IntegrationTestCase):
         res = move_nodes(WH, [{"kind": "hu", "name": a["name"]}], "bin", f"{WH}-B", "pc-test-5")
         self.assertEqual(res["errors"], [])
         self.assertEqual(frappe.db.get_value("Handling Unit", a["name"], "current_bin"), f"{WH}-B")
+
+    def test_a_difference_moves_the_missing_quantity_to_the_difference_bin(self):
+        frappe.db.set_value("WMS Warehouse", WH, "default_difference_bin", f"{WH}-B")
+        hu = create_hus(WH, f"{WH}-A", packaging_material="PC-MAT")[0]
+        self.stock(hu["name"], "A", 5)
+        row = next(r for r in packing_tree(WH, [f"{WH}-A"])["rows"] if r["pid"] == f"hu:{hu['name']}")
+        res = post_differences(WH, [{"label": "x", "lines": [dict(row["lines"][0], quantity=2)]}], "counted short", "pc-diff-1")
+        self.assertEqual((res["posted"], res["errors"]), (1, []))
+        self.assertEqual((qty(handling_unit=hu["name"]), qty(storage_bin=f"{WH}-B")), (3, 2))
+        self.assertTrue(frappe.db.exists("WMS Task Difference", {"warehouse": WH, "product": TEST_ITEM, "difference_quantity": 2, "status": "Open"}))
+        too_much = post_differences(WH, [{"label": "y", "lines": [dict(row["lines"][0], quantity=99)]}], None, "pc-diff-2")
+        self.assertEqual((too_much["posted"], len(too_much["errors"])), (0, 1))

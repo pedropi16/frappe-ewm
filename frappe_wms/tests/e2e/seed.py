@@ -146,6 +146,8 @@ def packing_stock():
         frappe.get_doc({"doctype": "WMS Number Range", "range_for": "Handling Unit", "warehouse": WAREHOUSE, "prefix": "E2EH", "start_number": 1, "end_number": 99999,
                         "number_length": 6, "current_number": 0, "active": 1}).insert(ignore_permissions=True)
     bin_ = f"{WAREHOUSE}-A1"
+    if frappe.db.exists("Storage Bin", f"{WAREHOUSE}-B1"):
+        frappe.db.set_value("WMS Warehouse", WAREHOUSE, "default_difference_bin", f"{WAREHOUSE}-B1")
     hus = []
     for n in ("E2EPC1", "E2EPC2"):
         name = frappe.db.get_value("Handling Unit", {"hu_number": n}) or frappe.get_doc({"doctype": "Handling Unit", "hu_number": n, "hu_type": "E2E-PAL",

@@ -26,6 +26,19 @@ def _bin_virtual(bin_column, label="Storage Type"):
             "sql": f"{bin_column} in (select `sel_bin`.name from `tabStorage Bin` `sel_bin` where {{cond}})"}
 
 
+# Every (bin, delivery, sales order, route, wave) a bin is tied to: stock allocated to a delivery sits in
+# the allocation's bin, and picked / packed stock sits in an HU that carries the delivery.
+_DELIVERY_BINS = """
+    select a.storage_bin, a.outbound_delivery, i.sales_order, d.route, (select w.parent from `tabWMS Wave Delivery` w where w.outbound_delivery = d.name limit 1) as wave
+      from `tabStock Allocation` a join `tabOutbound Delivery` d on d.name = a.outbound_delivery
+      left join `tabOutbound Delivery Item` i on i.name = a.outbound_delivery_item
+     where a.status in ('Allocated', 'Partially Picked', 'Picked')
+    union
+    select h.current_bin, h.outbound_delivery, i.sales_order, d.route, (select w.parent from `tabWMS Wave Delivery` w where w.outbound_delivery = d.name limit 1) as wave
+      from `tabHandling Unit` h join `tabOutbound Delivery` d on d.name = h.outbound_delivery
+      left join `tabOutbound Delivery Item` i on i.parent = d.name
+"""
+
 # view key -> DocType, default selection fields, default columns, order, virtual fields.
 VIEWS = {
     "inbound": {
@@ -77,7 +90,8 @@ VIEWS = {
     "packing": {
         "doctype": "Storage Bin", "title": "Packing Center", "order_by": "`tabStorage Bin`.name asc",
         "labels": {"name": "Storage Bin"},
-        "selection": ["name", "storage_type", "storage_section", "handling_unit", "hu_type", "packaging_material", "contains_product", "contains_batch", "contains_serial"],
+        "selection": ["name", "work_center", "storage_type", "storage_section", "handling_unit", "hu_type", "packaging_material", "contains_product", "contains_batch",
+                      "contains_serial", "outbound_delivery", "sales_order", "route", "wave"],
         "columns": ["name"],  # the tree's own columns are a catalog on the client; this only finds the bins
         "virtual": {
             "handling_unit": {"label": "Handling Unit", "fieldtype": "Link", "options": "Handling Unit", "column": "`sel_hu`.`name`",
@@ -90,6 +104,12 @@ VIEWS = {
                                  "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
             "contains_batch": {"label": "Contains Batch", "fieldtype": "Link", "options": "Batch", "column": "`sel_bal`.`batch_no`",
                                "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
+            "work_center": {"label": "Work Center", "fieldtype": "Link", "options": "Work Center", "column": "`sel_wc`.`name`",
+                            "sql": "`tabStorage Bin`.name in (select `sel_wc`.bin from `tabWork Center` `sel_wc` where {cond})"},
+            **{field: {"label": label, "fieldtype": "Link", "options": options, "column": f"`sel_doc`.`{field}`",
+                       "sql": "`tabStorage Bin`.name in (select `sel_doc`.storage_bin from (" + _DELIVERY_BINS + ") `sel_doc` where {cond})"}
+               for field, label, options in (("outbound_delivery", "Document (Outbound Delivery)", "Outbound Delivery"), ("sales_order", "Sales Order", "Sales Order"),
+                                             ("route", "Route", "WMS Route"), ("wave", "Wave", "WMS Wave"))},
             "contains_serial": {"label": "Contains Serial No", "fieldtype": "Link", "options": "Serial No", "column": "`sel_bal`.`serial_no`",
                                 "sql": "`tabStorage Bin`.name in (select `sel_bal`.storage_bin from `tabWMS Stock Balance` `sel_bal` where `sel_bal`.quantity > 0 and {cond})"},
         },

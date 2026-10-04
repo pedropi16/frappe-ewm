@@ -40,3 +40,10 @@ def packing_materials():
     for r in rows:
         r["numbering_mode"] = frappe.db.get_value("Handling Unit Type", r.hu_type, "numbering_mode") if r.hu_type else None
     return rows
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def post_differences(warehouse, items, remarks=None, idempotency_key=None):
+    _check(warehouse)
+    return pc.post_differences(warehouse, parse_json(items, "items"), remarks, idempotency_key or frappe.generate_hash(length=12))
