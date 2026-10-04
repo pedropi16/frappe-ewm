@@ -39,7 +39,7 @@ CUSTOMIZING = [
     "Process Determination Rule", "Removal Rule", "Replenishment Rule", "Storage Process", "Storage Type Search Sequence",
     "Warehouse Process Type", "Warehouse Process Type Determination Rule", "Wave Template", "WMS Movement Type",
     "WO Creation Rule", "WMS Route", "WMS Print Determination Rule", "WMS Number Range", "WMS HU Number Pool",
-    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group",
+    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area",
 ]
 MASTER_DATA = ["Storage Bin", "Storage Section", "Activity Area", "Bin Type", "WMS Product", "WMS Product Warehouse",
                "Packaging Material", "Packaging Spec", "Handling Unit Type"]

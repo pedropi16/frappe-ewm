@@ -19,6 +19,8 @@ def on_submit(doc, method=None):
     # replenishment. Best-effort throughout - a warehouse with no matching config for a given
     # item (no Production Supply bin configured, no source stock) just doesn't get an
     # auto-staged request; it never blocks the Work Order's own submission.
+    from frappe_wms.services.production_supply import psa_for_production_warehouse
+    if psa_for_production_warehouse(doc.wip_warehouse): return  # a Production Supply Area supplies this order through its Material Request instead
     for row in doc.required_items:
         wms_warehouse = frappe.db.get_value("WMS Warehouse", {"erpnext_warehouse": row.source_warehouse}, "name")
         if not wms_warehouse: continue

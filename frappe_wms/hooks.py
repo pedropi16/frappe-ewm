@@ -105,6 +105,7 @@ doc_events = {
         "validate": "frappe_wms.events.erpnext_stock_guard.validate",
         "on_submit": "frappe_wms.events.work_order.on_submit",
     },
+    "Material Request": {"on_submit": "frappe_wms.events.material_request.on_submit"},
     "Job Card": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "POS Invoice": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},
     "Asset Capitalization": {"validate": "frappe_wms.events.erpnext_stock_guard.validate"},

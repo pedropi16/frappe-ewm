@@ -1,6 +1,6 @@
 {
-  "name": "Consolidation Group",
-  "module": "WMS Execution",
+  "name": "Production Supply Area",
+  "module": "WMS Core",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -9,16 +9,12 @@
   "engine": "InnoDB",
   "field_order": [
     "warehouse",
-    "staging_bin",
-    "production_supply_area",
-    "material_request",
-    "target_hu",
-    "priority",
-    "status",
-    "gather_status",
-    "lines",
-    "completed_at",
-    "completed_by"
+    "psa_code",
+    "psa_name",
+    "production_warehouse",
+    "collection_bin",
+    "supply_bin",
+    "active"
   ],
   "fields": [
     {
@@ -31,89 +27,54 @@
       "in_standard_filter": 1
     },
     {
-      "fieldname": "staging_bin",
-      "label": "Staging Bin",
+      "fieldname": "psa_code",
+      "label": "PSA Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "psa_name",
+      "label": "PSA Name",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "production_warehouse",
+      "label": "Production Warehouse",
+      "fieldtype": "Link",
+      "options": "Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "The ERPNext warehouse a Material Request delivers into (e.g. Work In Progress). A submitted Material Transfer to this warehouse is supplied through this PSA."
+    },
+    {
+      "fieldname": "collection_bin",
+      "label": "Collection Bin",
       "fieldtype": "Link",
       "options": "Storage Bin",
       "reqd": 1,
-      "in_list_view": 1,
-      "description": "The physical consolidation point - e.g. a Production Supply Area bin or a rack. Where the target Handling Unit is gathered before being split out to its final destinations."
+      "description": "Where the picked material of one order is collected (the deconsolidation point) until every line of the Material Request has arrived."
     },
     {
-      "fieldname": "target_hu",
-      "label": "Target Handling Unit",
+      "fieldname": "supply_bin",
+      "label": "Supply Bin",
       "fieldtype": "Link",
-      "options": "Handling Unit",
-      "in_list_view": 1,
-      "description": "Blank until the first line is gathered onto it."
-    },
-    {
-      "fieldname": "priority",
-      "label": "Priority",
-      "fieldtype": "Select",
-      "options": "Low\nNormal\nHigh\nUrgent",
-      "default": "Normal",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "status",
-      "label": "Status",
-      "fieldtype": "Select",
-      "options": "Draft\nOpen\nCompleted\nCancelled",
+      "options": "Storage Bin",
       "reqd": 1,
-      "default": "Draft",
-      "read_only": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
+      "description": "The bin at the production floor the complete set is delivered to, on one Handling Unit."
     },
     {
-      "fieldname": "gather_status",
-      "label": "Gather Status",
-      "fieldtype": "Select",
-      "options": "Not Started\nPartially Gathered\nFully Gathered",
-      "reqd": 1,
-      "default": "Not Started",
-      "read_only": 1,
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
       "in_list_view": 1
-    },
-    {
-      "fieldname": "lines",
-      "label": "Lines",
-      "fieldtype": "Table",
-      "options": "Consolidation Group Line"
-    },
-    {
-      "fieldname": "completed_at",
-      "label": "Completed At",
-      "fieldtype": "Datetime",
-      "read_only": 1
-    },
-    {
-      "fieldname": "completed_by",
-      "label": "Completed By",
-      "fieldtype": "Link",
-      "options": "User",
-      "read_only": 1
-    },
-    {
-      "fieldname": "production_supply_area",
-      "label": "Production Supply Area",
-      "fieldtype": "Link",
-      "options": "Production Supply Area",
-      "read_only": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "material_request",
-      "label": "Material Request",
-      "fieldtype": "Link",
-      "options": "Material Request",
-      "read_only": 1,
-      "in_standard_filter": 1,
-      "description": "Set when this group delivers one Material Request's material to a Production Supply Area."
     }
   ],
-  "autoname": "CONSOL-.########",
+  "autoname": "format:{warehouse}-{psa_code}",
+  "title_field": "psa_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
@@ -198,6 +159,9 @@
     {
       "role": "WMS Process Engineer",
       "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
       "report": 1,
       "export": 1,
       "print": 1
@@ -205,6 +169,9 @@
     {
       "role": "WMS Master Data",
       "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
       "report": 1,
       "export": 1,
       "print": 1

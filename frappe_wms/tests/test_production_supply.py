@@ -67,7 +67,18 @@ class TestProductionSupply(IntegrationTestCase):
         if not frappe.db.exists("Handling Unit Type", "TEST-PSUP-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "TEST-PSUP-PALLET", "hu_type_name": "Test PSup Pallet"}).insert(ignore_permissions=True)
 
-    def _seed_rm_stock(self, qty):
+    def _second_rm(self):
+        rm2 = "WMS-TEST-PSUP-RM2"
+        if not frappe.db.exists("Item", rm2):
+            frappe.get_doc({"doctype": "Item", "item_code": rm2, "item_name": "PSUP RM2", "item_group": frappe.get_all("Item Group", limit=1, pluck="name")[0],
+                "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Product", {"item": rm2}):
+            frappe.get_doc({"doctype": "WMS Product", "item": rm2, "stock_uom": self.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        if not frappe.db.exists("WMS Product Warehouse", f"{self.warehouse}-{rm2}"):
+            frappe.get_doc({"doctype": "WMS Product Warehouse", "item": rm2, "warehouse": self.warehouse, "preferred_storage_type": f"{self.warehouse}-SRC", "active": 1}).insert(ignore_permissions=True)
+        return rm2
+
+    def _seed_rm_stock(self, qty, item=None):
         # A real Goods Receipt (not a raw ledger post) so ERPNext's own side also has
         # valuated stock for this item/warehouse - the Material Transfer for Manufacture
         # this test exercises later draws from ERPNext's stock ledger, not WMS's.
@@ -75,10 +86,10 @@ class TestProductionSupply(IntegrationTestCase):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "TEST-PSUP-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
         hu.insert(ignore_permissions=True)
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": supplier, "receiving_bin": self.recv_bin,
-            "items": [{"line_number": 1, "item": self.rm, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+            "items": [{"line_number": 1, "item": item or self.rm, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
         ind.insert(ignore_permissions=True)
         gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
-            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.rm, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": item or self.rm, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
         gr.insert(ignore_permissions=True)
         gr.submit()
         requests = create_putaway_requests(gr.name)
@@ -141,3 +152,50 @@ class TestProductionSupply(IntegrationTestCase):
 
         balance = frappe.get_all("WMS Stock Balance", filters={"product": self.fg, "warehouse": self.warehouse}, fields=["quantity"])
         self.assertEqual(sum(b.quantity for b in balance), 5)
+
+    def _material_request(self, lines):
+        mr = frappe.get_doc({"doctype": "Material Request", "material_request_type": "Material Transfer", "company": self.company,
+            "schedule_date": nowdate(), "set_from_warehouse": self.wh.erpnext_warehouse,
+            "items": [{"item_code": item, "qty": q, "uom": self.uom, "stock_uom": self.uom, "conversion_factor": 1,
+                "warehouse": self.wip_warehouse, "from_warehouse": self.wh.erpnext_warehouse, "schedule_date": nowdate()} for item, q in lines]})
+        mr.insert(ignore_permissions=True)
+        mr.submit()
+        return mr
+
+    def test_material_request_is_supplied_through_a_psa_and_delivered_when_complete(self):
+        coll, supply = f"{self.warehouse}-PSA-COLL", f"{self.warehouse}-PSA-SUP"
+        for b in (coll, supply):
+            if not frappe.db.exists("Storage Bin", b):
+                frappe.get_doc({"doctype": "Storage Bin", "bin_code": b, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Test PSA",
+            "production_warehouse": self.wip_warehouse, "collection_bin": coll, "supply_bin": supply}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))  # an active PSA on the WIP warehouse reroutes Work Order staging for every other test
+        frappe.db.set_single_value("WMS Settings", "default_handling_unit_type", "TEST-PSUP-PALLET")
+        rm2 = self._second_rm()
+        self._seed_rm_stock(50)
+        self._seed_rm_stock(50, item=rm2)
+
+        mr = self._material_request([(self.rm, 6), (rm2, 4)])
+        requests = frappe.get_all("Warehouse Request", filters={"reference_doctype": "Material Request", "reference_name": mr.name}, pluck="name", order_by="creation asc")
+        self.assertEqual(len(requests), 2)
+        self.assertEqual({frappe.db.get_value("Warehouse Request", r, "destination_bin") for r in requests}, {coll})
+        group = frappe.db.get_value("Consolidation Group", {"material_request": mr.name})
+        self.assertEqual(frappe.db.get_value("Consolidation Group", group, "production_supply_area"), psa.name)
+
+        task = frappe.get_all("Warehouse Task", filters={"warehouse_request": requests[0]}, pluck="name")[0]
+        pick_into_new_hu(task, confirmed_quantity=6)
+        self.assertFalse(frappe.get_all("Warehouse Task", filters={"task_type": "Consolidation", "consolidation_group_line": ["is", "set"]}),
+            "the order is not complete: nothing is delivered yet")
+
+        task = frappe.get_all("Warehouse Task", filters={"warehouse_request": requests[1]}, pluck="name")[0]
+        pick_into_new_hu(task, confirmed_quantity=4)
+        gather = frappe.get_all("Warehouse Task", filters={"task_type": "Consolidation", "destination_bin": supply}, fields=["name", "planned_quantity", "source_hu"], order_by="creation asc, name asc")
+        self.assertEqual(sorted(g.planned_quantity for g in gather), [4, 6])
+        for g in gather: confirm_task(g.name, scanned_source=g.source_hu, confirmed_quantity=g.planned_quantity)
+
+        grp = frappe.get_doc("Consolidation Group", group)
+        self.assertEqual((grp.status, grp.gather_status), ("Completed", "Fully Gathered"))
+        self.assertEqual(frappe.db.get_value("Handling Unit", grp.target_hu, "current_bin"), supply)
+        for r in requests:
+            se = frappe.get_doc("Stock Entry", frappe.db.get_value("Warehouse Request", r, "erpnext_stock_entry"))
+            self.assertEqual((se.stock_entry_type, se.items[0].t_warehouse), ("Material Transfer", self.wip_warehouse))

@@ -771,6 +771,9 @@ def _update_request(name):
         if request.reference_doctype == "Work Order":
             from frappe_wms.services.erp_sync_queue import dispatch
             dispatch("work_order_transfer", request)
+        elif request.reference_doctype == "Material Request":
+            from frappe_wms.services.production_supply import on_request_completed
+            on_request_completed(request)
 
 def _relocate_hu_for_task(task, destination_hu=None):
     # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source

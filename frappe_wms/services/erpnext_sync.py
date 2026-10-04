@@ -401,6 +401,26 @@ def sync_work_order_material_transfer(request):
     frappe.db.set_value("Warehouse Request", request.name, "erpnext_stock_entry", se.name)
     return se.name
 
+def sync_material_request_transfer(request):
+    # A supply request delivered to a Production Supply Area (services/production_supply.py): mirrors the
+    # delivery as a Material Transfer from the WMS warehouse to the Material Request line's own target warehouse.
+    if request.get("reference_doctype") != "Material Request" or request.get("erpnext_stock_entry"): return None
+    erpnext_warehouse = _erpnext_warehouse(request.warehouse)
+    line = frappe.db.get_value("Material Request Item", request.reference_line, ["warehouse", "parent"], as_dict=True) if request.reference_line else None
+    if not erpnext_warehouse or not line: return None
+    company = frappe.db.get_value("WMS Warehouse", request.warehouse, "company")
+    se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Warehouse Request {request.name}")
+    se.append("items", {
+        "item_code": request.product, "qty": flt(request.confirmed_quantity), "uom": request.stock_uom, "stock_uom": request.stock_uom,
+        "conversion_factor": 1, "s_warehouse": erpnext_warehouse, "t_warehouse": line.warehouse,
+        "material_request": line.parent, "material_request_item": request.reference_line,
+        "wms_stock_type": request.stock_type, "to_wms_stock_type": request.stock_type, "use_serial_batch_fields": 1,
+    })
+    se.flags.wms_managed_posting = True
+    _insert_and_submit_as_system(se)
+    frappe.db.set_value("Warehouse Request", request.name, "erpnext_stock_entry", se.name)
+    return se.name
+
 # --- WMS Quality Inspection -> Stock Entry (same-warehouse stock-type change) ---
 #
 # A QI decision moves stock between WMS Stock Types (QUALITY -> AVAILABLE/BLOCKED) without
