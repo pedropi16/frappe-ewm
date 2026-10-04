@@ -109,3 +109,27 @@ class TestPackingCenter(IntegrationTestCase):
         self.assertTrue(frappe.db.exists("WMS Task Difference", {"warehouse": WH, "product": TEST_ITEM, "difference_quantity": 2, "status": "Open"}))
         too_much = post_differences(WH, [{"label": "y", "lines": [dict(row["lines"][0], quantity=99)]}], None, "pc-diff-2")
         self.assertEqual((too_much["posted"], len(too_much["errors"])), (0, 1))
+
+    def test_a_search_shows_only_what_was_searched_plus_hus_created_since(self):
+        from frappe_wms.api.selection import execute_selection
+        a, b = create_hus(WH, f"{WH}-A", packaging_material="PC-MAT", quantity=2)
+        self.stock(a["name"], "A", 3)
+        self.stock(b["name"], "A", 4)
+        # searching one HU: its bin comes back, and the tree holds that HU with its contents only
+        import json  # as the browser sends it: criteria and columns as JSON text
+        found = execute_selection("packing", WH, json.dumps({"handling_unit": {"include": [{"op": "eq", "low": a["name"]}]}}), json.dumps(["name"]))
+        self.assertIn(f"{WH}-A", [r["name"] for r in found["rows"]])
+        scope = found["scope"]
+        self.assertEqual(scope["hus"], [a["name"]])
+        rows = packing_tree(WH, [f"{WH}-A"], hus=scope["hus"])["rows"]
+        hu_ids = [r["id"] for r in rows if r["kind"] == "hu"]
+        self.assertEqual(hu_ids, [f"hu:{a['name']}"])
+        self.assertEqual([r["quantity"] for r in rows if r["kind"] == "product"], [3])
+        # an HU created (or used) since the search joins the tree
+        c = create_hus(WH, f"{WH}-A", packaging_material="PC-MAT")[0]
+        rows = packing_tree(WH, [f"{WH}-A"], hus=scope["hus"], extra_hus=[c["name"]])["rows"]
+        self.assertEqual(sorted(r["id"] for r in rows if r["kind"] == "hu"), sorted([f"hu:{a['name']}", f"hu:{c['name']}"]))
+        # a bin search shows everything in the bin
+        everything = packing_tree(WH, [f"{WH}-A"])["rows"]
+        self.assertTrue({f"hu:{a['name']}", f"hu:{b['name']}"} <= {r["id"] for r in everything})
+        self.assertIsNone(execute_selection("packing", WH, {"name": {"include": [{"op": "eq", "low": f"{WH}-A"}]}}, ["name"])["scope"])

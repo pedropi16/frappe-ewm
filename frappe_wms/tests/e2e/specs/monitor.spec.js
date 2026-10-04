@@ -116,11 +116,27 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
 
   // create 2 HUs from a packing material in the bin
   await page.locator(".wms-pc-tab", { hasText: "Create HU" }).click();
-  await page.locator(".wms-pc-material").selectOption("E2E-CARTON");
+  await page.locator(".wms-pc-material").selectOption("E2E-BOX");
   await page.locator(".wms-pc-bin input").fill(`${s.warehouse}-A1`);
   await page.locator(".wms-pc-qty").fill("2");
   await page.locator(".wms-pc-create").click();
   await expect(page.locator(".wms-pc-grid tbody tr.wms-pc-new")).toHaveCount(2);
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing.png` });
+  bench("cleanup");
+});
+
+test("packing center: an HU search shows only that HU", async ({ page }) => {
+  const s = seed();
+  bench("cleanup"); bench("packing_stock");
+  await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
+  await page.goto("/app/wms-monitor");
+  await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
+  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
+  const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
+  await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC1");
+  await dialog.getByRole("button", { name: /Execute/ }).click();
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toHaveCount(1);
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toContainText("E2EPC1");
+  await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(1); // its contents, nothing else from the bin
   bench("cleanup");
 });

@@ -4,7 +4,21 @@ frappe.pages["wms-monitor"].on_page_load = function (wrapper) {
     title: __("WMS Monitor"),
     single_column: true,
   });
-  frappe.require(["/assets/frappe_wms/js/wms_selection.js", "/assets/frappe_wms/js/wms_packing_station.js"], () => new WMSMonitor(page));
+  // The assets are served with a long max-age, so a browser kept running an old wms_selection.js next to
+  // this (always fresh) page code after a deploy. A version in the URL that changes every 10 minutes
+  // bounds that - cheap, and nothing to remember to bump. (frappe.require cannot take a query string.)
+  const v = Math.floor(Date.now() / 600000);
+  const load = (src) => new Promise((resolve, reject) => {
+    const url = `${src}?v=${v}`;
+    if (document.querySelector(`script[data-wms-src="${url}"]`)) { resolve(); return; }
+    const el = document.createElement("script");
+    el.src = url; el.dataset.wmsSrc = url; el.onload = () => resolve(); el.onerror = () => reject(new Error(`could not load ${src}`));
+    document.head.appendChild(el);
+  });
+  load("/assets/frappe_wms/js/wms_selection.js")
+    .then(() => load("/assets/frappe_wms/js/wms_packing_station.js"))
+    .then(() => new WMSMonitor(page))
+    .catch((e) => frappe.msgprint({ title: __("WMS Monitor"), indicator: "red", message: frappe.utils.escape_html(e.message) }));
 };
 
 // SAP EWM-style Warehouse Management Monitor: one warehouse selector, a node tree of
@@ -758,7 +772,7 @@ class WMSMonitor {
     this.page = page;
     this.warehouse = null;
     this.view = "overview";
-    this.pack = { roots: [], extraBins: new Set(), rows: [], expanded: new Set(), sel: [], tab: "create", newIds: new Set(), materials: null };
+    this.pack = { roots: [], extraBins: new Set(), extraHus: new Set(), scope: null, rows: [], expanded: new Set(), sel: [], tab: "create", newIds: new Set(), materials: null };
 
     this.$body = $(`
       <div class="wms-monitor">
@@ -1607,7 +1621,7 @@ class WMSMonitor {
 
   // A new search starts from scratch: the previous tree, marks and extra bins belong to the old result.
   pack_new_search() {
-    this.pack = { ...this.pack, roots: [], extraBins: new Set(), rows: [], expanded: new Set(), sel: [], newIds: new Set(), loadedRows: null, drawn: false };
+    this.pack = { ...this.pack, roots: [], extraBins: new Set(), extraHus: new Set(), scope: null, rows: [], expanded: new Set(), sel: [], newIds: new Set(), loadedRows: null, drawn: false };
     this.pack_render_side();
   }
 
@@ -1616,13 +1630,17 @@ class WMSMonitor {
     if (this.pack.loadedRows === rows && this.pack.rows.length) { this.pack_draw(true); return; } // a layout change only redraws
     this.pack.loadedRows = rows;
     this.pack.roots = rows.map((r) => r.name);
-    this.pack.extraBins = new Set();
+    this.pack.extraBins = new Set(); this.pack.extraHus = new Set();
+    this.pack.scope = sel.scope;
     await this.pack_reload(true, true);
   }
 
   async pack_reload(initial, fromRender) {
     const bins = Array.from(new Set([...this.pack.roots, ...this.pack.extraBins]));
-    const r = await frappe.call("frappe_wms.api.packing_center.packing_tree", { warehouse: this.warehouse, bins: JSON.stringify(bins) }).then((x) => x.message);
+    const scope = this.pack.scope || {};
+    const r = await frappe.call("frappe_wms.api.packing_center.packing_tree", { warehouse: this.warehouse, bins: JSON.stringify(bins),
+      hus: scope.hus ? JSON.stringify(scope.hus) : undefined, balances: scope.balances ? JSON.stringify(scope.balances) : undefined,
+      extra_hus: JSON.stringify(Array.from(this.pack.extraHus)) }).then((x) => x.message);
     this.pack.rows = r.rows; this.pack.truncated = r.truncated;
     this.pack.children = new Map();
     r.rows.forEach((x) => { if (x.pid) { if (!this.pack.children.has(x.pid)) this.pack.children.set(x.pid, []); this.pack.children.get(x.pid).push(x); } });
@@ -1760,9 +1778,8 @@ class WMSMonitor {
   pack_build_create($pane) {
     $pane.html(`
       <div class="wms-pc-form">
-        <div><label>${__("Pack. Material")}</label><select class="form-control input-sm wms-pc-material"><option value="">${__("Loading…")}</option></select>
+        <div><label>${__("HU Type")}</label><select class="form-control input-sm wms-pc-material"><option value="">${__("Loading…")}</option></select>
           <div class="text-muted wms-pc-mat-hint"></div></div>
-        <div class="wms-pc-type-row" style="display:none;"><label>${__("HU Type")}</label><select class="form-control input-sm wms-pc-type"></select></div>
         <div><label>${__("HU")}</label><input class="form-control input-sm wms-pc-num" placeholder="${__("Leave empty to generate a new number")}">
           <div class="text-muted wms-pc-num-hint"></div></div>
         <div><label>${__("HU / Storage Bin")}</label><div class="wms-pc-bin"></div>
@@ -1773,10 +1790,10 @@ class WMSMonitor {
       </div>`);
     this.pack.ctl = { bin: this.pack_link_ctl($pane.find(".wms-pc-bin"), "Storage Bin", __("Storage Bin")), parent: this.pack_link_ctl($pane.find(".wms-pc-parent"), "Handling Unit", __("Handling Unit")) };
     const $mat = $pane.find(".wms-pc-material"), $num = $pane.find(".wms-pc-num"), $qty = $pane.find(".wms-pc-qty");
-    const typeOf = () => { const m = (this.pack.materials || []).find((x) => x.name === $mat.val()); return m ? m : null; };
+    const typeOf = () => (this.pack.materials || []).find((x) => x.name === $mat.val()) || null;
     const refresh = () => {
       const m = typeOf();
-      $pane.find(".wms-pc-mat-hint").text(m ? `${__("HU type")}: ${m.hu_type || "-"}` : "");
+      $pane.find(".wms-pc-mat-hint").text(m && m.hu_type_name && m.hu_type_name !== m.name ? m.hu_type_name : "");
       const internal = m && m.numbering_mode === "Internal";
       $num.prop("disabled", !!internal).attr("placeholder", internal ? __("Numbered automatically") : __("Leave empty to generate a new number"));
       if (internal) $num.val("");
@@ -1786,26 +1803,20 @@ class WMSMonitor {
     };
     $mat.on("change", refresh); $num.on("input", refresh);
     (async () => {
-      this.pack.materials = await frappe.call("frappe_wms.api.packing_center.packing_materials").then((r) => r.message || []);
-      $mat.html(`<option value="">${this.pack.materials.length ? __("Choose…") : __("(none configured)")}</option>` +
-        this.pack.materials.map((m) => `<option value="${frappe.utils.escape_html(m.name)}">${frappe.utils.escape_html(m.packaging_material_name || m.name)}</option>`).join(""));
+      this.pack.materials = await frappe.db.get_list("Handling Unit Type", { fields: ["name", "hu_type_name", "numbering_mode"], filters: { active: 1 }, limit_page_length: 200, order_by: "name asc" });
+      $mat.html(`<option value="">${__("Choose…")}</option>` + this.pack.materials.map((m) => `<option value="${frappe.utils.escape_html(m.name)}">${frappe.utils.escape_html(m.name)}${m.hu_type_name && m.hu_type_name !== m.name ? " - " + frappe.utils.escape_html(m.hu_type_name) : ""}</option>`).join(""));
       if (this.pack.materials.length === 1) { $mat.val(this.pack.materials[0].name); refresh(); }
-      if (!this.pack.materials.length) {
-        const types = await frappe.db.get_list("Handling Unit Type", { fields: ["name"], filters: { active: 1 }, limit_page_length: 100 });
-        $pane.find(".wms-pc-type-row").show().find("select").html(`<option value="">${__("Choose…")}</option>` + types.map((t) => `<option>${frappe.utils.escape_html(t.name)}</option>`).join(""));
-      }
     })();
     $pane.find(".wms-pc-create").on("click", async (e) => {
       const $btn = $(e.currentTarget);
-      const material = $mat.val(), hu_type = $pane.find(".wms-pc-type").val();
+      const hu_type = $mat.val();
       const bin = this.pack.ctl.bin.get_value(), parent = this.pack.ctl.parent.get_value();
-      if (!material && !hu_type) { frappe.show_alert({ message: __("Choose the packing material"), indicator: "orange" }); return; }
+      if (!hu_type) { frappe.show_alert({ message: __("Choose the HU type"), indicator: "orange" }); return; }
       if (!bin && !parent) { frappe.show_alert({ message: __("Choose the storage bin"), indicator: "orange" }); return; }
       $btn.prop("disabled", true);
       try {
         const created = await frappe.call("frappe_wms.api.packing_center.create_hus", {
-          warehouse: this.warehouse, storage_bin: bin || undefined, parent_hu: parent || undefined, packaging_material: material || undefined,
-          hu_type: material ? undefined : hu_type || undefined, hu_number: $num.val() || undefined, quantity: $qty.val() || 1 }).then((r) => r.message);
+          warehouse: this.warehouse, storage_bin: bin || undefined, parent_hu: parent || undefined, hu_type, hu_number: $num.val() || undefined, quantity: $qty.val() || 1 }).then((r) => r.message);
         frappe.show_alert({ message: __("Created {0}", [created.map((h) => h.hu_number).join(", ")]), indicator: "green" });
         $num.val(""); refresh();
         await this.pack_show_new(created.map((h) => `hu:${h.name}`), created[0].current_bin);
@@ -1819,6 +1830,7 @@ class WMSMonitor {
   async pack_show_new(ids, bin) {
     if (!this.pack.sel_screen) this.pack.sel_screen = await this.selections.packing;
     if (bin && !this.pack.roots.includes(bin)) this.pack.extraBins.add(bin);
+    ids.forEach((id) => this.pack.extraHus.add(id.replace(/^hu:/, "")));
     this.pack.newIds = new Set(ids);
     await this.pack_reload(false);
     this.pack_open_path(ids);
@@ -2019,6 +2031,7 @@ class WMSMonitor {
     const destRow = kind === "hu" ? this.pack.byId.get(`hu:${name}`) : null;
     const destBin = kind === "bin" ? name : destRow && destRow.storage_bin;
     if (destBin && !this.pack.roots.includes(destBin)) this.pack.extraBins.add(destBin);
+    if (kind === "hu") this.pack.extraHus.add(name);
     this.pack.newIds = new Set();
     await this.pack_reload(false);
     this.pack.expanded.add(kind === "hu" ? `hu:${name}` : `bin:${name}`);

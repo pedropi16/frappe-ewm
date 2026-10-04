@@ -90,7 +90,7 @@ VIEWS = {
     "packing": {
         "doctype": "Storage Bin", "title": "Packing Center", "order_by": "`tabStorage Bin`.name asc",
         "labels": {"name": "Storage Bin"},
-        "selection": ["name", "work_center", "storage_type", "storage_section", "handling_unit", "hu_type", "packaging_material", "contains_product", "contains_batch",
+        "selection": ["name", "work_center", "storage_type", "storage_section", "handling_unit", "hu_type", "contains_product", "contains_batch",
                       "contains_serial", "outbound_delivery", "sales_order", "route", "wave"],
         "columns": ["name"],  # the tree's own columns are a catalog on the client; this only finds the bins
         "virtual": {
@@ -195,12 +195,31 @@ def execute_selection(view, warehouse, criteria=None, columns=None, max_hits=500
     frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
     if isinstance(columns, str):
         columns = json.loads(columns or "[]")
+    if isinstance(criteria, str):  # over HTTP the criteria arrive as JSON text
+        criteria = json.loads(criteria or "{}")
     fields = _valid_columns(spec, columns)
     rows = run_selection(spec["doctype"], criteria or {}, fields, base_filters={"warehouse": warehouse},
                          virtual=spec.get("virtual"), order_by=spec.get("order_by"), max_hits=max_hits, start=start)
     if view == "stock":
         _enrich_stock(rows)
-    return {"rows": rows, "start": cint(start), "max_hits": cint(max_hits) or 500, "truncated": len(rows) >= (cint(max_hits) or 500)}
+    out = {"rows": rows, "start": cint(start), "max_hits": cint(max_hits) or 500, "truncated": len(rows) >= (cint(max_hits) or 500)}
+    if view == "packing":
+        out["scope"] = _packing_scope(warehouse, criteria or {})
+    return out
+
+
+def _packing_scope(warehouse, criteria):
+    """What the Packing Center tree should show inside the bins that were found: only the Handling
+    Units (and stock lines) the search was actually about, not everything else in those bins."""
+    scope = {}
+    hu_crit = {"name": criteria["handling_unit"]} if criteria.get("handling_unit") else {}
+    hu_crit.update({k: criteria[k] for k in ("hu_type", "packaging_material") if criteria.get(k)})
+    if hu_crit:
+        scope["hus"] = [r.name for r in run_selection("Handling Unit", hu_crit, ["name"], base_filters={"warehouse": warehouse}, max_hits=5000)]
+    stock_crit = {dest: criteria[src] for src, dest in (("contains_product", "product"), ("contains_batch", "batch_no"), ("contains_serial", "serial_no")) if criteria.get(src)}
+    if stock_crit:
+        scope["balances"] = [r.name for r in run_selection("WMS Stock Balance", stock_crit, ["name"], base_filters={"warehouse": warehouse, "quantity": [">", 0]}, max_hits=20000)]
+    return scope or None
 
 
 ACTIVE_ALLOCATION = ("Allocated", "Partially Picked")

@@ -13,9 +13,10 @@ def _check(warehouse):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def packing_tree(warehouse, bins):
+def packing_tree(warehouse, bins, hus=None, balances=None, extra_hus=None):
     _check(warehouse)
-    return pc.packing_tree(warehouse, parse_json(bins, "bins"))
+    lists = [parse_json(x, "list") if x not in (None, "") else None for x in (hus, balances, extra_hus)]
+    return pc.packing_tree(warehouse, parse_json(bins, "bins"), *lists)
 
 
 @frappe.whitelist()

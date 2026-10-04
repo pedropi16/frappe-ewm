@@ -566,6 +566,7 @@ if (typeof frappe !== "undefined") (function () {
       } catch (e) { $res.html(`<div class="text-danger">${__("The selection failed - check the values entered.")}</div>`); this.openDialog(); return; }
       const res = r.message;
       this.lastRows = res.rows;
+      this.scope = res.scope || null; // a view may need to know what exactly was searched (Packing Center)
       this.fetchedColumns = columns;
       this.truncated = res.truncated;
       this.lastQuery = { wh, criteria, columns };

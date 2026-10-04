@@ -36,21 +36,52 @@ def _join(values, limit=3):
     return ", ".join(vals) if len(vals) <= limit else _("{0} values").format(len(vals))
 
 
-def packing_tree(warehouse, bins):
-    """The whole forest for the given bins as one DFS-ordered list of rows (bin, HU, product), each
+def packing_tree(warehouse, bins, hus=None, balances=None, extra_hus=None):
+    """The forest for the given bins as one DFS-ordered list of rows (section, bin, HU, product), each
     row carrying every column the Packing Center can show. Product rows group the balance lines of
-    one container by product / batch / stock type; their serial numbers stay in `lines`."""
+    one container by product / batch / stock type; their serial numbers stay in `lines`.
+
+    What is shown follows what was searched, so the tree stays clear: a search by bin shows
+    everything in the bin; a search by HU (`hus`) shows only those HUs with what is inside them; a
+    search by product / batch / serial (`balances`) shows only those stock lines and the HUs holding
+    them. `extra_hus` are HUs created or used in the Packing Center since the search - always shown.
+    """
     from frappe_wms.api.selection import _enrich_stock  # allocations (document / sales order) per balance row
     bins = list(dict.fromkeys(b for b in bins if b))[:MAX_BINS]
     if not bins:
         return {"rows": [], "truncated": False}
     bin_docs = {b.name: b for b in frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "name": ["in", bins]}, fields=BIN_FIELDS)}
     bins = [b for b in bins if b in bin_docs]
-    hus = frappe.get_all("Handling Unit", filters={"current_bin": ["in", bins]}, fields=HU_FIELDS, order_by="hu_number asc")
-    balances = frappe.get_all("WMS Stock Balance", filters={"storage_bin": ["in", bins], "quantity": [">", 0]}, fields=BALANCE_FIELDS,
-                              order_by="product asc", limit=MAX_BALANCE_ROWS + 1)
-    truncated = len(balances) > MAX_BALANCE_ROWS
-    balances = balances[:MAX_BALANCE_ROWS]
+    all_hus = frappe.get_all("Handling Unit", filters={"current_bin": ["in", bins]}, fields=HU_FIELDS, order_by="hu_number asc")
+    stock = frappe.get_all("WMS Stock Balance", filters={"storage_bin": ["in", bins], "quantity": [">", 0]}, fields=BALANCE_FIELDS,
+                           order_by="product asc", limit=MAX_BALANCE_ROWS + 1)
+    truncated = len(stock) > MAX_BALANCE_ROWS
+    stock = stock[:MAX_BALANCE_ROWS]
+    extra = set(extra_hus or [])
+    if hus is None and balances is None:
+        hus = all_hus  # a bin search: everything in the bin
+        loose_ok = True
+    else:
+        wanted = set(extra)
+        if hus is not None:
+            wanted |= set(hus)
+        if balances is not None:
+            wanted_lines = set(balances)
+            stock = [b for b in stock if b.name in wanted_lines or b.handling_unit in extra]
+            if hus is None:
+                wanted |= {b.handling_unit for b in stock if b.handling_unit}
+        # whatever is nested inside a wanted HU belongs to it
+        grew = True
+        while grew:
+            grew = False
+            for h in all_hus:
+                if h.name not in wanted and h.parent_hu in wanted:
+                    wanted.add(h.name)
+                    grew = True
+        hus = [h for h in all_hus if h.name in wanted]
+        loose_ok = balances is not None
+    shown = {h.name for h in hus}
+    balances = [b for b in stock if (b.handling_unit in shown) or (not b.handling_unit and loose_ok)]
     _enrich_stock(balances)
     names = list({b.product for b in balances})
     items = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", names]}, fields=["name", "item_name", "item_group", "country_of_origin"])} if names else {}
@@ -218,7 +249,7 @@ def create_hus(warehouse, storage_bin, packaging_material=None, hu_type=None, hu
     if packaging_material and not hu_type:
         hu_type = frappe.db.get_value("Packaging Material", packaging_material, "hu_type")
     if not hu_type:
-        frappe.throw(_("Choose a packing material (or an HU type)"))
+        frappe.throw(_("Choose the HU type"))
     generate = not hu_number and frappe.db.get_value("Handling Unit Type", hu_type, "numbering_mode") != "Internal"
     created = []
     for _i in range(quantity):
