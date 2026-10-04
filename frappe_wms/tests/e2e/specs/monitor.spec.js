@@ -98,7 +98,7 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   await product.locator("th.wms-grid-rowhead").click();
   await expect(page.locator(".wms-pc-side")).toContainText("Open form");
   if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/packing-details.png` });
-  await product.locator(".wms-row-grip").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
+  await product.locator(".wms-row-drag").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
   const qdialog = page.locator(".modal.show", { hasText: "Repack into" });
   await expect(qdialog).toBeVisible();
   await qdialog.locator("input").fill("2");

@@ -1,0 +1,22 @@
+[
+  {
+    "t": "2026-10-03T05:06:49.260Z",
+    "kind": "FLOW",
+    "msg": "Resumed already-logged-on session"
+  },
+  {
+    "t": "2026-10-03T05:06:50.052Z",
+    "kind": "INFO",
+    "msg": "1 loadable shipment(s) found on #/load"
+  },
+  {
+    "t": "2026-10-03T05:06:53.218Z",
+    "kind": "INFO",
+    "msg": "Departed shipment (SHIP-00000003)"
+  },
+  {
+    "t": "2026-10-03T05:06:53.954Z",
+    "kind": "INFO",
+    "msg": "0 delivery(ies) ready to ship on #/ship"
+  }
+]

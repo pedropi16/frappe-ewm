@@ -128,6 +128,8 @@ function ensure_monitor_styles() {
     .wms-grid-group { height:24px; width:110px; font-size:12px; padding:0 4px; }
     .wms-grid-treebar { display:none; align-items:center; gap:4px; }
     .wms-tree-nocaret { display:inline-block; width:22px; }
+    .wms-row-drag { cursor:grab; }
+    .wms-drag-image { position:absolute; top:-100px; padding:4px 10px; border-radius:6px; background:var(--primary,#3b82f6); color:#fff; font-size:12px; font-weight:600; }
     .wms-row-grip { cursor:grab; opacity:.5; font-size:10px; letter-spacing:-2px; margin-right:4px; }
     .wms-row-grip:hover { opacity:1; }
     .wms-grid-table tbody tr.wms-drop td { outline:2px dashed var(--primary,#3b82f6); outline-offset:-2px; background:var(--bg-light-blue,#eff6ff) !important; }
@@ -279,23 +281,33 @@ class DataGrid {
   _bindDrag() {
     if (!this.hier || !this.opts.onDrop) return;
     const rowOf = (el) => this._visRows[$(el).closest("tr").index()];
-    this.$table.find(".wms-row-grip").on("mousedown", (e) => e.stopPropagation())
-      .on("click", (e) => { // a plain click on the grip marks the row like a click on its number
-        const r = Number($(e.currentTarget).closest("th").data("r"));
-        if (this._selectedRowIndices().has(r)) return;
-        this.sels = [{ r0: r, r1: r, c0: 1, c1: this._maxC }]; this.anchor = { r, c: 1 };
+    const handles = this.$table.find(".wms-row-grip, .wms-row-drag");
+    const rowNo = (el) => $(el).closest("tr").index() + 1;
+    handles.on("mousedown", (e) => e.stopPropagation())
+      .on("click", (e) => { // a click on a handle marks the row (ctrl/cmd adds or removes it)
+        const r = rowNo(e.currentTarget), marked = this._selectedRowIndices(), rect = { r0: r, r1: r, c0: 1, c1: this._maxC };
+        if (e.ctrlKey || e.metaKey) {
+          const at = this.sels.findIndex((x) => this._sameRect(x, rect));
+          if (at >= 0) this.sels.splice(at, 1); else this.sels.push(rect);
+        } else if (marked.has(r) && marked.size === 1) return;
+        else this.sels = [rect];
+        this.anchor = { r, c: 1 };
         this._applyHighlight(); this._renderActionBar();
       })
       .on("dragstart", (e) => {
-        const r = Number($(e.currentTarget).closest("th").data("r"));
+        const r = rowNo(e.currentTarget);
         const marked = this._selectedRowIndices();
         let rows = (marked.has(r) ? Array.from(marked) : [r]).map((i) => this._visRows[i - 1]).filter((x) => x && (!this.opts.draggable || this.opts.draggable(x)));
         const ids = new Set(rows.map((x) => x.id));
         // a node whose ancestor travels as well goes along with that ancestor already
         rows = rows.filter((x) => { for (let p = x.pid; p; p = this.parentOf.get(p)) if (ids.has(p)) return false; return true; });
         this._dragRows = rows;
-        e.originalEvent.dataTransfer.effectAllowed = "move";
-        e.originalEvent.dataTransfer.setData("text/plain", rows.map((x) => x.name).join(", "));
+        const dt = e.originalEvent.dataTransfer;
+        dt.effectAllowed = "move";
+        dt.setData("text/plain", rows.map((x) => x.name).join(", "));
+        const $img = $(`<div class="wms-drag-image">${__("{0} row(s)", [rows.length])}</div>`).appendTo("body");
+        dt.setDragImage($img[0], 10, 10);
+        setTimeout(() => $img.remove(), 0);
       })
       .on("dragend", () => { this._dragRows = null; this.$table.find(".wms-drop").removeClass("wms-drop"); });
     this.$table.find("tbody tr")
@@ -477,6 +489,7 @@ class DataGrid {
           }
           if (this.hier && ci === 0) {
             const pad = this._flat ? 0 : (row.depth || 0) * 16;
+            if (this.opts.onDrop && (!this.opts.draggable || this.opts.draggable(row))) inner = `<span class="wms-row-drag" draggable="true" title="${__("Drag to repack")}">${inner}</span>`;
             inner = `<span style="display:inline-block;width:${pad}px"></span>${row.has_kids && !this._flat ? `<button type="button" class="wms-tree-caret" data-key="${frappe.utils.escape_html(row.id)}">${this.expanded.has(row.id) ? "&#9662;" : "&#9656;"}</button>` : `<span class="wms-tree-nocaret"></span>`}${inner}`;
           }
           return `<td class="wms-grid-cell${this.numeric.has(field) ? " wms-grid-num" : ""}" data-r="${ri + 1}" data-c="${ci + 1}">${inner}</td>`;
@@ -622,6 +635,7 @@ class DataGrid {
     let dragging = false, liveIndex = -1;
     this.$table.on("mousedown", "th, td", (e) => {
       if ($(e.currentTarget).closest("tfoot").length) return; // the totals row is not selectable data
+      if ($(e.target).closest(".wms-row-drag").length) return; // let the browser start a drag
       if ($(e.target).is("a, button, input, select, textarea, label")) return; // let interactive controls work normally, don't hijack them into a selection
       const $cell = $(e.currentTarget);
       const r = Number($cell.data("r")), c = Number($cell.data("c"));
