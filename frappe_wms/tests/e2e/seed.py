@@ -105,6 +105,7 @@ def cleanup():
     for dt in ("Handling Unit Event",):
         frappe.db.sql(f"delete from `tab{dt}` where handling_unit like 'E2EPC%%' or handling_unit like 'E2EH%%'")
     frappe.db.sql("delete from `tabHandling Unit` where hu_number like 'E2EPC%%' or hu_number like 'E2EH%%'")
+    frappe.db.sql("delete from `tabSerial No` where name like 'E2EPCSN%%'")
     for dt in ("Warehouse Task", "WMS Stock Ledger Entry", "WMS Stock Balance", "WMS Physical Inventory Count"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
@@ -155,5 +156,17 @@ def packing_stock():
         hus.append(name)
     post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": bin_, "handling_unit": hus[0], "stock_type": "AVAILABLE", "stock_uom": uom,
                    "quantity": 6, "movement_type": "701"}], "Storage Bin", bin_, f"e2e-pc:{frappe.generate_hash(length=8)}")
+    # a third HU holding three serial-numbered units
+    serial_item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_serial_no": 1}, limit=1, pluck="name")
+    if serial_item:
+        name = frappe.db.get_value("Handling Unit", {"hu_number": "E2EPC3"}) or frappe.get_doc({"doctype": "Handling Unit", "hu_number": "E2EPC3", "hu_type": "E2E-PAL",
+            "warehouse": WAREHOUSE, "current_bin": bin_, "status": "Open"}).insert(ignore_permissions=True).name
+        for n in range(3):
+            sn = f"E2EPCSN{n}"
+            if not frappe.db.exists("Serial No", sn):
+                frappe.get_doc({"doctype": "Serial No", "serial_no": sn, "item_code": serial_item[0]}).insert(ignore_permissions=True)
+            post_entries([{"warehouse": WAREHOUSE, "product": serial_item[0], "serial_no": sn, "storage_bin": bin_, "handling_unit": name, "stock_type": "AVAILABLE",
+                           "stock_uom": frappe.db.get_value("Item", serial_item[0], "stock_uom"), "quantity": 1, "movement_type": "701"}],
+                         "Storage Bin", bin_, f"e2e-pcsn:{n}:{frappe.generate_hash(length=8)}")
     frappe.db.commit()
     print("E2E_PACKING " + json.dumps({"hus": hus, "item": item}))

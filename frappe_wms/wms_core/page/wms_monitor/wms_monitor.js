@@ -85,6 +85,9 @@ function ensure_grid_styles() {
   ` }).appendTo("head");
 }
 
+// Rows being dragged out of one grid (the serial numbers list) onto another grid's rows (the Packing Center tree).
+let WMS_EXTERNAL_DRAG = null;
+
 let _monitor_styles_injected = false;
 function ensure_monitor_styles() {
   if (_monitor_styles_injected) return;
@@ -107,10 +110,23 @@ function ensure_monitor_styles() {
     .wms-pc-defbin { width:200px; display:inline-block; }
     .wms-pc-defbin .frappe-control, .wms-pc-defbin .form-group { margin:0; }
     .wms-pc-split { --wms-pc-side:380px; display:flex; align-items:flex-start; gap:0; }
-    .wms-pc-main { flex:1 1 0; min-width:0; }
+    .wms-pc-main { flex:1 1 0; min-width:0; max-width:100%; }
+    .wms-monitor { max-width:100%; overflow-x:clip; }
+    .wms-pc-side .frappe-control .awesomplete > ul { max-width:100%; }
     .wms-pc-resizer { flex:0 0 8px; align-self:stretch; min-height:200px; cursor:col-resize; margin:0 2px; border-radius:4px; background:linear-gradient(to right, transparent 3px, var(--border-color) 3px, var(--border-color) 5px, transparent 5px); }
     .wms-pc-resizer:hover { background:var(--primary,#3b82f6); opacity:.5; }
-    .wms-pc-side { flex:0 0 var(--wms-pc-side); width:var(--wms-pc-side); min-width:0; border:1px solid var(--border-color); border-radius:8px; background:var(--card-bg,#fff); max-height:calc(100vh - 230px); overflow:auto; }
+    .wms-pc { min-width:0; max-width:100%; }
+    .wms-pc-split { max-width:100%; }
+    .wms-pc-side { flex:0 1 var(--wms-pc-side); width:var(--wms-pc-side); max-width:60%; min-width:240px; display:flex; flex-direction:column; border:1px solid var(--border-color); border-radius:8px;
+      background:var(--card-bg,#fff); height:calc(100vh - 230px); overflow:hidden; }
+    .wms-pc-actions { flex:0 1 auto; max-height:56%; overflow:auto; min-height:90px; }
+    .wms-pc-info { flex:1 1 0; min-height:150px; overflow:auto; border-top:2px solid var(--border-color); }
+    .wms-pc-side .wms-grid-toolbar { padding:4px 6px; }
+    .wms-pc-side .wms-grid-layout-toggle, .wms-pc-side .wms-grid-layoutbar { display:none !important; }
+    .wms-grid-layoutbar { flex-wrap:wrap; max-width:100%; }
+    .wms-sn-list { max-height:150px; overflow:auto; border:1px solid var(--border-color); border-radius:4px; padding:4px 6px; }
+    .wms-sn-list label { display:block; margin:1px 0; font-weight:normal; font-size:12px; }
+    .wms-sn-links { font-size:11px; margin:2px 0; }
     .wms-pc-collapsed .wms-pc-side { display:none; }
     .wms-pc-tabs { overflow-x:auto; display:flex; border-bottom:1px solid var(--border-color); position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
     .wms-pc-tab { white-space:nowrap; padding:8px 10px; cursor:pointer; font-size:12.5px; color:var(--text-muted); border-bottom:2px solid transparent; }
@@ -118,7 +134,7 @@ function ensure_monitor_styles() {
     .wms-pc-pane { padding:10px 12px; }
     .wms-pc-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
     .wms-pc-sheet { grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); }
-    .wms-pc-form > div { margin-bottom:10px; }
+    .wms-pc-form > div { margin-bottom:5px; }
     .wms-pc-form label { font-size:12px; color:var(--text-muted); margin-bottom:2px; }
     .wms-pc-form .control-input-wrapper, .wms-pc-form .frappe-control { margin-bottom:0; }
     .wms-pc-pane .wms-grid-scroll { max-height:50vh; }
@@ -155,6 +171,8 @@ function ensure_monitor_styles() {
     .wms-grid-table tbody td.wms-grid-selected { background:rgba(59,130,246,.18) !important; }
     .wms-grid-actionbar { padding:2px 0; }
     .wms-grid-actionbar:empty { display:none; }
+    .wms-grid-actionbar { flex-wrap:wrap; max-width:100%; }
+    .wms-grid-toolbar > * { min-width:0; max-width:100%; }
     .wms-grid-table { margin-top:0 !important; }
     
     .wms-detail-panel { margin-top:14px; padding:10px 12px; border:1px solid var(--primary,#3b82f6); border-radius:10px; background:var(--card-bg,#fff); }
@@ -318,6 +336,31 @@ class DataGrid {
     });
   }
 
+  _bindDragOut() {
+    if (!this.opts.dragOut) return;
+    const rowNo = (el) => $(el).closest("tr").index() + 1;
+    this.$table.find(".wms-row-grip-out").on("mousedown", (e) => e.stopPropagation())
+      .on("click", (e) => {
+        const r = rowNo(e.currentTarget), marked = this._selectedRowIndices(), rect = { r0: r, r1: r, c0: 1, c1: this._maxC };
+        if (e.ctrlKey || e.metaKey) {
+          const at = this.sels.findIndex((x) => this._sameRect(x, rect));
+          if (at >= 0) this.sels.splice(at, 1); else this.sels.push(rect);
+        } else if (marked.has(r) && marked.size === 1) return;
+        else this.sels = [rect];
+        this.anchor = { r, c: 1 }; this._applyHighlight(); this._renderActionBar();
+      })
+      .on("dragstart", (e) => {
+        const r = rowNo(e.currentTarget), marked = this._selectedRowIndices();
+        const rows = (marked.has(r) ? Array.from(marked) : [r]).map((i) => this._visRows[i - 1]).filter(Boolean);
+        WMS_EXTERNAL_DRAG = this.opts.dragOut(rows);
+        const dt = e.originalEvent.dataTransfer;
+        dt.effectAllowed = "move"; dt.setData("text/plain", rows.map((x) => x.serial_no || x.name || "").join(", "));
+        const $img = $(`<div class="wms-drag-image">${__("{0} row(s)", [rows.length])}</div>`).appendTo("body");
+        dt.setDragImage($img[0], 10, 10); setTimeout(() => $img.remove(), 0);
+      })
+      .on("dragend", () => { WMS_EXTERNAL_DRAG = null; $(".wms-drop").removeClass("wms-drop"); });
+  }
+
   _bindDrag() {
     if (!this.hier || !this.opts.onDrop) return;
     const rowOf = (el) => this._visRows[$(el).closest("tr").index()];
@@ -349,13 +392,19 @@ class DataGrid {
     this.$table.find("tbody tr")
       .on("dragover", (e) => {
         const row = rowOf(e.currentTarget);
-        if (!this._dragRows || !row || (this.opts.droppable && !this.opts.droppable(row))) return;
+        if (!(this._dragRows || (WMS_EXTERNAL_DRAG && this.opts.onExternalDrop)) || !row || (this.opts.droppable && !this.opts.droppable(row))) return;
         e.preventDefault(); $(e.currentTarget).addClass("wms-drop");
       })
       .on("dragleave", (e) => $(e.currentTarget).removeClass("wms-drop"))
       .on("drop", (e) => {
         const row = rowOf(e.currentTarget), rows = this._dragRows;
         $(e.currentTarget).removeClass("wms-drop");
+        if (!rows && WMS_EXTERNAL_DRAG && this.opts.onExternalDrop && row && (!this.opts.droppable || this.opts.droppable(row))) {
+          e.preventDefault();
+          const payload = WMS_EXTERNAL_DRAG; WMS_EXTERNAL_DRAG = null;
+          this.opts.onExternalDrop(payload, row);
+          return;
+        }
         if (!rows || !row || (this.opts.droppable && !this.opts.droppable(row))) return;
         e.preventDefault(); this._dragRows = null;
         this.opts.onDrop(rows, row, { ask: false }); // left button: everything, no questions
@@ -503,7 +552,8 @@ class DataGrid {
       })
     ).join("");
     const body = rows.map((row, ri) => {
-      const grip = this.hier && this.opts.onDrop && (!this.opts.draggable || this.opts.draggable(row)) ? `<span class="wms-row-grip" draggable="true" title="${__("Drag to repack")}">&#8942;&#8942;</span>` : "";
+      const grip = this.hier && this.opts.onDrop && (!this.opts.draggable || this.opts.draggable(row)) ? `<span class="wms-row-grip" draggable="true" title="${__("Drag to repack")}">&#8942;&#8942;</span>`
+        : this.opts.dragOut ? `<span class="wms-row-grip wms-row-grip-out" draggable="true" title="${__("Drag the marked rows onto a Handling Unit to repack them")}">&#8942;&#8942;</span>` : "";
       const cells = [`<th class="wms-grid-rowhead" data-r="${ri + 1}" data-c="0">${grip}${ri + 1}</th>`].concat(
         this.columns.map(([field, , renderFn], ci) => {
           const raw = row[field];
@@ -550,6 +600,7 @@ class DataGrid {
     this.$el.find(".wms-grid-treebar").toggle(this.groupBy.length > 0 || this.hier);
     this._bindHeaderControls();
     this._bindDrag();
+    this._bindDragOut();
     this._applyHighlight();
     this._renderActionBar();
   }
@@ -822,7 +873,7 @@ class WMSMonitor {
     this.page = page;
     this.warehouse = null;
     this.view = "overview";
-    this.pack = { roots: [], extraBins: new Set(), extraHus: new Set(), scope: null, rows: [], expanded: new Set(), sel: [], tab: "create", newIds: new Set(), materials: null };
+    this.pack = { roots: [], extraBins: new Set(), extraHus: new Set(), scope: null, rows: [], expanded: new Set(), sel: [], tab: "create", infoTab: "details", newIds: new Set(), materials: null };
 
     this.$body = $(`
       <div class="wms-monitor">
@@ -1740,7 +1791,7 @@ class WMSMonitor {
       numeric: PACK_COLUMNS.filter((c) => c[2]).map((c) => c[0]), totalFilter: (r) => r.kind === "product",
       sort: sel.layout && sel.layout.sort, totals: sel.layout ? sel.layout.totals : false,
       layoutBar: sel.layoutBar(), onLayoutChange: (state) => sel.gridLayoutChanged(state),
-      draggable: (r) => r.kind === "hu" || r.kind === "product", droppable: (r) => r.kind !== "section", onDrop: (rows, target, opts) => this.pack_drop(rows, target, opts),
+      draggable: (r) => r.kind === "hu" || r.kind === "product", droppable: (r) => r.kind !== "section", onDrop: (rows, target, opts) => this.pack_drop(rows, target, opts), onExternalDrop: (payload, target) => this.pack_serials_drop(payload, target),
       onSelect: (rows) => this.pack_selected(rows), rowClass: (r) => (this.pack.newIds.has(r.id) ? "wms-pc-new" : ""),
       actions: this.pack_actions(),
     });
@@ -1758,21 +1809,29 @@ class WMSMonitor {
   pack_render_side() {
     const $side = this.$body.find(".wms-pc-side");
     if (!$side.length) return;
-    if (!$side.find(".wms-pc-tabs").length) {
-      $side.html(["details", "serials", "create", "repack_hu", "repack_product", "difference"].map((k) => `<div class="wms-pc-pane" data-pane="${k}"></div>`).join("").replace(/^/, `<div class="wms-pc-tabs"></div>`));
+    const pane = (k) => `<div class="wms-pc-pane" data-pane="${k}"></div>`;
+    if (!$side.find(".wms-pc-actions").length) {
+      $side.html(`<div class="wms-pc-actions"><div class="wms-pc-tabs"></div>${["create", "repack_hu", "repack_product", "difference"].map(pane).join("")}</div>
+        <div class="wms-pc-info"><div class="wms-pc-tabs"></div>${["details", "serials"].map(pane).join("")}</div>`);
       this.pack_build_create($side.find('[data-pane="create"]'));
       this.pack_build_repack_hu($side.find('[data-pane="repack_hu"]'));
       this.pack_build_repack_product($side.find('[data-pane="repack_product"]'));
       this.pack_build_difference($side.find('[data-pane="difference"]'));
     }
-    const tabs = [["create", __("Create HU")], ["repack_hu", __("Repack HU")], ["repack_product", __("Repack Product")], ["difference", __("Difference")],
-      ["details", __("Details")], ["serials", __("Serial Numbers")]];
-    $side.find(".wms-pc-tabs").html(tabs.map(([k, l]) => `<span class="wms-pc-tab ${this.pack.tab === k ? "active" : ""}" data-tab="${k}">${l}</span>`).join(""))
-      .find(".wms-pc-tab").on("click", (e) => { this.pack.tab = e.currentTarget.dataset.tab; this.pack_render_side(); });
-    $side.find(".wms-pc-pane").each((_, el) => $(el).toggle(el.dataset.pane === this.pack.tab));
-    if (this.pack.tab === "details") this.pack_render_details($side.find('[data-pane="details"]').empty());
-    else if (this.pack.tab === "serials") this.pack_render_serials($side.find('[data-pane="serials"]').empty());
-    else if (this.pack.tab === "repack_hu") this.pack_refresh_repack_hu();
+    const groups = [
+      [".wms-pc-actions", "tab", [["create", __("Create HU")], ["repack_hu", __("Repack HU")], ["repack_product", __("Repack Product")], ["difference", __("Difference")]]],
+      [".wms-pc-info", "infoTab", [["details", __("Details")], ["serials", __("Serial Numbers")]]],
+    ];
+    groups.forEach(([sel, key, tabs]) => {
+      const $g = $side.find(sel);
+      $g.children(".wms-pc-tabs").html(tabs.map(([k, l]) => `<span class="wms-pc-tab ${this.pack[key] === k ? "active" : ""}" data-tab="${k}">${l}</span>`).join(""))
+        .find(".wms-pc-tab").on("click", (e) => { this.pack[key] = e.currentTarget.dataset.tab; this.pack_render_side(); });
+      $g.children(".wms-pc-pane").each((_, el) => $(el).toggle(el.dataset.pane === this.pack[key]));
+    });
+    // the information below follows the marked rows; the form above only refreshes its list of marked rows
+    if (this.pack.infoTab === "serials") this.pack_render_serials($side.find('[data-pane="serials"]').empty());
+    else this.pack_render_details($side.find('[data-pane="details"]').empty());
+    if (this.pack.tab === "repack_hu") this.pack_refresh_repack_hu();
     else if (this.pack.tab === "repack_product") this.pack_refresh_repack_product();
     else if (this.pack.tab === "difference") this.pack_refresh_difference();
     else this.pack_prefill_create();
@@ -1807,21 +1866,52 @@ class WMSMonitor {
     $pane.append(`<div class="text-muted" style="margin-top:8px;font-size:12px;">${esc(rows.slice(0, 40).map((r) => r.name).join(", "))}${rows.length > 40 ? " …" : ""}</div>`);
   }
 
-  // Every serial number inside the marked rows (a bin or HU brings everything beneath it).
-  pack_render_serials($pane) {
+  // The serial lines inside the marked rows (a bin or HU brings everything beneath it).
+  pack_serial_lines() {
     const lines = new Set();
     const collect = (r) => { if (r.kind === "product") r.lines.forEach((l) => lines.add(l)); else (this.pack.children.get(r.id) || []).forEach(collect); };
     this.pack.sel.forEach(collect);
-    const serial = Array.from(lines).filter((l) => l.serial_no).map((l) => ({ ...l, handling_unit: l.source_hu, storage_bin: l.source_bin }));
+    return Array.from(lines).filter((l) => l.serial_no).map((l) => ({ ...l, handling_unit: l.source_hu, storage_bin: l.source_bin }));
+  }
+
+  // Serial-numbered stock is repacked by serial number: filter, mark several, drag them onto an HU in
+  // the tree (or Move to...) - a bare quantity would not say which serial numbers moved.
+  pack_render_serials($pane) {
+    const serial = this.pack_serial_lines();
     if (!this.pack.sel.length) { $pane.html(`<div class="text-muted">${__("Mark rows in the tree to list their serial numbers.")}</div>`); return; }
     if (!serial.length) { $pane.html(`<div class="text-muted">${__("No serial-numbered stock in the marked rows.")}</div>`); return; }
-    $pane.append(`<div class="wms-pc-head"><b>${__("{0} serial number(s)", [serial.length])}</b></div>`);
+    $pane.append(`<div class="wms-pc-head"><b>${__("{0} serial number(s)", [serial.length])}</b>
+      <span class="text-muted" style="font-size:12px;">${__("Mark serial numbers, then drag them by ⋮⋮ onto a Handling Unit in the tree, or use Move to…")}</span></div>`);
     $pane.find(".wms-pc-head").append(this.copy_btn(serial.map((l) => l.serial_no).join("\n")));
     $pane.append(this.render_table(serial, [
       ["serial_no", __("Serial No"), this.link_cell("Serial No", "serial_no")], ["product", __("Product"), this.link_cell("Item", "product")], ["batch_no", __("Batch")],
       ["handling_unit", __("Handling Unit"), this.hu_link_cell("handling_unit")], ["storage_bin", __("Storage Bin"), this.link_cell("Storage Bin", "storage_bin")],
       ["first_receipt_date", __("GR Date / Time"), (r) => frappe.utils.escape_html(String(r.first_receipt_date || "").slice(0, 16))],
-    ], null, { noGroup: true, exportName: "packing-serials" }));
+    ], null, {
+      noGroup: true, exportName: "packing-serials", dragOut: (rows) => ({ serials: rows }),
+      actions: [
+        { label: __("Move to…"), kind: "primary", run: (rows) => this.pack_dest_dialog(__("Move {0} serial number(s) to…", [rows.length]), (kind, name) => this.pack_move_lines(rows, kind, name)) },
+        { label: __("Missing"), kind: "danger", confirm: (rows) => __("Move {0} missing serial number(s) to the difference bin?", [rows.length]),
+          run: (rows) => this.pack_post_differences(rows.map((l) => ({ label: l.serial_no, lines: [{ ...l, quantity: 1 }] })), "") },
+      ],
+    }));
+  }
+
+  pack_serials_drop(payload, target) {
+    const dest = this.pack_dest_of(target);
+    return this.pack_move_lines(payload.serials, dest.kind, dest.name);
+  }
+
+  pack_move_lines(lines, kind, name) {
+    return this.pack_run_move([{ kind: "stock", label: __("{0} serial number(s)", [lines.length]), lines: lines.map((l) => ({ ...l, quantity: 1 })) }], kind, name);
+  }
+
+  async pack_post_differences(items, remarks) {
+    const res = await frappe.call("frappe_wms.api.packing_center.post_differences", { warehouse: this.warehouse, items: JSON.stringify(items),
+      remarks: remarks || undefined, idempotency_key: `PCD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }).then((r) => r.message);
+    frappe.show_alert({ message: __("Posted {0} difference(s)", [res.posted]), indicator: res.errors.length ? "orange" : "green" });
+    if (res.errors.length) frappe.msgprint({ title: __("Not posted"), indicator: "orange", message: res.errors.map((e) => `<b>${frappe.utils.escape_html(e.item)}</b>: ${frappe.utils.escape_html(e.error)}`).join("<br>") });
+    await this.pack_reload(false);
   }
 
   // ---- creating Handling Units: packing material, number (empty = generated), bin, amount ----
@@ -1936,8 +2026,9 @@ class WMSMonitor {
     if (!rows.length) return `<div class="text-muted">${__("Mark product lines in the tree.")}</div>`;
     return `<table class="table table-sm"><thead><tr><th>${__("Product")}</th><th>${__("In")}</th><th style="text-align:right;">${esc(label)}</th></tr></thead><tbody>
       ${rows.map((r, i) => `<tr><td>${esc(r.product)}<div class="text-muted" style="font-size:11px;">${esc(r.batch_no || "")} ${esc(r.stock_type || "")}</div></td><td>${esc(r.handling_unit || r.storage_bin || "")}</td>
-        <td style="text-align:right;white-space:nowrap;"><input type="number" class="form-control input-sm wms-pc-q" style="width:90px;display:inline-block;" data-i="${i}" min="0" max="${r.quantity}"
-          step="${r.serial_count ? 1 : "any"}" value="${blank ? "" : r.quantity}"> / ${r.quantity} ${esc(r.stock_uom || "")}</td></tr>`).join("")}</tbody></table>`;
+        <td style="text-align:right;white-space:nowrap;">${r.serial_count
+          ? `<span class="text-muted" style="font-size:11px;white-space:normal;">${blank ? __("{0} serial numbers - mark the missing ones under Serial Numbers › Missing", [r.serial_count]) : __("all {0} serial numbers - to repack only some, use Serial Numbers", [r.serial_count])}</span>`
+          : `<input type="number" class="form-control input-sm wms-pc-q" style="width:90px;display:inline-block;" data-i="${i}" min="0" max="${r.quantity}" step="any" value="${blank ? "" : r.quantity}"> / ${r.quantity} ${esc(r.stock_uom || "")}`}</td></tr>`).join("")}</tbody></table>`;
   }
 
   pack_read_qtys($pane, rows, requireAll) {
@@ -1946,9 +2037,10 @@ class WMSMonitor {
     $pane.find(".wms-pc-q").each((_, el) => {
       const row = rows[Number(el.dataset.i)], q = parseFloat(el.value);
       if (!el.value && !requireAll) return;
-      if (!(q > 0) || q > flt(row.quantity) + 1e-9 || (row.serial_count && q !== Math.floor(q))) bad = true; else out.set(row.id, q);
+      if (!(q > 0) || q > flt(row.quantity) + 1e-9) bad = true; else out.set(row.id, q);
     });
-    if (bad) { frappe.show_alert({ message: __("Enter a quantity above 0, at most what is there (whole numbers for serial numbers)"), indicator: "orange" }); return null; }
+    if (bad) { frappe.show_alert({ message: __("Enter a quantity above 0, at most what is there"), indicator: "orange" }); return null; }
+    if (requireAll) rows.forEach((r) => { if (r.serial_count) out.set(r.id, flt(r.quantity)); }); // serial lines: all of them
     return out;
   }
 
@@ -1983,11 +2075,7 @@ class WMSMonitor {
       if (!qtys.size) { frappe.show_alert({ message: __("Enter the missing quantity of at least one line"), indicator: "orange" }); return; }
       frappe.confirm(__("Move the missing quantity of {0} line(s) to the difference bin?", [qtys.size]), async () => {
         const items = rows.filter((r) => qtys.has(r.id)).map((r) => ({ label: r.product, lines: this.pack_take(r, qtys.get(r.id)) }));
-        const res = await frappe.call("frappe_wms.api.packing_center.post_differences", { warehouse: this.warehouse, items: JSON.stringify(items),
-          remarks: $pane.find(".wms-pc-remarks").val() || undefined, idempotency_key: `PCD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }).then((r) => r.message);
-        frappe.show_alert({ message: __("Posted {0} difference(s)", [res.posted]), indicator: res.errors.length ? "orange" : "green" });
-        if (res.errors.length) frappe.msgprint({ title: __("Not posted"), indicator: "orange", message: res.errors.map((e) => `<b>${frappe.utils.escape_html(e.item)}</b>: ${frappe.utils.escape_html(e.error)}`).join("<br>") });
-        await this.pack_reload(false);
+        await this.pack_post_differences(items, $pane.find(".wms-pc-remarks").val());
       });
     });
   }
@@ -2011,8 +2099,12 @@ class WMSMonitor {
   }
 
   pack_move_dialog(rows) {
+    this.pack_dest_dialog(__("Move {0} row(s) to…", [rows.length]), (kind, name) => this.pack_move(rows, kind, name));
+  }
+
+  pack_dest_dialog(title, onPick) {
     const d = new frappe.ui.Dialog({
-      title: __("Move {0} row(s) to…", [rows.length]),
+      title,
       fields: [
         { fieldname: "kind", fieldtype: "Select", label: __("Destination"), options: "Handling Unit\nStorage Bin", default: "Handling Unit" },
         { fieldname: "hu", fieldtype: "Link", options: "Handling Unit", label: __("Handling Unit"), depends_on: "eval:doc.kind=='Handling Unit'", get_query: () => ({ filters: { warehouse: this.warehouse } }) },
@@ -2023,13 +2115,14 @@ class WMSMonitor {
         const name = v.kind === "Handling Unit" ? v.hu : v.bin;
         if (!name) { frappe.show_alert({ message: __("Choose the destination"), indicator: "orange" }); return; }
         d.hide();
-        this.pack_move(rows, v.kind === "Handling Unit" ? "hu" : "bin", name);
+        onPick(v.kind === "Handling Unit" ? "hu" : "bin", name);
       },
     });
     d.show();
   }
 
-  // Partial quantities: each product line to be moved asks how much (all of it by default).
+  // Partial quantities: each product line asks how much (all of it by default). A serial-numbered
+  // line asks WHICH serial numbers instead - a bare quantity would not say which ones moved.
   pack_ask_quantities(stockRows, destName) {
     return new Promise((resolve) => {
       let done = false;
@@ -2039,24 +2132,45 @@ class WMSMonitor {
         primary_action: () => {
           const out = new Map();
           let bad = false;
-          $(d.fields_dict.body.wrapper).find("input").each((_, el) => {
+          const $b = $(d.fields_dict.body.wrapper);
+          $b.find("input.wms-pc-q").each((_, el) => {
             const row = stockRows[Number(el.dataset.i)], q = parseFloat(el.value);
-            if (!(q > 0) || q > flt(row.quantity) + 1e-9 || (row.serial_count && q !== Math.floor(q))) bad = true; else out.set(row.id, q);
+            if (!(q > 0) || q > flt(row.quantity) + 1e-9) bad = true; else out.set(row.id, q);
           });
-          if (bad) { frappe.show_alert({ message: __("Enter a quantity above 0, at most what is there (whole numbers for serial numbers)"), indicator: "orange" }); return; }
+          $b.find(".wms-sn-pick").each((_, el) => {
+            const row = stockRows[Number(el.dataset.i)];
+            const lines = $(el).find("input[type=checkbox]:checked").map((_, c) => row.lines[Number(c.dataset.k)]).get();
+            if (!lines.length) bad = true; else out.set(row.id, { lines });
+          });
+          if (bad) { frappe.show_alert({ message: __("Enter a quantity above 0, at most what is there - and choose at least one serial number for serial-numbered lines"), indicator: "orange" }); return; }
           done = true; d.hide(); resolve(out);
         },
       });
       d.onhide = () => { if (!done) resolve(null); };
-      $(d.fields_dict.body.wrapper).html(`<table class="table table-sm"><thead><tr><th>${__("Product")}</th><th>${__("From")}</th><th>${__("Batch")}</th><th>${__("Stock Type")}</th><th style="text-align:right;">${__("Quantity")}</th></tr></thead><tbody>
-        ${stockRows.map((r, i) => `<tr><td>${esc(r.product)}</td><td>${esc(r.handling_unit || r.storage_bin || "")}</td><td>${esc(r.batch_no || "")}</td><td>${esc(r.stock_type || "")}</td>
-          <td style="text-align:right;white-space:nowrap;"><input type="number" class="form-control input-sm" style="width:100px;display:inline-block;" data-i="${i}" min="0" max="${r.quantity}" step="${r.serial_count ? 1 : "any"}" value="${r.quantity}"> / ${r.quantity} ${esc(r.stock_uom || "")}</td></tr>`).join("")}</tbody></table>`);
+      const cell = (r, i) => r.serial_count
+        ? `<div class="wms-sn-pick" data-i="${i}"><div class="text-muted" style="font-size:11px;">${__("Choose the serial numbers to repack")}</div>
+            <input class="form-control input-sm wms-sn-filter" placeholder="${__("Filter serial numbers")}" style="margin:2px 0;">
+            <div class="wms-sn-links"><a href="#" class="wms-sn-all">${__("all")}</a> · <a href="#" class="wms-sn-none">${__("none")}</a> · <span class="wms-sn-count"></span></div>
+            <div class="wms-sn-list">${r.lines.map((l, k) => `<label><input type="checkbox" data-k="${k}" data-sn="${esc(l.serial_no || "")}" checked> ${esc(l.serial_no || "")}</label>`).join("")}</div></div>`
+        : `<input type="number" class="form-control input-sm wms-pc-q" style="width:100px;display:inline-block;" data-i="${i}" min="0" max="${r.quantity}" step="any" value="${r.quantity}"> / ${r.quantity} ${esc(r.stock_uom || "")}`;
+      const $b = $(d.fields_dict.body.wrapper);
+      $b.html(`<table class="table table-sm"><thead><tr><th>${__("Product")}</th><th>${__("From")}</th><th>${__("Batch")}</th><th>${__("Stock Type")}</th><th>${__("Quantity")}</th></tr></thead><tbody>
+        ${stockRows.map((r, i) => `<tr><td>${esc(r.product)}</td><td>${esc(r.handling_unit || r.storage_bin || "")}</td><td>${esc(r.batch_no || "")}</td><td>${esc(r.stock_type || "")}</td><td style="min-width:220px;">${cell(r, i)}</td></tr>`).join("")}</tbody></table>`);
+      $b.find(".wms-sn-pick").each((_, el) => {
+        const $p = $(el), count = () => $p.find(".wms-sn-count").text(__("{0} chosen", [$p.find("input[type=checkbox]:checked").length]));
+        count();
+        $p.find(".wms-sn-filter").on("input", (e) => { const q = e.target.value.toLowerCase(); $p.find("label").each((_, l) => $(l).toggle(!q || String($(l).find("input").data("sn")).toLowerCase().includes(q))); });
+        $p.find(".wms-sn-all").on("click", (e) => { e.preventDefault(); $p.find("label:visible input").prop("checked", true); count(); });
+        $p.find(".wms-sn-none").on("click", (e) => { e.preventDefault(); $p.find("label:visible input").prop("checked", false); count(); });
+        $p.on("change", "input[type=checkbox]", count);
+      });
       d.show();
     });
   }
 
   // `quantity` of a product row, taken from its stock lines one after the other.
   pack_take(row, quantity) {
+    if (quantity && quantity.lines) return quantity.lines.map((l) => ({ ...l, quantity: flt(l.quantity) }));
     let need = quantity, out = [];
     for (const ln of row.lines) {
       if (need <= 1e-9) break;
@@ -2075,6 +2189,10 @@ class WMSMonitor {
     if (stockRows.length) { qtys = presetQtys || await this.pack_ask_quantities(stockRows, name); if (!qtys) return; }
     const items = rows.map((r) => r.kind === "hu" ? { kind: "hu", name: r.handling_unit, label: r.name }
       : { kind: "stock", label: r.product, lines: this.pack_take(r, qtys.get(r.id)) });
+    return this.pack_run_move(items, kind, name);
+  }
+
+  async pack_run_move(items, kind, name) {
     const res = await frappe.call("frappe_wms.api.packing_center.move_nodes", {
       warehouse: this.warehouse, items: JSON.stringify(items), destination_kind: kind, destination: name,
       idempotency_key: `PC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }).then((r) => r.message);

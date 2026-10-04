@@ -83,7 +83,7 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
   const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
   await expect(dialog).toBeVisible();
-  await dialog.locator(".wms-sel-row[data-field='name'] .wms-sel-from").fill(`${s.warehouse}-A1`);
+  await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC1;E2EPC2");
   await dialog.getByRole("button", { name: /Execute/ }).click();
   await expect(dialog).toBeHidden();
 
@@ -148,5 +148,51 @@ test("packing center: an HU search shows only that HU", async ({ page }) => {
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toHaveCount(1);
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-hu")).toContainText("E2EPC1");
   await expect(page.locator(".wms-pc-grid tbody tr.wms-hier-product")).toHaveCount(1); // its contents, nothing else from the bin
+  bench("cleanup");
+});
+
+test("packing center: serial numbers are repacked by serial, and nothing runs off screen", async ({ page }) => {
+  const s = seed();
+  bench("cleanup"); bench("packing_stock");
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
+  await page.goto("/app/wms-monitor");
+  await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
+  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
+  const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
+  await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC3;E2EPC2");
+  await dialog.getByRole("button", { name: /Execute/ }).click();
+  const products = page.locator(".wms-pc-grid tbody tr.wms-hier-product");
+  await expect(products).toHaveCount(1);
+
+  // the panel does not run off the right edge, and the details are visible under the forms
+  const right = await page.locator(".wms-pc-side").evaluate((el) => el.getBoundingClientRect().right);
+  expect(right).toBeLessThanOrEqual(1100);
+  await products.locator(".wms-row-drag").click();
+  await expect(page.locator(".wms-pc-info")).toContainText("Open form");
+  await expect(page.locator(".wms-pc-actions")).toContainText("Create HU");
+
+  // serial numbers: filter, mark two, drag them onto E2EPC2
+  await page.locator(".wms-pc-info .wms-pc-tab", { hasText: "Serial Numbers" }).click();
+  const serials = page.locator(".wms-pc-info tbody tr");
+  await expect(serials).toHaveCount(3);
+  await serials.nth(0).locator("th.wms-grid-rowhead").click();
+  await serials.nth(1).locator("th.wms-grid-rowhead").click({ modifiers: ["Control"] });
+  await serials.nth(0).locator(".wms-row-grip-out").dragTo(page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }));
+  await expect(page.getByText("Moved 1 of 1")).toBeVisible();
+  await page.locator(".wms-pc-grid tbody tr.wms-hier-product").first().locator(".wms-row-drag").click(); // E2EPC2 now holds 2
+  await expect(page.locator(".wms-pc-info")).toContainText("2 serial number(s)");
+
+  // a right-button drag of a serial-numbered line asks WHICH serial numbers, not how many
+  const last = page.locator(".wms-pc-grid tbody tr.wms-hier-product").last().locator(".wms-row-drag");
+  await last.click();
+  const from = await last.boundingBox();
+  const to = await page.locator(".wms-pc-grid tbody tr.wms-hier-hu", { hasText: "E2EPC2" }).boundingBox();
+  await page.mouse.move(from.x + 8, from.y + 8);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(to.x + 60, to.y + 8, { steps: 8 });
+  await page.mouse.up({ button: "right" });
+  await expect(page.locator(".modal.show .wms-sn-pick")).toBeVisible();
+  await expect(page.locator(".modal.show input.wms-pc-q")).toHaveCount(0);
   bench("cleanup");
 });
