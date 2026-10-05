@@ -1,6 +1,6 @@
 # Frappe EWM → SAP EWM parity: gap analysis & roadmap
 
-2026-09-21 · @Someone · updated 2026-09-22
+2026-09-21 · @Someone · updated 2026-10-05
 
 frappe\_wms already has SAP EWM's backbone (ledger, bins, handling units, warehouse tasks and orders, RF app, monitor), so reaching EWM Basic parity is about 14–18 developer-weeks of hardening and rule engines rather than a rewrite. The first priority is eight defects that let WMS and ERPNext drift apart or leave configured rules unenforced; advanced features (waves, cross-docking, yard, labor, slotting, MFS) follow as optional phases.
 
@@ -449,6 +449,68 @@ The user reported seeing two tiles on the ERPNext desk for this app — one labe
 Root cause, confirmed by reading Frappe core (`frappe/desk/doctype/desktop_icon/desktop_icon.py`): every app install fires `frappe.hooks.after_app_install -> auto_generate_icons_and_sidebar() -> create_desktop_icons()`, which does two things — `create_desktop_icons_from_installed_apps()` makes an `App`-type icon from `add_to_apps_screen`/`app_title` ("Frappe WMS", with our real logo via `app_logo_url`), and `create_desktop_icons_from_workspace()` makes a `Link`-type icon per public Workspace (ours is named "WMS"). Frappe's own de-dup for this only fires when a Workspace's name equals `app_title` exactly (it then hides the redundant workspace-derived icon and keeps the App-derived one, logo and all) — ours never matched ("WMS" vs "Frappe WMS"), so both were created, and a manually-created third icon in `install.py`'s `after_install` (from the earlier pass that first added desktop-icon support) only added to the confusion rather than fixing it. Fix: `app_title` changed to `"WMS"` (matching the Workspace's own name — the only string the user actually wants to see), and the manual Desktop Icon creation in `install.py` removed entirely, letting Frappe's own now-correctly-matching mechanism produce exactly one icon. Verified on `wms.local` by deleting both stale icons and re-running `auto_generate_icons_and_sidebar()` — exactly one `Desktop Icon` record survives, `icon_type=App`, `logo_url` set, `link=/app/wms`.
 
 **A second, much bigger bug turned up investigating "the icon isn't rendering" on the production Docker stack** (`erp.pinohomelab.duckdns.org`): `bench build` always *symlinks* `sites/assets/<app> -> apps/<app>/<app>/public` rather than copying (standard Frappe behavior, fine on a single-filesystem bench) — but in this stack, `sites/assets` is itself a symlink to a **per-container-local**, non-shared `/home/frappe/frappe-bench/assets/` directory that each container's entrypoint links independently from its *own* `apps/` folder at startup. `frappe_wms` had only ever been deployed (via `bench get-app` + `pip install -e`) into the Python-running containers (backend/queue-short/queue-long/scheduler) — never into `frappe-frontend-1`, the nginx container that actually serves every `/assets/*` request. The result: **every** `/assets/frappe_wms/*` URL 404'd from nginx's perspective, including `app_include_js`/`app_include_css`'s `frappe_wms.js`/`frappe_wms.css` — loaded on *every single desk page* — not just the desktop icon's logo image. This means the app's entire custom desk-side JS layer (the Warehouse Order Put On Hold/Resume buttons, `frappe_wms.set_warehouse_filters`, every `doctype_js` override) had never actually executed in a real browser against production. Fixed by replicating `apps/frappe_wms` into `frappe-frontend-1` too (`pip install -e` + `bench build --app frappe_wms`, same as the other containers) and restarting it — confirmed `/assets/frappe_wms/{images/wms-logo.svg,js/frappe_wms.js,css/frappe_wms.css}` all now return 200 through nginx. Worth remembering for any future container added to this stack: it needs the same `apps/frappe_wms` replication as the Python containers, even if it never runs Python itself, purely so its own local asset-symlink chain resolves.
+
+## Comparison with the SAP EWM architecture reference (2026-10-05)
+
+Compared against the SAP EWM technical architecture reference (enterprise structure, topography, quants, HUM, documents/PPF,
+WPT and storage control, strategies, waves, WT/WO/WOCR, queues/resources, yard, VAS/QIE/PI/cross-docking, integration, monitor,
+production integration, tables, BAdIs, exceptions, labor, MFS, work centers, analytics). Status: **Done** (equivalent exists),
+**Partial** (exists, simpler than SAP), **Gap** (missing), **n/a** (out of scope here). Implementation order: [docs/ewm-parity-plan.md](docs/ewm-parity-plan.md).
+
+Shipped since P4 and not in the sprint notes above: Production Supply Area + Production Material Request (PMR from the Work Order,
+single-/cross-order staging, backflushed consumption, desktop Production Staging page, automatic staging per PSA); Work Center
+locations; Bin Type as size class with HU-type fit by size; Storage Group; Layout Storage Control (intermediate bin, second leg
+created on confirmation); configurable Handling Indicators (required storage group, do-not-unpack); a security/concurrency/workflow
+audit (locking recomputes, atomic quantity updates, HU-source rule enforced over HTTP, role gates).
+
+| # | SAP topic | Status | In frappe_wms / what is missing |
+| --- | --- | --- | --- |
+| 1.1 | Enterprise mapping: warehouse number, plant/storage location, PETD, owner | Partial | WMS Warehouse = ERPNext company/warehouse. **Gap:** no Party Entitled to Dispose / Owner dimension on stock (single owner; also blocks 3PL billing per owner). |
+| 1.2 | Supply Chain Unit (time zone, address, hours) | n/a | Not needed single-site. |
+| 1.3 | Product master: global, warehouse, putaway, removal, slotting views | Partial | WMS Product (+ per-warehouse row): serial/batch control, shelf life, default HU type, preferred storage type, full HU qty, weight/volume, ABC, handling indicators. **Gap:** Putaway Control Indicator, Stock Removal Control Indicator, Storage Section Indicator, HU-type-check indicator, max quantity per storage type, two-step-picking flag, velocity code, warehouse product group, nesting factor. |
+| 1.4 | Packaging specification (levels, elements, condition technique) | Partial | Packaging Spec with levels (HU type, packaging material, quantity). **Gap:** condition technique (product + customer/vendor), work center instructions per level. |
+| 2.1 | Storage type: role, putaway/removal strategy, HU requirement, capacity method, mixing | Partial | Roles (10), mixing flags, capacity None/HU count/weight/volume. **Gap:** HU requirement is a yes/no flag (SAP: forbidden/optional/mandatory); capacity by max quantity / bin-type capability / key figure; putaway and removal strategy as storage-type defaults (here only on rules); identification-point role. |
+| 2.2 | Storage section, bin type, HU-type check | Done | Section; Bin Type (size, weight, volume, max HUs); HU type fits bin type by size; bin inherits capacity from its type. |
+| 2.3 | Storage bin: coordinates, aisle/stack/level, capacity, verification, blocks | Partial | Aisle/rack/level/position, capacity, check digits, putaway/removal/inventory blocks, storage group. **Gap:** X/Y/Z coordinates, access type, fire containment section, reason code for a block. |
+| 2.4 | Activity area and bin sorting per activity (PICK/PUTW/PHYS) | Partial | Activity Area links to bins; one bin `sequence` serves all activities. **Gap:** a sort sequence per area and activity; walk-path ordering of tasks in a Warehouse Order. |
+| 3.1 | Quant (product, batch, stock type, PETD, owner, valuation, GR date, SLED, country, QI ref) | Partial | WMS Stock Balance: product, batch, serial, HU, bin, stock type, quantity, allocated, GR date, SLED. **Gap:** owner/PETD, valuation type, country of origin. |
+| 3.2 | Stock types and availability groups, posting change to ERP | Done | Configurable WMS Stock Type with availability category; stock-type change mirrors to ERPNext (Inventory Dimension Stock Entry). |
+| 4.1 | Handling unit: nesting, SSCC, packaging material, weights, volumes, status | Partial | Nested HU, SSCC, packaging material, tare/gross/net, volume, statuses, events. **Gap:** HU outer dimensions and max payload, HU type group, Planned/In-Transit statuses, HU at a resource or transport unit. |
+| 4.2 | HU type check | Done | See 2.2. |
+| 5.1 | Document hierarchy (request, order, final delivery) | Partial | Inbound/Outbound Delivery replicate ERPNext documents (one level), Goods Receipt/Issue post. **Gap:** the request / order / final-order split. |
+| 5.2 | Document types (number range, status profile, field control, PPF profile) | Gap | Fixed document model; number ranges only. |
+| 5.3 | Post Processing Framework | Partial | Print Determination Rule + spool; scheduler jobs; ERP sync queue. **Gap:** general condition/action framework (create tasks, send notifications, EDI). |
+| 6.1 | Warehouse process type | Partial | Activity, source/destination required, HU/stock required, confirmation mode, movement type, picking strategy. **Gap:** default source/destination storage type/bin, default queue and priority, rough bin determination, immediate-confirmation flag semantics. |
+| 6.2 | WPT determination matrix | Partial | Warehouse Process Type Determination Rule: item, item group, stock type, priority, indicator. **Gap:** document type, item type, process indicator, control indicator, quantity classification. |
+| 6.3 | Storage control: process-oriented | Done | Storage Process with steps; next task created from what was confirmed. |
+| 6.3 | Storage control: layout-oriented | Done | Layout Storage Control: rule per source/destination type/group, intermediate bin, second leg on confirmation. |
+| 7.1 | Putaway: STSS (PCI, stock type, hazard, PETD), section search, bin type search, strategies | Partial | Search sequences by direction + stock type; section and group filter on rules; bin-type fit; empty bin, addition, near fixed, pallet, bulk, least utilized. **Gap:** STSS keyed by PCI; bulk storage stack height / lane depth. |
+| 7.2 | Removal: FIFO/LIFO/FEFO, batch determination, partial-quant minimization | Done | Removal Rule (7 strategies + custom sort), batch characteristics, FEFO. Stringent FIFO is sort-only. |
+| 8.1 | Waves, templates, two-step picking | Partial | Wave Template (cutoff, auto release), two-step via a shared staging bin and sort tasks. **Gap:** release thresholds, lock times, wave splitting, collective retrieval as one combined task. |
+| 8.2 | Replenishment: planned, automatic, direct, order-related | Partial | Planned (hourly), direct, order-related on a short pick. **Gap:** automatic replenishment triggered by a confirmed removal; min/max kept on the product per storage type (here per bin rule). |
+| 9.1 | Warehouse task: product vs HU task, lifecycle | Done | Task with source/destination HU, status incl. On Hold, reversal, idempotency. |
+| 9.2-9.3 | Warehouse order and WOCR | Partial | WO Creation Rule: limits on tasks/weight/volume/minutes, pick HU type. **Gap:** grouping by activity area/consolidation group, item filters, sort by activity-area bin sequence, pick-HU calculation from the packaging spec. |
+| 10.1 | Queue determination (WPT + area + door/staging) | Partial | Queue by activity, storage type, activity area. **Gap:** door/staging area. |
+| 10.2 | Resources, groups, interleaving | Done | Resource Group owns queues, priority across queues, logon. |
+| 10.3 | RF framework | n/a | Own RF app (`/wms`); logical transactions are not needed. |
+| 11 | Yard, transportation units | Partial | Dock Appointment (yard bin, door, check-in/out), Shipment, Route. **Gap:** Transportation Unit as its own entity with yard tasks. |
+| 12.1 | VAS | Done | VAS Order with activities. |
+| 12.2 | Quality inspection | Partial | Inspection Rule (sampling %), WMS Quality Inspection (pass/fail to stock types) mirrored to ERPNext QI. **Gap:** sample management per HU, usage-decision follow-up tasks. |
+| 12.3 | Physical inventory | Partial | Periodic/cycle (ABC)/zero-stock counts, difference analyzer, 701/702. **Gap:** zero-stock check triggered at pick time. |
+| 12.4 | Cross-docking | Partial | Opportunistic. **Gap:** planned. |
+| 13 | ECC integration (CIF, qRFC, logs) | Done | Direct ERPNext integration; WMS ERP Sync Log with queued retry replaces qRFC. |
+| 14 | Warehouse monitor | Done | WMS Monitor with the node tree, selection, actions. |
+| 15.1 | PSA and control cycle | Partial | PSA (supply bin, workstations, staging mode). **Gap:** control cycle (plant + PSA + material -> staging type/bin, min/max); PSA with several bins. |
+| 15.2 | Staging methods | Partial | Pick parts = single-order; release order parts = cross-order. **Gap:** crate parts (min/max replenishment per PSA), direct consumption. |
+| 15.3 | PMR, staging, consumption | Done | PMR from the Work Order, staging tasks, backflush from the Manufacture entry (reserved first, then pool). **Gap:** returning unused material. |
+| 15.4 | Receipt from production | Done | FG receipt from a Work Order through GR and putaway. |
+| 16 | Core tables | n/a | Mapped by design (ledger + balance replace quants). |
+| 17 | Extension BAdIs | Partial | `wms_removal_strategies` hook; no general strategy-override hooks for putaway, WOCR, queue. |
+| 18 | Exceptions and business contexts | Partial | WMS Exception Code (allowed task types, supervisor, comment, quantity/bin change, follow-up action). **Gap:** business contexts, system actions CHBIN/SPLT/NEXT/DIFF as configurable actions. |
+| 19 | Labor management, travel distance | Partial | Labor Standard (seconds/unit), efficiency KPI. **Gap:** travel distance (coordinates, network), engineered-standard formula (base + travel + handling + PF&D). |
+| 20 | MFS / PLC | n/a | Out of scope. |
+| 21 | Work centers, deconsolidation, packing station | Done | Work Center (types, locations), Packing Center, Consolidation Group. **Gap:** scale (RS232) integration. |
+| 22 | Embedded analytics | Partial | Monitor KPI views; no cube/consumption layer. |
 
 ## Risks and open decisions
 
