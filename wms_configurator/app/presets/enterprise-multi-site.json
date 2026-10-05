@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "profileName": "Enterprise Multi-Site",
+  "profileName": "Enterprise Multi-Site (with Manufacturing Plant)",
   "records": {
     "WMS Settings": [
       {
@@ -43,6 +43,39 @@
         "width": 0,
         "height": 0,
         "active": 1
+      },
+      {
+        "bin_type_code": "SHELF-BIN",
+        "bin_type_name": "Component Shelf",
+        "maximum_weight": 120,
+        "maximum_volume": 0.4,
+        "length": 0.8,
+        "width": 0.6,
+        "height": 0.5,
+        "maximum_hus": 4,
+        "active": 1
+      },
+      {
+        "bin_type_code": "LINESIDE-BIN",
+        "bin_type_name": "Line-Side Bin",
+        "maximum_weight": 200,
+        "maximum_volume": 0.8,
+        "length": 1.0,
+        "width": 0.8,
+        "height": 0.8,
+        "maximum_hus": 4,
+        "active": 1
+      },
+      {
+        "bin_type_code": "FLOOR-LANE",
+        "bin_type_name": "Floor Lane (blocked stacking)",
+        "maximum_weight": 3000,
+        "maximum_volume": 5.4,
+        "length": 3.6,
+        "width": 1.2,
+        "height": 1.5,
+        "maximum_hus": 3,
+        "active": 1
       }
     ],
     "Handling Unit Type": [
@@ -56,7 +89,8 @@
         "reusable": 1,
         "requires_seal": 0,
         "numbering_mode": "Internal",
-        "active": 1
+        "active": 1,
+        "hu_type_group": "PALLETS"
       },
       {
         "hu_type_code": "TOTE",
@@ -68,7 +102,8 @@
         "reusable": 1,
         "requires_seal": 0,
         "numbering_mode": "Internal",
-        "active": 1
+        "active": 1,
+        "hu_type_group": "TOTES"
       },
       {
         "hu_type_code": "INBOUND",
@@ -80,7 +115,42 @@
         "reusable": 0,
         "requires_seal": 0,
         "numbering_mode": "External",
-        "active": 1
+        "active": 1,
+        "hu_type_group": "TOTES"
+      },
+      {
+        "hu_type_code": "CRATE",
+        "hu_type_name": "Component Crate",
+        "category": "Crate",
+        "maximum_weight": 40,
+        "maximum_volume": 0.12,
+        "nestable": 1,
+        "reusable": 1,
+        "requires_seal": 0,
+        "numbering_mode": "Internal",
+        "active": 1,
+        "hu_type_group": "CRATES",
+        "length": 0.6,
+        "width": 0.4,
+        "height": 0.3,
+        "maximum_payload": 35
+      },
+      {
+        "hu_type_code": "DECO-TROLLEY",
+        "hu_type_name": "Deconsolidation Trolley",
+        "category": "Trolley",
+        "maximum_weight": 250,
+        "maximum_volume": 1.2,
+        "nestable": 0,
+        "reusable": 1,
+        "requires_seal": 0,
+        "numbering_mode": "Internal",
+        "active": 1,
+        "hu_type_group": "CRATES",
+        "length": 1.2,
+        "width": 0.8,
+        "height": 1.4,
+        "maximum_payload": 220
       }
     ],
     "WMS Exception Code": [
@@ -597,6 +667,23 @@
         "outbound_follow_up": "Allocate and Create Pick Tasks",
         "erp_change_policy": "Block Changes After Replication",
         "active": 1
+      },
+      {
+        "warehouse_code": "PLT1",
+        "warehouse_name": "Manufacturing Plant 1",
+        "company": "",
+        "default_receiving_bin": "PLT1-RECEIVING-DOCK1",
+        "default_shipping_bin": "PLT1-SHIP-DOOR1",
+        "default_difference_bin": "PLT1-DAMAGE-D1",
+        "default_picking_staging_bin": "PLT1-STAGING-S1",
+        "default_stock_type": "AVAILABLE",
+        "inbound_replication": "Purchase Order Submitted",
+        "outbound_replication": "Sales Order Submitted",
+        "outbound_follow_up": "Allocate and Create Pick Tasks",
+        "erp_sync_mode": "Queued with Retry",
+        "kitting_stage_components": "Manually",
+        "load_sequence_check": "Warn",
+        "active": 1
       }
     ],
     "Activity Area": [
@@ -616,6 +703,94 @@
         "warehouse": "DC2",
         "area_code": "KITZONE",
         "area_name": "Kitting & Repack Zone",
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "area_code": "RAW",
+        "area_name": "Raw material zone",
+        "active": 1,
+        "bin_sort": [
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A1-L1",
+            "sequence": 1
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A2-L1",
+            "sequence": 2
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A1-L2",
+            "sequence": 3
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A2-L2",
+            "sequence": 4
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A1-L3",
+            "sequence": 5
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-RAW-A2-L3",
+            "sequence": 6
+          }
+        ]
+      },
+      {
+        "warehouse": "PLT1",
+        "area_code": "SUPPLY",
+        "area_name": "Production supply zone",
+        "active": 1,
+        "bin_sort": [
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-COMP-C01",
+            "sequence": 1
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-COMP-C02",
+            "sequence": 2
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-COMP-C03",
+            "sequence": 3
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-COMP-C04",
+            "sequence": 4
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-PSA-L1-SUPPLY",
+            "sequence": 1
+          },
+          {
+            "activity": "Pick",
+            "storage_bin": "PLT1-PSA-L1-RACK1",
+            "sequence": 2
+          }
+        ]
+      },
+      {
+        "warehouse": "PLT1",
+        "area_code": "DECO",
+        "area_name": "Deconsolidation zone",
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "area_code": "FG",
+        "area_name": "Finished goods zone",
         "active": 1
       }
     ],
@@ -830,6 +1005,233 @@
         "hu_managed": 1,
         "capacity_check_method": "None",
         "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "RECEIVING",
+        "storage_type_name": "Receiving Docks",
+        "storage_role": "Receiving",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "IDPOINT",
+        "storage_type_name": "Identification Point",
+        "storage_role": "Identification Point",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "RAW",
+        "storage_type_name": "Raw Material Racking",
+        "storage_role": "Storage",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1,
+        "putaway_strategy": "Addition to Existing Stock"
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "AISLE",
+        "storage_type_name": "Aisle-End Intermediate Bins",
+        "storage_role": "Staging",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "COMP",
+        "storage_type_name": "Component Pick Face",
+        "storage_role": "Picking",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 0,
+        "capacity_check_method": "Max Quantity",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Optional",
+        "hu_type_check": 1,
+        "putaway_strategy": "Fixed Bin"
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "DECO",
+        "storage_type_name": "Deconsolidation Area",
+        "storage_role": "Staging",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "PSA",
+        "storage_type_name": "Production Supply Areas",
+        "storage_role": "Production Supply",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 0,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Optional",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "PRODOUT",
+        "storage_type_name": "Production Output",
+        "storage_role": "Staging",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "FG",
+        "storage_type_name": "Finished Goods Store",
+        "storage_role": "Storage",
+        "allow_mixed_products": 0,
+        "allow_mixed_stock_types": 0,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1,
+        "putaway_strategy": "First Empty Bin"
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "PACK",
+        "storage_type_name": "Packing",
+        "storage_role": "Packing",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "STAGING",
+        "storage_type_name": "Delivery Staging",
+        "storage_role": "Staging",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "SHIP",
+        "storage_type_name": "Shipping Doors",
+        "storage_role": "Door",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "None",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "QUALITY",
+        "storage_type_name": "Quality Inspection",
+        "storage_role": "Storage",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "storage_type_code": "DAMAGE",
+        "storage_type_name": "Damage, Scrap and Rework",
+        "storage_role": "Difference",
+        "allow_mixed_products": 1,
+        "allow_mixed_stock_types": 1,
+        "allow_mixed_batches": 1,
+        "hu_managed": 1,
+        "capacity_check_method": "HU Count",
+        "putaway_blocked": 0,
+        "removal_blocked": 1,
+        "active": 1,
+        "hu_requirement": "Mandatory",
+        "hu_type_check": 1
       }
     ],
     "Storage Section": [
@@ -843,6 +1245,26 @@
         "storage_type": "DC1-BULK",
         "section_code": "SLOW",
         "section_name": "Slow Movers",
+        "active": 1
+      },
+      {
+        "storage_type": "PLT1-RAW",
+        "section_code": "FAST",
+        "section_name": "Fast movers",
+        "active": 1,
+        "section_indicator": "SI-FAST"
+      },
+      {
+        "storage_type": "PLT1-RAW",
+        "section_code": "SLOW",
+        "section_name": "Slow movers",
+        "active": 1,
+        "section_indicator": "SI-SLOW"
+      },
+      {
+        "storage_type": "PLT1-FG",
+        "section_code": "A",
+        "section_name": "Finished goods A",
         "active": 1
       }
     ],
@@ -1558,6 +1980,1657 @@
         "active": 1,
         "allowed_stock_types": [],
         "allowed_hu_types": []
+      },
+      {
+        "bin_code": "PLT1-RECEIVING-DOCK1",
+        "bin_name": "PLT1-RECEIVING-DOCK1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RECEIVING",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Receiving",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 0,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-RECEIVING-DOCK2",
+        "bin_name": "PLT1-RECEIVING-DOCK2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RECEIVING",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Receiving",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 0,
+        "y_coordinate": 8,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-IDPOINT-ID1",
+        "bin_name": "PLT1-IDPOINT-ID1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-IDPOINT",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 6,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-RAW-A1-L1",
+        "bin_name": "PLT1-RAW-A1-L1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R1",
+        "level": "1",
+        "position": "1",
+        "sequence": 1,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HEAVY",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 3,
+        "z_coordinate": 0.0,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-A2-L1",
+        "bin_name": "PLT1-RAW-A2-L1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R2",
+        "level": "1",
+        "position": "2",
+        "sequence": 2,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HEAVY",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 6,
+        "z_coordinate": 0.0,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-A1-L2",
+        "bin_name": "PLT1-RAW-A1-L2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R1",
+        "level": "2",
+        "position": "1",
+        "sequence": 3,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 3,
+        "z_coordinate": 1.8,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-A2-L2",
+        "bin_name": "PLT1-RAW-A2-L2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R2",
+        "level": "2",
+        "position": "2",
+        "sequence": 4,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 6,
+        "z_coordinate": 1.8,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-A1-L3",
+        "bin_name": "PLT1-RAW-A1-L3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R1",
+        "level": "3",
+        "position": "1",
+        "sequence": 5,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 3,
+        "z_coordinate": 3.6,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-A2-L3",
+        "bin_name": "PLT1-RAW-A2-L3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-FAST",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "A",
+        "rack": "R2",
+        "level": "3",
+        "position": "2",
+        "sequence": 6,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 12,
+        "y_coordinate": 6,
+        "z_coordinate": 3.6,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B1-L1",
+        "bin_name": "PLT1-RAW-B1-L1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R1",
+        "level": "1",
+        "position": "1",
+        "sequence": 7,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HEAVY",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 3,
+        "z_coordinate": 0.0,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B2-L1",
+        "bin_name": "PLT1-RAW-B2-L1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R2",
+        "level": "1",
+        "position": "2",
+        "sequence": 8,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HEAVY",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 6,
+        "z_coordinate": 0.0,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B1-L2",
+        "bin_name": "PLT1-RAW-B1-L2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R1",
+        "level": "2",
+        "position": "1",
+        "sequence": 9,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 3,
+        "z_coordinate": 1.8,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B2-L2",
+        "bin_name": "PLT1-RAW-B2-L2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R2",
+        "level": "2",
+        "position": "2",
+        "sequence": 10,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 6,
+        "z_coordinate": 1.8,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B1-L3",
+        "bin_name": "PLT1-RAW-B1-L3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R1",
+        "level": "3",
+        "position": "1",
+        "sequence": 11,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 3,
+        "z_coordinate": 3.6,
+        "access_type": "Forklift"
+      },
+      {
+        "bin_code": "PLT1-RAW-B2-L3",
+        "bin_name": "PLT1-RAW-B2-L3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "PLT1-RAW-SLOW",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "B",
+        "rack": "R2",
+        "level": "3",
+        "position": "2",
+        "sequence": 12,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 1,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-STD",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 24,
+        "y_coordinate": 6,
+        "z_coordinate": 3.6,
+        "access_type": "Forklift",
+        "block_reason": "MAINT"
+      },
+      {
+        "bin_code": "PLT1-RAW-HAZ-1",
+        "bin_name": "PLT1-RAW-HAZ-1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 50,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HAZ",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 36,
+        "y_coordinate": 3,
+        "z_coordinate": 0,
+        "fire_containment_section": "FC-1"
+      },
+      {
+        "bin_code": "PLT1-RAW-HAZ-2",
+        "bin_name": "PLT1-RAW-HAZ-2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-RAW",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 51,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-RAW-HAZ",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          },
+          {
+            "stock_type": "QUALITY"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 36,
+        "y_coordinate": 6,
+        "z_coordinate": 0,
+        "fire_containment_section": "FC-1"
+      },
+      {
+        "bin_code": "PLT1-AISLE-END-A1",
+        "bin_name": "PLT1-AISLE-END-A1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-AISLE",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-AISLE-END-A",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 10,
+        "y_coordinate": 0,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-AISLE-END-A2",
+        "bin_name": "PLT1-AISLE-END-A2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-AISLE",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-AISLE-END-A",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 10,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-AISLE-END-B1",
+        "bin_name": "PLT1-AISLE-END-B1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-AISLE",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-RAW",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 3,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-AISLE-END-B",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 22,
+        "y_coordinate": 0,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-COMP-C01",
+        "bin_name": "PLT1-COMP-C01",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-COMP",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "",
+        "level": "",
+        "position": "1",
+        "sequence": 1,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 500,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 40,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-COMP-C02",
+        "bin_name": "PLT1-COMP-C02",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-COMP",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "",
+        "level": "",
+        "position": "2",
+        "sequence": 2,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 500,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 40,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-COMP-C03",
+        "bin_name": "PLT1-COMP-C03",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-COMP",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "",
+        "level": "",
+        "position": "3",
+        "sequence": 3,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 500,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 40,
+        "y_coordinate": 6,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-COMP-C04",
+        "bin_name": "PLT1-COMP-C04",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-COMP",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "C",
+        "rack": "",
+        "level": "",
+        "position": "4",
+        "sequence": 4,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 500,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 40,
+        "y_coordinate": 8,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-T1",
+        "bin_name": "PLT1-DECO-T1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Trolley",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 50,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-T2",
+        "bin_name": "PLT1-DECO-T2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Trolley",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 50,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-T3",
+        "bin_name": "PLT1-DECO-T3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Trolley",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 3,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 50,
+        "y_coordinate": 6,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-T4",
+        "bin_name": "PLT1-DECO-T4",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "SHELF-BIN",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Trolley",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 4,
+        "maximum_hus": 2,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 50,
+        "y_coordinate": 8,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-IN",
+        "bin_name": "PLT1-DECO-IN",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 10,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 48,
+        "y_coordinate": 0,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DECO-OUT",
+        "bin_name": "PLT1-DECO-OUT",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DECO",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-DECO",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 11,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 48,
+        "y_coordinate": 12,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PSA-L1-SUPPLY",
+        "bin_name": "PLT1-PSA-L1-SUPPLY",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PSA",
+        "storage_section": "",
+        "bin_type": "LINESIDE-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 60,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PSA-L1-RACK1",
+        "bin_name": "PLT1-PSA-L1-RACK1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PSA",
+        "storage_section": "",
+        "bin_type": "LINESIDE-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 60,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PSA-L1-RACK2",
+        "bin_name": "PLT1-PSA-L1-RACK2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PSA",
+        "storage_section": "",
+        "bin_type": "LINESIDE-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 3,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 60,
+        "y_coordinate": 6,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PSA-L2-SUPPLY",
+        "bin_name": "PLT1-PSA-L2-SUPPLY",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PSA",
+        "storage_section": "",
+        "bin_type": "LINESIDE-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 4,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 70,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PSA-L2-CRATES",
+        "bin_name": "PLT1-PSA-L2-CRATES",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PSA",
+        "storage_section": "",
+        "bin_type": "LINESIDE-BIN",
+        "activity_area": "PLT1-SUPPLY",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 5,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 70,
+        "y_coordinate": 4,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PRODOUT-OUT1",
+        "bin_name": "PLT1-PRODOUT-OUT1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PRODOUT",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 80,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PRODOUT-OUT2",
+        "bin_name": "PLT1-PRODOUT-OUT2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PRODOUT",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 3,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 80,
+        "y_coordinate": 6,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-FG-A1",
+        "bin_name": "PLT1-FG-A1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-FG",
+        "storage_section": "PLT1-FG-A",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-FG-FAST",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 90,
+        "y_coordinate": 3,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-FG-A2",
+        "bin_name": "PLT1-FG-A2",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-FG",
+        "storage_section": "PLT1-FG-A",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-FG-FAST",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 90,
+        "y_coordinate": 6,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-FG-A3",
+        "bin_name": "PLT1-FG-A3",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-FG",
+        "storage_section": "PLT1-FG-A",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 3,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-FG-FAST",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 90,
+        "y_coordinate": 9,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-FG-A4",
+        "bin_name": "PLT1-FG-A4",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-FG",
+        "storage_section": "PLT1-FG-A",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 4,
+        "maximum_hus": 1,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "PLT1-FG-FAST",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 90,
+        "y_coordinate": 12,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-PACK-STATION1",
+        "bin_name": "PLT1-PACK-STATION1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-PACK",
+        "storage_section": "",
+        "bin_type": "TOTE-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Packing",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 100,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-STAGING-S1",
+        "bin_name": "PLT1-STAGING-S1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-STAGING",
+        "storage_section": "",
+        "bin_type": "FLOOR-LANE",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Staging",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 104,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-SHIP-DOOR1",
+        "bin_name": "PLT1-SHIP-DOOR1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-SHIP",
+        "storage_section": "",
+        "bin_type": "DOOR-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Door",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 6,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [],
+        "allowed_hu_types": [],
+        "x_coordinate": 108,
+        "y_coordinate": 2,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-QUALITY-Q1",
+        "bin_name": "PLT1-QUALITY-Q1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-QUALITY",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 4,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 0,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "QUALITY"
+          },
+          {
+            "stock_type": "AVAILABLE"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 100,
+        "y_coordinate": 10,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DAMAGE-D1",
+        "bin_name": "PLT1-DAMAGE-D1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DAMAGE",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Difference",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 1,
+        "maximum_hus": 8,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 1,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "DAMAGED"
+          },
+          {
+            "stock_type": "WAREHOUSE_BLOCKED"
+          },
+          {
+            "stock_type": "PRODUCTION_BLOCKED"
+          },
+          {
+            "stock_type": "SCRAP"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 100,
+        "y_coordinate": 14,
+        "z_coordinate": 0
+      },
+      {
+        "bin_code": "PLT1-DAMAGE-SCRAP1",
+        "bin_name": "PLT1-DAMAGE-SCRAP1",
+        "warehouse": "PLT1",
+        "storage_type": "PLT1-DAMAGE",
+        "storage_section": "",
+        "bin_type": "PALLET-BIN",
+        "activity_area": "PLT1-FG",
+        "parent_bin": "",
+        "bin_role": "Standard",
+        "aisle": "",
+        "rack": "",
+        "level": "",
+        "position": "",
+        "sequence": 2,
+        "maximum_hus": 8,
+        "maximum_weight": 0,
+        "maximum_volume": 0,
+        "putaway_blocked": 0,
+        "removal_blocked": 1,
+        "inventory_blocked": 0,
+        "active": 1,
+        "storage_group": "",
+        "maximum_quantity": 0,
+        "allowed_stock_types": [
+          {
+            "stock_type": "SCRAP"
+          }
+        ],
+        "allowed_hu_types": [],
+        "x_coordinate": 100,
+        "y_coordinate": 16,
+        "z_coordinate": 0
       }
     ],
     "Work Center": [
@@ -1622,6 +3695,55 @@
         "completeness_check": "Block",
         "close_follow_up": "Move to Outbound Section",
         "allow_differences": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "work_center_code": "DECO1",
+        "work_center_name": "Deconsolidation Work Center",
+        "bin": "PLT1-DECO-IN",
+        "active": 1,
+        "work_center_type": "Deconsolidation",
+        "inbound_section_bin": "PLT1-DECO-IN",
+        "outbound_section_bin": "PLT1-DECO-OUT",
+        "default_hu_type": "DECO-TROLLEY",
+        "quantity_proposal": "Full Quantity",
+        "weigh_on_close": "Optional",
+        "completeness_check": "Block",
+        "close_follow_up": "Move to Outbound Section",
+        "print_label_on_close": 1,
+        "allow_differences": 1,
+        "locations": [
+          {
+            "storage_bin": "PLT1-DECO-T1"
+          },
+          {
+            "storage_bin": "PLT1-DECO-T2"
+          },
+          {
+            "storage_bin": "PLT1-DECO-T3"
+          },
+          {
+            "storage_bin": "PLT1-DECO-T4"
+          }
+        ]
+      },
+      {
+        "warehouse": "PLT1",
+        "work_center_code": "PACK1",
+        "work_center_name": "Pack Station 1 (scale)",
+        "bin": "PLT1-PACK-STATION1",
+        "active": 1,
+        "work_center_type": "Packing",
+        "quantity_proposal": "One Unit per Scan",
+        "weigh_on_close": "Required",
+        "weight_tolerance_percent": 3,
+        "completeness_check": "Block",
+        "close_follow_up": "Move to Delivery Staging Bin",
+        "print_label_on_create": 1,
+        "print_label_on_close": 1,
+        "scale_enabled": 1,
+        "scale_baud_rate": 9600,
+        "scale_unit": "kg"
       }
     ],
     "Warehouse Process Type": [
@@ -1783,6 +3905,77 @@
         "picking_strategy": "Pick-Pack-Pass",
         "pick_pack_pass_hu_type": "TOTE",
         "active": 1
+      },
+      {
+        "process_type_code": "AISLE_HOP",
+        "process_type_name": "Putaway to Aisle-End Bin",
+        "activity": "Internal Move",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "301",
+        "active": 1,
+        "default_destination_storage_type": "PLT1-AISLE",
+        "default_priority": "Normal"
+      },
+      {
+        "process_type_code": "PSA_STAGE",
+        "process_type_name": "Stage Material to Production Supply Area",
+        "activity": "Internal Move",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 0,
+        "stock_required": 1,
+        "confirmation_mode": "Product and Quantity",
+        "movement_type": "301",
+        "active": 1,
+        "default_destination_storage_type": "PLT1-PSA",
+        "default_priority": "High"
+      },
+      {
+        "process_type_code": "PSA_RETURN",
+        "process_type_name": "Return Unused Material from PSA",
+        "activity": "Internal Move",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 0,
+        "stock_required": 1,
+        "confirmation_mode": "Product and Quantity",
+        "movement_type": "301",
+        "active": 1,
+        "default_source_storage_type": "PLT1-PSA",
+        "default_priority": "Normal"
+      },
+      {
+        "process_type_code": "PROD_PUTAWAY",
+        "process_type_name": "Putaway of Production Output",
+        "activity": "Putaway",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 1,
+        "stock_required": 1,
+        "confirmation_mode": "Handling Unit",
+        "movement_type": "201",
+        "active": 1,
+        "default_source_storage_type": "PLT1-PRODOUT",
+        "default_destination_storage_type": "PLT1-FG"
+      },
+      {
+        "process_type_code": "COMP_PICK",
+        "process_type_name": "Pick Components to Deconsolidation",
+        "activity": "Pick",
+        "source_required": 1,
+        "destination_required": 1,
+        "hu_required": 0,
+        "stock_required": 1,
+        "confirmation_mode": "Product and Quantity",
+        "movement_type": "401",
+        "active": 1,
+        "picking_strategy": "Two-Step",
+        "default_source_storage_type": "PLT1-RAW",
+        "default_destination_storage_type": "PLT1-DECO"
       }
     ],
     "Warehouse Process Type Determination Rule": [
@@ -1839,6 +4032,78 @@
         "activity": "Internal Move",
         "process_type": "CONSOL",
         "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "GR_PUTAWAY",
+        "active": 1
+      },
+      {
+        "priority": 110,
+        "warehouse": "PLT1",
+        "activity": "Pick",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "OB_PICK",
+        "active": 1
+      },
+      {
+        "priority": 120,
+        "warehouse": "PLT1",
+        "activity": "Internal Move",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "INTERNAL_MOVE",
+        "active": 1
+      },
+      {
+        "priority": 130,
+        "warehouse": "PLT1",
+        "activity": "Stage",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "OB_STAGE",
+        "active": 1
+      },
+      {
+        "priority": 140,
+        "warehouse": "PLT1",
+        "activity": "Load",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "OB_LOAD",
+        "active": 1
+      },
+      {
+        "priority": 150,
+        "warehouse": "PLT1",
+        "activity": "Deconsolidation",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "priority_level": "",
+        "process_type_determination_indicator": "",
+        "process_type": "DECON",
+        "active": 1
       }
     ],
     "WO Creation Rule": [
@@ -1886,6 +4151,41 @@
         "maximum_tasks": 12,
         "maximum_minutes": 90,
         "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "activity": "Pick",
+        "item_group": "",
+        "stock_type": "",
+        "maximum_tasks": 25,
+        "maximum_weight": 500,
+        "maximum_minutes": 45,
+        "pick_hu_type": "DECO-TROLLEY",
+        "group_by_activity_area": 1,
+        "group_by_consolidation_group": 1,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item_group": "",
+        "stock_type": "",
+        "maximum_tasks": 10,
+        "maximum_weight": 2000,
+        "active": 1
+      },
+      {
+        "priority": 300,
+        "warehouse": "PLT1",
+        "activity": "Internal Move",
+        "item_group": "",
+        "stock_type": "",
+        "maximum_tasks": 15,
+        "maximum_minutes": 30,
+        "group_by_activity_area": 1,
+        "active": 1
       }
     ],
     "Storage Type Search Sequence": [
@@ -1900,6 +4200,53 @@
           },
           {
             "storage_type": "DC1-BULK2",
+            "sequence": 2
+          }
+        ],
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "direction": "Putaway",
+        "stock_type": "AVAILABLE",
+        "putaway_control_indicator": "PC-STD",
+        "storage_types": [
+          {
+            "storage_type": "PLT1-RAW",
+            "sequence": 1
+          }
+        ],
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "direction": "Putaway",
+        "stock_type": "AVAILABLE",
+        "putaway_control_indicator": "PC-HEAVY",
+        "storage_types": [
+          {
+            "storage_type": "PLT1-RAW",
+            "sequence": 1
+          },
+          {
+            "storage_type": "PLT1-FG",
+            "sequence": 2
+          }
+        ],
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "direction": "Removal",
+        "stock_type": "AVAILABLE",
+        "stock_removal_control_indicator": "RC-PICKFACE",
+        "storage_types": [
+          {
+            "storage_type": "PLT1-COMP",
+            "sequence": 1
+          },
+          {
+            "storage_type": "PLT1-RAW",
             "sequence": 2
           }
         ],
@@ -2052,6 +4399,104 @@
         "fixed_destination_bin": "DC3-SHIP-DOOR1",
         "strategy": "Fixed Bin",
         "active": 1
+      },
+      {
+        "priority": 50,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "QUALITY",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "PLT1-QUALITY",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 60,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "DAMAGED",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "PLT1-DAMAGE",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "First Empty Bin",
+        "active": 1
+      },
+      {
+        "priority": 90,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "PLT1-PRODOUT",
+        "destination_storage_type": "PLT1-FG",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "Bin Sequence",
+        "active": 1,
+        "destination_storage_group": "PLT1-FG-FAST"
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "PLT1-RAW",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "",
+        "strategy": "Addition to Existing Stock",
+        "active": 1,
+        "destination_storage_group": "PLT1-RAW-STD"
+      },
+      {
+        "priority": 110,
+        "warehouse": "PLT1",
+        "activity": "Internal Move",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "PLT1-PSA",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "PLT1-PSA-L1-SUPPLY",
+        "strategy": "Fixed Bin",
+        "active": 1
+      },
+      {
+        "priority": 120,
+        "warehouse": "PLT1",
+        "activity": "Pick",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "hu_type": "",
+        "source_storage_type": "PLT1-FG",
+        "destination_storage_type": "PLT1-STAGING",
+        "search_sequence": "",
+        "destination_section": "",
+        "fixed_destination_bin": "PLT1-STAGING-S1",
+        "strategy": "Fixed Bin",
+        "active": 1
       }
     ],
     "Storage Process": [
@@ -2174,6 +4619,172 @@
             "create_task_automatically": 1
           }
         ]
+      },
+      {
+        "process_code": "PLT1_RM_INBOUND",
+        "process_name": "Raw Material Inbound (via aisle end)",
+        "process_category": "Inbound",
+        "warehouse": "PLT1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "UNLOAD",
+            "process_type": "GR_UNLOAD",
+            "source_storage_type": "",
+            "destination_storage_type": "PLT1-RECEIVING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 2,
+            "step_code": "AISLE",
+            "process_type": "AISLE_HOP",
+            "source_storage_type": "PLT1-RECEIVING",
+            "destination_storage_type": "PLT1-AISLE",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 3,
+            "step_code": "RACK",
+            "process_type": "GR_PUTAWAY",
+            "source_storage_type": "PLT1-AISLE",
+            "destination_storage_type": "PLT1-RAW",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "PLT1_PROD_SUPPLY",
+        "process_name": "Production Supply (pick, deconsolidate, stage)",
+        "process_category": "Internal",
+        "warehouse": "PLT1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "PICK",
+            "process_type": "COMP_PICK",
+            "source_storage_type": "PLT1-RAW",
+            "destination_storage_type": "PLT1-DECO",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 2,
+            "step_code": "DECO",
+            "process_type": "DECON",
+            "source_storage_type": "PLT1-DECO",
+            "destination_storage_type": "PLT1-DECO",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 3,
+            "step_code": "STAGE",
+            "process_type": "PSA_STAGE",
+            "source_storage_type": "PLT1-DECO",
+            "destination_storage_type": "PLT1-PSA",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "PLT1_PROD_OUTPUT",
+        "process_name": "Finished Goods Putaway",
+        "process_category": "Internal",
+        "warehouse": "PLT1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "PUTAWAY",
+            "process_type": "PROD_PUTAWAY",
+            "source_storage_type": "PLT1-PRODOUT",
+            "destination_storage_type": "PLT1-FG",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "PLT1_OUTBOUND",
+        "process_name": "Finished Goods Outbound",
+        "process_category": "Outbound",
+        "warehouse": "PLT1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "PICK",
+            "process_type": "OB_PICK",
+            "source_storage_type": "PLT1-FG",
+            "destination_storage_type": "PLT1-STAGING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 2,
+            "step_code": "STAGE",
+            "process_type": "OB_STAGE",
+            "source_storage_type": "",
+            "destination_storage_type": "PLT1-STAGING",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 1
+          },
+          {
+            "sequence": 3,
+            "step_code": "LOAD",
+            "process_type": "OB_LOAD",
+            "source_storage_type": "PLT1-STAGING",
+            "destination_storage_type": "PLT1-SHIP",
+            "destination_bin": "PLT1-SHIP-DOOR1",
+            "require_hu_close": 1,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
+      },
+      {
+        "process_code": "PLT1_RETURN_PSA",
+        "process_name": "Return Unused Material",
+        "process_category": "Internal",
+        "warehouse": "PLT1",
+        "active": 1,
+        "steps": [
+          {
+            "sequence": 1,
+            "step_code": "RETURN",
+            "process_type": "PSA_RETURN",
+            "source_storage_type": "PLT1-PSA",
+            "destination_storage_type": "PLT1-RAW",
+            "destination_bin": "",
+            "require_hu_close": 0,
+            "create_task_automatically": 1,
+            "next_step_on_confirmation": 0
+          }
+        ]
       }
     ],
     "Process Determination Rule": [
@@ -2209,6 +4820,71 @@
         "document_type": "Internal Movement",
         "storage_process": "DC2_FLOWTHROUGH",
         "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "document_type": "Inbound Delivery",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "",
+        "route": "",
+        "storage_process": "PLT1_RM_INBOUND",
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "document_type": "Outbound Delivery",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "",
+        "destination_storage_type": "",
+        "route": "PLT1-ROUTE",
+        "storage_process": "PLT1_OUTBOUND",
+        "active": 1
+      },
+      {
+        "priority": 90,
+        "warehouse": "PLT1",
+        "document_type": "Internal Movement",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "PLT1-RAW",
+        "destination_storage_type": "PLT1-PSA",
+        "route": "",
+        "storage_process": "PLT1_PROD_SUPPLY",
+        "active": 1
+      },
+      {
+        "priority": 95,
+        "warehouse": "PLT1",
+        "document_type": "Internal Movement",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "PLT1-PRODOUT",
+        "destination_storage_type": "PLT1-FG",
+        "route": "",
+        "storage_process": "PLT1_PROD_OUTPUT",
+        "active": 1
+      },
+      {
+        "priority": 96,
+        "warehouse": "PLT1",
+        "document_type": "Internal Movement",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "source_storage_type": "PLT1-PSA",
+        "destination_storage_type": "PLT1-RAW",
+        "route": "",
+        "storage_process": "PLT1_RETURN_PSA",
+        "active": 1
       }
     ],
     "Removal Rule": [
@@ -2231,6 +4907,38 @@
         ],
         "fixed_bin": "",
         "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "item": "",
+        "item_group": "",
+        "stock_type": "",
+        "strategy": "FIFO",
+        "sort_fields": [
+          {
+            "field": "first_receipt_date",
+            "direction": "Asc"
+          }
+        ],
+        "fixed_bin": "",
+        "active": 1
+      },
+      {
+        "priority": 50,
+        "warehouse": "PLT1",
+        "item": "",
+        "item_group": "",
+        "stock_type": "QUALITY",
+        "strategy": "FEFO",
+        "sort_fields": [
+          {
+            "field": "shelf_life_expiry_date",
+            "direction": "Asc"
+          }
+        ],
+        "fixed_bin": "",
+        "active": 1
       }
     ],
     "Inspection Rule": [
@@ -2244,6 +4952,20 @@
         "priority": 200,
         "warehouse": "DC1",
         "sampling_percentage": 10,
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "sampling_percentage": 100,
+        "acceptable_failures": 0,
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "PLT1",
+        "sampling_percentage": 10,
+        "acceptable_failures": 1,
         "active": 1
       }
     ],
@@ -2279,6 +5001,16 @@
         "warehouse": "DC3",
         "tolerance_percentage": 5,
         "requires_recount": 1,
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "item_group": "",
+        "tolerance_percentage": 2,
+        "tolerance_quantity": 0,
+        "requires_recount": 1,
+        "requires_approval": 1,
         "active": 1
       }
     ],
@@ -2329,6 +5061,24 @@
         "warehouse": "DC3",
         "procedure_type": "Annual",
         "frequency_days": 365,
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "procedure_type": "ABC Cycle Count",
+        "abc_indicator": "A",
+        "storage_type": "PLT1-COMP",
+        "frequency_days": 14,
+        "active": 1
+      },
+      {
+        "priority": 110,
+        "warehouse": "PLT1",
+        "procedure_type": "Zero Stock",
+        "abc_indicator": "",
+        "storage_type": "PLT1-RAW",
+        "frequency_days": 30,
         "active": 1
       }
     ],
@@ -2440,6 +5190,23 @@
             "description": "Final gate checkpoint"
           }
         ]
+      },
+      {
+        "route_code": "PLT1-ROUTE",
+        "route_name": "Plant 1 Outbound Route",
+        "origin_warehouse": "PLT1",
+        "default_staging_bin": "PLT1-STAGING-S1",
+        "default_door": "PLT1-SHIP-DOOR1",
+        "carrier": "",
+        "stops": [
+          {
+            "sequence": 1,
+            "storage_bin": "PLT1-STAGING-S1",
+            "stop_type": "Staging",
+            "description": "Finished goods staging lane"
+          }
+        ],
+        "active": 1
       }
     ],
     "WMS Resource Group": [
@@ -2467,6 +5234,20 @@
         "group_code": "DC3-GATE",
         "group_name": "DC3 Gate & Yard Crew",
         "warehouse": "DC3",
+        "active": 1
+      },
+      {
+        "group_code": "PLT1-FORKLIFTS",
+        "group_name": "Plant 1 forklift drivers",
+        "warehouse": "PLT1",
+        "description": "Putaway and aisle-end moves",
+        "active": 1
+      },
+      {
+        "group_code": "PLT1-SUPPLY",
+        "group_name": "Plant 1 production supply",
+        "warehouse": "PLT1",
+        "description": "Picking trolleys feeding the lines",
         "active": 1
       }
     ],
@@ -2534,6 +5315,46 @@
         "printer_connection": "Print Agent",
         "agent_printer_name": "DC3-ZEBRA-GATE",
         "active": 1
+      },
+      {
+        "resource_code": "PLT1-FORK-01",
+        "warehouse": "PLT1",
+        "resource_group": "PLT1-FORKLIFTS",
+        "resource_type": "Forklift",
+        "device_id": "",
+        "user": "",
+        "current_queue": "",
+        "current_work_center": "",
+        "current_bin": "",
+        "active": 1
+      },
+      {
+        "resource_code": "PLT1-TROLLEY-01",
+        "warehouse": "PLT1",
+        "resource_group": "PLT1-SUPPLY",
+        "resource_type": "Picking Trolley",
+        "device_id": "",
+        "user": "",
+        "current_queue": "",
+        "current_work_center": "",
+        "current_bin": "",
+        "active": 1
+      },
+      {
+        "resource_code": "PLT1-PRINTER-01",
+        "warehouse": "PLT1",
+        "resource_group": "PLT1-SUPPLY",
+        "resource_type": "Printer",
+        "device_id": "",
+        "user": "",
+        "current_queue": "",
+        "current_work_center": "",
+        "current_bin": "",
+        "active": 1,
+        "printer_connection": "Network (Raw TCP)",
+        "printer_language": "ZPL",
+        "printer_host": "192.168.10.60",
+        "printer_port": 9100
       }
     ],
     "Warehouse Queue": [
@@ -2557,6 +5378,50 @@
         "activity_area": "",
         "resource_group": "PICKERS",
         "sequence_rule": "FIFO",
+        "active": 1
+      },
+      {
+        "queue_code": "PLT1-PUTAWAY-Q",
+        "queue_name": "Plant 1 Putaway",
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "storage_type": "PLT1-RAW",
+        "activity_area": "PLT1-RAW",
+        "resource_group": "PLT1-FORKLIFTS",
+        "sequence_rule": "Priority Then FIFO",
+        "active": 1
+      },
+      {
+        "queue_code": "PLT1-SUPPLY-Q",
+        "queue_name": "Plant 1 Production Supply",
+        "warehouse": "PLT1",
+        "activity": "Internal Move",
+        "storage_type": "PLT1-PSA",
+        "activity_area": "PLT1-SUPPLY",
+        "resource_group": "PLT1-SUPPLY",
+        "sequence_rule": "Priority Then FIFO",
+        "active": 1
+      },
+      {
+        "queue_code": "PLT1-DECO-Q",
+        "queue_name": "Plant 1 Deconsolidation",
+        "warehouse": "PLT1",
+        "activity": "Deconsolidation",
+        "storage_type": "PLT1-DECO",
+        "activity_area": "PLT1-DECO",
+        "resource_group": "PLT1-SUPPLY",
+        "sequence_rule": "Priority Then FIFO",
+        "active": 1
+      },
+      {
+        "queue_code": "PLT1-PICK-Q",
+        "queue_name": "Plant 1 Component Picking",
+        "warehouse": "PLT1",
+        "activity": "Pick",
+        "storage_type": "PLT1-RAW",
+        "activity_area": "PLT1-RAW",
+        "resource_group": "PLT1-SUPPLY",
+        "sequence_rule": "Bin Sequence",
         "active": 1
       }
     ],
@@ -2604,6 +5469,22 @@
         "event": "Shipment Loaded",
         "output_device": "DC3-PRINTER-AGENT",
         "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "event": "HU Created",
+        "output_device": "PLT1-PRINTER-01",
+        "print_format": "",
+        "active": 1
+      },
+      {
+        "priority": 200,
+        "warehouse": "PLT1",
+        "event": "Putaway Confirmed",
+        "output_device": "PLT1-PRINTER-01",
+        "print_format": "",
+        "active": 1
       }
     ],
     "Wave Template": [
@@ -2627,6 +5508,20 @@
         "picking_strategy": "Single Order",
         "cutoff_time": "16:30:00",
         "auto_release": 1,
+        "active": 1
+      },
+      {
+        "template_code": "PLT1-SHIFT",
+        "template_name": "Plant 1 Shift Wave",
+        "warehouse": "PLT1",
+        "route": "PLT1-ROUTE",
+        "priority": "Normal",
+        "picking_strategy": "Single Order",
+        "cutoff_time": "13:00:00",
+        "auto_release": 1,
+        "minimum_deliveries": 1,
+        "maximum_deliveries": 25,
+        "lock_minutes": 10,
         "active": 1
       }
     ],
@@ -2653,6 +5548,587 @@
         "task_type": "Load",
         "item_group": "",
         "standard_seconds_per_unit": 15,
+        "active": 1
+      },
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "task_type": "Pick",
+        "item_group": "",
+        "standard_seconds_per_unit": 20,
+        "base_allowance_seconds": 30,
+        "travel_seconds_per_meter": 0.8,
+        "handling_seconds_per_kg": 0.5,
+        "pfd_percent": 12,
+        "active": 1
+      },
+      {
+        "priority": 110,
+        "warehouse": "PLT1",
+        "task_type": "Putaway",
+        "item_group": "",
+        "standard_seconds_per_unit": 45,
+        "base_allowance_seconds": 20,
+        "travel_seconds_per_meter": 0.6,
+        "pfd_percent": 10,
+        "active": 1
+      },
+      {
+        "priority": 120,
+        "warehouse": "PLT1",
+        "task_type": "Internal Move",
+        "item_group": "",
+        "standard_seconds_per_unit": 40,
+        "travel_seconds_per_meter": 0.7,
+        "pfd_percent": 10,
+        "active": 1
+      }
+    ],
+    "Handling Unit Type Group": [
+      {
+        "group_code": "PALLETS",
+        "group_name": "Pallets"
+      },
+      {
+        "group_code": "TOTES",
+        "group_name": "Totes and trays"
+      },
+      {
+        "group_code": "CRATES",
+        "group_name": "Crates and trolleys"
+      }
+    ],
+    "Storage Group": [
+      {
+        "storage_type": "PLT1-RAW",
+        "group_code": "HEAVY",
+        "group_name": "Heavy pallets (ground level)",
+        "active": 1,
+        "description": "Handling indicator HEAVY puts products only here."
+      },
+      {
+        "storage_type": "PLT1-RAW",
+        "group_code": "HAZ",
+        "group_name": "Hazardous cage",
+        "active": 1,
+        "description": "Fire containment section."
+      },
+      {
+        "storage_type": "PLT1-RAW",
+        "group_code": "STD",
+        "group_name": "Standard racks",
+        "active": 1
+      },
+      {
+        "storage_type": "PLT1-AISLE",
+        "group_code": "END-A",
+        "group_name": "End of aisle A",
+        "active": 1,
+        "description": "Intermediate bins where goods wait for the forklift of aisle A."
+      },
+      {
+        "storage_type": "PLT1-AISLE",
+        "group_code": "END-B",
+        "group_name": "End of aisle B",
+        "active": 1
+      },
+      {
+        "storage_type": "PLT1-FG",
+        "group_code": "FAST",
+        "group_name": "Fast-moving finished goods",
+        "active": 1
+      }
+    ],
+    "Putaway Control Indicator": [
+      {
+        "indicator_code": "PC-STD",
+        "indicator_name": "Standard putaway",
+        "description": "Standard raw material: racking by addition to existing stock.",
+        "active": 1
+      },
+      {
+        "indicator_code": "PC-HEAVY",
+        "indicator_name": "Heavy / ground level",
+        "description": "Heavy products go to the ground-level racks.",
+        "active": 1
+      },
+      {
+        "indicator_code": "PC-DIRECT",
+        "indicator_name": "Direct to production",
+        "description": "Goods that skip the racking and go to the production supply.",
+        "active": 1
+      }
+    ],
+    "Stock Removal Control Indicator": [
+      {
+        "indicator_code": "RC-FIFO",
+        "indicator_name": "FIFO removal",
+        "description": "Oldest stock first.",
+        "active": 1
+      },
+      {
+        "indicator_code": "RC-FEFO",
+        "indicator_name": "Shelf-life removal",
+        "description": "Earliest expiry first.",
+        "active": 1
+      },
+      {
+        "indicator_code": "RC-PICKFACE",
+        "indicator_name": "Pick face first",
+        "description": "Component pick face before the racking.",
+        "active": 1
+      }
+    ],
+    "Storage Section Indicator": [
+      {
+        "indicator_code": "SI-FAST",
+        "indicator_name": "Fast movers",
+        "description": "Set on products with high turnover; they are put into sections with this indicator.",
+        "active": 1
+      },
+      {
+        "indicator_code": "SI-SLOW",
+        "indicator_name": "Slow movers",
+        "description": "Slow turnover products.",
+        "active": 1
+      }
+    ],
+    "Handling Indicator": [
+      {
+        "indicator_code": "HEAVY",
+        "indicator_name": "Heavy goods",
+        "required_storage_group": "PLT1-RAW-HEAVY",
+        "no_unpack": 0,
+        "description": "Only ground-level racks.",
+        "active": 1
+      },
+      {
+        "indicator_code": "HAZMAT",
+        "indicator_name": "Hazardous material",
+        "required_storage_group": "PLT1-RAW-HAZ",
+        "no_unpack": 1,
+        "description": "Hazard cage; the pallet stays closed.",
+        "active": 1
+      },
+      {
+        "indicator_code": "SEALED",
+        "indicator_name": "Sealed pallet",
+        "required_storage_group": "",
+        "no_unpack": 1,
+        "description": "Never unpack: moved as a whole handling unit.",
+        "active": 1
+      }
+    ],
+    "WMS Block Reason": [
+      {
+        "reason_code": "DAMAGED",
+        "reason_name": "Damaged",
+        "applies_to": "Both",
+        "active": 1
+      },
+      {
+        "reason_code": "QUALITY-HOLD",
+        "reason_name": "Quality hold",
+        "applies_to": "Both",
+        "active": 1
+      },
+      {
+        "reason_code": "RECALL",
+        "reason_name": "Supplier recall",
+        "applies_to": "Handling Unit",
+        "active": 1
+      },
+      {
+        "reason_code": "COUNT",
+        "reason_name": "Counting in progress",
+        "applies_to": "Bin",
+        "active": 1
+      },
+      {
+        "reason_code": "MAINT",
+        "reason_name": "Rack maintenance",
+        "applies_to": "Bin",
+        "active": 1
+      }
+    ],
+    "Layout Storage Control": [
+      {
+        "warehouse": "PLT1",
+        "priority": 1,
+        "source_storage_type": "PLT1-RECEIVING",
+        "destination_storage_type": "PLT1-RAW",
+        "destination_storage_group": "PLT1-RAW-STD",
+        "intermediate_storage_type": "PLT1-AISLE",
+        "intermediate_storage_group": "PLT1-AISLE-END-A",
+        "active": 1
+      },
+      {
+        "warehouse": "PLT1",
+        "priority": 2,
+        "source_storage_type": "PLT1-IDPOINT",
+        "destination_storage_type": "PLT1-RAW",
+        "destination_storage_group": "PLT1-RAW-HEAVY",
+        "intermediate_storage_type": "PLT1-AISLE",
+        "intermediate_storage_group": "PLT1-AISLE-END-B",
+        "intermediate_bin": "PLT1-AISLE-END-B1",
+        "active": 1
+      }
+    ],
+    "Production Supply Area": [
+      {
+        "warehouse": "PLT1",
+        "psa_code": "LINE1",
+        "psa_name": "Assembly Line 1",
+        "supply_bin": "PLT1-PSA-L1-SUPPLY",
+        "workstations": [],
+        "deconsolidation_work_center": "PLT1-DECO1",
+        "active": 1,
+        "staging_mode": "Automatic",
+        "bins": [
+          {
+            "storage_bin": "PLT1-PSA-L1-RACK1"
+          },
+          {
+            "storage_bin": "PLT1-PSA-L1-RACK2"
+          }
+        ]
+      },
+      {
+        "warehouse": "PLT1",
+        "psa_code": "LINE2",
+        "psa_name": "Assembly Line 2 (crate supply)",
+        "supply_bin": "PLT1-PSA-L2-SUPPLY",
+        "workstations": [],
+        "active": 1,
+        "staging_mode": "Manual",
+        "bins": [
+          {
+            "storage_bin": "PLT1-PSA-L2-CRATES"
+          }
+        ]
+      }
+    ],
+    "Production Supply Control Cycle": [
+      {
+        "production_supply_area": "PLT1-LINE1",
+        "product": "RM-STEEL-SAMPLE",
+        "staging_method": "Pick Parts",
+        "staging_bin": "PLT1-PSA-L1-RACK1",
+        "active": 1
+      },
+      {
+        "production_supply_area": "PLT1-LINE1",
+        "product": "COMP-BOLT-SAMPLE",
+        "staging_method": "Release Order Parts",
+        "staging_bin": "PLT1-PSA-L1-RACK2",
+        "active": 1
+      },
+      {
+        "production_supply_area": "PLT1-LINE2",
+        "product": "COMP-BOLT-SAMPLE",
+        "staging_method": "Crate Parts",
+        "staging_bin": "PLT1-PSA-L2-CRATES",
+        "minimum_quantity": 50,
+        "maximum_quantity": 200,
+        "active": 1
+      }
+    ],
+    "Replenishment Rule": [
+      {
+        "warehouse": "PLT1",
+        "product": "COMP-BOLT-SAMPLE",
+        "storage_bin": "PLT1-COMP-C01",
+        "stock_type": "AVAILABLE",
+        "minimum_quantity": 100,
+        "target_quantity": 400,
+        "source_storage_type": "PLT1-RAW",
+        "priority": "High",
+        "active": 1
+      }
+    ],
+    "WMS Usage Decision": [
+      {
+        "decision_code": "ACCEPT",
+        "decision_name": "Accept - release to stock",
+        "category": "Accept",
+        "target_stock_type": "AVAILABLE",
+        "follow_up_action": "None",
+        "active": 1
+      },
+      {
+        "decision_code": "REWORK",
+        "decision_name": "Rework",
+        "category": "Other",
+        "target_stock_type": "PRODUCTION_BLOCKED",
+        "follow_up_action": "Move to Bin",
+        "follow_up_bin": "PLT1-DAMAGE-D1",
+        "active": 1
+      },
+      {
+        "decision_code": "REJECT",
+        "decision_name": "Reject - return to supplier",
+        "category": "Reject",
+        "target_stock_type": "WAREHOUSE_BLOCKED",
+        "follow_up_action": "Move to Bin",
+        "follow_up_bin": "PLT1-DAMAGE-D1",
+        "active": 1
+      },
+      {
+        "decision_code": "SCRAP",
+        "decision_name": "Scrap",
+        "category": "Reject",
+        "target_stock_type": "SCRAP",
+        "follow_up_action": "Move to Bin",
+        "follow_up_bin": "PLT1-DAMAGE-SCRAP1",
+        "active": 1
+      }
+    ],
+    "WMS Stock Owner": [
+      {
+        "owner_code": "OWN-PLANT",
+        "owner_name": "Plant (own stock)",
+        "partner_type": "Company",
+        "partner": "",
+        "active": 1
+      },
+      {
+        "owner_code": "OWN-CONSIGN",
+        "owner_name": "Consignment supplier stock",
+        "partner_type": "Supplier",
+        "partner": "",
+        "active": 1
+      },
+      {
+        "owner_code": "OWN-CUSTOMER",
+        "owner_name": "Customer-owned material",
+        "partner_type": "Customer",
+        "partner": "",
+        "active": 1
+      }
+    ],
+    "WMS Document Type": [
+      {
+        "document_type_code": "PLT1-RM-IN",
+        "document_type_name": "Raw material delivery",
+        "category": "Inbound Delivery",
+        "warehouse": "PLT1",
+        "is_default": 1,
+        "active": 1,
+        "defaults": [
+          {
+            "fieldname": "priority",
+            "value": "Normal"
+          }
+        ],
+        "field_control": [
+          {
+            "fieldname": "stock_owner",
+            "control": "Required"
+          }
+        ],
+        "status_transitions": []
+      },
+      {
+        "document_type_code": "PLT1-FG-OUT",
+        "document_type_name": "Finished goods delivery",
+        "category": "Outbound Delivery",
+        "warehouse": "PLT1",
+        "is_default": 1,
+        "active": 1,
+        "defaults": [
+          {
+            "fieldname": "priority",
+            "value": "Normal"
+          }
+        ],
+        "field_control": [],
+        "status_transitions": [
+          {
+            "from_status": "Open",
+            "to_status": "Cancelled",
+            "allowed_role": "WMS Supervisor"
+          }
+        ]
+      },
+      {
+        "document_type_code": "PLT1-PMR",
+        "document_type_name": "Production material request",
+        "category": "Warehouse Request",
+        "warehouse": "PLT1",
+        "is_default": 0,
+        "active": 1,
+        "defaults": [
+          {
+            "fieldname": "priority",
+            "value": "High"
+          }
+        ],
+        "field_control": [],
+        "status_transitions": []
+      }
+    ],
+    "PPF Action Profile": [
+      {
+        "profile_code": "PLT1-PUTAWAY-LABEL",
+        "profile_name": "Print HU label on putaway",
+        "reference_doctype": "Warehouse Task",
+        "document_type": "",
+        "active": 1,
+        "actions": [
+          {
+            "sequence": 10,
+            "event": "Status Change",
+            "status_field": "status",
+            "status_value": "Completed",
+            "condition": "doc.warehouse == 'PLT1'",
+            "action_type": "Print",
+            "parameters": "{\"event\": \"Putaway Confirmed\"}",
+            "execute_once": 1,
+            "active": 1
+          }
+        ]
+      },
+      {
+        "profile_code": "PLT1-HIGH-PRIO",
+        "profile_name": "Alert supervisors on urgent tasks",
+        "reference_doctype": "Warehouse Task",
+        "document_type": "",
+        "active": 1,
+        "actions": [
+          {
+            "sequence": 10,
+            "event": "After Insert",
+            "status_field": "status",
+            "status_value": "",
+            "condition": "doc.priority == 'Urgent'",
+            "action_type": "Notify",
+            "parameters": "{\"roles\": \"WMS Supervisor\", \"subject\": \"Urgent task\", \"message\": \"Urgent task \u007b{ doc.name }} created\"}",
+            "execute_once": 1,
+            "active": 1
+          }
+        ]
+      }
+    ],
+    "WMS MFS Endpoint": [
+      {
+        "endpoint_code": "PLT1-ASRS",
+        "endpoint_name": "Plant 1 conveyor / AS-RS controller",
+        "warehouse": "PLT1",
+        "mode": "Client",
+        "host": "192.168.10.50",
+        "port": 5000,
+        "terminator": "\\n",
+        "telegram_length": 0,
+        "encoding": "ascii",
+        "timeout_seconds": 5,
+        "wait_for_ack": 1,
+        "active": 1
+      }
+    ],
+    "WMS MFS Telegram Type": [
+      {
+        "type_code": "PLT1-MOVE",
+        "endpoint": "PLT1-ASRS",
+        "direction": "Outbound",
+        "identifier_start": 0,
+        "identifier_length": 0,
+        "identifier_value": "",
+        "fields": [
+          {
+            "field_name": "id",
+            "start": 0,
+            "length": 4,
+            "field_type": "String",
+            "constant": "MOVE"
+          },
+          {
+            "field_name": "task",
+            "start": 4,
+            "length": 12,
+            "field_type": "String",
+            "justify": "Left",
+            "pad": " "
+          },
+          {
+            "field_name": "quantity",
+            "start": 16,
+            "length": 6,
+            "field_type": "Integer",
+            "justify": "Right",
+            "pad": "0"
+          }
+        ],
+        "inbound_action": "None",
+        "active": 1
+      },
+      {
+        "type_code": "PLT1-CONF",
+        "endpoint": "PLT1-ASRS",
+        "direction": "Inbound",
+        "identifier_start": 0,
+        "identifier_length": 4,
+        "identifier_value": "CONF",
+        "fields": [
+          {
+            "field_name": "id",
+            "start": 0,
+            "length": 4,
+            "field_type": "String"
+          },
+          {
+            "field_name": "task",
+            "start": 4,
+            "length": 12,
+            "field_type": "String"
+          },
+          {
+            "field_name": "quantity",
+            "start": 16,
+            "length": 6,
+            "field_type": "Integer"
+          }
+        ],
+        "inbound_action": "Confirm Warehouse Task",
+        "active": 1
+      }
+    ],
+    "Packaging Spec": [
+      {
+        "item": "FG-WIDGET-SAMPLE",
+        "levels": [
+          {
+            "level_name": "Inner box",
+            "quantity_per_level": 12,
+            "hu_type": "CRATE",
+            "packaging_material": ""
+          },
+          {
+            "level_name": "Pallet",
+            "quantity_per_level": 480,
+            "hu_type": "PALLET",
+            "packaging_material": "PALLET_WRAP"
+          }
+        ],
+        "active": 1
+      }
+    ],
+    "Billing Rate": [
+      {
+        "priority": 100,
+        "warehouse": "PLT1",
+        "activity": "Putaway",
+        "uom_basis": "Per Unit",
+        "rate": 0.15,
+        "billing_item": "WMS-HANDLING-SAMPLE",
+        "active": 1
+      },
+      {
+        "priority": 110,
+        "warehouse": "PLT1",
+        "activity": "Pick",
+        "uom_basis": "Per Task",
+        "rate": 0.4,
+        "billing_item": "WMS-HANDLING-SAMPLE",
         "active": 1
       }
     ]

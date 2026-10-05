@@ -1,4 +1,4 @@
-import * as Store from "./store.js?v=2147aeedbd";
+import * as Store from "./store.js?v=76ce61e4c0";
 
 function slug(name) {
   return (name || "wms-profile").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "wms-profile";

@@ -1,6 +1,6 @@
-import { autofillSingleCompany } from "./preflight.js?v=2147aeedbd";
-import * as Store from "./store.js?v=2147aeedbd";
-import { el } from "./render.js?v=2147aeedbd";
+import { autofillSingleCompany } from "./preflight.js?v=76ce61e4c0";
+import * as Store from "./store.js?v=76ce61e4c0";
+import { el } from "./render.js?v=76ce61e4c0";
 
 export const PRESETS = [
   { id: "blank", name: "Blank", description: "Start empty and build the configuration from scratch.", file: null },
@@ -26,7 +26,7 @@ export const PRESETS = [
   },
   {
     id: "enterprise-multi-site", name: "Enterprise Multi-Site",
-    description: "Adds a third warehouse (Regional DC) with yard & dock appointment rules, a multi-stop milk-run route, network and print-agent printers, and turns on hourly supervisor alerts and stock ledger archiving. The most complete, hardest-to-outgrow starting point - expects multiple companies, so warehouse-to-company assignment is left for you to fill in.",
+    description: "Adds a third warehouse (Regional DC) with yard & dock appointment rules, a multi-stop milk-run route, network and print-agent printers, and turns on hourly supervisor alerts and stock ledger archiving. Also includes Manufacturing Plant 1: raw material racking with storage groups and handling indicators, intermediate aisle-end bins (layout-oriented storage control), a deconsolidation work center, two Production Supply Areas with control cycles, production output putaway, usage decisions, owners, document types, PPF actions and an AS/RS telegram link. Item, billing-item and workstation codes in it are samples (the PLT1 Control Cycles, Replenishment Rule, Packaging Spec and Billing Rates) - replace them with your own before applying. The most complete, hardest-to-outgrow starting point - expects multiple companies, so warehouse-to-company assignment is left for you to fill in.",
     file: "presets/enterprise-multi-site.json",
   },
 ];

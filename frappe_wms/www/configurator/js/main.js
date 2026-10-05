@@ -1,10 +1,10 @@
-import { loadSchema } from "./schema.js?v=2147aeedbd";
-import * as Store from "./store.js?v=2147aeedbd";
-import { initSearch } from "./search.js?v=2147aeedbd";
-import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js?v=2147aeedbd";
-import { initConnectModal } from "./connect.js?v=2147aeedbd";
-import * as ERP from "./erp.js?v=2147aeedbd";
-import { exportProfile, importProfileFromFile } from "./export_import.js?v=2147aeedbd";
+import { loadSchema } from "./schema.js?v=76ce61e4c0";
+import * as Store from "./store.js?v=76ce61e4c0";
+import { initSearch } from "./search.js?v=76ce61e4c0";
+import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js?v=76ce61e4c0";
+import { initConnectModal } from "./connect.js?v=76ce61e4c0";
+import * as ERP from "./erp.js?v=76ce61e4c0";
+import { exportProfile, importProfileFromFile } from "./export_import.js?v=76ce61e4c0";
 
 async function main() {
   await loadSchema();
