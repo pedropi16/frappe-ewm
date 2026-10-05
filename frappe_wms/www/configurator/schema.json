@@ -4259,7 +4259,7 @@
      "label": "Parameters (JSON)",
      "fieldtype": "Code",
      "options": "JSON",
-     "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}. Send MFS Telegram: {\"type\": \"Telegram type\", \"values\": {\"task\": \"{{ doc.name }}\"}}."
+     "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... \u007b{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}. Send MFS Telegram: {\"type\": \"Telegram type\", \"values\": {\"task\": \"\u007b{ doc.name }}\"}}."
     },
     {
      "fieldname": "execute_once",

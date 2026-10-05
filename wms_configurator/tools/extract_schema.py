@@ -250,7 +250,11 @@ def main():
         "doctypes": doctypes,
         "runtime": {n: runtime_links(n) for n in RUNTIME_DOCTYPES},
     }
-    (OUT_DIR / "schema.json").write_text(json.dumps(schema, indent=1, sort_keys=False))
+    # Frappe renders www files through Jinja, so a literal "{{" / "{%" / "{#" in a description would be evaluated: write the brace as a JSON escape.
+    text = json.dumps(schema, indent=1, sort_keys=False)
+    for brace in ("{{", "{%", "{#"):
+        text = text.replace(brace, "\\u007b" + brace[1])
+    (OUT_DIR / "schema.json").write_text(text)
     (OUT_DIR / "apply_order.json").write_text(json.dumps(apply_order, indent=1))
 
     print(f"Wrote {OUT_DIR / 'schema.json'} ({len(doctypes)} doctypes, {len(child_doctypes)} child tables)")
