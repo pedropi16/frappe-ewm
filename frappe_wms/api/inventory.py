@@ -67,8 +67,14 @@ def analyze_differences(warehouse, from_date=None, to_date=None, product=None):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None):
-    return _complete_inspection(inspection_name, passed_quantity, failed_quantity)
+def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None, decisions=None):
+    return _complete_inspection(inspection_name, passed_quantity, failed_quantity, parse_json(decisions, "decisions") if decisions else None)
+
+@frappe.whitelist()
+@retry_on_deadlock
+def record_sample_result(inspection_name, sample_name, result, remarks=None):
+    from frappe_wms.services.quality import record_sample_result as _record
+    return _record(inspection_name, sample_name, result, remarks)
 
 @frappe.whitelist()
 @retry_on_deadlock

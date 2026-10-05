@@ -479,7 +479,7 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 4.2 | HU type check | Done | See 2.2. |
 | 5.1 | Document hierarchy (request, order, final delivery) | Partial | Inbound/Outbound Delivery replicate ERPNext documents (one level), Goods Receipt/Issue post. **Gap:** the request / order / final-order split. |
 | 5.2 | Document types (number range, status profile, field control, PPF profile) | Gap | Fixed document model; number ranges only. |
-| 5.3 | Post Processing Framework | Partial | Print Determination Rule + spool; scheduler jobs; ERP sync queue. **Gap:** general condition/action framework (create tasks, send notifications, EDI). |
+| 5.3 | Post Processing Framework | Done | PPF Action Profile / actions (create tasks, print, notify, call method, set field, ToDo) with events, conditions, scheduled actions and a log (Phase E); print determination and the ERP sync queue as before. EDI output is a Call Method action. |
 | 6.1 | Warehouse process type | Partial | Activity, source/destination required, HU/stock required, confirmation mode, movement type, picking strategy, default source/destination storage type and bin, default queue and priority (Phase A). **Gap:** rough bin determination (bin chosen at confirmation), immediate-confirmation flag semantics. |
 | 6.2 | WPT determination matrix | Partial | Warehouse Process Type Determination Rule: item, item group, stock type, priority, indicator. **Gap:** document type, item type, process indicator, control indicator, quantity classification. |
 | 6.3 | Storage control: process-oriented | Done | Storage Process with steps; next task created from what was confirmed. |
@@ -493,9 +493,9 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 10.1 | Queue determination (WPT + area + door/staging) | Done | Queue by activity, storage type, activity area, door/staging bin; process type default queue (Phases A, C). |
 | 10.2 | Resources, groups, interleaving | Done | Resource Group owns queues, priority across queues, logon. |
 | 10.3 | RF framework | n/a | Own RF app (`/wms`); logical transactions are not needed. |
-| 11 | Yard, transportation units | Partial | Dock Appointment (yard bin, door, check-in/out), Shipment, Route. **Gap:** Transportation Unit as its own entity with yard tasks. |
+| 11 | Yard, transportation units | Done | Dock Appointment, WMS Transportation Unit and WMS Yard Task (yard spot / door moves) tied to the appointment, Shipment, Route (Phase E). |
 | 12.1 | VAS | Done | VAS Order with activities. |
-| 12.2 | Quality inspection | Partial | Inspection Rule (sampling %), WMS Quality Inspection (pass/fail to stock types) mirrored to ERPNext QI. **Gap:** sample management per HU, usage-decision follow-up tasks. |
+| 12.2 | Quality inspection | Done | Inspection Rule (sampling %, acceptable failures), sample plan per nested HU / quantity, sample results, usage decisions with stock type, follow-up task and ERPNext mirror (Phase E). |
 | 12.3 | Physical inventory | Done | Periodic/cycle (ABC)/zero-stock counts, zero-stock check when a pick empties a bin (setting), difference analyzer, 701/702. |
 | 12.4 | Cross-docking | Done | Opportunistic and planned (reservation before the goods arrive) (Phase C). |
 | 13 | ECC integration (CIF, qRFC, logs) | Done | Direct ERPNext integration; WMS ERP Sync Log with queued retry replaces qRFC. |
@@ -505,12 +505,12 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 15.3 | PMR, staging, consumption | Done | PMR from the Work Order, staging tasks (optionally via the deconsolidation work center), backflush from the Manufacture entry (reserved first, then pool), return of unused material (Phase B). |
 | 15.4 | Receipt from production | Done | FG receipt from a Work Order through GR and putaway. |
 | 16 | Core tables | n/a | Mapped by design (ledger + balance replace quants). |
-| 17 | Extension BAdIs | Partial | `wms_removal_strategies` hook; no general strategy-override hooks for putaway, WOCR, queue. |
+| 17 | Extension BAdIs | Done | Hooks: `wms_putaway_strategies`, `wms_removal_strategies`, `wms_wocr_group_key`, `wms_queue_override`, `wms_ppf_actions` (Phase E). |
 | 18 | Exceptions and business contexts | Done | WMS Exception Code with business context and system action (change bin, split task, skip, post difference) plus supervisor/comment/follow-up (Phase C). |
 | 19 | Labor management, travel distance | Partial | Labor Standard with the engineered-standard formula (base + units + travel + handling + PF&D), Manhattan travel distance from coordinates, order walk path, efficiency KPI (Phase D). **Gap:** network distance (shortest path along edges). |
 | 20 | MFS / PLC | n/a | Out of scope. |
 | 21 | Work centers, deconsolidation, packing station | Done | Work Center (types, locations), Packing Center, Consolidation Group. **Gap:** scale (RS232) integration. |
-| 22 | Embedded analytics | Partial | Monitor KPI views; no cube/consumption layer. |
+| 22 | Embedded analytics | Partial | Monitor KPI views plus four script reports (task analysis, bin utilization, resource activity, outbound status) with charts (Phase E). No separate cube layer. |
 
 ## Risks and open decisions
 

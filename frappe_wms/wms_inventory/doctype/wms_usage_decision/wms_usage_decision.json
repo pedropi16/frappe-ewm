@@ -1,0 +1,195 @@
+{
+  "name": "WMS Usage Decision",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "decision_code",
+    "decision_name",
+    "category",
+    "target_stock_type",
+    "follow_up_action",
+    "follow_up_bin",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "decision_code",
+      "label": "Decision Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "decision_name",
+      "label": "Decision",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "category",
+      "label": "Category",
+      "fieldtype": "Select",
+      "options": "Accept\nReject\nOther",
+      "reqd": 1,
+      "default": "Accept",
+      "in_list_view": 1,
+      "description": "Accept counts as passed, Reject as failed in the inspection's totals."
+    },
+    {
+      "fieldname": "target_stock_type",
+      "label": "Target Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "The stock moves to this stock type."
+    },
+    {
+      "fieldname": "follow_up_action",
+      "label": "Follow-up",
+      "fieldtype": "Select",
+      "options": "None\nMove to Bin",
+      "default": "None"
+    },
+    {
+      "fieldname": "follow_up_bin",
+      "label": "Follow-up Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "depends_on": "eval:doc.follow_up_action=='Move to Bin'",
+      "description": "E.g. the scrapping, rework or returns bin: a task moves the quantity there."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "field:decision_code",
+  "title_field": "decision_name"
+}

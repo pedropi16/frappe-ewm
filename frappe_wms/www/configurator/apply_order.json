@@ -1,6 +1,7 @@
 [
  "Bin Type",
  "Handling Unit Type Group",
+ "PPF Action Profile",
  "Putaway Control Indicator",
  "Stock Removal Control Indicator",
  "Storage Section Indicator",
@@ -34,6 +35,7 @@
  "Removal Rule",
  "Replenishment Rule",
  "WMS Route",
+ "WMS Usage Decision",
  "Work Center",
  "Production Supply Area",
  "Warehouse Queue",

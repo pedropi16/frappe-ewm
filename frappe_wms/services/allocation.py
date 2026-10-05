@@ -71,7 +71,7 @@ def _candidate_balances(row, warehouse, customer=None):
     item_group = frappe.db.get_value("Item", row.item, "item_group")
     rule = match_removal_rule(warehouse, item=row.item, item_group=item_group, stock_type=row.required_stock_type)
     if rule:
-        balances = apply_strategy(rule.strategy, balances, sort_fields=rule.sort_fields, fixed_bin=rule.fixed_bin)
+        balances = apply_strategy(rule.strategy, balances, sort_fields=rule.sort_fields, fixed_bin=rule.fixed_bin, custom_strategy=rule.get("custom_strategy"))
     else:
         # No configured Removal Rule for this warehouse/item - preserve the exact FEFO-then-FIFO
         # default every warehouse had before Removal Rules existed (soonest expiry first, nulls

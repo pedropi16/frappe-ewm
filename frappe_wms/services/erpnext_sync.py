@@ -416,8 +416,10 @@ def sync_quality_inspection(doc, passed, failed):
     if not erpnext_warehouse: return None
     company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
     se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Quality Inspection {doc.name}")
-    for qty, to_stock_type in ((passed, doc.passed_to_stock_type), (failed, doc.failed_to_stock_type)):
-        if qty <= 0: continue
+    moves = ([(d.quantity, frappe.db.get_value("WMS Usage Decision", d.usage_decision, "target_stock_type")) for d in doc.get("decisions") or []]
+        or [(passed, doc.passed_to_stock_type), (failed, doc.failed_to_stock_type)])
+    for qty, to_stock_type in moves:
+        if qty <= 0 or to_stock_type == doc.from_stock_type: continue
         se.append("items", {
             "item_code": doc.product, "qty": flt(qty), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
             "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,

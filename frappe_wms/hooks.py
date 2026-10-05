@@ -38,6 +38,12 @@ jinja = {"methods": ["frappe_wms.services.printing.packing_list_data", "frappe_w
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 
 doc_events = {
+    "*": {
+        "after_insert": "frappe_wms.services.ppf.on_event",
+        "on_update": "frappe_wms.services.ppf.on_event",
+        "on_submit": "frappe_wms.services.ppf.on_event",
+        "on_cancel": "frappe_wms.services.ppf.on_event",
+    },
     "Handling Unit": {
         "validate": "frappe_wms.events.handling_unit.validate_hu",
         "on_update": "frappe_wms.events.handling_unit.on_hu_update",
@@ -127,7 +133,7 @@ doc_events = {
 
 scheduler_events = {
     # ERPNext postings queued by warehouses in "Queued with Retry" mode (services/erp_sync_queue.py).
-    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due", "frappe_wms.services.printing.retry_print_jobs"]},
+    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due", "frappe_wms.services.printing.retry_print_jobs", "frappe_wms.services.ppf.run_scheduled_actions"]},
     "hourly": [
         "frappe_wms.tasks.recalculate_stale_bin_capacity",
         "frappe_wms.tasks.run_replenishment_check",
@@ -156,6 +162,13 @@ wms_removal_strategies = {
     "By Quantity": "frappe_wms.services.removal_rules.strategy_by_quantity",
     "Fixed Bin": "frappe_wms.services.removal_rules.strategy_fixed_bin",
 }
+
+# Further extension points (each an app can register in its own hooks.py):
+#   wms_putaway_strategies = {"My strategy": "myapp.wms.rank_bins"}     function (bins, context) -> bins, best first; used by a Bin Determination Rule with strategy Custom
+#   wms_removal_strategies  (above) - used by a Removal Rule with strategy Custom
+#   wms_wocr_group_key = ["myapp.wms.wo_group"]                         function (task) -> str|None; tasks with different values never share a Warehouse Order
+#   wms_queue_override = ["myapp.wms.pick_queue"]                       function (task, queue) -> queue|None
+#   wms_ppf_actions = {"My action": "myapp.wms.do_it"}                 function (doc, params) for a PPF action of type Call Method
 
 permission_query_conditions = {
     "WMS Stock Ledger Entry": "frappe_wms.permissions.ledger_query",

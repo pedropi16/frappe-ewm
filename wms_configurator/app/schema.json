@@ -29,6 +29,8 @@
   "WO Creation Rule",
   "Inspection Rule",
   "WMS Exception Code",
+  "WMS Usage Decision",
+  "PPF Action Profile",
   "WMS Block Reason",
   "Count Tolerance Group",
   "Cycle Count Rule",
@@ -1572,7 +1574,7 @@
      "fieldname": "strategy",
      "label": "Strategy",
      "fieldtype": "Select",
-     "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
+     "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin\nCustom",
      "reqd": 1
     },
     {
@@ -1586,6 +1588,13 @@
      "label": "Destination Storage Group",
      "fieldtype": "Link",
      "options": "Storage Group"
+    },
+    {
+     "fieldname": "custom_strategy",
+     "label": "Custom Strategy",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.strategy=='Custom'",
+     "description": "Name registered by an app under hooks.py wms_putaway_strategies: a function (bins, context) -> bins, best first."
     }
    ],
    "key": {
@@ -2106,7 +2115,7 @@
      "fieldname": "strategy",
      "label": "Strategy",
      "fieldtype": "Select",
-     "options": "FIFO\nLIFO\nFEFO\nStringent FIFO\nPartial Quantity First\nBy Quantity\nFixed Bin",
+     "options": "FIFO\nLIFO\nFEFO\nStringent FIFO\nPartial Quantity First\nBy Quantity\nFixed Bin\nCustom",
      "reqd": 1
     },
     {
@@ -2128,6 +2137,13 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "custom_strategy",
+     "label": "Custom Strategy",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.strategy=='Custom'",
+     "description": "Name registered by an app under hooks.py wms_removal_strategies (balances, context) -> balances."
     }
    ],
    "key": {
@@ -2366,6 +2382,11 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "acceptable_failures",
+     "label": "Acceptable Failed Samples",
+     "fieldtype": "Int"
     }
    ],
    "key": {
@@ -2458,6 +2479,123 @@
     "type": "field",
     "fields": [
      "exception_code"
+    ]
+   }
+  },
+  "WMS Usage Decision": {
+   "name": "WMS Usage Decision",
+   "module": "WMS Inventory",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "decision_code",
+     "label": "Decision Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "decision_name",
+     "label": "Decision",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "category",
+     "label": "Category",
+     "fieldtype": "Select",
+     "options": "Accept\nReject\nOther",
+     "reqd": 1,
+     "default": "Accept",
+     "description": "Accept counts as passed, Reject as failed in the inspection's totals."
+    },
+    {
+     "fieldname": "target_stock_type",
+     "label": "Target Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "reqd": 1,
+     "description": "The stock moves to this stock type."
+    },
+    {
+     "fieldname": "follow_up_action",
+     "label": "Follow-up",
+     "fieldtype": "Select",
+     "options": "None\nMove to Bin",
+     "default": "None"
+    },
+    {
+     "fieldname": "follow_up_bin",
+     "label": "Follow-up Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "depends_on": "eval:doc.follow_up_action=='Move to Bin'",
+     "description": "E.g. the scrapping, rework or returns bin: a task moves the quantity there."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "decision_code"
+    ]
+   }
+  },
+  "PPF Action Profile": {
+   "name": "PPF Action Profile",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "profile_code",
+     "label": "Profile Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "profile_name",
+     "label": "Profile Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "reference_doctype",
+     "label": "Document Type",
+     "fieldtype": "Link",
+     "options": "DocType",
+     "reqd": 1,
+     "description": "The document the actions run for."
+    },
+    {
+     "fieldname": "document_type",
+     "label": "WMS Document Type",
+     "fieldtype": "Data",
+     "description": "Optional: only documents of this WMS Document Type."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "actions",
+     "label": "Actions",
+     "fieldtype": "Table",
+     "options": "PPF Action Definition"
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "profile_code"
     ]
    }
   },
@@ -3714,6 +3852,78 @@
     "type": "none"
    }
   },
+  "PPF Action Definition": {
+   "name": "PPF Action Definition",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "sequence",
+     "label": "Sequence",
+     "fieldtype": "Int",
+     "default": 10
+    },
+    {
+     "fieldname": "event",
+     "label": "Event",
+     "fieldtype": "Select",
+     "options": "After Insert\nOn Update\nOn Submit\nOn Cancel\nStatus Change\nScheduled",
+     "reqd": 1
+    },
+    {
+     "fieldname": "status_field",
+     "label": "Status Field",
+     "fieldtype": "Data",
+     "default": "status",
+     "depends_on": "eval:doc.event=='Status Change'"
+    },
+    {
+     "fieldname": "status_value",
+     "label": "Status Value",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.event=='Status Change'",
+     "description": "Runs when the field changes to this value."
+    },
+    {
+     "fieldname": "condition",
+     "label": "Condition",
+     "fieldtype": "Small Text",
+     "description": "Python expression over `doc`, e.g. doc.priority == 'High' and doc.warehouse == 'MAIN'. Blank = always."
+    },
+    {
+     "fieldname": "action_type",
+     "label": "Action",
+     "fieldtype": "Select",
+     "options": "Create Tasks\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
+     "reqd": 1
+    },
+    {
+     "fieldname": "parameters",
+     "label": "Parameters (JSON)",
+     "fieldtype": "Code",
+     "options": "JSON",
+     "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}."
+    },
+    {
+     "fieldname": "execute_once",
+     "label": "Execute Once per Document",
+     "fieldtype": "Check",
+     "default": 1,
+     "description": "Skip documents this action already ran successfully for."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
   "PSA Bin": {
    "name": "PSA Bin",
    "module": "WMS Core",
@@ -4185,6 +4395,14 @@
     {
      "target": "Stock Entry",
      "label": "ERPNext Stock Entry"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Samples \u2192 Handling Unit"
+    },
+    {
+     "target": "WMS Usage Decision",
+     "label": "Usage Decisions \u2192 Usage Decision"
     }
    ]
   },

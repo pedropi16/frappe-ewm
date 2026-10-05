@@ -16,12 +16,17 @@
     "storage_bin",
     "from_stock_type",
     "quantity",
+    "sampling_percentage",
+    "acceptable_failures",
     "stock_uom",
     "status",
     "passed_quantity",
     "passed_to_stock_type",
     "failed_quantity",
     "failed_to_stock_type",
+    "samples",
+    "sample_result",
+    "decisions",
     "remarks",
     "inspector",
     "inspection_date",
@@ -179,6 +184,39 @@
       "options": "Stock Entry",
       "read_only": 1,
       "description": "Same-warehouse Material Transfer posted to change the WMS Stock Type Inventory Dimension in ERPNext to match this decision, if the warehouse is ERPNext-linked."
+    },
+    {
+      "fieldname": "sampling_percentage",
+      "label": "Sampling %",
+      "fieldtype": "Percent",
+      "description": "From the Inspection Rule at creation; below 100 the inspection works on samples."
+    },
+    {
+      "fieldname": "acceptable_failures",
+      "label": "Acceptable Failed Samples",
+      "fieldtype": "Int",
+      "description": "More failed samples than this rejects the whole inspection."
+    },
+    {
+      "fieldname": "samples",
+      "label": "Samples",
+      "fieldtype": "Table",
+      "options": "WMS QI Sample"
+    },
+    {
+      "fieldname": "sample_result",
+      "label": "Sample Result",
+      "fieldtype": "Select",
+      "options": "Pending\nAccept\nReject",
+      "read_only": 1,
+      "default": "Pending"
+    },
+    {
+      "fieldname": "decisions",
+      "label": "Usage Decisions",
+      "fieldtype": "Table",
+      "options": "WMS QI Decision",
+      "description": "Split the inspected quantity over usage decisions (accept, rework, scrap ...). Without decisions the passed/failed quantities are used."
     }
   ],
   "autoname": "QI-.########",

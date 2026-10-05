@@ -147,6 +147,7 @@ def determine_destination_bin(context):
             # preferred_storage_type fallback are just one-element sequences of this same loop.
             bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, rule.destination_section, context, rule.destination_storage_group)
             if not bins: continue
+            context["_custom_strategy"] = rule.get("custom_strategy")
             bin_name=_apply_bin_strategy(rule.strategy,bins,context)
             if bin_name: return bin_name
     # No rule gave a bin: the storage types the product's indicators lead to, each with its own default putaway strategy.
@@ -167,7 +168,21 @@ def determine_route(warehouse, carrier=None):
 def _occupied_bins(bins, item):
     return set(frappe.get_all("WMS Stock Balance",filters={"storage_bin":["in",[b.name for b in bins]],"product":item,"quantity":[">",0]},pluck="storage_bin"))
 
+def get_putaway_strategies():
+    """Putaway strategies other apps register under hooks.py wms_putaway_strategies: name -> function (bins, context) -> bins, best first
+    (the extension point of SAP's putaway strategy BAdI). The last app to register a name wins."""
+    registry = {}
+    for name, paths in (frappe.get_hooks("wms_putaway_strategies") or {}).items():
+        path = paths[-1] if isinstance(paths, list) else paths
+        registry[name] = frappe.get_attr(path) if isinstance(path, str) else path
+    return registry
+
 def _apply_bin_strategy(strategy,bins,context):
+    if strategy=="Custom":
+        fn = get_putaway_strategies().get(context.get("_custom_strategy"))
+        if not fn: frappe.throw(_("Unknown putaway strategy: {0}").format(context.get("_custom_strategy")))
+        ranked = fn(bins, context)
+        return ranked[0].name if ranked else None
     if strategy=="Least Utilized Bin":
         bins=sorted(bins,key=lambda x:x.current_hu_count or 0)
     elif strategy in ("Bin Sequence","General Storage"):

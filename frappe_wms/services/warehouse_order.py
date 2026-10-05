@@ -158,10 +158,15 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
             storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])
             if storage_type: break
     queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area, _task_door(task_doc)) or default_queue
+    for path in frappe.get_hooks("wms_queue_override") or []:  # extension point: function (task, queue) -> queue name or None (keep)
+        queue = frappe.get_attr(path)(task_doc, queue) or queue
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     stock_type = task_doc.get("stock_type_from")
     unit_weight = flt(frappe.db.get_value("WMS Product", {"item": task_doc.product}, "gross_weight_per_unit")) if task_doc.product else None
     rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type, unit_weight)
+    for path in frappe.get_hooks("wms_wocr_group_key") or []:  # extension point: extra grouping of tasks into Warehouse Orders, function (task) -> str or None
+        extra = frappe.get_attr(path)(task_doc)
+        if extra: batch_key = f"{batch_key}~{extra}"
     if rule and rule.group_by_activity_area: batch_key = f"{batch_key}@{activity_area or '-'}"
     if rule and rule.group_by_consolidation_group and task_doc.get("consolidation_group_line"):
         batch_key = f"{batch_key}+{frappe.db.get_value('Consolidation Group Line', task_doc.consolidation_group_line, 'parent')}"

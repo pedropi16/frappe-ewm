@@ -683,6 +683,38 @@
    "color": "Orange"
   },
   {
+   "type": "Report",
+   "label": "Task Analysis",
+   "link_to": "WMS Task Analysis",
+   "is_query_report": 1,
+   "icon": "chart",
+   "color": "Blue"
+  },
+  {
+   "type": "Report",
+   "label": "Bin Utilization",
+   "link_to": "WMS Bin Utilization",
+   "is_query_report": 1,
+   "icon": "chart",
+   "color": "Blue"
+  },
+  {
+   "type": "Report",
+   "label": "Resource Activity",
+   "link_to": "WMS Resource Activity",
+   "is_query_report": 1,
+   "icon": "chart",
+   "color": "Blue"
+  },
+  {
+   "type": "Report",
+   "label": "Outbound Status",
+   "link_to": "WMS Outbound Status",
+   "is_query_report": 1,
+   "icon": "chart",
+   "color": "Blue"
+  },
+  {
    "type": "Page",
    "label": "Production Staging",
    "link_to": "wms-production-staging",

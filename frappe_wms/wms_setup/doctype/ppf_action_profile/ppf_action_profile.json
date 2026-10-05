@@ -1,0 +1,180 @@
+{
+  "name": "PPF Action Profile",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "profile_code",
+    "profile_name",
+    "reference_doctype",
+    "document_type",
+    "active",
+    "actions"
+  ],
+  "fields": [
+    {
+      "fieldname": "profile_code",
+      "label": "Profile Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "profile_name",
+      "label": "Profile Name",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "reference_doctype",
+      "label": "Document Type",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "The document the actions run for."
+    },
+    {
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Data",
+      "description": "Optional: only documents of this WMS Document Type."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "actions",
+      "label": "Actions",
+      "fieldtype": "Table",
+      "options": "PPF Action Definition"
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "field:profile_code",
+  "title_field": "profile_name"
+}

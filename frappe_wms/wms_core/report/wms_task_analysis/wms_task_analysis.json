@@ -1,0 +1,33 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "is_standard": "Yes",
+ "json": "{}",
+ "module": "WMS Core",
+ "name": "WMS Task Analysis",
+ "prepared_report": 0,
+ "ref_doctype": "Warehouse Task",
+ "report_name": "WMS Task Analysis",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Inventory Controller"
+  },
+  {
+   "role": "WMS Auditor"
+  }
+ ]
+}

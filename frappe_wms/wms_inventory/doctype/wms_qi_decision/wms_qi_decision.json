@@ -1,0 +1,35 @@
+{
+  "name": "WMS QI Decision",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "usage_decision",
+    "quantity"
+  ],
+  "fields": [
+    {
+      "fieldname": "usage_decision",
+      "label": "Usage Decision",
+      "fieldtype": "Link",
+      "options": "WMS Usage Decision",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

@@ -822,6 +822,25 @@ SAP's product-driven storage search: indicators on the product pick the storage 
 * **Packaging Spec condition technique** - a spec can be for a customer or a supplier (named `item-customer`); `determine_packaging_spec` takes the
   customer's, then the supplier's, then the generic spec (named by the item as before). Packing by instruction and VAS use it with the delivery's customer.
 
+## Extension, actions, quality decisions, yard units and reports (Phase E, part 1)
+
+* **Extension points** (hooks.py of any app): `wms_putaway_strategies` (a Bin Determination Rule with strategy *Custom*: `(bins, context) -> bins`, best first),
+  `wms_removal_strategies` (a Removal Rule with strategy *Custom*), `wms_wocr_group_key` (`(task) -> str`: tasks with different values never share a
+  Warehouse Order), `wms_queue_override` (`(task, queue) -> queue`), `wms_ppf_actions` (see below).
+* **Post Processing Framework** - `PPF Action Profile` per document type with actions: *when* (After Insert / On Update / On Submit / On Cancel / Status
+  Change / Scheduled), a *condition* (Python over `doc`), and *what* (Create Tasks for a Warehouse Request, Print, Notify, Call Method registered in
+  `wms_ppf_actions`, Set Field, Create ToDo; JSON parameters). Every run is logged in `PPF Action Log`; a failing action is logged and never undoes the
+  document; *Execute once* skips documents an action already succeeded for; scheduled actions run every 10 minutes over the documents their filters select.
+* **Quality inspection samples and usage decisions** - an Inspection Rule's *sampling percentage* makes the inspection sample: of the HUs nested in the
+  inspected HU (evenly spread, at least one), else a quantity of units; `record_sample_result` marks each sample Pass/Fail; more failed samples than
+  *acceptable failures* rejects the whole quantity. A `WMS Usage Decision` (Accept / Reject / Other, target stock type, optional follow-up *Move to Bin*)
+  splits the inspected quantity over decisions: each moves its stock to its stock type, raises its follow-up task and is mirrored to ERPNext.
+* **Transportation Units and yard tasks** - `WMS Transportation Unit` (vehicle / container with status Planned, In Yard, At Door, Loading, Unloading,
+  Departed): the dock appointment's check-in creates it on its yard spot, `WMS Yard Task` moves it between yard spots and doors (confirming a door move
+  books the door on the appointment), departing it checks the appointment out.
+* **Reports** - *WMS Task Analysis* (by task type / resource / day / product), *WMS Bin Utilization*, *WMS Resource Activity* (efficiency against the
+  labor standards), *WMS Outbound Status*; linked from the WMS workspace.
+
 ## Modules
 
 | Module | Contains |

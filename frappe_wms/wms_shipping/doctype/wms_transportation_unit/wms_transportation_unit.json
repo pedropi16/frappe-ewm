@@ -1,0 +1,245 @@
+{
+  "name": "WMS Transportation Unit",
+  "module": "WMS Shipping",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "unit_type",
+    "status",
+    "carrier",
+    "vehicle_registration",
+    "trailer_number",
+    "driver_name",
+    "seal_number",
+    "yard_bin",
+    "door",
+    "dock_appointment",
+    "shipment",
+    "inbound_delivery",
+    "arrived_at",
+    "departed_at"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "unit_type",
+      "label": "Unit Type",
+      "fieldtype": "Select",
+      "options": "Truck\nTrailer\nContainer\nRail Car\nVan",
+      "default": "Truck",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Planned\nIn Yard\nAt Door\nLoading\nUnloading\nDeparted\nCancelled",
+      "default": "Planned",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "carrier",
+      "label": "Carrier",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "vehicle_registration",
+      "label": "Vehicle Registration",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "trailer_number",
+      "label": "Trailer Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "driver_name",
+      "label": "Driver",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "seal_number",
+      "label": "Seal Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "yard_bin",
+      "label": "Yard Spot",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "door",
+      "label": "Door",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "dock_appointment",
+      "label": "Dock Appointment",
+      "fieldtype": "Link",
+      "options": "WMS Dock Appointment"
+    },
+    {
+      "fieldname": "shipment",
+      "label": "Shipment",
+      "fieldtype": "Link",
+      "options": "WMS Shipment"
+    },
+    {
+      "fieldname": "inbound_delivery",
+      "label": "Inbound Delivery",
+      "fieldtype": "Link",
+      "options": "Inbound Delivery"
+    },
+    {
+      "fieldname": "arrived_at",
+      "label": "Arrived At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "departed_at",
+      "label": "Departed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "TU-.#####"
+}

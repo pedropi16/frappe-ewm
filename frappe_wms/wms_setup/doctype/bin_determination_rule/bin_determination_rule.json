@@ -22,6 +22,7 @@
     "destination_storage_group",
     "fixed_destination_bin",
     "strategy",
+    "custom_strategy",
     "active"
   ],
   "fields": [
@@ -107,7 +108,7 @@
       "fieldname": "strategy",
       "label": "Strategy",
       "fieldtype": "Select",
-      "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
+      "options": "Fixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nManual Selection\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin\nCustom",
       "reqd": 1
     },
     {
@@ -122,6 +123,13 @@
       "label": "Destination Storage Group",
       "fieldtype": "Link",
       "options": "Storage Group"
+    },
+    {
+      "fieldname": "custom_strategy",
+      "label": "Custom Strategy",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.strategy=='Custom'",
+      "description": "Name registered by an app under hooks.py wms_putaway_strategies: a function (bins, context) -> bins, best first."
     }
   ],
   "autoname": "BDR-.#####",

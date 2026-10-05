@@ -56,3 +56,46 @@ def check_out(appointment):
 @retry_on_deadlock
 def cancel(appointment, reason=None):
     return yard.cancel(appointment, reason)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def create_transport_unit(warehouse, unit_type="Truck", carrier=None, vehicle_registration=None, trailer_number=None, driver_name=None, seal_number=None,
+                          dock_appointment=None, shipment=None, inbound_delivery=None):
+    from frappe_wms.services import transport_unit as tu
+    return tu.create_transport_unit(warehouse, unit_type, carrier, vehicle_registration, trailer_number, driver_name, seal_number, dock_appointment, shipment, inbound_delivery)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def arrive_transport_unit(unit, yard_spot=None):
+    from frappe_wms.services import transport_unit as tu
+    return tu.arrive(unit, yard_spot)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def request_yard_move(unit, to_bin, assigned_resource=None, priority="Normal"):
+    from frappe_wms.services import transport_unit as tu
+    return tu.request_yard_move(unit, to_bin, assigned_resource, priority)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def confirm_yard_move(task):
+    from frappe_wms.services import transport_unit as tu
+    return tu.confirm_yard_move(task)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def start_transport_unit_work(unit, kind):
+    from frappe_wms.services import transport_unit as tu
+    return tu.start_work(unit, kind)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def depart_transport_unit(unit):
+    from frappe_wms.services import transport_unit as tu
+    return tu.depart(unit)

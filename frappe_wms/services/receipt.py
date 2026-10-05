@@ -83,12 +83,16 @@ def post_goods_receipt(doc):
     if doc.inbound_delivery:
         _update_inbound_delivery_receipt_progress(doc.inbound_delivery, doc.items)
     for row in inspection_rows:
-        frappe.get_doc({
+        rule = matches_inspection_rule(doc.warehouse, row.item, frappe.db.get_value("Item", row.item, "item_group"))
+        sampling, acceptable = frappe.db.get_value("Inspection Rule", rule, ["sampling_percentage", "acceptable_failures"]) if rule else (0, 0)
+        qi = frappe.get_doc({
             "doctype": "WMS Quality Inspection", "warehouse": doc.warehouse, "product": row.item,
             "batch_no": row.batch_no, "serial_no": row.serial_no, "handling_unit": row.handling_unit,
             "storage_bin": doc.receiving_bin, "from_stock_type": "QUALITY", "quantity": row.quantity,
-            "stock_uom": row.stock_uom, "goods_receipt": doc.name,
+            "stock_uom": row.stock_uom, "goods_receipt": doc.name, "sampling_percentage": sampling or 100, "acceptable_failures": acceptable or 0,
         }).insert(ignore_permissions=True)
+        from frappe_wms.services.quality import generate_samples
+        generate_samples(qi)
     doc.db_set("status","Posted")
 
 def reverse_goods_receipt(doc):

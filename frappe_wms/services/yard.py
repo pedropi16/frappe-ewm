@@ -162,6 +162,8 @@ def check_in(warehouse, appointment=None, vehicle_registration=None, direction=N
     doc.update({"status": "Checked In", "checked_in_at": now, "yard_bin": yard_bin})
     if doc.is_new(): doc.insert(ignore_permissions=True)
     else: doc.save(ignore_permissions=True)
+    from frappe_wms.services.transport_unit import sync_from_appointment
+    sync_from_appointment(doc)  # the truck's transportation unit
     return {"appointment": doc.name, "status": doc.status, "door": doc.door, "yard_bin": doc.yard_bin}
 
 
@@ -181,6 +183,8 @@ def to_door(appointment, door=None):
     doc.save(ignore_permissions=True)
     if doc.shipment and frappe.db.get_value("WMS Shipment", doc.shipment, "status") in ("Ready to Load", "Loading", "Loaded"):
         frappe.db.set_value("WMS Shipment", doc.shipment, "door", door)
+    from frappe_wms.services.transport_unit import sync_from_appointment
+    sync_from_appointment(doc)
     return {"appointment": doc.name, "status": doc.status, "door": door}
 
 
@@ -197,6 +201,9 @@ def check_out(appointment):
     now = now_datetime()
     doc.db_set({"status": "Checked Out", "checked_out_at": now, "completed_at": doc.completed_at or (now if doc.status == "At Door" else None)},
                update_modified=True)
+    doc.status = "Checked Out"
+    from frappe_wms.services.transport_unit import sync_from_appointment
+    sync_from_appointment(doc)
     return {"appointment": doc.name, "status": "Checked Out"}
 
 

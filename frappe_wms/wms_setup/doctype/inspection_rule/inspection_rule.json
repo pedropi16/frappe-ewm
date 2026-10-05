@@ -13,6 +13,7 @@
     "item",
     "item_group",
     "sampling_percentage",
+    "acceptable_failures",
     "active"
   ],
   "fields": [
@@ -57,6 +58,12 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "acceptable_failures",
+      "label": "Acceptable Failed Samples",
+      "fieldtype": "Int",
+      "default": 0
     }
   ],
   "autoname": "INSR-.#####",

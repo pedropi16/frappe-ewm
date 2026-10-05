@@ -1,0 +1,48 @@
+{
+  "name": "WMS QI Sample",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "handling_unit",
+    "quantity_sampled",
+    "result",
+    "remarks"
+  ],
+  "fields": [
+    {
+      "fieldname": "handling_unit",
+      "label": "Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "quantity_sampled",
+      "label": "Quantity Sampled",
+      "fieldtype": "Float",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "result",
+      "label": "Result",
+      "fieldtype": "Select",
+      "options": "Pending\nPass\nFail",
+      "default": "Pending",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Data"
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

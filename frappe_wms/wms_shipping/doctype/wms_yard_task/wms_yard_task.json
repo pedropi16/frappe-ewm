@@ -1,0 +1,207 @@
+{
+  "name": "WMS Yard Task",
+  "module": "WMS Shipping",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "transport_unit",
+    "warehouse",
+    "from_bin",
+    "to_bin",
+    "status",
+    "priority",
+    "assigned_resource",
+    "confirmed_at",
+    "confirmed_by"
+  ],
+  "fields": [
+    {
+      "fieldname": "transport_unit",
+      "label": "Transportation Unit",
+      "fieldtype": "Link",
+      "options": "WMS Transportation Unit",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "from_bin",
+      "label": "From",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "to_bin",
+      "label": "To",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nConfirmed\nCancelled",
+      "default": "Open",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Select",
+      "options": "Low\nNormal\nHigh\nUrgent",
+      "default": "Normal"
+    },
+    {
+      "fieldname": "assigned_resource",
+      "label": "Resource",
+      "fieldtype": "Link",
+      "options": "WMS Resource"
+    },
+    {
+      "fieldname": "confirmed_at",
+      "label": "Confirmed At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "confirmed_by",
+      "label": "Confirmed By",
+      "fieldtype": "Link",
+      "options": "User",
+      "read_only": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "YT-.#####"
+}

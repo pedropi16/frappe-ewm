@@ -74,7 +74,9 @@ Shipped: D1 coordinates, access type, fire section, stack height x lane depth ca
 | D5 HU extras | Outer dimensions and max payload on the HU, HU type group, Planned/In-Transit statuses. | Payload check on packing. |
 | D6 Packspec condition technique | Packaging Spec determination by product + customer/vendor. | Customer-specific spec wins over the default. |
 
-## Phase E - Decision-gated work (not scheduled)
+## Phase E - Decision-gated work (all options requested 2026-10-05)
+
+Status: **E3 PPF, E4 transportation unit, E5 quality samples/usage decisions, E6 extension hooks, E7 reports done**; E1 owner/PETD and E2 document model + types in progress; MFS/PLC and scale integration still open.
 
 Large or business-dependent; decide before any work starts.
 

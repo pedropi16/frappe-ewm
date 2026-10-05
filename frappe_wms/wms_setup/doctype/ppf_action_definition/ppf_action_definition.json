@@ -1,0 +1,91 @@
+{
+  "name": "PPF Action Definition",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "sequence",
+    "event",
+    "status_field",
+    "status_value",
+    "condition",
+    "action_type",
+    "parameters",
+    "execute_once",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "sequence",
+      "label": "Sequence",
+      "fieldtype": "Int",
+      "in_list_view": 1,
+      "default": 10
+    },
+    {
+      "fieldname": "event",
+      "label": "Event",
+      "fieldtype": "Select",
+      "options": "After Insert\nOn Update\nOn Submit\nOn Cancel\nStatus Change\nScheduled",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status_field",
+      "label": "Status Field",
+      "fieldtype": "Data",
+      "default": "status",
+      "depends_on": "eval:doc.event=='Status Change'"
+    },
+    {
+      "fieldname": "status_value",
+      "label": "Status Value",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.event=='Status Change'",
+      "description": "Runs when the field changes to this value."
+    },
+    {
+      "fieldname": "condition",
+      "label": "Condition",
+      "fieldtype": "Small Text",
+      "description": "Python expression over `doc`, e.g. doc.priority == 'High' and doc.warehouse == 'MAIN'. Blank = always."
+    },
+    {
+      "fieldname": "action_type",
+      "label": "Action",
+      "fieldtype": "Select",
+      "options": "Create Tasks\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "parameters",
+      "label": "Parameters (JSON)",
+      "fieldtype": "Code",
+      "options": "JSON",
+      "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}."
+    },
+    {
+      "fieldname": "execute_once",
+      "label": "Execute Once per Document",
+      "fieldtype": "Check",
+      "default": 1,
+      "description": "Skip documents this action already ran successfully for."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

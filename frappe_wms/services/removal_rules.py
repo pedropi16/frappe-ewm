@@ -78,7 +78,11 @@ def get_removal_strategies():
     return registry
 
 
-def apply_strategy(strategy_name, balances, *, sort_fields=None, fixed_bin=None):
+def apply_strategy(strategy_name, balances, *, sort_fields=None, fixed_bin=None, custom_strategy=None):
+    if strategy_name == "Custom":
+        fn = get_removal_strategies().get(custom_strategy)
+        if not fn: frappe.throw(_("Unknown removal strategy: {0}").format(custom_strategy))
+        return fn(balances, {})
     if strategy_name == "Fixed Bin":
         return strategy_fixed_bin(balances, {"fixed_bin": fixed_bin})
     if sort_fields:

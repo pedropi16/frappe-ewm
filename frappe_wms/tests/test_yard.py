@@ -84,3 +84,33 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         self.assertEqual(yard.to_door(a)["door"], self.doors[0])
         w = yard.check_in(self.wh, vehicle_registration="NEXT-1", direction="Inbound")["appointment"]
         self.assertEqual(yard.to_door(w)["door"], self.doors[1])
+
+    def test_transportation_unit_follows_the_appointment_and_yard_tasks_move_it(self):
+        from frappe_wms.services import transport_unit as tu
+        a = self._book(self.t0, vehicle_registration="1234-ABC", direction="Outbound")
+        yard.check_in(self.wh, appointment=a, yard_bin=self.spot)
+        unit = frappe.db.get_value("WMS Transportation Unit", {"dock_appointment": a}, ["name", "status", "yard_bin", "vehicle_registration"], as_dict=True)
+        self.assertEqual((unit.status, unit.yard_bin, unit.vehicle_registration), ("In Yard", self.spot, "1234-ABC"), "checking in creates the unit on its yard spot")
+        door = frappe.db.get_value("WMS Dock Appointment", a, "door")
+        task = tu.request_yard_move(unit.name, door)
+        with self.assertRaises(frappe.ValidationError): tu.request_yard_move(unit.name, self.doors[1])  # one open yard task at a time
+        with self.assertRaises(frappe.ValidationError): tu.depart(unit.name)  # not while a yard task is open
+        tu.confirm_yard_move(task)
+        row = frappe.db.get_value("WMS Transportation Unit", unit.name, ["status", "door", "yard_bin"], as_dict=True)
+        self.assertEqual((row.status, row.door, row.yard_bin), ("At Door", door, None))
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", a, "status"), "At Door", "the appointment follows the yard move")
+        tu.start_work(unit.name, "Loading")
+        tu.depart(unit.name)
+        self.assertEqual(frappe.db.get_value("WMS Transportation Unit", unit.name, "status"), "Departed")
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", a, "status"), "Checked Out")
+
+    def test_a_unit_without_an_appointment_takes_a_free_spot_and_two_units_never_share_one(self):
+        from frappe_wms.services import transport_unit as tu
+        first = tu.create_transport_unit(self.wh, vehicle_registration="AAA-111")
+        second = tu.create_transport_unit(self.wh, vehicle_registration="BBB-222")
+        self.assertEqual(tu.arrive(first)["yard_bin"], self.spot)
+        self.assertIsNone(tu.arrive(second)["yard_bin"], "the only spot is taken: it waits without one")
+        with self.assertRaises(frappe.ValidationError): tu.request_yard_move(second, self.spot)
+        task = tu.request_yard_move(first, self.doors[0])
+        tu.confirm_yard_move(task)
+        self.assertEqual(tu.request_yard_move(second, self.spot) and "ok", "ok", "the spot is free again once the first unit went to its door")
