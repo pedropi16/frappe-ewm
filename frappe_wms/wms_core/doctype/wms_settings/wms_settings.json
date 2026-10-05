@@ -1,207 +1,228 @@
 {
- "actions": [],
- "creation": "2026-09-16 00:00:00.000000",
- "description": "App-wide configuration for frappe_wms.",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "enforcement_section",
-  "enforce_wms_only_stock_movements",
-  "enforce_storage_type_rules",
-  "column_break_enforcement",
-  "verification_section",
-  "require_scan_verification",
-  "column_break_verification",
-  "require_bin_check_digits",
-  "inventory_section",
-  "blind_counting",
-  "defaults_section",
-  "default_handling_unit_type",
-  "labeling_section",
-  "gs1_company_prefix",
-  "sscc_next_serial",
-  "alerts_section",
-  "alert_notifications",
-  "alert_recipients",
-  "archiving_section",
-  "ledger_retention_months"
- ],
- "fields": [
-  {
-   "fieldname": "enforcement_section",
-   "fieldtype": "Section Break",
-   "label": "ERPNext Stock Enforcement"
-  },
-  {
-   "default": "1",
-   "description": "When enabled, WMS-managed warehouses (any ERPNext Warehouse linked from a WMS Warehouse) cannot receive direct Stock Entry, Delivery Note, Purchase Receipt, or Stock Reconciliation postings from ERPNext's own desk. All stock movement must go through frappe_wms (Goods Receipt / Goods Issue / RF app), which mirrors it into ERPNext automatically. Turn this off only as a temporary escape hatch.",
-   "fieldname": "enforce_wms_only_stock_movements",
-   "fieldtype": "Check",
-   "label": "Enforce WMS-Only Stock Movements"
-  },
-  {
-   "default": "0",
-   "description": "When enabled, a Storage Type's Allow Mixed Products / Stock Types / Batches flags are enforced when choosing a destination bin: a bin already holding a different product/stock type/batch is excluded unless the storage type explicitly allows mixing. Off by default because most existing warehouses have never had these flags reviewed - turn on only after confirming each Storage Type's mixing flags reflect how it is actually used.",
-   "fieldname": "enforce_storage_type_rules",
-   "fieldtype": "Check",
-   "label": "Enforce Storage Type Mixing Rules"
-  },
-  {
-   "fieldname": "column_break_enforcement",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "verification_section",
-   "fieldtype": "Section Break",
-   "label": "Verification"
-  },
-  {
-   "default": "0",
-   "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk.",
-   "fieldname": "require_scan_verification",
-   "fieldtype": "Check",
-   "label": "Require Scan Verification"
-  },
-  {
-   "fieldname": "column_break_verification",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "description": "When enabled, confirming a task against a bin with no Handling Unit also involved (Putaway, Internal Move, Posting Change) asks for the bin's check digits instead of its barcode - a short code printed only on the bin's physical label, never shown in the RF app or any task list, so entering it correctly proves the operator is actually standing at that bin. Off by default: every Storage Bin needs its check digits label printed before this is safe to turn on.",
-   "fieldname": "require_bin_check_digits",
-   "fieldtype": "Check",
-   "label": "Require Bin Check Digits"
-  },
-  {
-   "fieldname": "inventory_section",
-   "fieldtype": "Section Break",
-   "label": "Physical Inventory"
-  },
-  {
-   "default": "1",
-   "description": "When enabled, the RF app and count APIs never return a line's book quantity to the counter before it's recorded - matching SAP EWM's own default RF counting behavior, since a counter who can see the book quantity beforehand tends to just copy it in rather than actually count. The server still compares against the real book quantity either way.",
-   "fieldname": "blind_counting",
-   "fieldtype": "Check",
-   "label": "Blind Counting"
-  },
-  {
-   "fieldname": "defaults_section",
-   "fieldtype": "Section Break",
-   "label": "Defaults"
-  },
-  {
-   "description": "Used by the RF app when a scanned Handling Unit barcode does not exist yet and needs to be auto-registered without asking the operator to pick a type.",
-   "fieldname": "default_handling_unit_type",
-   "fieldtype": "Link",
-   "label": "Default Handling Unit Type",
-   "options": "Handling Unit Type"
-  },
-  {
-   "fieldname": "labeling_section",
-   "fieldtype": "Section Break",
-   "label": "Labeling"
-  },
-  {
-   "default": "0614141",
-   "description": "GS1 Company Prefix used to build SSCC-18 codes for Handling Unit labels (services/labeling.generate_sscc). Defaults to GS1's own reserved test prefix (0614141) - a label printed with this prefix scans and structurally validates correctly but is NOT a globally-unique real-world identifier. Replace with your organization's actual GS1-issued prefix before relying on printed labels outside this system - this is a config change only, no code change needed.",
-   "fieldname": "gs1_company_prefix",
-   "fieldtype": "Data",
-   "label": "GS1 Company Prefix"
-  },
-  {
-   "default": "0",
-   "description": "The last SSCC serial reference issued (services/labeling.generate_sscc). Advances by 1 per label; not a WMS Number Range like Handling Unit/Shipment numbering since SSCC has no backing DocType for that mechanism's own collision check to run against.",
-   "fieldname": "sscc_next_serial",
-   "fieldtype": "Int",
-   "label": "SSCC Next Serial",
-   "read_only": 1
-  },
-  {
-   "fieldname": "alerts_section",
-   "fieldtype": "Section Break",
-   "label": "Alerts",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "alert_notifications",
-   "fieldtype": "Select",
-   "label": "Alert Notifications",
-   "options": "Off\nDesk Notification\nDesk Notification and Email",
-   "default": "Desk Notification",
-   "description": "Every hour, supervisors are told about what needs a person: ERPNext postings that keep failing, negative quants, aged task exceptions, requests without tasks, stalled warehouse orders. Only when something changed since the last digest."
-  },
-  {
-   "fieldname": "alert_recipients",
-   "fieldtype": "Small Text",
-   "label": "Alert Recipients",
-   "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
-  },
-  {
-   "fieldname": "archiving_section",
-   "fieldtype": "Section Break",
-   "label": "Ledger Archiving",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "ledger_retention_months",
-   "fieldtype": "Int",
-   "label": "Keep Stock Ledger Entries (Months)",
-   "default": "0",
-   "non_negative": 1,
-   "description": "0 keeps every entry forever. Otherwise, on the 1st of each month, entries older than this many months (at least 12) move to an archive file (WMS Ledger Archive Run) and each stock position keeps one carry-forward entry."
-  }
- ],
- "icon": "icon-cog",
- "index_web_pages_for_search": 1,
- "issingle": 1,
- "links": [],
- "modified": "2026-09-16 00:00:00.000000",
- "modified_by": "Administrator",
- "module": "WMS Core",
- "name": "WMS Settings",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "WMS Administrator"
-  },
-  {
-   "role": "WMS Process Engineer",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "report": 1,
-   "export": 1,
-   "print": 1
-  },
-  {
-   "role": "WMS Supervisor",
-   "read": 1,
-   "report": 1,
-   "export": 1,
-   "print": 1
-  },
-  {
-   "role": "WMS Auditor",
-   "read": 1,
-   "report": 1,
-   "export": 1,
-   "print": 1
-  }
- ],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 1
+  "actions": [],
+  "creation": "2026-09-16 00:00:00.000000",
+  "description": "App-wide configuration for frappe_wms.",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "enforcement_section",
+    "enforce_wms_only_stock_movements",
+    "enforce_storage_type_rules",
+    "column_break_enforcement",
+    "verification_section",
+    "require_scan_verification",
+    "column_break_verification",
+    "require_bin_check_digits",
+    "replenish_on_removal",
+    "zero_stock_check_on_pick",
+    "require_block_reason",
+    "inventory_section",
+    "blind_counting",
+    "defaults_section",
+    "default_handling_unit_type",
+    "labeling_section",
+    "gs1_company_prefix",
+    "sscc_next_serial",
+    "alerts_section",
+    "alert_notifications",
+    "alert_recipients",
+    "archiving_section",
+    "ledger_retention_months"
+  ],
+  "fields": [
+    {
+      "fieldname": "enforcement_section",
+      "fieldtype": "Section Break",
+      "label": "ERPNext Stock Enforcement"
+    },
+    {
+      "default": "1",
+      "description": "When enabled, WMS-managed warehouses (any ERPNext Warehouse linked from a WMS Warehouse) cannot receive direct Stock Entry, Delivery Note, Purchase Receipt, or Stock Reconciliation postings from ERPNext's own desk. All stock movement must go through frappe_wms (Goods Receipt / Goods Issue / RF app), which mirrors it into ERPNext automatically. Turn this off only as a temporary escape hatch.",
+      "fieldname": "enforce_wms_only_stock_movements",
+      "fieldtype": "Check",
+      "label": "Enforce WMS-Only Stock Movements"
+    },
+    {
+      "default": "0",
+      "description": "When enabled, a Storage Type's Allow Mixed Products / Stock Types / Batches flags are enforced when choosing a destination bin: a bin already holding a different product/stock type/batch is excluded unless the storage type explicitly allows mixing. Off by default because most existing warehouses have never had these flags reviewed - turn on only after confirming each Storage Type's mixing flags reflect how it is actually used.",
+      "fieldname": "enforce_storage_type_rules",
+      "fieldtype": "Check",
+      "label": "Enforce Storage Type Mixing Rules"
+    },
+    {
+      "fieldname": "column_break_enforcement",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "verification_section",
+      "fieldtype": "Section Break",
+      "label": "Verification"
+    },
+    {
+      "default": "0",
+      "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk.",
+      "fieldname": "require_scan_verification",
+      "fieldtype": "Check",
+      "label": "Require Scan Verification"
+    },
+    {
+      "fieldname": "column_break_verification",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "0",
+      "description": "When enabled, confirming a task against a bin with no Handling Unit also involved (Putaway, Internal Move, Posting Change) asks for the bin's check digits instead of its barcode - a short code printed only on the bin's physical label, never shown in the RF app or any task list, so entering it correctly proves the operator is actually standing at that bin. Off by default: every Storage Bin needs its check digits label printed before this is safe to turn on.",
+      "fieldname": "require_bin_check_digits",
+      "fieldtype": "Check",
+      "label": "Require Bin Check Digits"
+    },
+    {
+      "fieldname": "inventory_section",
+      "fieldtype": "Section Break",
+      "label": "Physical Inventory"
+    },
+    {
+      "default": "1",
+      "description": "When enabled, the RF app and count APIs never return a line's book quantity to the counter before it's recorded - matching SAP EWM's own default RF counting behavior, since a counter who can see the book quantity beforehand tends to just copy it in rather than actually count. The server still compares against the real book quantity either way.",
+      "fieldname": "blind_counting",
+      "fieldtype": "Check",
+      "label": "Blind Counting"
+    },
+    {
+      "fieldname": "defaults_section",
+      "fieldtype": "Section Break",
+      "label": "Defaults"
+    },
+    {
+      "description": "Used by the RF app when a scanned Handling Unit barcode does not exist yet and needs to be auto-registered without asking the operator to pick a type.",
+      "fieldname": "default_handling_unit_type",
+      "fieldtype": "Link",
+      "label": "Default Handling Unit Type",
+      "options": "Handling Unit Type"
+    },
+    {
+      "fieldname": "labeling_section",
+      "fieldtype": "Section Break",
+      "label": "Labeling"
+    },
+    {
+      "default": "0614141",
+      "description": "GS1 Company Prefix used to build SSCC-18 codes for Handling Unit labels (services/labeling.generate_sscc). Defaults to GS1's own reserved test prefix (0614141) - a label printed with this prefix scans and structurally validates correctly but is NOT a globally-unique real-world identifier. Replace with your organization's actual GS1-issued prefix before relying on printed labels outside this system - this is a config change only, no code change needed.",
+      "fieldname": "gs1_company_prefix",
+      "fieldtype": "Data",
+      "label": "GS1 Company Prefix"
+    },
+    {
+      "default": "0",
+      "description": "The last SSCC serial reference issued (services/labeling.generate_sscc). Advances by 1 per label; not a WMS Number Range like Handling Unit/Shipment numbering since SSCC has no backing DocType for that mechanism's own collision check to run against.",
+      "fieldname": "sscc_next_serial",
+      "fieldtype": "Int",
+      "label": "SSCC Next Serial",
+      "read_only": 1
+    },
+    {
+      "fieldname": "alerts_section",
+      "fieldtype": "Section Break",
+      "label": "Alerts",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "alert_notifications",
+      "fieldtype": "Select",
+      "label": "Alert Notifications",
+      "options": "Off\nDesk Notification\nDesk Notification and Email",
+      "default": "Desk Notification",
+      "description": "Every hour, supervisors are told about what needs a person: ERPNext postings that keep failing, negative quants, aged task exceptions, requests without tasks, stalled warehouse orders. Only when something changed since the last digest."
+    },
+    {
+      "fieldname": "alert_recipients",
+      "fieldtype": "Small Text",
+      "label": "Alert Recipients",
+      "description": "One user or e-mail per line. Empty: every enabled WMS Supervisor, limited to the warehouses their User Permissions allow."
+    },
+    {
+      "fieldname": "archiving_section",
+      "fieldtype": "Section Break",
+      "label": "Ledger Archiving",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "ledger_retention_months",
+      "fieldtype": "Int",
+      "label": "Keep Stock Ledger Entries (Months)",
+      "default": "0",
+      "non_negative": 1,
+      "description": "0 keeps every entry forever. Otherwise, on the 1st of each month, entries older than this many months (at least 12) move to an archive file (WMS Ledger Archive Run) and each stock position keeps one carry-forward entry."
+    },
+    {
+      "fieldname": "replenish_on_removal",
+      "label": "Replenish on Removal",
+      "fieldtype": "Check",
+      "description": "A confirmed pick that leaves a bin at or below its Replenishment Rule's minimum raises the replenishment immediately, not only in the hourly scan."
+    },
+    {
+      "fieldname": "zero_stock_check_on_pick",
+      "label": "Zero Stock Check on Pick",
+      "fieldtype": "Check",
+      "description": "A pick that empties a bin creates a physical inventory count for it."
+    },
+    {
+      "fieldname": "require_block_reason",
+      "label": "Require Block Reason",
+      "fieldtype": "Check",
+      "description": "Blocking a bin needs a WMS Block Reason."
+    }
+  ],
+  "icon": "icon-cog",
+  "index_web_pages_for_search": 1,
+  "issingle": 1,
+  "links": [],
+  "modified": "2026-09-16 00:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "WMS Core",
+  "name": "WMS Settings",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "email": 1,
+      "print": 1,
+      "read": 1,
+      "role": "System Manager",
+      "share": 1,
+      "write": 1
+    },
+    {
+      "read": 1,
+      "role": "WMS Administrator"
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": [],
+  "track_changes": 1
 }

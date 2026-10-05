@@ -17,6 +17,11 @@ def _create_count(warehouse, *, product=None, storage_bin=None):
     doc.insert(ignore_permissions=True)
     return doc.name
 
+def request_zero_stock_check(warehouse, storage_bin):
+    """A pick emptied the bin: ask for a count of it unless one is already open."""
+    if frappe.db.exists("WMS Physical Inventory Count", {"warehouse": warehouse, "storage_bin": storage_bin, "status": ["in", ["Draft", "Counting", "Counted", "Under Review"]]}): return None
+    return _create_count(warehouse, storage_bin=storage_bin)
+
 def _generate_abc_counts(rule):
     created = []
     if not rule.abc_indicator: return created

@@ -486,18 +486,18 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 6.3 | Storage control: layout-oriented | Done | Layout Storage Control: rule per source/destination type/group, intermediate bin, second leg on confirmation. |
 | 7.1 | Putaway: STSS (PCI, stock type, hazard, PETD), section search, bin type search, strategies | Partial | Search sequences keyed by putaway control indicator + stock type (Phase A); storage section indicator search; group filter on rules; bin-type fit; empty bin, addition, near fixed, pallet, bulk, least utilized. **Gap:** hazard class and PETD in the search; bulk storage stack height / lane depth. |
 | 7.2 | Removal: FIFO/LIFO/FEFO, batch determination, partial-quant minimization | Done | Removal Rule (7 strategies + custom sort), batch characteristics, FEFO, storage type search sequence by stock removal control indicator (Phase A). Stringent FIFO is sort-only. |
-| 8.1 | Waves, templates, two-step picking | Partial | Wave Template (cutoff, auto release), two-step via a shared staging bin and sort tasks. **Gap:** release thresholds, lock times, wave splitting, collective retrieval as one combined task. |
-| 8.2 | Replenishment: planned, automatic, direct, order-related | Partial | Planned (hourly), direct, order-related on a short pick. **Gap:** automatic replenishment triggered by a confirmed removal; min/max kept on the product per storage type (here per bin rule). |
+| 8.1 | Waves, templates, two-step picking | Partial | Wave Template (cutoff, auto release, minimum/maximum deliveries, lock minutes), wave splitting, two-step via a shared staging bin and sort tasks (Phase C). **Gap:** collective retrieval as one combined task. |
+| 8.2 | Replenishment: planned, automatic, direct, order-related | Done | Planned (hourly), automatic on a confirmed removal (setting), direct, order-related on a short pick (Phase C). Min/max live on a per-bin rule, not on the product per storage type. |
 | 9.1 | Warehouse task: product vs HU task, lifecycle | Done | Task with source/destination HU, status incl. On Hold, reversal, idempotency. |
-| 9.2-9.3 | Warehouse order and WOCR | Partial | WO Creation Rule: limits on tasks/weight/volume/minutes, pick HU type. **Gap:** grouping by activity area/consolidation group, item filters, sort by activity-area bin sequence, pick-HU calculation from the packaging spec. |
-| 10.1 | Queue determination (WPT + area + door/staging) | Partial | Queue by activity, storage type, activity area. **Gap:** door/staging area. |
+| 9.2-9.3 | Warehouse order and WOCR | Partial | WO Creation Rule: limits on tasks/weight/volume/minutes, pick HU type, unit-weight filter, grouping by activity area / consolidation group (Phase C). **Gap:** sort by activity-area bin sequence (Phase D), pick-HU calculation from the packaging spec. |
+| 10.1 | Queue determination (WPT + area + door/staging) | Done | Queue by activity, storage type, activity area, door/staging bin; process type default queue (Phases A, C). |
 | 10.2 | Resources, groups, interleaving | Done | Resource Group owns queues, priority across queues, logon. |
 | 10.3 | RF framework | n/a | Own RF app (`/wms`); logical transactions are not needed. |
 | 11 | Yard, transportation units | Partial | Dock Appointment (yard bin, door, check-in/out), Shipment, Route. **Gap:** Transportation Unit as its own entity with yard tasks. |
 | 12.1 | VAS | Done | VAS Order with activities. |
 | 12.2 | Quality inspection | Partial | Inspection Rule (sampling %), WMS Quality Inspection (pass/fail to stock types) mirrored to ERPNext QI. **Gap:** sample management per HU, usage-decision follow-up tasks. |
-| 12.3 | Physical inventory | Partial | Periodic/cycle (ABC)/zero-stock counts, difference analyzer, 701/702. **Gap:** zero-stock check triggered at pick time. |
-| 12.4 | Cross-docking | Partial | Opportunistic. **Gap:** planned. |
+| 12.3 | Physical inventory | Done | Periodic/cycle (ABC)/zero-stock counts, zero-stock check when a pick empties a bin (setting), difference analyzer, 701/702. |
+| 12.4 | Cross-docking | Done | Opportunistic and planned (reservation before the goods arrive) (Phase C). |
 | 13 | ECC integration (CIF, qRFC, logs) | Done | Direct ERPNext integration; WMS ERP Sync Log with queued retry replaces qRFC. |
 | 14 | Warehouse monitor | Done | WMS Monitor with the node tree, selection, actions. |
 | 15.1 | PSA and control cycle | Done | PSA with several bins, workstations, staging mode; Production Supply Control Cycle (PSA + material -> method, staging bin, min/max) (Phase B). PSA is a set of bins, not storage type + section. |
@@ -506,7 +506,7 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 15.4 | Receipt from production | Done | FG receipt from a Work Order through GR and putaway. |
 | 16 | Core tables | n/a | Mapped by design (ledger + balance replace quants). |
 | 17 | Extension BAdIs | Partial | `wms_removal_strategies` hook; no general strategy-override hooks for putaway, WOCR, queue. |
-| 18 | Exceptions and business contexts | Partial | WMS Exception Code (allowed task types, supervisor, comment, quantity/bin change, follow-up action). **Gap:** business contexts, system actions CHBIN/SPLT/NEXT/DIFF as configurable actions. |
+| 18 | Exceptions and business contexts | Done | WMS Exception Code with business context and system action (change bin, split task, skip, post difference) plus supervisor/comment/follow-up (Phase C). |
 | 19 | Labor management, travel distance | Partial | Labor Standard (seconds/unit), efficiency KPI. **Gap:** travel distance (coordinates, network), engineered-standard formula (base + travel + handling + PF&D). |
 | 20 | MFS / PLC | n/a | Out of scope. |
 | 21 | Work centers, deconsolidation, packing station | Done | Work Center (types, locations), Packing Center, Consolidation Group. **Gap:** scale (RS232) integration. |

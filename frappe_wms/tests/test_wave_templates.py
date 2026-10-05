@@ -122,3 +122,31 @@ class TestWaveTemplates(IntegrationTestCase):
 
         released = auto_release_due_waves()
         self.assertEqual(len(released), 0)
+
+    def test_a_sweep_fills_waves_up_to_the_maximum_and_a_small_wave_is_not_released_automatically(self):
+        self._receive_and_putaway(10)
+        deliveries = [self._make_delivery() for _ in range(3)]
+        template = self._make_template("00:00:01")
+        template.db_set({"maximum_deliveries": 2, "minimum_deliveries": 2})
+        created = generate_waves_from_templates()
+        mine = [w for w in created if frappe.db.get_value("WMS Wave", w, "wave_template") == template.name]
+        sizes = sorted(frappe.db.count("WMS Wave Delivery", {"parent": w}) for w in mine)
+        self.assertEqual(sizes, [1, 2], "three deliveries, at most two to a wave")
+        released = auto_release_due_waves()  # the cutoff has passed; only the wave with two reaches the minimum
+        self.assertEqual(len([w for w in mine if frappe.db.get_value("WMS Wave", w, "status") != "Draft"]), 1)
+
+    def test_split_wave_moves_deliveries_to_a_new_wave_unless_it_is_locked(self):
+        from frappe_wms.services.wave import split_wave
+        a, b = self._make_delivery(), self._make_delivery()
+        wave = frappe.get_doc({"doctype": "WMS Wave", "warehouse": self.warehouse, "priority": "Normal", "picking_strategy": "Single Order", "status": "Draft",
+            "deliveries": [{"outbound_delivery": a.name}, {"outbound_delivery": b.name}]}).insert(ignore_permissions=True)
+        with self.assertRaises(frappe.ValidationError): split_wave(wave.name, [a.name, b.name])  # not all
+        new = split_wave(wave.name, [b.name])
+        self.assertEqual([r.outbound_delivery for r in frappe.get_doc("WMS Wave", wave.name).deliveries], [a.name])
+        self.assertEqual([r.outbound_delivery for r in frappe.get_doc("WMS Wave", new).deliveries], [b.name])
+        template = self._make_template("23:59:59")
+        template.db_set("lock_minutes", 24 * 60)
+        locked = frappe.get_doc({"doctype": "WMS Wave", "warehouse": self.warehouse, "priority": "Normal", "picking_strategy": "Single Order", "status": "Draft", "wave_template": template.name,
+            "deliveries": [{"outbound_delivery": a.name}, {"outbound_delivery": b.name}]})
+        locked.flags.ignore_validate = True
+        with self.assertRaises(frappe.ValidationError): split_wave(locked.insert(ignore_permissions=True).name, [a.name])

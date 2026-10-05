@@ -248,6 +248,18 @@ test("exception: pick a code, comment is required, and nothing is blocked until 
   expect(done.blocking_reason).toContain("pallet crushed");
 });
 
+test("exception with a system action (skip): the task moves on and stays open, nothing is blocked", async ({ page, request }) => {
+  const t = await makeTask(request);
+  await openTask(page, t);
+  await page.getByRole("button", { name: "Exception" }).click();
+  await view(page).getByRole("button", { name: /E2E skip task/ }).click();
+  await expect(view(page)).toContainText(/back of its order/);
+  await page.getByRole("button", { name: "Report exception" }).click();            // no "Block this task?" dialog for an action
+  await expect(page).toHaveURL(/#\/tasks\/internal$/);
+  await expect(notice(page)).toContainText(/Skip Task/);
+  expect((await getTask(request, t.name)).status).not.toBe("Exception");
+});
+
 test("short pick: the quantity already typed carries straight into the exception's quantity-found field", async ({ page, request }) => {
   // The SAP EWM comparison's "cheap, do it" gap: a short pick used to need picking a code first
   // and then retyping the quantity on its own screen - this carries whatever was already typed

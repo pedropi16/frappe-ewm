@@ -378,7 +378,40 @@ def _release_short_pick_reservation(task, shortfall):
             frappe.db.set_value("Outbound Delivery", delivery_name, "allocation_status",
                 "Fully Allocated" if fully_allocated else ("Partially Allocated" if any_allocated else "Not Allocated"))
 
-def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
+def _exception_action(code):
+    return code.system_action or None  # explicit only: the older "allows bin change" flag stays what it was (informational)
+
+def _change_bin(task, new_bin):
+    """CHBIN: the task goes to another bin - its destination for putaway-type tasks (the new bin must accept the goods), its source otherwise (it must hold the stock)."""
+    bin_doc = frappe.db.get_value("Storage Bin", new_bin, ["warehouse", "active"], as_dict=True)
+    if not bin_doc or bin_doc.warehouse != task.warehouse or not bin_doc.active: frappe.throw(_("{0} is not an active bin of warehouse {1}").format(new_bin, task.warehouse))
+    from frappe_wms.services.warehouse_order import DESTINATION_DRIVEN_TASK_TYPES
+    if task.task_type in DESTINATION_DRIVEN_TASK_TYPES:
+        hu_type = frappe.db.get_value("Handling Unit", task.source_hu, "hu_type") if task.source_hu else None
+        validate_destination_bin(new_bin, item=task.product, stock_type=task.stock_type_to or task.stock_type_from, hu_type=hu_type, batch_no=task.batch_no, destination_hu=task.source_hu, incoming_quantity=flt(task.planned_quantity) - flt(task.confirmed_quantity))
+        task.db_set("destination_bin", new_bin, update_modified=True)
+    else:
+        if task.get("stock_allocations") or task.stock_allocation: frappe.throw(_("A pick for a delivery cannot change its source bin: report it as a short pick and let the delivery be allocated again"))
+        held = frappe.db.sql("select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where storage_bin=%s and product=%s and stock_type=%s and quantity>0", (new_bin, task.product, task.stock_type_from))[0][0]
+        if flt(held) < flt(task.planned_quantity) - flt(task.confirmed_quantity) - 0.000001: frappe.throw(_("{0} does not hold enough {1}").format(new_bin, task.product))
+        task.db_set({"source_bin": new_bin, "source_hu": None}, update_modified=True)
+
+def split_task(task, quantity, new_bin=None):
+    """SPLT: carve quantity off an open task into a new one (optionally to another destination bin)."""
+    quantity = flt(quantity)
+    open_qty = flt(task.planned_quantity) - flt(task.confirmed_quantity)
+    if quantity <= 0 or quantity >= open_qty: frappe.throw(_("Split off more than 0 and less than the open {0}").format(open_qty))
+    if task.get("stock_allocations") or task.stock_allocation: frappe.throw(_("A pick for a delivery cannot be split: confirm what was picked and report the rest as a short pick"))
+    values = {k: task.get(k) for k in ("warehouse_request", "task_type", "warehouse", "product", "stock_uom", "batch_no", "serial_no", "source_bin", "source_hu", "destination_bin", "destination_hu",
+        "final_destination_bin", "stock_type_from", "stock_type_to", "movement_type", "priority", "warehouse_order", "queue", "assigned_resource", "predecessor_task", "wave", "sequence")}
+    new = frappe.get_doc({"doctype": "Warehouse Task", **values, "planned_quantity": quantity, "status": task.status if task.status in ("Open", "Assigned", "On Hold") else "Open"})
+    if new_bin: new.destination_bin = new_bin
+    new.insert(ignore_permissions=True)
+    task.db_set("planned_quantity", open_qty - quantity + flt(task.confirmed_quantity), update_modified=True)
+    if task.warehouse_order: frappe.db.sql("update `tabWarehouse Order` set task_count=task_count+1 where name=%s", task.warehouse_order)
+    return new.name
+
+def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None, new_bin=None, split_quantity=None):
     require_role("WMS Operator", "WMS Supervisor")
     code = frappe.get_cached_doc("WMS Exception Code", exception_code)
     if not code.active: frappe.throw(_("Exception code {0} is not active").format(exception_code))
@@ -386,8 +419,23 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
     if code.requires_comment and not (remarks or "").strip(): frappe.throw(_("This exception requires a comment"))
     task = frappe.get_doc("Warehouse Task", task_name, for_update=True)
     if task.docstatus != 0: frappe.throw(_("Task is already confirmed or cancelled"))
+    action = _exception_action(code)
+    if action == "Change Bin":
+        if not new_bin: frappe.throw(_("Enter the bin to use instead"))
+        _change_bin(task, new_bin)
+        task.add_comment("Comment", _("{0}: {1} - bin changed to {2}").format(exception_code, remarks or "", new_bin))
+        return {"task": task.name, "status": task.status, "bin_changed": new_bin}
+    if action == "Split Task":
+        created = split_task(task, split_quantity, new_bin)
+        task.add_comment("Comment", _("{0}: {1} - {2} split off as {3}").format(exception_code, remarks or "", flt(split_quantity), created))
+        return {"task": task.name, "status": task.status, "split_task": created}
+    if action == "Skip Task":
+        later = frappe.db.sql("select coalesce(max(sequence), 0) from `tabWarehouse Task` where warehouse_order=%s", task.warehouse_order)[0][0] if task.warehouse_order else task.sequence or 0
+        task.db_set("sequence", flt(later) + 1, update_modified=True)
+        task.add_comment("Comment", _("{0}: {1} - skipped").format(exception_code, remarks or ""))
+        return {"task": task.name, "status": task.status, "skipped": True}
     result = None
-    if code.allows_quantity_change and revised_quantity is not None:
+    if (code.allows_quantity_change or action == "Post Difference") and revised_quantity is not None:
         # Pick denial: less stock was found at the bin than planned. Whatever was already
         # confirmed was already transferred, so closing the task out at the revised (lower)
         # planned_quantity finishes it instead of leaving it stuck waiting on stock that
@@ -616,6 +664,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         advance(task)
     _update_request(task.warehouse_request)
     _update_allocations(task, posted_qty)
+    if posted_qty > 0 and task.task_type == "Pick": _after_removal(task)
     from frappe_wms.services.production_supply import on_staging_confirmed
     on_staging_confirmed(task, posted_qty)
     if task.consolidation_group_line:
@@ -644,6 +693,16 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if difference_name: result["difference"] = difference_name
     if sort_task: result["sort_task"] = sort_task
     return result
+
+def _after_removal(task):
+    """What a confirmed pick sets off when enabled in WMS Settings: replenishment of the pick bin, a zero stock count of an emptied bin."""
+    replenish, zero_check = frappe.db.get_value("WMS Settings", "WMS Settings", ["replenish_on_removal", "zero_stock_check_on_pick"]) or (0, 0)
+    if replenish and task.source_bin:
+        from frappe_wms.services.replenishment import replenish_after_removal
+        replenish_after_removal(task)
+    if zero_check and task.source_bin and not flt(frappe.db.sql("select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where storage_bin=%s and quantity>0", task.source_bin)[0][0]):
+        from frappe_wms.services.cycle_count import request_zero_stock_check
+        request_zero_stock_check(task.warehouse, task.source_bin)
 
 def _resolve_partial_hu_move(task, qty):
     # The destination fell back to "the same HU it came from" - right when the whole HU travels

@@ -10,11 +10,15 @@ PRIORITY_RANK = {"Urgent": 0, "High": 1, "Normal": 2, "Low": 3}
 def _by_priority_then_age(rows):
     return sorted(rows, key=lambda r: (PRIORITY_RANK.get(r.priority, 2), r.creation))
 
-def determine_queue(warehouse, activity, storage_type=None, activity_area=None):
+def determine_queue(warehouse, activity, storage_type=None, activity_area=None, door=None):
     # Narrowest match wins, same idiom as every other rule table in this app: a queue scoped
-    # to this exact Activity Area beats one scoped only to the broader Storage Type, which
-    # beats a blank-everything fallback queue.
-    filters = {"warehouse": warehouse, "activity": activity, "active": 1}
+    # to this task's door/staging bin beats one scoped to this exact Activity Area, which beats
+    # one scoped only to the broader Storage Type, which beats a blank-everything fallback queue.
+    # A queue with a door only takes tasks for that door.
+    if door:
+        queue = frappe.db.get_value("Warehouse Queue", {"warehouse": warehouse, "activity": activity, "active": 1, "door": door}, "name")
+        if queue: return queue
+    filters = {"warehouse": warehouse, "activity": activity, "active": 1, "door": ["in", ["", None]]}
     if activity_area:
         queue = frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": activity_area}, "name")
         if queue: return queue
@@ -23,13 +27,28 @@ def determine_queue(warehouse, activity, storage_type=None, activity_area=None):
         if queue: return queue
     return frappe.db.get_value("Warehouse Queue", {**filters, "activity_area": ["in", ["", None]], "storage_type": ["in", ["", None]]}, "name")
 
-def _matching_wo_creation_rule(warehouse, activity, item_group=None, stock_type=None):
+def _matching_wo_creation_rule(warehouse, activity, item_group=None, stock_type=None, unit_weight=None):
     for rule in frappe.get_all("WO Creation Rule", filters={"warehouse": warehouse, "activity": activity, "active": 1},
             fields=["name", "item_group", "stock_type", "maximum_tasks", "maximum_weight", "maximum_volume",
-                "standard_minutes_per_task", "maximum_minutes", "pick_hu_type"], order_by="priority asc"):
+                "standard_minutes_per_task", "maximum_minutes", "pick_hu_type", "minimum_unit_weight", "maximum_unit_weight",
+                "group_by_activity_area", "group_by_consolidation_group"], order_by="priority asc"):
         if rule.item_group and rule.item_group != item_group: continue
         if rule.stock_type and rule.stock_type != stock_type: continue
+        if unit_weight is not None and (flt(unit_weight) < flt(rule.minimum_unit_weight) or (rule.maximum_unit_weight and flt(unit_weight) > flt(rule.maximum_unit_weight))): continue
         return rule
+    return None
+
+def _task_door(task_doc):
+    """The door/staging bin a task works toward: its delivery's door (else staging bin) for a pick, otherwise its destination when that is a door or staging bin."""
+    allocation = task_doc.get("stock_allocation") or next((r.stock_allocation for r in task_doc.get("stock_allocations") or []), None)
+    if allocation:
+        delivery = frappe.db.get_value("Stock Allocation", allocation, "outbound_delivery")
+        door, staging = frappe.db.get_value("Outbound Delivery", delivery, ["door", "staging_bin"]) if delivery else (None, None)
+        return door or staging
+    destination = task_doc.get("destination_bin")
+    if destination:
+        role = frappe.db.get_value("Storage Type", frappe.db.get_value("Storage Bin", destination, "storage_type"), "storage_role")
+        if role in ("Door", "Staging"): return destination
     return None
 
 def _task_weight_and_volume(task_doc):
@@ -138,10 +157,14 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
         if bin_name:
             storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])
             if storage_type: break
-    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area) or default_queue
+    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area, _task_door(task_doc)) or default_queue
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     stock_type = task_doc.get("stock_type_from")
-    rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type)
+    unit_weight = flt(frappe.db.get_value("WMS Product", {"item": task_doc.product}, "gross_weight_per_unit")) if task_doc.product else None
+    rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type, unit_weight)
+    if rule and rule.group_by_activity_area: batch_key = f"{batch_key}@{activity_area or '-'}"
+    if rule and rule.group_by_consolidation_group and task_doc.get("consolidation_group_line"):
+        batch_key = f"{batch_key}+{frappe.db.get_value('Consolidation Group Line', task_doc.consolidation_group_line, 'parent')}"
     weight_increment, volume_increment = _task_weight_and_volume(task_doc)
     minutes_increment = flt(rule.standard_minutes_per_task) if rule and rule.standard_minutes_per_task else 0
     wo_name = get_or_create_warehouse_order(

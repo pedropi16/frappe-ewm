@@ -45,7 +45,7 @@ class TestScannerApi(IntegrationTestCase):
 
     def test_raise_exception_blocks_task_and_prevents_confirmation(self):
         task = self._make_task()
-        code = frappe.get_all("WMS Exception Code", filters={"active": 1}, limit=1, pluck="name")
+        code = frappe.get_all("WMS Exception Code", filters={"active": 1, "system_action": ["in", ["", None]]}, limit=1, pluck="name")
         if not code:
             self.skipTest("no WMS Exception Code configured")
         code = code[0]

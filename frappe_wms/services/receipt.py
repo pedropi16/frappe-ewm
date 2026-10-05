@@ -5,7 +5,7 @@ from frappe.utils import add_days, getdate, now_datetime, flt
 from frappe_wms.services.stock import post_entries
 from frappe_wms.services.determination import determine_process_type, determine_storage_process, matches_inspection_rule
 from frappe_wms.services.storage_process import first_step
-from frappe_wms.services.cross_dock import find_cross_dock_demand, reserve_cross_dock_demand
+from frappe_wms.services.cross_dock import find_cross_dock_demand, reserve_cross_dock_demand, planned_matches, consume_plan
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
 from frappe_wms.services.task import my_resource, create_tasks_for_request, OPEN_TASK_STATUSES, TASK_SUMMARY_FIELDS
 from frappe_wms.utils import require_role
@@ -117,7 +117,10 @@ def create_putaway_requests(receipt_name):
         # "Internal Move" process-type determination since physically it's the same kind of
         # bin-to-bin transfer; only the request/task type label is distinct, for traceability.
         remaining_qty = flt(row.quantity)
-        cross_dock_matches = find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty)
+        # Planned cross-docking first: demand reserved for the expected delivery before the goods arrived (plan_cross_dock) - already reserved, so only routed here.
+        planned = planned_matches(row.inbound_delivery_item, remaining_qty) if row.inbound_delivery_item else []
+        cross_dock_matches = [m for _plan, m in planned] + find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned))
+        planned_by_match = {id(m): plan for plan, m in planned}
         if cross_dock_matches:
             cross_dock_process_type = determine_process_type(receipt.warehouse, "Internal Move", item=row.item, stock_type=row.stock_type, default="INTERNAL_MOVE")
             for match in cross_dock_matches:
@@ -127,7 +130,8 @@ def create_putaway_requests(receipt_name):
                     "reference_doctype":"Outbound Delivery","reference_name":match["delivery"],"reference_line":match["delivery_item"],
                     "process_type":cross_dock_process_type,"priority":"High","status":"Open"})
                 cd_req.insert(ignore_permissions=True); names.append(cd_req.name)
-                reserve_cross_dock_demand(match)
+                if id(match) in planned_by_match: consume_plan(planned_by_match[id(match)], match["quantity"])
+                else: reserve_cross_dock_demand(match)
                 remaining_qty -= match["quantity"]
         if remaining_qty <= 0: continue  # fully cross-docked - no Putaway request for this row
 

@@ -13,6 +13,10 @@
     "activity",
     "item_group",
     "stock_type",
+    "minimum_unit_weight",
+    "maximum_unit_weight",
+    "group_by_activity_area",
+    "group_by_consolidation_group",
     "maximum_tasks",
     "limits_section",
     "maximum_weight",
@@ -120,6 +124,30 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "minimum_unit_weight",
+      "label": "Minimum Unit Weight",
+      "fieldtype": "Float",
+      "description": "The rule only applies to products whose gross weight per unit is at least this (0 = no minimum)."
+    },
+    {
+      "fieldname": "maximum_unit_weight",
+      "label": "Maximum Unit Weight",
+      "fieldtype": "Float",
+      "description": "...and at most this (0 = no maximum). Heavy items can get their own rule with their own limits."
+    },
+    {
+      "fieldname": "group_by_activity_area",
+      "label": "Group by Activity Area",
+      "fieldtype": "Check",
+      "description": "Tasks of different activity areas never share a Warehouse Order."
+    },
+    {
+      "fieldname": "group_by_consolidation_group",
+      "label": "Group by Consolidation Group",
+      "fieldtype": "Check",
+      "description": "Tasks of different consolidation groups never share a Warehouse Order."
     }
   ],
   "autoname": "WOCR-.#####",

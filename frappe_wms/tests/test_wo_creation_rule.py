@@ -172,3 +172,42 @@ class TestWOCreationRule(IntegrationTestCase):
         task.insert(ignore_permissions=True)
 
         self.assertEqual(task.destination_hu, explicit_hu.name)
+
+    def test_unit_weight_filter_gives_heavy_items_their_own_rule(self):
+        heavy = self._make_weighted_item("TEST-WOCR-HEAVY", gross_weight_per_unit=12)
+        light = self._make_weighted_item("TEST-WOCR-LIGHT", gross_weight_per_unit=2)
+        frappe.get_doc({"doctype": "WO Creation Rule", "priority": 1, "warehouse": self.warehouse, "activity": "Internal Move", "minimum_unit_weight": 10, "maximum_tasks": 1, "active": 1}).insert(ignore_permissions=True)
+        frappe.get_doc({"doctype": "WO Creation Rule", "priority": 2, "warehouse": self.warehouse, "activity": "Internal Move", "maximum_tasks": 5, "active": 1}).insert(ignore_permissions=True)
+        key = frappe.generate_hash(length=10)
+        h1, h2 = self._make_task_for(heavy, key, sequence=1), self._make_task_for(heavy, key, sequence=2)
+        l1, l2 = self._make_task_for(light, key + "L", sequence=1), self._make_task_for(light, key + "L", sequence=2)
+        self.assertNotEqual(h1.warehouse_order, h2.warehouse_order, "heavy items: one task per order")
+        self.assertEqual(l1.warehouse_order, l2.warehouse_order)
+
+    def test_group_by_activity_area_keeps_areas_in_separate_orders(self):
+        areas = []
+        for code, bin_name in (("X", self.bin_a), ("Y", self.bin_b)):
+            name = f"{self.warehouse}-{code}"
+            if not frappe.db.exists("Activity Area", name):
+                frappe.get_doc({"doctype": "Activity Area", "warehouse": self.warehouse, "area_code": code, "area_name": code, "active": 1}).insert(ignore_permissions=True)
+            frappe.db.set_value("Storage Bin", bin_name, "activity_area", name)
+        frappe.get_doc({"doctype": "WO Creation Rule", "priority": 1, "warehouse": self.warehouse, "activity": "Internal Move", "group_by_activity_area": 1, "active": 1}).insert(ignore_permissions=True)
+        key = frappe.generate_hash(length=10)
+
+        def task(source):
+            doc = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": self.warehouse, "product": self.item, "planned_quantity": 1, "stock_uom": self.uom,
+                "source_bin": source, "destination_bin": self.bin_b if source == self.bin_a else self.bin_a, "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": "301", "priority": "Normal", "status": "Open"})
+            attach_task(doc, key)
+            return doc.insert(ignore_permissions=True)
+        a1, a2, b1 = task(self.bin_a), task(self.bin_a), task(self.bin_b)
+        self.assertEqual(a1.warehouse_order, a2.warehouse_order)
+        self.assertNotEqual(a1.warehouse_order, b1.warehouse_order)
+
+    def test_a_queue_with_a_door_only_takes_the_tasks_for_that_door(self):
+        from frappe_wms.services.warehouse_order import determine_queue
+        door = f"{self.warehouse}-DOOR1"
+        if not frappe.db.exists("Storage Bin", door): frappe.get_doc({"doctype": "Storage Bin", "bin_code": door, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-A", "active": 1, "sequence": 9}).insert(ignore_permissions=True)
+        doors = frappe.get_doc({"doctype": "Warehouse Queue", "queue_code": f"DOORQ-{frappe.generate_hash(length=4)}", "queue_name": "Door queue", "warehouse": self.warehouse, "activity": "Internal Move", "door": door, "active": 1}).insert(ignore_permissions=True)
+        self.assertEqual(determine_queue(self.warehouse, "Internal Move", f"{self.warehouse}-A", None, door), doors.name)
+        self.assertNotEqual(determine_queue(self.warehouse, "Internal Move", f"{self.warehouse}-A", None, None), doors.name, "no door: the door queue does not take it")
+        self.assertEqual(determine_queue(self.warehouse, "Internal Move", f"{self.warehouse}-A", None, f"{self.warehouse}-OTHERDOOR"), determine_queue(self.warehouse, "Internal Move", f"{self.warehouse}-A", None, None))

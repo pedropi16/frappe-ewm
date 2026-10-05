@@ -55,3 +55,9 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
 @retry_on_deadlock
 def create_return_inbound_delivery(delivery_note, warehouse):
     return _create_return_inbound_delivery(delivery_note, warehouse)
+
+@frappe.whitelist()
+@retry_on_deadlock
+def plan_cross_dock(inbound_delivery):
+    from frappe_wms.services.cross_dock import plan_cross_dock as _plan_cross_dock
+    return _plan_cross_dock(inbound_delivery)

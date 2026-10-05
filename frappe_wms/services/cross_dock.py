@@ -65,6 +65,7 @@ def redirect_cross_dock_to_putaway(delivery_name):
     from frappe_wms.services.determination import determine_process_type
     from frappe_wms.services.task import plan_requests
     from frappe_wms.services.warehouse_order import release_next_in_sequence, sync_warehouse_order
+    cancel_cross_dock_plan(outbound_delivery=delivery_name)  # planned (not yet received) demand of this delivery
     requests = frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery",
         "reference_name": delivery_name, "status": ["not in", ["Completed", "Cancelled"]]}, pluck="name")
     created = []
@@ -93,3 +94,55 @@ def redirect_cross_dock_to_putaway(delivery_name):
         plan_requests([putaway.name])
         created.append(putaway.name)
     return created
+
+
+# ------------------------------------------------------------------ planned cross-docking
+
+def plan_cross_dock(inbound_delivery):
+    """Planned cross-docking: before the goods arrive, match the expected quantity of an inbound delivery against open outbound demand and reserve
+    it. The goods receipt then sends exactly that stock to the delivery's staging bin (create_putaway_requests); the rest is put away / matched
+    opportunistically as before. Running it again plans only what is not planned yet."""
+    from frappe_wms.utils import require_role
+    require_role("WMS Operator", "WMS Supervisor")
+    doc = frappe.get_doc("Inbound Delivery", inbound_delivery, for_update=True)
+    if doc.docstatus != 1 or doc.closed_short: frappe.throw(frappe._("Only an open, submitted inbound delivery can be planned"))
+    planned = []
+    for row in doc.items:
+        already = sum(flt(p.planned_quantity) - flt(p.consumed_quantity) for p in doc.cross_dock_plan if p.inbound_delivery_item == row.name and p.status == "Planned")
+        open_qty = flt(row.expected_quantity) - flt(row.received_quantity) - already
+        if open_qty <= 0.000001: continue
+        for match in find_cross_dock_demand(doc.warehouse, row.item, row.expected_stock_type or "AVAILABLE", open_qty):
+            reserve_cross_dock_demand(match)
+            frappe.get_doc({"doctype": "Inbound Cross Dock Plan", "parent": doc.name, "parenttype": "Inbound Delivery", "parentfield": "cross_dock_plan", "inbound_delivery_item": row.name,
+                "item": row.item, "outbound_delivery": match["delivery"], "outbound_delivery_item": match["delivery_item"], "staging_bin": match["staging_bin"],
+                "planned_quantity": match["quantity"], "consumed_quantity": 0, "status": "Planned", "idx": len(doc.cross_dock_plan) + len(planned) + 1}).insert(ignore_permissions=True)
+            planned.append(match)
+    return planned
+
+
+def planned_matches(inbound_delivery_item, quantity):
+    """The planned matches a receipt row consumes (up to quantity): [(plan row name, match)]; the reservation was made when it was planned."""
+    out, left = [], flt(quantity)
+    for p in frappe.get_all("Inbound Cross Dock Plan", filters={"inbound_delivery_item": inbound_delivery_item, "status": "Planned"}, fields=["name", "outbound_delivery", "outbound_delivery_item", "staging_bin", "planned_quantity", "consumed_quantity"], order_by="idx asc"):
+        take = min(left, flt(p.planned_quantity) - flt(p.consumed_quantity))
+        if take <= 0: continue
+        out.append((p.name, {"delivery": p.outbound_delivery, "delivery_item": p.outbound_delivery_item, "staging_bin": p.staging_bin, "quantity": take}))
+        left -= take
+        if left <= 0: break
+    return out
+
+
+def consume_plan(plan_name, quantity):
+    plan = frappe.db.get_value("Inbound Cross Dock Plan", plan_name, ["planned_quantity", "consumed_quantity"], as_dict=True)
+    consumed = flt(plan.consumed_quantity) + flt(quantity)
+    frappe.db.set_value("Inbound Cross Dock Plan", plan_name, {"consumed_quantity": consumed, "status": "Done" if consumed >= flt(plan.planned_quantity) - 0.000001 else "Planned"})
+
+
+def cancel_cross_dock_plan(inbound_delivery=None, outbound_delivery=None):
+    """The inbound delivery will not bring (all of) the goods, or the outbound delivery is gone: give the reserved demand back."""
+    filters = {"status": "Planned", **({"parent": inbound_delivery} if inbound_delivery else {}), **({"outbound_delivery": outbound_delivery} if outbound_delivery else {})}
+    for p in frappe.get_all("Inbound Cross Dock Plan", filters=filters, fields=["name", "outbound_delivery", "outbound_delivery_item", "planned_quantity", "consumed_quantity"]):
+        open_qty = flt(p.planned_quantity) - flt(p.consumed_quantity)
+        if open_qty > 0 and not outbound_delivery:  # an outbound delivery that is gone takes its reservation with it
+            frappe.db.sql("update `tabOutbound Delivery Item` set allocated_quantity = greatest(allocated_quantity - %s, 0) where name = %s", (open_qty, p.outbound_delivery_item))
+        frappe.db.set_value("Inbound Cross Dock Plan", p.name, "status", "Cancelled")

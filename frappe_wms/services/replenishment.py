@@ -42,29 +42,32 @@ def _best_source_bin(warehouse, product, storage_type, stock_type, exclude_bin):
 
 def check_replenishment_needs():
     require_role("WMS Operator", "WMS Supervisor")
-    created = []
-    for rule in frappe.get_all("Replenishment Rule", filters={"active": 1}, fields=["*"]):
-        current = _current_quantity(rule.warehouse, rule.product, rule.storage_bin, rule.stock_type)
-        if current > rule.minimum_quantity: continue
-        if _pending_request_exists(rule.name): continue
-        source, available = _best_source_bin(rule.warehouse, rule.product, rule.source_storage_type, rule.stock_type, rule.storage_bin)
-        if not source or available <= 0: continue
-        needed = flt(rule.target_quantity) - current
-        qty = min(needed, available)
-        if qty <= 0: continue
-        stock_uom = frappe.db.get_value("WMS Product", {"item": rule.product}, "stock_uom") or frappe.db.get_value("Item", rule.product, "stock_uom")
-        process_type = determine_process_type(rule.warehouse, "Replenish", item=rule.product, stock_type=rule.stock_type, default="REPLENISH")
-        request = frappe.get_doc({
-            "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": rule.warehouse, "product": rule.product,
-            "requested_quantity": qty, "stock_uom": stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
-            "batch_no": source.batch_no, "serial_no": source.serial_no,
-            "destination_bin": rule.storage_bin, "stock_type": rule.stock_type, "reference_doctype": "Replenishment Rule",
-            "reference_name": rule.name, "process_type": process_type, "priority": rule.priority or "Normal", "status": "Open",
-        })
-        request.insert(ignore_permissions=True)
-        task = create_tasks_for_request(request.name)
-        created.append(task)
-    return created
+    return [t for t in (_replenish_for_rule(rule) for rule in frappe.get_all("Replenishment Rule", filters={"active": 1}, fields=["*"])) if t]
+
+def replenish_after_removal(task):
+    """Automatic replenishment: a confirmed removal that leaves the bin at or below its rule's minimum raises the request right away."""
+    return [t for t in (_replenish_for_rule(rule) for rule in frappe.get_all("Replenishment Rule", filters={"active": 1, "warehouse": task.warehouse, "product": task.product, "storage_bin": task.source_bin}, fields=["*"])) if t]
+
+def _replenish_for_rule(rule):
+    current = _current_quantity(rule.warehouse, rule.product, rule.storage_bin, rule.stock_type)
+    if current > rule.minimum_quantity: return None
+    if _pending_request_exists(rule.name): return None
+    source, available = _best_source_bin(rule.warehouse, rule.product, rule.source_storage_type, rule.stock_type, rule.storage_bin)
+    if not source or available <= 0: return None
+    needed = flt(rule.target_quantity) - current
+    qty = min(needed, available)
+    if qty <= 0: return None
+    stock_uom = frappe.db.get_value("WMS Product", {"item": rule.product}, "stock_uom") or frappe.db.get_value("Item", rule.product, "stock_uom")
+    process_type = determine_process_type(rule.warehouse, "Replenish", item=rule.product, stock_type=rule.stock_type, default="REPLENISH")
+    request = frappe.get_doc({
+        "doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": rule.warehouse, "product": rule.product,
+        "requested_quantity": qty, "stock_uom": stock_uom, "source_bin": source.storage_bin, "source_hu": source.handling_unit,
+        "batch_no": source.batch_no, "serial_no": source.serial_no,
+        "destination_bin": rule.storage_bin, "stock_type": rule.stock_type, "reference_doctype": "Replenishment Rule",
+        "reference_name": rule.name, "process_type": process_type, "priority": rule.priority or "Normal", "status": "Open",
+    })
+    request.insert(ignore_permissions=True)
+    return create_tasks_for_request(request.name)
 
 def create_order_related_replenishment(task):
     # Reactive replenishment triggered by a Pick task that just went through a pick denial

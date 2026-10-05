@@ -1,6 +1,6 @@
 {
-  "name": "Warehouse Queue",
-  "module": "WMS Execution",
+  "name": "WMS Block Reason",
+  "module": "WMS Setup",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -8,76 +8,34 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "queue_code",
-    "queue_name",
-    "warehouse",
-    "activity",
-    "storage_type",
-    "activity_area",
-    "door",
-    "resource_group",
-    "sequence_rule",
+    "reason_code",
+    "reason_name",
+    "applies_to",
     "active"
   ],
   "fields": [
     {
-      "fieldname": "queue_code",
-      "label": "Queue Code",
+      "fieldname": "reason_code",
+      "label": "Reason Code",
       "fieldtype": "Data",
       "reqd": 1,
       "unique": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
+      "in_list_view": 1
     },
     {
-      "fieldname": "queue_name",
-      "label": "Queue Name",
+      "fieldname": "reason_name",
+      "label": "Reason",
       "fieldtype": "Data",
       "reqd": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "warehouse",
-      "label": "Warehouse",
-      "fieldtype": "Link",
-      "options": "WMS Warehouse",
-      "reqd": 1,
+      "fieldname": "applies_to",
+      "label": "Applies To",
+      "fieldtype": "Select",
+      "options": "Bin\nHandling Unit\nBoth",
+      "default": "Both",
       "in_list_view": 1
-    },
-    {
-      "fieldname": "activity",
-      "label": "Activity",
-      "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nPack\nStage\nLoad\nPosting Change\nInventory Count\nSort\nCross Dock",
-      "reqd": 1
-    },
-    {
-      "fieldname": "storage_type",
-      "label": "Storage Type",
-      "fieldtype": "Link",
-      "options": "Storage Type"
-    },
-    {
-      "fieldname": "activity_area",
-      "label": "Activity Area",
-      "fieldtype": "Link",
-      "options": "Activity Area",
-      "description": "Narrower than Storage Type - a queue matching a task's bin's own Activity Area wins over one matching only its Storage Type."
-    },
-    {
-      "fieldname": "resource_group",
-      "label": "Resource Group",
-      "fieldtype": "Link",
-      "options": "WMS Resource Group",
-      "description": "The pool of physical Resources (devices) eligible to work this queue - mirrors SAP EWM's Queue-to-Resource-Group link."
-    },
-    {
-      "fieldname": "sequence_rule",
-      "label": "Sequence Rule",
-      "fieldtype": "Select",
-      "options": "Priority Then FIFO\nFIFO\nBin Sequence\nDelivery Sequence\nOldest Stock First",
-      "reqd": 1,
-      "default": "Priority Then FIFO"
     },
     {
       "fieldname": "active",
@@ -85,17 +43,8 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
-    },
-    {
-      "fieldname": "door",
-      "label": "Door / Staging Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "description": "Only tasks for this door or staging bin (outbound picks of a delivery staged there, loading) are queued here."
     }
   ],
-  "autoname": "field:queue_code",
-  "title_field": "queue_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
@@ -190,6 +139,9 @@
     {
       "role": "WMS Master Data",
       "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
       "report": 1,
       "export": 1,
       "print": 1
@@ -208,5 +160,7 @@
       "export": 1,
       "print": 1
     }
-  ]
+  ],
+  "autoname": "field:reason_code",
+  "title_field": "reason_name"
 }

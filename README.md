@@ -785,6 +785,25 @@ SAP's product-driven storage search: indicators on the product pick the storage 
 * **Warehouse Process Type defaults**: source/destination storage type and bin, queue, priority - used when the request does not say.
 * **Two-Step Picking** flag on the product warehouse row forces picks through the shared picking staging bin.
 
+## Execution control (Phase C)
+
+* **Exception actions** - a WMS Exception Code has a *Business Context* (where it is offered: RF task, desktop task, packing, physical inventory) and
+  a *System Action*: **Change Bin** (the destination of a putaway-type task, else the source; the new bin must accept / hold the goods; a pick for a
+  delivery cannot change source), **Split Task** (a quantity becomes a new task, optionally to another bin; picks for a delivery cannot be split),
+  **Skip Task** (to the back of its Warehouse Order) and **Post Difference** (close at the quantity found, book the shortfall). Actions do not block
+  the task. The RF exception screen asks for the bin / quantity the action needs. Codes without an action behave as before.
+* **Block reason** - `WMS Block Reason` master (applies to Bin / Handling Unit / Both), `Storage Bin.block_reason`; WMS Settings *Require Block Reason*.
+* **Replenish on Removal** (WMS Settings) - a confirmed pick that leaves the bin at or below its Replenishment Rule's minimum raises the
+  replenishment immediately. **Zero Stock Check on Pick** - a pick that empties a bin creates a physical inventory count for it (one open count per bin).
+* **Wave Template** - *Minimum Deliveries* (a smaller wave is not released automatically), *Maximum Deliveries* (a sweep fills waves up to this),
+  *Lock Minutes* (a Draft wave cannot be split shortly before the cutoff); `split_wave` moves some deliveries of a Draft wave into a new one.
+* **WO Creation Rule** - unit-weight filter (min/max gross weight per unit, so heavy items get their own rule), *Group by Activity Area* and *Group by
+  Consolidation Group* (such tasks never share a Warehouse Order).
+* **Warehouse Queue** - a *Door / Staging Bin*: only tasks for that door (a pick's delivery door or staging bin, a task to a door/staging bin) queue there.
+* **Planned cross-docking** - `plan_cross_dock(inbound_delivery)` matches the expected quantity against open outbound demand and reserves it before
+  the goods arrive (table *Planned Cross-Docking* on the Inbound Delivery); the goods receipt sends exactly that stock to the delivery's staging bin and
+  the remainder is put away or matched opportunistically. Completing the inbound delivery short, or removing the outbound one, gives the demand back.
+
 ## Modules
 
 | Module | Contains |

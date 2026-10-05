@@ -46,7 +46,9 @@ Shipped: B1 (PSA bins table + control cycle with staging bin), B2 crate parts, B
 
 Dependencies: B1 before B2/B3. Decision needed: one PSA = several bins (SAP: storage type + section + bin) or several PSAs per area (recommendation: bins table).
 
-## Phase C - Execution control and exceptions (about 10 days)
+## Phase C - Execution control and exceptions (about 10 days) - DONE 2026-10-05
+
+Shipped: C1 (business context + change bin / split / skip / post difference, RF screen), C2 block reason, C3 replenish on removal, C4 minimum/maximum deliveries, lock minutes, split wave, C5 unit-weight filter and grouping by activity area / consolidation group, C6 queue door, C7 zero-stock check on pick, C8 planned cross-docking. **Not built:** collective retrieval as one combined two-step task; sort by activity-area bin sequence and pick-HU calculation from the packspec (Phase D); a desk button for split wave (API only); reason code on HU block already existed.
 
 | Item | Change | Test |
 | --- | --- | --- |

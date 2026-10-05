@@ -64,8 +64,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
 
 @frappe.whitelist()
 @retry_on_deadlock
-def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None):
-    return _raise_exception(task_name, exception_code, remarks, revised_quantity)
+def raise_exception(task_name, exception_code, remarks=None, revised_quantity=None, new_bin=None, split_quantity=None):
+    return _raise_exception(task_name, exception_code, remarks, revised_quantity, new_bin, split_quantity)
 
 @frappe.whitelist()
 @retry_on_deadlock
@@ -74,14 +74,14 @@ def reverse_task(task_name, reason=None):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def list_exception_codes(task_type=None):
+def list_exception_codes(task_type=None, context="Task Execution (RF)"):
     require_role(*RF_ROLES)
-    filters = {"active": 1}
+    filters = {"active": 1, "business_context": ["in", ["Any", context, "", None]]}
     if task_type:
         codes = frappe.get_all("Allowed Task Type", filters={"task_type": task_type}, pluck="parent")
         if not codes: return []
         filters["name"] = ["in", codes]
-    return frappe.get_all("WMS Exception Code", filters=filters, fields=["name", "exception_name", "category", "requires_supervisor", "requires_comment", "allows_quantity_change"])
+    return frappe.get_all("WMS Exception Code", filters=filters, fields=["name", "exception_name", "category", "requires_supervisor", "requires_comment", "allows_quantity_change", "allows_bin_change", "system_action"])
 
 @frappe.whitelist()
 @retry_on_deadlock

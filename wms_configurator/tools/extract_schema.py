@@ -51,6 +51,7 @@ IN_SCOPE_DOCTYPES = [
     "WO Creation Rule",
     "Inspection Rule",
     "WMS Exception Code",
+    "WMS Block Reason",
     "Count Tolerance Group",
     "Cycle Count Rule",
     "Replenishment Rule",

@@ -241,3 +241,43 @@ class TestCrossDock(IntegrationTestCase):
             self.assertEqual(confirm_hu_loaded(shipment, staged[2][1])["shipment_status"], "Loaded")
         finally:
             frappe.db.set_value("WMS Warehouse", self.warehouse, "load_sequence_check", "Off")
+
+    def test_planned_cross_docking_reserves_demand_before_the_goods_arrive_and_the_receipt_uses_it(self):
+        from frappe_wms.services.allocation import allocate_delivery
+        from frappe_wms.services.cross_dock import plan_cross_dock, cancel_cross_dock_plan
+        item = self._make_item("TEST-XDOCK-PLAN-1")
+        obd = self._make_delivery(item, 4)
+        hu = self._make_hu()
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": item, "expected_quantity": 10, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True); ind.submit()
+        plan_cross_dock(ind.name)
+        ind.reload()
+        self.assertEqual([(p.outbound_delivery, p.planned_quantity, p.status) for p in ind.cross_dock_plan], [(obd.name, 4, "Planned")])
+        obd.reload()
+        self.assertEqual(obd.items[0].allocated_quantity, 4, "reserved before anything arrived")
+        allocate_delivery(obd.name)
+        self.assertEqual(frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}), [], "normal allocation leaves it alone")
+        self.assertEqual(plan_cross_dock(ind.name), [], "planning again plans nothing new")
+
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": item, "quantity": 10, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True); gr.submit()
+        requests = {r.request_type: r for r in [frappe.get_doc("Warehouse Request", n) for n in create_putaway_requests(gr.name)]}
+        self.assertEqual((requests["Cross Dock"].requested_quantity, requests["Cross Dock"].reference_name, requests["Putaway"].requested_quantity), (4, obd.name, 6))
+        obd.reload()
+        self.assertEqual(obd.items[0].allocated_quantity, 4, "not reserved twice")
+        ind.reload()
+        self.assertEqual([p.status for p in ind.cross_dock_plan], ["Done"])
+
+    def test_cancelling_a_plan_gives_the_reserved_demand_back(self):
+        from frappe_wms.services.cross_dock import plan_cross_dock, cancel_cross_dock_plan
+        item = self._make_item("TEST-XDOCK-PLAN-2")
+        obd = self._make_delivery(item, 3)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": self.supplier, "receiving_bin": self.recv_bin,
+            "items": [{"line_number": 1, "item": item, "expected_quantity": 3, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+        ind.insert(ignore_permissions=True); ind.submit()
+        plan_cross_dock(ind.name)
+        cancel_cross_dock_plan(inbound_delivery=ind.name)
+        obd.reload()
+        self.assertEqual(obd.items[0].allocated_quantity, 0)

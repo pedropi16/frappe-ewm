@@ -321,7 +321,7 @@ function exceptionView(wrap, ctx) {
     if (!st.codes) box.append(Loading());
     else if (!st.codes.length) box.append(Hint(_("No exception codes are configured for this task type. Ask a supervisor to set one up under WMS Exception Code.")));
     (st.codes || []).forEach((c) => box.append(Btn({ label: c.exception_name + (c.requires_supervisor ? " \u{1F512}" : ""), kind: "danger", onClick: () => {
-      st.exc = { remarks: "", revised: st.excPrefillQty != null ? fmtQty(st.excPrefillQty) : fmtQty(remaining(t)) };
+      st.exc = { remarks: "", bin: "", split: "", revised: st.excPrefillQty != null ? fmtQty(st.excPrefillQty) : fmtQty(remaining(t)) };
       st.excPrefillQty = null;
       nav.go(href("task", st.name, "exception", c.name));
     } })));
@@ -331,11 +331,22 @@ function exceptionView(wrap, ctx) {
   const c = (st.codes || []).find((x) => x.name === code);
   if (!c) { if (st.codes) return Empty(_("Unknown exception code.")); return Loading(); }
   const box = Section({ title: c.exception_name });
-  if (c.allows_quantity_change) {
+  const action = excAction(c);
+  if (action === "Change Bin") {
+    box.append(Hint(_("Scan the bin to use instead. The task stays open.")),
+      Field({ name: "bin", kind: "scan", label: _("New bin"), value: st.exc.bin, autofocus: true, onInput: (v) => { st.exc.bin = v; } }));
+  } else if (action === "Split Task") {
+    box.append(Hint(_("Part of the quantity becomes a new task, optionally to another bin. The rest stays on this task.")),
+      Field({ name: "split", kind: "qty", label: _("Quantity to split off"), value: st.exc.split, unit: t.stock_uom, autofocus: true, onInput: (v) => { st.exc.split = v; } }),
+      Field({ name: "bin", kind: "scan", label: _("Bin for it (optional)"), value: st.exc.bin, onInput: (v) => { st.exc.bin = v; } }));
+  } else if (action === "Skip Task") {
+    box.append(Hint(_("The task moves to the back of its order. Nothing is blocked.")));
+  }
+  if (c.allows_quantity_change || action === "Post Difference") {
     box.append(Hint(_("Enter the quantity actually found. The task closes at this amount and the shortfall raises a replenishment request.")),
       Field({ name: "revised", kind: "qty", label: _("Quantity found"), value: st.exc.revised, unit: t.stock_uom, autofocus: true, onInput: (v) => { st.exc.revised = v; } }));
   }
-  box.append(Field({ name: "remarks", kind: "text", label: c.requires_comment ? _("Comment (required)") : _("Comment (optional)"), placeholder: _("What happened?"), value: st.exc.remarks, autofocus: !c.allows_quantity_change, onInput: (v) => { st.exc.remarks = v; } }));
+  box.append(Field({ name: "remarks", kind: "text", label: c.requires_comment ? _("Comment (required)") : _("Comment (optional)"), placeholder: _("What happened?"), value: st.exc.remarks, autofocus: !c.allows_quantity_change && !action, onInput: (v) => { st.exc.remarks = v; } }));
   wrap.append(box);
   return wrap;
 }
@@ -346,22 +357,32 @@ async function reportException() {
   if (!c) return;
   const remarks = st.exc.remarks.trim();
   if (c.requires_comment && !remarks) return fail("remarks", _("This exception requires a comment."));
-  let revised;
-  if (c.allows_quantity_change) {
+  const action = excAction(c);
+  let revised, newBin, splitQty;
+  if (action === "Change Bin") {
+    newBin = st.exc.bin.trim();
+    if (!newBin) return fail("bin", _("Scan the new bin."));
+  } else if (action === "Split Task") {
+    if (!isNumeric(st.exc.split) || parseNum(st.exc.split) <= 0) return fail("split", _("Enter a quantity above zero."));
+    splitQty = parseNum(st.exc.split);
+    newBin = st.exc.bin.trim() || undefined;
+  }
+  if (c.allows_quantity_change || action === "Post Difference") {
     if (!isNumeric(st.exc.revised)) return fail("revised", _("Enter a number."));
     revised = parseNum(st.exc.revised);
     if (revised < 0) return fail("revised", _("Quantity cannot be negative."));
     if (revised < flt(t.confirmed_quantity)) return fail("revised", _("Cannot be less than the {0} already confirmed.", [fmtQty(t.confirmed_quantity)]));
   }
-  if (!confirm_(_("Block this task with “{0}”?", [c.exception_name]))) return;
-  const ok = await run(() => api("frappe_wms.api.scanner.raise_exception", { task_name: t.name, exception_code: c.name, remarks: remarks || undefined, revised_quantity: revised }), { label: _("Reporting…"), again: reportException });
+  if (!action && !confirm_(_("Block this task with “{0}”?", [c.exception_name]))) return;
+  const ok = await run(() => api("frappe_wms.api.scanner.raise_exception", { task_name: t.name, exception_code: c.name, remarks: remarks || undefined, revised_quantity: revised, new_bin: newBin, split_quantity: splitQty }), { label: _("Reporting…"), again: reportException });
   if (!ok) return;
   feedback.warn();
   clearDraft(draftKey(t.name));
   const w0 = st.form && st.form.w0;
   st.form = null; st.fetchedAt = 0;
   await run(refreshSession, { busy: false, exclusive: false });
-  finishFlow(w0, `#/tasks/${groupOfType(t.task_type)}`, _("{0} flagged as exception", [_(t.task_type)]));
+  finishFlow(w0, `#/tasks/${groupOfType(t.task_type)}`, action ? _("{0}: {1}", [c.exception_name, _(action)]) : _("{0} flagged as exception", [_(t.task_type)]));
 }
+const excAction = (c) => c.system_action || "";
 const currentCode = () => (S.route && S.route.params.code) || null;
 const confirm_ = (msg) => window.confirm(msg);

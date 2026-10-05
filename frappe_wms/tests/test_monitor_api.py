@@ -72,7 +72,7 @@ class TestMonitorApi(IntegrationTestCase):
     def test_summary_counts_exceptions_and_in_progress_deliveries(self):
         _hu1, task1 = self._receive(10)
         _hu2, task2 = self._receive(5)
-        code = frappe.get_all("WMS Exception Code", filters={"active": 1}, limit=1, pluck="name")
+        code = frappe.get_all("WMS Exception Code", filters={"active": 1, "system_action": ["in", ["", None]]}, limit=1, pluck="name")
         if not code:
             self.skipTest("no WMS Exception Code configured")
         raise_exception(task2, code[0], remarks="test")
@@ -116,7 +116,7 @@ class TestMonitorApi(IntegrationTestCase):
 
     def test_search_tasks_filters_by_status(self):
         _hu, task = self._receive(3)
-        code = frappe.get_all("WMS Exception Code", filters={"active": 1}, limit=1, pluck="name")
+        code = frappe.get_all("WMS Exception Code", filters={"active": 1, "system_action": ["in", ["", None]]}, limit=1, pluck="name")
         if not code:
             self.skipTest("no WMS Exception Code configured")
         raise_exception(task, code[0], remarks="test")

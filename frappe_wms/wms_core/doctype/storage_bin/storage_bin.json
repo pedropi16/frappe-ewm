@@ -33,6 +33,7 @@
     "putaway_blocked",
     "removal_blocked",
     "inventory_blocked",
+    "block_reason",
     "allowed_stock_types",
     "allowed_hu_types",
     "active"
@@ -223,6 +224,13 @@
       "label": "Maximum Quantity",
       "fieldtype": "Float",
       "description": "Capacity check method Max Quantity: most stock (any product, stock UoM) the bin holds. A bin's own value wins over its Bin Type's."
+    },
+    {
+      "fieldname": "block_reason",
+      "label": "Block Reason",
+      "fieldtype": "Link",
+      "options": "WMS Block Reason",
+      "description": "Why the bin is blocked."
     }
   ],
   "autoname": "field:bin_code",

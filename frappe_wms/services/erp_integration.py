@@ -425,6 +425,8 @@ def complete_short(doctype, delivery_name, reason=None):
     else:
         if frappe.db.exists("Goods Receipt", {"inbound_delivery": d.name, "docstatus": 0}):
             frappe.throw(_("A draft Goods Receipt exists for {0}; post or delete it first").format(d.name))
+        from frappe_wms.services.cross_dock import cancel_cross_dock_plan
+        cancel_cross_dock_plan(inbound_delivery=d.name)  # the goods that never come release their reserved demand
     for i in d.items:
         frappe.db.set_value(side["item"], i.name, side["qty"], flt(i.get(side["done"])))
     d.db_set({"status": "Completed", "closed_short": 1, "close_reason": reason or _("Completed short")}, update_modified=True)

@@ -20,6 +20,7 @@
     "process_status",
     "posting_date",
     "items",
+    "cross_dock_plan",
     "remarks",
     "erp_section",
     "erp_source_doctype",
@@ -168,6 +169,15 @@
       "fieldtype": "Small Text",
       "allow_on_submit": 1,
       "read_only": 1
+    },
+    {
+      "fieldname": "cross_dock_plan",
+      "label": "Planned Cross-Docking",
+      "fieldtype": "Table",
+      "options": "Inbound Cross Dock Plan",
+      "read_only": 1,
+      "allow_on_submit": 1,
+      "description": "Open outbound demand reserved for this delivery before it arrives; goods receipt sends the stock straight to the delivery's staging bin."
     }
   ],
   "autoname": "IBD-.########",

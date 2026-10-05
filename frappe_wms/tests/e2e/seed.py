@@ -88,6 +88,9 @@ def run():
     if not frappe.db.exists("WMS Exception Code", "E2E-DAMAGED"):
         frappe.get_doc({"doctype": "WMS Exception Code", "exception_code": "E2E-DAMAGED", "exception_name": "E2E damaged goods", "category": "Task", "active": 1,
                         "requires_comment": 1, "follow_up_action": "None", "allowed_task_types": [{"task_type": "Internal Move"}]}).insert(ignore_permissions=True)
+    if not frappe.db.exists("WMS Exception Code", "E2E-SKIP"):
+        frappe.get_doc({"doctype": "WMS Exception Code", "exception_code": "E2E-SKIP", "exception_name": "E2E skip task", "category": "Task", "active": 1,
+                        "system_action": "Skip Task", "allowed_task_types": [{"task_type": "Internal Move"}]}).insert(ignore_permissions=True)
     from frappe.core.doctype.user.user import generate_keys
     keys = generate_keys(ADMIN[0])
     api_key = frappe.db.get_value("User", ADMIN[0], "api_key")
