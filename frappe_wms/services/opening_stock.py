@@ -67,6 +67,7 @@ def post_opening_stock_load(name):
             "quantity": row.quantity, "stock_uom": row.stock_uom, "movement_type": "561",
             "reference_line": row.name,
         }
+        if row.get("stock_owner") or row.get("entitled_party"): entry.update({"stock_owner": row.stock_owner, "entitled_party": row.entitled_party})
         if row.shelf_life_expiry_date:
             entry["shelf_life_expiry_date"] = row.shelf_life_expiry_date
         post_entries([entry], doc.doctype, doc.name, f"OSL:{doc.name}:{i}")
@@ -75,7 +76,7 @@ def post_opening_stock_load(name):
     if erpnext_warehouse:
         groups = {}
         for row in doc.items:
-            key = (row.item, row.batch_no, row.serial_no, row.stock_type)
+            key = (row.item, row.batch_no, row.serial_no, row.stock_type, row.get("stock_owner") or None, row.get("entitled_party") or None)
             group = groups.setdefault(key, {"quantity": 0.0, "stock_uom": row.stock_uom, "valuation_rate": row.valuation_rate})
             group["quantity"] += flt(row.quantity)
         account = _resolve_opening_account(company)
@@ -92,12 +93,12 @@ def post_opening_stock_load(name):
         group_items = list(groups.items())
         for start in range(0, len(group_items), SR_MAX_ROWS):
             sr = frappe.get_doc({"doctype": "Stock Reconciliation", "company": company, "purpose": "Opening Stock", "expense_account": account})
-            for (item, batch_no, serial_no, stock_type), group in group_items[start:start + SR_MAX_ROWS]:
+            for (item, batch_no, serial_no, stock_type, owner, party), group in group_items[start:start + SR_MAX_ROWS]:
                 sr.append("items", {
                     "item_code": item, "warehouse": erpnext_warehouse, "qty": group["quantity"],
                     "valuation_rate": _resolve_valuation_rate(item, group["valuation_rate"]),
                     "batch_no": batch_no, "serial_no": serial_no, "use_serial_batch_fields": 1,
-                    "wms_stock_type": stock_type,
+                    "wms_stock_type": stock_type, **({"wms_stock_owner": owner} if owner else {}), **({"wms_entitled_party": party} if party else {}),
                 })
             sr.flags.wms_managed_posting = True
             sr.insert(ignore_permissions=True)

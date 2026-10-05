@@ -64,6 +64,14 @@ def after_install():
     # and left two "WMS" / "Frappe WMS" tiles on the desk with mismatched icons.
 
     ensure_stock_type_inventory_dimension()
+    ensure_owner_inventory_dimensions()
+
+def ensure_owner_inventory_dimensions():
+    """ERPNext sees the WMS owner and party entitled to dispose as Inventory Dimensions (like the stock type): fields wms_stock_owner / wms_entitled_party
+    on every stock document row and on the stock ledger, so ERPNext stock is tracked per owner too."""
+    for dimension in ("WMS Stock Owner", "WMS Entitled Party"):
+        if frappe.db.exists("Inventory Dimension", {"dimension_name": dimension}): continue
+        frappe.get_doc({"doctype": "Inventory Dimension", "reference_document": "WMS Stock Owner", "dimension_name": dimension, "apply_to_all_doctypes": 1}).insert(ignore_permissions=True)
 
 def ensure_stock_type_inventory_dimension():
     if frappe.db.exists("Inventory Dimension", {"reference_document": "WMS Stock Type"}): return

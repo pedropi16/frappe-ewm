@@ -175,11 +175,13 @@ def _header(doc, wh):
     number = f"{doc.name}-{wh.name}" if frappe.db.count(SIDE[doc.doctype]["doctype"], {"erp_source_name": doc.name}) == 0 \
         else f"{doc.name}-{wh.name}-{frappe.generate_hash(length=4)}"
     if SIDE[doc.doctype] is INBOUND:
-        return {"inbound_delivery_number": number, "supplier": doc.supplier, "company": doc.company, "receiving_bin": wh.default_receiving_bin,
+        return {"stock_owner": doc.get("wms_stock_owner"), "entitled_party": doc.get("wms_entitled_party"),
+                "inbound_delivery_number": number, "supplier": doc.supplier, "company": doc.company, "receiving_bin": wh.default_receiving_bin,
                 "posting_date": nowdate(), "expected_arrival": doc.get("schedule_date") or doc.get("posting_date"),
                 "external_reference": doc.get("supplier_delivery_note") or doc.name,
                 "erp_source_doctype": doc.doctype, "erp_source_name": doc.name}
-    return {"outbound_delivery_number": number, "customer": doc.customer, "ship_to_party": doc.get("shipping_address_name"),
+    return {"stock_owner": doc.get("wms_stock_owner"), "entitled_party": doc.get("wms_entitled_party"),
+            "outbound_delivery_number": number, "customer": doc.customer, "ship_to_party": doc.get("shipping_address_name"),
             "delivery_date": doc.get("delivery_date") or doc.get("posting_date") or nowdate(), "staging_bin": wh.default_shipping_bin,
             "priority": "Normal", "external_reference": doc.get("po_no") or doc.name,
             "erp_source_doctype": doc.doctype, "erp_source_name": doc.name}

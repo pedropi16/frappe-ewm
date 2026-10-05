@@ -848,8 +848,10 @@ SAP's product-driven storage search: indicators on the product pick the storage 
   per row, on a Goods Receipt Item) they come with the stock at receipt, through putaway requests/tasks, moves (a transfer keeps the stock's owner) and
   allocation: an Outbound Delivery with an owner only allocates that owner's stock, one without only the warehouse's own. A decrement that names no owner
   takes the owner of the stock it is booked from (the owner-less stock first; two owners in the same place must be named explicitly). Cross-docking
-  matches deliveries of the same owner; replenishment, production staging and kitting use owner-less stock only. The ERPNext mirror does not carry the
-  owner.
+  matches deliveries of the same owner; replenishment, production staging and kitting use owner-less stock only. The ERPNext mirror carries the owner both ways: the Inventory Dimensions
+  `WMS Stock Owner` / `WMS Entitled Party` (`wms_stock_owner`, `wms_entitled_party`, `to_` prefix on the target) are set on the Stock Entry /
+  Delivery Note / Purchase Receipt rows built from WMS stock (grouped per owner), and `wms_stock_owner` / `wms_entitled_party` on a Purchase Order,
+  Sales Order, Purchase Receipt or Delivery Note header go onto the WMS delivery created from it. Opening stock loads accept an owner per row.
 * **WMS Document Type** (category Inbound Delivery / Outbound Delivery / Warehouse Request / Delivery Request / Final Outbound Delivery, optional
   warehouse, default flag): *Number Range*, *Field Defaults* (new documents), *Field Control* (Required / Read Only / Hidden, enforced on save and applied to
   the form) and a *Status Profile* (allowed status changes, optionally per role). PPF profiles can be limited to a document type.

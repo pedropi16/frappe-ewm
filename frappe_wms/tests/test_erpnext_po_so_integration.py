@@ -110,6 +110,24 @@ class TestErpnextPoSoIntegration(IntegrationTestCase):
         self.assertEqual(pr.items[0].qty, 2, "qty must be back-converted into the PO's transactional UOM")
         self.assertEqual(pr.items[0].stock_qty, 10, "stock_qty (the real stock movement) must not double-apply the conversion factor")
 
+    def test_the_owner_on_a_purchase_order_reaches_the_delivery_the_stock_and_the_purchase_receipt(self):
+        if not frappe.db.exists("WMS Stock Owner", "OWN-PO"):
+            frappe.get_doc({"doctype": "WMS Stock Owner", "owner_code": "OWN-PO", "owner_name": "OWN-PO", "partner_type": "Other"}).insert(ignore_permissions=True)
+        po = frappe.get_doc({"doctype": "Purchase Order", "supplier": self.supplier, "company": self.company, "transaction_date": nowdate(), "schedule_date": nowdate(), "wms_stock_owner": "OWN-PO",
+            "items": [{"item_code": self.item, "qty": 6, "rate": 10, "schedule_date": nowdate()}]})
+        po.insert(ignore_permissions=True)
+        po.submit()
+        ind = frappe.get_doc("Inbound Delivery", create_inbound_delivery_from_purchase_order(po.name, self.warehouse))
+        self.assertEqual(ind.stock_owner, "OWN-PO")
+        hu = self._make_hu(self.recv_bin)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.item, "quantity": 6, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+        gr.insert(ignore_permissions=True)
+        gr.submit()
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"handling_unit": hu.name}, "stock_owner"), "OWN-PO")
+        pr = frappe.get_doc("Purchase Receipt", gr.erpnext_purchase_receipt)
+        self.assertEqual(pr.items[0].wms_stock_owner, "OWN-PO", "the Purchase Receipt row carries the owner as an Inventory Dimension")
+
     def test_mixed_po_and_standalone_lines_are_rejected(self):
         po = frappe.get_doc({"doctype": "Purchase Order", "supplier": self.supplier, "company": self.company, "transaction_date": nowdate(), "schedule_date": nowdate(),
             "items": [{"item_code": self.item, "qty": 5, "rate": 10, "schedule_date": nowdate()}]})

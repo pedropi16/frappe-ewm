@@ -22,3 +22,4 @@ frappe_wms.patches.v0_2.backfill_default_number_ranges
 frappe_wms.patches.v0_2.backfill_unqueued_cross_dock_tasks
 frappe_wms.patches.v0_2.backfill_storage_bin_check_digits
 frappe_wms.patches.v0_2.backfill_storage_type_hu_requirement
+frappe_wms.patches.v0_2.create_owner_inventory_dimensions

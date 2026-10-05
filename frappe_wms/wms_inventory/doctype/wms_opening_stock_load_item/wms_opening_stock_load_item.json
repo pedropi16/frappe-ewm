@@ -15,6 +15,8 @@
     "batch_no",
     "serial_no",
     "stock_type",
+    "entitled_party",
+    "stock_owner",
     "quantity",
     "stock_uom",
     "shelf_life_expiry_date",
@@ -94,6 +96,18 @@
       "label": "Valuation Rate",
       "fieldtype": "Currency",
       "description": "Used for the mirrored ERPNext opening Stock Reconciliation. Falls back to the item's own valuation/last purchase rate when left blank."
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner"
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner"
     }
   ],
   "sort_field": "modified",

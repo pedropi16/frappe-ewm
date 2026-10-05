@@ -58,6 +58,26 @@ def _insert_and_submit_as_system(doc):
 def _erpnext_warehouse(wms_warehouse):
     return frappe.db.get_value("WMS Warehouse", wms_warehouse, "erpnext_warehouse")
 
+def _owner_pair(entries):
+    pairs = {(e.stock_owner or None, e.entitled_party or None) for e in entries}
+    return pairs.pop() if len(pairs) == 1 else (None, None)
+
+def _row_owner(row):
+    """(owner, party entitled to dispose) of the stock a receipt / issue / count row booked, read from its ledger entries - the ledger holds what was really
+    posted, including an owner the posting resolved from the stock itself."""
+    return _owner_pair(frappe.get_all("WMS Stock Ledger Entry", filters={"reference_doctype": row.parenttype, "reference_name": row.parent, "reference_line": row.name}, fields=["stock_owner", "entitled_party"]))
+
+def _doc_owner(doc):
+    return _owner_pair(frappe.get_all("WMS Stock Ledger Entry", filters={"reference_doctype": doc.doctype, "reference_name": doc.name}, fields=["stock_owner", "entitled_party"]))
+
+def _dims(stock_type, owner=None, party=None, target=False):
+    """The WMS Inventory Dimension values of an ERPNext stock row (stock type, owner, party entitled to dispose); a stock entry's target side is prefixed to_."""
+    p = "to_" if target else ""
+    values = {f"{p}wms_stock_type": stock_type}
+    if owner: values[f"{p}wms_stock_owner"] = owner
+    if party: values[f"{p}wms_entitled_party"] = party
+    return values
+
 def _make_stock_entry(*, stock_entry_type, company, remarks):
     se = frappe.new_doc("Stock Entry")
     se.stock_entry_type = stock_entry_type
@@ -92,7 +112,7 @@ def _append_row(se, row, *, target_field, erpnext_warehouse, uom=None, conversio
         target_field: erpnext_warehouse,
         # Stock Entry Detail's WMS Stock Type Inventory Dimension fields mirror its
         # s_warehouse/t_warehouse pair: unprefixed = source, "to_" = target.
-        "to_wms_stock_type" if target_field == "t_warehouse" else "wms_stock_type": row.stock_type,
+        **_dims(row.stock_type, *_row_owner(row), target=target_field == "t_warehouse"),
     }
     if target_field == "t_warehouse":
         # A Material Issue consumes valuation layers ERPNext already has for this stock, so it
@@ -133,7 +153,7 @@ def _post_replicated_draft(doc, erpnext_warehouse, source_doctype, source_name, 
     groups = {}
     for row in doc.items:
         source_line = frappe.db.get_value(line_doctype, row.get(line_field), "source_document_line") if row.get(line_field) else None
-        key = (source_line, row.batch_no, row.serial_no, row.stock_type)
+        key = (source_line, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         groups[key] = groups.get(key, 0) + flt(row.quantity)
     with _as_system_user():
         previous, frappe.flags.wms_posting = frappe.flags.get("wms_posting"), True
@@ -141,13 +161,13 @@ def _post_replicated_draft(doc, erpnext_warehouse, source_doctype, source_name, 
             src = frappe.get_doc(source_doctype, source_name)
             templates = {r.name: r for r in src.items}
             kept = []
-            for (source_line, batch_no, serial_no, stock_type), qty in groups.items():
+            for (source_line, batch_no, serial_no, stock_type, owner, party), qty in groups.items():
                 template = templates.get(source_line)
                 if not template:
                     frappe.throw(_("{0} line for {1} {2} was not found on {3}").format(doc.doctype, doc.name, source_line, source_name))
                 values = {k: v for k, v in template.as_dict().items() if k not in _DRAFT_ROW_SKIP}
                 values.update(qty=qty / flt(template.conversion_factor or 1), stock_qty=qty, warehouse=erpnext_warehouse,
-                              batch_no=batch_no, serial_no=serial_no, use_serial_batch_fields=1, wms_stock_type=stock_type)
+                              batch_no=batch_no, serial_no=serial_no, use_serial_batch_fields=1, **_dims(stock_type, owner, party))
                 if source_doctype == "Purchase Receipt": values["received_qty"] = values["qty"]
                 kept.append(values)
             src.set("items", kept)
@@ -266,7 +286,7 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
     # batch/serial-managed item (ERPNext requires that data on such a row).
     groups = {}
     for row, (_po, po_item) in zip(doc.items, po_links):
-        key = (po_item, row.batch_no, row.serial_no, row.stock_type)
+        key = (po_item, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     # Everything from here on - the mapping, row assembly, insert and submit - runs as the
@@ -278,7 +298,7 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
         pr = make_purchase_receipt(po_names.pop())
         template_by_po_item = {item.purchase_order_item: item for item in pr.items}
         kept = []
-        for (po_item, batch_no, serial_no, stock_type), qty in groups.items():
+        for (po_item, batch_no, serial_no, stock_type, owner, party), qty in groups.items():
             template = template_by_po_item.get(po_item)
             if not template: continue
             row = pr.append("items", {})
@@ -295,7 +315,7 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
             row.use_serial_batch_fields = 1
             # Purchase Receipt Item's dimension field for its primary "warehouse" (the
             # receiving/target warehouse) is unprefixed, unlike Stock Entry's source/target split.
-            row.wms_stock_type = stock_type
+            row.update(_dims(stock_type, owner, party))
             kept.append(row)
         if not kept: frappe.throw(_("No matching Purchase Order rows found for Goods Receipt {0}").format(doc.name))
         # Drop whatever template rows make_purchase_receipt pre-filled from the PO itself (their
@@ -339,7 +359,7 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
     dn_name = return_links[0][0]
     groups = {}
     for row, (_dn, dn_item) in zip(doc.items, return_links):
-        key = (dn_item, row.batch_no, row.serial_no, row.stock_type)
+        key = (dn_item, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
@@ -348,7 +368,7 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
         ret = make_sales_return(dn_name)
         template_by_dn_item = {item.dn_detail: item for item in ret.items}
         kept = []
-        for (dn_item, batch_no, serial_no, stock_type), qty in groups.items():
+        for (dn_item, batch_no, serial_no, stock_type, owner, party), qty in groups.items():
             template = template_by_dn_item.get(dn_item)
             if not template: continue
             row = ret.append("items", {})
@@ -363,7 +383,7 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
             row.batch_no = batch_no
             row.serial_no = serial_no
             row.use_serial_batch_fields = 1
-            row.wms_stock_type = stock_type
+            row.update(_dims(stock_type, owner, party))
             kept.append(row)
         if not kept: frappe.throw(_("No matching Delivery Note rows found for Goods Receipt {0}").format(doc.name))
         ret.items = kept
@@ -418,13 +438,14 @@ def sync_quality_inspection(doc, passed, failed):
     se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Quality Inspection {doc.name}")
     moves = ([(d.quantity, frappe.db.get_value("WMS Usage Decision", d.usage_decision, "target_stock_type")) for d in doc.get("decisions") or []]
         or [(passed, doc.passed_to_stock_type), (failed, doc.failed_to_stock_type)])
+    owner, party = _doc_owner(doc)
     for qty, to_stock_type in moves:
         if qty <= 0 or to_stock_type == doc.from_stock_type: continue
         se.append("items", {
             "item_code": doc.product, "qty": flt(qty), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
             "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
             "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
-            "wms_stock_type": doc.from_stock_type, "to_wms_stock_type": to_stock_type,
+            **_dims(doc.from_stock_type, owner, party), **_dims(to_stock_type, owner, party, target=True),
             # Normally derived from the source warehouse's own existing valuation (a same-
             # warehouse transfer creates no new value) - but that only works once ERPNext has
             # ever actually valued this item in this warehouse. A product whose stock has only
@@ -449,11 +470,12 @@ def sync_posting_change(doc):
     if not erpnext_warehouse: return None
     company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
     se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Posting Change {doc.name}")
+    owner, party = _doc_owner(doc)
     se.append("items", {
         "item_code": doc.product, "qty": flt(doc.quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
         "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
         "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
-        "wms_stock_type": doc.from_stock_type, "to_wms_stock_type": doc.to_stock_type,
+        **_dims(doc.from_stock_type, owner, party), **_dims(doc.to_stock_type, owner, party, target=True),
         "allow_zero_valuation_rate": 1,  # see sync_quality_inspection above for why
     })
     se.flags.wms_managed_posting = True
@@ -537,7 +559,7 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
     # would fail outright for a batch/serial-managed item.
     groups = {}
     for row, (_so, so_item) in zip(doc.items, so_links):
-        key = (so_item, row.batch_no, row.serial_no, row.stock_type)
+        key = (so_item, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
@@ -546,7 +568,7 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
         dn = make_delivery_note(so_names.pop())
         template_by_so_item = {item.so_detail: item for item in dn.items}
         kept = []
-        for (so_item, batch_no, serial_no, stock_type), qty in groups.items():
+        for (so_item, batch_no, serial_no, stock_type, owner, party), qty in groups.items():
             template = template_by_so_item.get(so_item)
             if not template: continue
             row = dn.append("items", {})
@@ -562,7 +584,7 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
             row.use_serial_batch_fields = 1
             # Delivery Note Item's dimension field for its primary "warehouse" (the
             # shipping-from/source warehouse) is unprefixed, matching Stock Entry's convention.
-            row.wms_stock_type = stock_type
+            row.update(_dims(stock_type, owner, party))
             kept.append(row)
         if not kept: frappe.throw(_("No matching Sales Order rows found for Goods Issue {0}").format(doc.name))
         dn.items = kept
@@ -585,7 +607,7 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
     pr_name = return_links[0][0]
     groups = {}
     for row, (_pr, pr_item) in zip(doc.items, return_links):
-        key = (pr_item, row.batch_no, row.serial_no, row.stock_type)
+        key = (pr_item, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         groups[key] = groups.get(key, 0) + flt(row.quantity)
 
     # See the comment on the Purchase Receipt mirror above - the whole mapping/insert/submit
@@ -594,7 +616,7 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
         ret = make_purchase_return(pr_name)
         template_by_pr_item = {item.purchase_receipt_item: item for item in ret.items}
         kept = []
-        for (pr_item, batch_no, serial_no, stock_type), qty in groups.items():
+        for (pr_item, batch_no, serial_no, stock_type, owner, party), qty in groups.items():
             template = template_by_pr_item.get(pr_item)
             if not template: continue
             row = ret.append("items", {})
@@ -605,7 +627,7 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
             row.batch_no = batch_no
             row.serial_no = serial_no
             row.use_serial_batch_fields = 1
-            row.wms_stock_type = stock_type
+            row.update(_dims(stock_type, owner, party))
             kept.append(row)
         if not kept: frappe.throw(_("No matching Purchase Receipt rows found for Goods Issue {0}").format(doc.name))
         ret.items = kept
@@ -638,7 +660,7 @@ def sync_physical_inventory_count(doc, rows=None):
     if not erpnext_warehouse: return None, None
     groups = {}
     for row in (doc.items if rows is None else rows):
-        key = (row.product, row.batch_no, row.serial_no, row.stock_type)
+        key = (row.product, row.batch_no, row.serial_no, row.stock_type, *_row_owner(row))
         group = groups.setdefault(key, {"variance": 0.0, "stock_uom": row.stock_uom})
         group["variance"] += flt(row.variance)
 
@@ -654,11 +676,11 @@ def sync_physical_inventory_count(doc, rows=None):
 
     if gains:
         se = _make_stock_entry(stock_entry_type="Material Receipt", company=company, remarks=f"frappe_wms Physical Inventory Count {doc.name}")
-        for (product, batch_no, serial_no, stock_type), group in gains.items():
+        for (product, batch_no, serial_no, stock_type, owner, party), group in gains.items():
             values = {
                 "item_code": product, "qty": group["variance"], "uom": group["stock_uom"], "stock_uom": group["stock_uom"],
                 "conversion_factor": 1, "batch_no": batch_no, "serial_no": serial_no, "use_serial_batch_fields": 1,
-                "t_warehouse": erpnext_warehouse, "to_wms_stock_type": stock_type,
+                "t_warehouse": erpnext_warehouse, **_dims(stock_type, owner, party, target=True),
             }
             rate = _resolve_rate(product)
             if rate: values["basic_rate"] = rate
@@ -670,11 +692,11 @@ def sync_physical_inventory_count(doc, rows=None):
 
     if losses:
         se = _make_stock_entry(stock_entry_type="Material Issue", company=company, remarks=f"frappe_wms Physical Inventory Count {doc.name}")
-        for (product, batch_no, serial_no, stock_type), group in losses.items():
+        for (product, batch_no, serial_no, stock_type, owner, party), group in losses.items():
             se.append("items", {
                 "item_code": product, "qty": -group["variance"], "uom": group["stock_uom"], "stock_uom": group["stock_uom"],
                 "conversion_factor": 1, "batch_no": batch_no, "serial_no": serial_no, "use_serial_batch_fields": 1,
-                "s_warehouse": erpnext_warehouse, "wms_stock_type": stock_type,
+                "s_warehouse": erpnext_warehouse, **_dims(stock_type, owner, party),
             })
         se.flags.wms_managed_posting = True
         _insert_and_submit_as_system(se)
@@ -697,7 +719,7 @@ def sync_over_difference(doc):
     values = {
         "item_code": doc.product, "qty": flt(doc.difference_quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
         "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
-        "t_warehouse": erpnext_warehouse, "to_wms_stock_type": doc.stock_type,
+        "t_warehouse": erpnext_warehouse, **_dims(doc.stock_type, *(frappe.db.get_value("Warehouse Task", doc.warehouse_task, ["stock_owner", "entitled_party"]) or (None, None)), target=True),
     }
     rate = _resolve_rate(doc.product)
     if rate: values["basic_rate"] = rate

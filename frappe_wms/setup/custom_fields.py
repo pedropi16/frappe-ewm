@@ -5,6 +5,8 @@ CUSTOM_FIELDS = {
     # The ECC-delivery pattern: a draft Delivery Note / Purchase Receipt that was replicated to
     # the warehouse points at the WMS delivery that executes it (services/erp_integration.py).
     "Delivery Note": [
+        {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "customer", "print_hide": 1},
+        {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
         {"fieldname": "wms_outbound_delivery", "label": "WMS Outbound Delivery", "fieldtype": "Link", "options": "Outbound Delivery",
          "insert_after": "customer", "read_only": 1, "no_copy": 1, "allow_on_submit": 1, "print_hide": 1},
     ],
@@ -14,7 +16,19 @@ CUSTOM_FIELDS = {
         {"fieldname": "wms_minimum_remaining_shelf_life", "label": "WMS Minimum Remaining Shelf Life (Days)", "fieldtype": "Int",
          "insert_after": "customer_group", "non_negative": 1},
     ],
+    "Purchase Order": [
+        {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "supplier", "print_hide": 1,
+         "description": "Whose stock the warehouse receives (blank = the warehouse's own). Goes onto the WMS inbound delivery and the stock."},
+        {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
+    ],
+    "Sales Order": [
+        {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "customer", "print_hide": 1,
+         "description": "Whose stock is delivered (blank = the warehouse's own). The WMS outbound delivery only takes this owner's stock."},
+        {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
+    ],
     "Purchase Receipt": [
+        {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "supplier", "print_hide": 1},
+        {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
         {"fieldname": "wms_inbound_delivery", "label": "WMS Inbound Delivery", "fieldtype": "Link", "options": "Inbound Delivery",
          "insert_after": "supplier", "read_only": 1, "no_copy": 1, "allow_on_submit": 1, "print_hide": 1},
     ],

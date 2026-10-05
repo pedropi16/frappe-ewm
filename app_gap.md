@@ -465,7 +465,7 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 
 | # | SAP topic | Status | In frappe_wms / what is missing |
 | --- | --- | --- | --- |
-| 1.1 | Enterprise mapping: warehouse number, plant/storage location, PETD, owner | Done | WMS Warehouse = ERPNext company/warehouse; owner and Party Entitled to Dispose as stock dimensions (receipt, putaway, moves, allocation, cross-dock) (Phase E). Billing per owner and the ERP mirror of the owner are not built. |
+| 1.1 | Enterprise mapping: warehouse number, plant/storage location, PETD, owner | Done | WMS Warehouse = ERPNext company/warehouse; owner and Party Entitled to Dispose as stock dimensions (receipt, putaway, moves, allocation, cross-dock) (Phase E). The owner is mirrored to ERPNext both ways (Inventory Dimensions on stock rows, header fields on PO/SO/PR/DN). Billing per owner is not built. |
 | 1.2 | Supply Chain Unit (time zone, address, hours) | n/a | Not needed single-site. |
 | 1.3 | Product master: global, warehouse, putaway, removal, slotting views | Partial | WMS Product (+ per-warehouse row): serial/batch control, shelf life, default HU type, preferred storage type, full HU qty, weight/volume, ABC, handling indicators; **Phase A (2026-10-05):** putaway/removal control and storage section indicators, max quantity per storage type, two-step-picking flag. **Gap:** velocity code, warehouse product group, nesting factor. |
 | 1.4 | Packaging specification (levels, elements, condition technique) | Partial | Packaging Spec with levels (HU type, packaging material, quantity) and the condition technique product + customer / supplier (Phase D). **Gap:** work center instructions per level. |

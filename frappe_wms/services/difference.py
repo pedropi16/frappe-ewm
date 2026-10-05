@@ -34,6 +34,7 @@ def record_over_difference(task, excess_qty, idempotency_key):
         "handling_unit": None, "storage_bin": bin_name, "stock_type": stock_type,
         "quantity": excess_qty, "stock_uom": task.stock_uom, "movement_type": "701", "reference_line": task.name,
     }
+    if task.get("stock_owner") or task.get("entitled_party"): entry.update({"stock_owner": task.stock_owner, "entitled_party": task.entitled_party})  # the extra goods are the task's owner's
     post_entries([entry], task.doctype, task.name, idempotency_key)
     doc = frappe.get_doc({
         "doctype": "WMS Task Difference", "warehouse": task.warehouse, "warehouse_task": task.name, "task_type": task.task_type,
