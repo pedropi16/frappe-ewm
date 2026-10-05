@@ -55,6 +55,8 @@ def create_pmr(wo):
     pmr = frappe.get_doc({"doctype": "Production Material Request", "work_order": wo.name, "warehouse": warehouse, "production_item": wo.production_item,
         "qty": wo.qty, "planned_date": getdate(wo.planned_start_date) if wo.get("planned_start_date") else None, "status": "Open", "items": items})
     pmr.insert(ignore_permissions=True)
+    for psa in {i["psa"] for i in items if i["psa"] and frappe.db.get_value("Production Supply Area", i["psa"], "staging_mode") == "Automatic"}:
+        auto_stage(psa)
     return pmr.name
 
 
@@ -105,8 +107,21 @@ def close_pmr(pmr_name):
 
 # ------------------------------------------------------------------ staging (the app)
 
+def _planned_out(product, bin_name, hu):
+    """Quantity already tasked out of a stock line and not yet confirmed - not available to plan a second time."""
+    rows = frappe.db.sql("""select coalesce(sum(planned_quantity - confirmed_quantity), 0) from `tabWarehouse Task` where docstatus=0 and status in ('Open', 'On Hold', 'Available', 'Assigned', 'In Process', 'Partially Confirmed')
+        and product=%s and source_bin=%s and ifnull(source_hu, '')=%s""", (product, bin_name, hu or ""))
+    return flt(rows[0][0])
+
+
 def _source_lines(warehouse, product, psa, limit=5):
-    """Stock lines the material could be staged from, oldest first: storage bins only, not the PSA itself."""
+    """Stock lines the material could be staged from, oldest first: storage bins only, not the PSA itself, less what open tasks already take."""
+    lines = _raw_source_lines(warehouse, product, psa, limit * 4)
+    for l in lines: l["available_quantity"] = flt(l.available_quantity) - _planned_out(product, l.storage_bin, l.handling_unit)
+    return [l for l in lines if l.available_quantity > 0.000001][:limit]
+
+
+def _raw_source_lines(warehouse, product, psa, limit):
     return frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.available_quantity from `tabWMS Stock Balance` b
         join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type
         where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin!=%s
@@ -133,8 +148,9 @@ def _create_staging_request(psa, product, source, quantity, reference_doctype, r
     blank = lambda v: v or ["in", ["", None]]  # noqa: E731
     available = frappe.db.get_value("WMS Stock Balance", {"warehouse": warehouse, "product": product, "storage_bin": source["source_bin"], "handling_unit": blank(source.get("source_hu")),
         "batch_no": blank(source.get("batch_no")), "serial_no": blank(source.get("serial_no")), "stock_type": "AVAILABLE"}, "available_quantity", for_update=True)
-    if flt(available) < quantity - 0.000001:
-        frappe.throw(_("Only {0} of {1} is available in {2}").format(flt(available), product, source["source_bin"]))
+    available = flt(available) - _planned_out(product, source["source_bin"], source.get("source_hu"))
+    if available < quantity - 0.000001:
+        frappe.throw(_("Only {0} of {1} is available in {2}").format(available, product, source["source_bin"]))
     request = frappe.get_doc({"doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": warehouse, "product": product, "requested_quantity": quantity,
         "stock_uom": frappe.db.get_value("Item", product, "stock_uom"), "source_bin": source["source_bin"], "source_hu": source.get("source_hu") or None,
         "batch_no": source.get("batch_no") or None, "serial_no": source.get("serial_no") or None, "destination_bin": supply_bin, "stock_type": "AVAILABLE",
@@ -174,6 +190,42 @@ def stage_items(psa, method, lines):
         for parent in {i.parent for i in items}: _refresh_status(parent)
         created.append({"warehouse_request": request, "task": task})
     return created
+
+
+def pmr_overview(psa):
+    """The PSA's PMR items with their progress - the status half of the staging app."""
+    require_role(*STAGE_ROLES)
+    return frappe.db.sql("""select p.name as pmr, p.work_order, p.status, p.planned_date, i.product, i.operation, i.required_quantity, i.tasked_quantity,
+        i.staged_quantity, i.consumed_quantity from `tabProduction Material Request Item` i join `tabProduction Material Request` p on p.name = i.parent
+        where i.psa=%s and p.status in %s order by p.planned_date asc, p.creation asc, i.idx asc""", (psa, OPEN_STATUSES), as_dict=True)
+
+
+def auto_stage(psa):
+    """Single-order staging of every open item from the oldest stock - what an Automatic PSA does on its own."""
+    require_role(*STAGE_ROLES)
+    staged = []
+    for r in staging_overview(psa):
+        left, lines = r.open_quantity, []
+        for src in _source_lines(frappe.db.get_value("Production Supply Area", psa, "warehouse"), r.product, psa, limit=50):
+            take = min(left, flt(src.available_quantity))
+            lines.append({"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "serial_no": src.serial_no, "pmr_item": r.pmr_item, "quantity": take})
+            left -= take
+            if left <= 0.000001: break
+        for line in lines:
+            frappe.db.savepoint("wms_auto_stage")
+            try:
+                staged += stage_items(psa, "Single Order", [line])
+            except frappe.ValidationError:
+                frappe.db.rollback(save_point="wms_auto_stage")
+                frappe.clear_messages()
+    return staged
+
+
+def run_auto_staging():
+    """Scheduler: every Automatic PSA stages what is open (stock may have arrived since)."""
+    for psa in frappe.get_all("Production Supply Area", filters={"active": 1, "staging_mode": "Automatic"}, pluck="name"):
+        auto_stage(psa)
+    frappe.db.commit()
 
 
 def on_staging_confirmed(task, quantity):

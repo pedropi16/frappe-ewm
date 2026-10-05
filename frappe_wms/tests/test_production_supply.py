@@ -157,7 +157,7 @@ class TestProductionSupply(IntegrationTestCase):
         item = pmr.items[0]
         self.assertEqual((item.product, item.psa, item.required_quantity, pmr.status), (self.rm, psa.name, 20, "Open"))
 
-        proposal = [r for r in ps.staging_overview(psa.name) if r.pmr_item == item.name][0]["proposals"][0]
+        proposal = max([r for r in ps.staging_overview(psa.name) if r.pmr_item == item.name][0]["proposals"], key=lambda p: p.available_quantity)  # earlier tests leave open tasks on other lines
         self.assertEqual(proposal.storage_bin, self.source_bin)
         source = {"source_bin": proposal.storage_bin, "source_hu": proposal.handling_unit, "batch_no": proposal.batch_no}
 
@@ -187,3 +187,20 @@ class TestProductionSupply(IntegrationTestCase):
             ps.consume_from_stock_entry(entry(6, 2))
         ps.consume_from_stock_entry(entry(5, 3))
         self.assertEqual(frappe.db.get_value("Production Material Request", pmr.name, "status"), "Consumed")
+
+    def test_automatic_psa_stages_a_new_pmr_on_its_own(self):
+        from frappe_wms.services import production_supply as ps
+        supply = f"{self.warehouse}-PSA-SUP"
+        if not frappe.db.exists("Storage Bin", supply):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": supply, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Auto PSA",
+            "supply_bin": supply, "staging_mode": "Automatic"}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        self._seed_rm_stock(50)
+
+        wo = self._submit_work_order(qty=10)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        self.assertEqual(item.tasked_quantity, 20)
+        tasks = frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", frappe.get_all("Warehouse Request", filters={"reference_doctype": "Production Material Request"}, pluck="name")], "product": self.rm}, fields=["planned_quantity", "source_bin"])
+        self.assertEqual((sum(t.planned_quantity for t in tasks), tasks[0].source_bin), (20, self.source_bin))
+        self.assertEqual(ps.auto_stage(psa.name), [], "nothing left open: running again creates nothing")

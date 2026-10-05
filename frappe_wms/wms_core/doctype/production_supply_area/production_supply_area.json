@@ -12,6 +12,7 @@
     "psa_code",
     "psa_name",
     "supply_bin",
+    "staging_mode",
     "workstations",
     "deconsolidation_work_center",
     "active"
@@ -68,6 +69,14 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "staging_mode",
+      "label": "Staging Mode",
+      "fieldtype": "Select",
+      "options": "Manual\nAutomatic",
+      "default": "Manual",
+      "description": "Automatic: open PMR items are staged by single-order tasks from the oldest stock, when the PMR is created and hourly. Manual: staged in the Production Staging app."
     }
   ],
   "sort_field": "modified",

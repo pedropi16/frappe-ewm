@@ -20,6 +20,18 @@ def staging_overview(psa):
 
 @frappe.whitelist()
 @retry_on_deadlock
+def pmr_overview(psa):
+    return ps.pmr_overview(psa)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def auto_stage(psa):
+    return ps.auto_stage(psa)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
 def stage_items(psa, method, lines):
     return ps.stage_items(psa, method, parse_json(lines, "lines"))
 

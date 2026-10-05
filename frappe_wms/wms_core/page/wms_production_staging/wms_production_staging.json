@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "WMS Core",
+ "name": "wms-production-staging",
+ "page_name": "wms-production-staging",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Operator"
+  },
+  {
+   "role": "WMS Inventory Controller"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Production Staging"
+}

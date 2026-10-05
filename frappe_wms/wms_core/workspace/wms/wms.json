@@ -683,6 +683,13 @@
    "color": "Orange"
   },
   {
+   "type": "Page",
+   "label": "Production Staging",
+   "link_to": "wms-production-staging",
+   "icon": "arrow-right",
+   "color": "Green"
+  },
+  {
    "type": "URL",
    "label": "WMS Scanner (RF)",
    "url": "/wms",
