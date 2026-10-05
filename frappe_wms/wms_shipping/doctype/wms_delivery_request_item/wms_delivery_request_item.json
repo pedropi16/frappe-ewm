@@ -1,0 +1,67 @@
+{
+  "name": "WMS Delivery Request Item",
+  "module": "WMS Shipping",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "item",
+    "quantity",
+    "stock_uom",
+    "uom",
+    "source_document_type",
+    "source_document_number",
+    "source_document_line"
+  ],
+  "fields": [
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity (stock UoM)",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "UOM",
+      "fieldtype": "Link",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "uom",
+      "label": "Order UoM",
+      "fieldtype": "Link",
+      "options": "UOM"
+    },
+    {
+      "fieldname": "source_document_type",
+      "label": "Source Document",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "source_document_number",
+      "label": "Source Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "source_document_line",
+      "label": "Source Line",
+      "fieldtype": "Data"
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

@@ -108,12 +108,15 @@ class TestOutboundDeliveryLifecycle(IntegrationTestCase):
         result = post_goods_issue_for_delivery(obd.name)
         gi = frappe.get_doc("Goods Issue", result["goods_issue"])
         self.assertEqual(gi.status, "Posted")
+        self.assertEqual(frappe.db.get_value("Final Outbound Delivery", {"goods_issue": gi.name}, ["outbound_delivery", "status"], as_dict=True), {"outbound_delivery": obd.name, "status": "Posted"},
+            "posting the goods issue creates the final outbound delivery")
 
         obd.reload()
         with self.assertRaises(frappe.ValidationError):
             obd.cancel()
 
         gi.cancel()
+        self.assertEqual(frappe.db.get_value("Final Outbound Delivery", {"goods_issue": gi.name}, "status"), "Reversed")
 
         # Reversing the Goods Issue only undoes the shipment - the Pick task itself is still
         # Confirmed, so before_cancel still (correctly) blocks the delivery until that's reversed

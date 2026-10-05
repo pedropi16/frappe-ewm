@@ -97,14 +97,27 @@ def outstanding_for_order_line(order_doctype, row):
 
 # ------------------------------------------------------------------ building deliveries
 
+def _delivery_request(side, wh, header, lines):
+    """SAP's Inbound / Outbound Delivery Request: the unedited replica of what the ERP document asked for, kept when the delivery order is changed, split or cancelled."""
+    inbound = side is INBOUND
+    qty_field = "expected_quantity" if inbound else "requested_quantity"
+    return frappe.get_doc({"doctype": "WMS Delivery Request", "direction": "Inbound" if inbound else "Outbound", "warehouse": wh.name, "status": "Open",
+        "partner": header.get("supplier") if inbound else header.get("customer"), "external_reference": header.get("external_reference"),
+        "erp_source_doctype": header.get("erp_source_doctype"), "erp_source_name": header.get("erp_source_name"),
+        "items": [{"item": l["item"], "quantity": l[qty_field], "stock_uom": l.get("stock_uom"), "uom": l.get("uom"), "source_document_type": l.get("source_document_type"),
+                   "source_document_number": l.get("source_document_number"), "source_document_line": l.get("source_document_line")} for l in lines]}).insert(ignore_permissions=True)
+
+
 def _delivery_doc(side, wh, header, lines):
     rows = []
     for i, l in enumerate(lines, 1):
         l = dict(l)
         l["line_number"] = i
         rows.append(l)
-    doc = frappe.get_doc({"doctype": side["doctype"], "warehouse": wh.name, **header, "items": rows})
+    request = _delivery_request(side, wh, header, lines)
+    doc = frappe.get_doc({"doctype": side["doctype"], "warehouse": wh.name, **header, "delivery_request": request.name, "items": rows})
     doc.insert(ignore_permissions=True)
+    request.db_set({"status": "Order Created", "delivery_order": doc.name})
     return doc
 
 
@@ -235,6 +248,8 @@ def _is_started(delivery):
 
 def _withdraw(delivery_name, doctype, reason):
     """Takes a not-started WMS delivery back: cancelled if released, deleted if still a draft."""
+    request = frappe.db.get_value(doctype, delivery_name, "delivery_request")
+    if request: frappe.db.set_value("WMS Delivery Request", request, "status", "Cancelled")
     d = frappe.get_doc(doctype, delivery_name)
     if d.docstatus == 0:
         frappe.delete_doc(doctype, d.name, ignore_permissions=True, force=True)

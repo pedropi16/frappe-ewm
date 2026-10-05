@@ -44,12 +44,24 @@ def autoname_from_range(doc, method=None):
     # that doctype's ordinary naming-series autoname - configuring a range is opt-in per doctype,
     # nothing breaks for one that was never given one.
     warehouse = _warehouse_of(doc)
-    if find_number_range(doc.doctype, warehouse=warehouse):
+    # A WMS Document Type with its own number range names the documents of that type.
+    document_type = doc.get("document_type")
+    if not document_type and doc.meta.has_field("document_type"):
+        from frappe_wms.services.document_types import CATEGORY, default_type
+        document_type = default_type(doc.doctype, warehouse) if doc.doctype in CATEGORY else None
+    type_range = frappe.db.get_value("WMS Document Type", document_type, "number_range") if document_type else None
+    if type_range:
+        doc.name = next_from_range(type_range, doc.doctype)
+    elif find_number_range(doc.doctype, warehouse=warehouse):
         doc.name = next_number(doc.doctype, warehouse=warehouse)
 
 
-def next_number(range_for, warehouse=None, hu_type=None):
-    range_name = find_number_range(range_for, warehouse, hu_type)
+def next_from_range(range_name, range_for):
+    return next_number(range_for, range_name=range_name)
+
+
+def next_number(range_for, warehouse=None, hu_type=None, range_name=None):
+    range_name = range_name or find_number_range(range_for, warehouse, hu_type)
     if not range_name:
         frappe.throw(_("No active Number Range is configured for {0}").format(range_for))
     # Row-lock so concurrent RF scans/shipment creation never hand out the same number twice -

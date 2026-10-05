@@ -58,8 +58,16 @@ def post_goods_issue(doc):
         hu=frappe.get_doc("Handling Unit",name)
         hu.flags.wms_service_update=True; hu.status="Shipped"; hu.save(ignore_permissions=True)
     doc.db_set("status","Posted")
+    _create_final_delivery(doc)
     _update_delivery_issue_status(doc.outbound_delivery)
     create_print_spool("Goods Issue", doc.name, "Goods Issue Posted", doc.warehouse)
+
+def _create_final_delivery(doc):
+    """SAP's Final Outbound Delivery: the shipping document of what was actually issued, created when the goods issue is posted."""
+    if not doc.outbound_delivery or frappe.db.exists("Final Outbound Delivery", {"goods_issue": doc.name}): return
+    from frappe.utils import now_datetime
+    frappe.get_doc({"doctype": "Final Outbound Delivery", "outbound_delivery": doc.outbound_delivery, "goods_issue": doc.name, "warehouse": doc.warehouse, "status": "Posted", "posted_at": now_datetime(),
+        "items": [{"item": r.item, "quantity": flt(r.quantity), "stock_uom": r.stock_uom, "handling_unit": r.handling_unit, "batch_no": r.get("batch_no"), "serial_no": r.get("serial_no")} for r in doc.items]}).insert(ignore_permissions=True)
 
 def reverse_goods_issue(doc):
     from frappe_wms.services.archiving import ensure_reversible; ensure_reversible(doc)
@@ -79,6 +87,7 @@ def reverse_goods_issue(doc):
             current = flt(frappe.db.get_value("Outbound Delivery Item", row.outbound_delivery_item, "issued_quantity"))
             frappe.db.set_value("Outbound Delivery Item", row.outbound_delivery_item, "issued_quantity", max(current - flt(row.quantity), 0))
     doc.db_set({"status":"Reversed","reversed":1})
+    frappe.db.set_value("Final Outbound Delivery", {"goods_issue": doc.name}, "status", "Reversed")
     _update_delivery_issue_status(doc.outbound_delivery)
 
 def _update_delivery_issue_status(delivery_name):

@@ -10,6 +10,8 @@
   "field_order": [
     "outbound_delivery_number",
     "warehouse",
+    "document_type",
+    "delivery_request",
     "customer",
     "ship_to_party",
     "delivery_date",
@@ -226,6 +228,20 @@
       "label": "Completion Remarks",
       "fieldtype": "Small Text",
       "allow_on_submit": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Link",
+      "options": "WMS Document Type",
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "delivery_request",
+      "label": "Delivery Request",
+      "fieldtype": "Link",
+      "options": "WMS Delivery Request",
       "read_only": 1
     }
   ],

@@ -9,6 +9,7 @@
   "engine": "InnoDB",
   "field_order": [
     "request_type",
+    "document_type",
     "warehouse",
     "product",
     "requested_quantity",
@@ -227,6 +228,13 @@
       "options": "Stock Entry",
       "read_only": 1,
       "description": "Set once this request (e.g. Work Order material staging) has mirrored to an ERPNext Stock Entry - guards against posting it twice."
+    },
+    {
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Link",
+      "options": "WMS Document Type",
+      "in_standard_filter": 1
     }
   ],
   "autoname": "WR-.########",

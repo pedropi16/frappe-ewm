@@ -1,0 +1,33 @@
+{
+  "name": "WMS Document Type Default",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "fieldname",
+    "value"
+  ],
+  "fields": [
+    {
+      "fieldname": "fieldname",
+      "label": "Field",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "value",
+      "label": "Default Value",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

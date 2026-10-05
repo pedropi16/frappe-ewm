@@ -20,7 +20,7 @@ add_to_apps_screen = [
     }
 ]
 
-app_include_js = ["/assets/frappe_wms/js/frappe_wms.js", "/assets/frappe_wms/js/erp_wms_status.js"]
+app_include_js = ["/assets/frappe_wms/js/frappe_wms.js", "/assets/frappe_wms/js/erp_wms_status.js", "/assets/frappe_wms/js/wms_document_type.js"]
 app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
 
 doctype_js = {
@@ -57,16 +57,18 @@ doc_events = {
         "after_insert": "frappe_wms.events.warehouse_task.update_order_distance",
         "on_cancel": "frappe_wms.events.warehouse_task.prevent_direct_cancel_after_posting",
     },
-    "Warehouse Request": {"autoname": _NUMBER_RANGE_AUTONAME},
+    "Warehouse Request": {"autoname": _NUMBER_RANGE_AUTONAME, "validate": "frappe_wms.services.document_types.validate_document_type"},
+    "WMS Delivery Request": {"autoname": _NUMBER_RANGE_AUTONAME, "validate": "frappe_wms.services.document_types.validate_document_type"},
+    "Final Outbound Delivery": {"autoname": _NUMBER_RANGE_AUTONAME, "validate": "frappe_wms.services.document_types.validate_document_type"},
     "Inbound Delivery": {
         "autoname": _NUMBER_RANGE_AUTONAME,
-        "validate": "frappe_wms.events.deliveries.validate_inbound_delivery",
+        "validate": ["frappe_wms.events.deliveries.validate_inbound_delivery", "frappe_wms.services.document_types.validate_document_type"],
         "before_cancel": "frappe_wms.events.deliveries.before_cancel_inbound_delivery",
         "on_cancel": "frappe_wms.events.deliveries.on_cancel_inbound_delivery",
     },
     "Outbound Delivery": {
         "autoname": _NUMBER_RANGE_AUTONAME,
-        "validate": "frappe_wms.events.deliveries.validate_outbound_delivery",
+        "validate": ["frappe_wms.events.deliveries.validate_outbound_delivery", "frappe_wms.services.document_types.validate_document_type"],
         "before_cancel": "frappe_wms.events.deliveries.before_cancel_outbound_delivery",
         "on_cancel": "frappe_wms.events.deliveries.on_cancel_outbound_delivery",
     },
