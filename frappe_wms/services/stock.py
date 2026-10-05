@@ -4,10 +4,35 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 
 DIMENSIONS = ("warehouse", "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type")
+# Ownership dimensions (SAP's owner and party entitled to dispose): part of a balance's identity only when set, so the identity (and name) of every
+# balance of owner-less stock stays exactly what it always was.
+OWNER_KEYS = ("stock_owner", "entitled_party")
 
 def _balance_name(values):
     raw = "|".join(str(values.get(k) or "") for k in DIMENSIONS)
+    if values.get("stock_owner") or values.get("entitled_party"):
+        raw += f"|{values.get('stock_owner') or ''}|{values.get('entitled_party') or ''}"
     return hashlib.sha256(raw.encode()).hexdigest()
+
+def _owner_stock_exists():
+    flag = frappe.flags.get("wms_owner_stock")
+    if flag is None:
+        flag = frappe.flags.wms_owner_stock = bool(frappe.db.sql("select 1 from `tabWMS Stock Balance` where ifnull(stock_owner, '') != '' or ifnull(entitled_party, '') != '' limit 1"))
+    return flag
+
+def _resolve_owner(entry):
+    """A decrement that names no owner takes the owner of the stock it is booked from: the owner-less stock when it covers the quantity, else the
+    one owner who holds it; several owners holding it in the same place is ambiguous and must be said explicitly (stock_owner / entitled_party)."""
+    if any(k in entry for k in OWNER_KEYS) or flt(entry.get("quantity")) >= 0 or not _owner_stock_exists(): return
+    rows = frappe.db.sql("""select stock_owner, entitled_party, quantity from `tabWMS Stock Balance` where warehouse=%s and product=%s and ifnull(batch_no,'')=%s and ifnull(serial_no,'')=%s
+        and ifnull(handling_unit,'')=%s and storage_bin=%s and stock_type=%s and quantity > 0""", (entry["warehouse"], entry["product"], entry.get("batch_no") or "", entry.get("serial_no") or "",
+        entry.get("handling_unit") or "", entry["storage_bin"], entry["stock_type"]), as_dict=True)
+    needed = -flt(entry["quantity"])
+    pool = [r for r in rows if flt(r.quantity) >= needed - 0.000001] or rows
+    if not pool or any(not r.stock_owner and not r.entitled_party for r in pool): return
+    if len(pool) > 1:
+        frappe.throw(_("{0} in {1} belongs to several owners: say which one ({2})").format(entry["product"], entry["storage_bin"], ", ".join(f"{r.stock_owner or '-'}/{r.entitled_party or '-'}" for r in pool)))
+    entry["stock_owner"], entry["entitled_party"] = pool[0].stock_owner, pool[0].entitled_party
 
 def _lock_balance(name):
     frappe.db.sql("select name from `tabWMS Stock Balance` where name=%s for update", name)
@@ -28,7 +53,8 @@ def _upsert_balance(values, delta):
     doc = _get_balance_for_update(name) or frappe.new_doc("WMS Stock Balance")
     if doc.is_new():
         doc.name = name
-        for key in DIMENSIONS: doc.set(key, values.get(key))
+        for key in DIMENSIONS + OWNER_KEYS: doc.set(key, values.get(key))
+        if values.get("stock_owner") or values.get("entitled_party"): frappe.flags.wms_owner_stock = True
         doc.stock_uom = values.get("stock_uom")
         doc.quantity = 0
         doc.allocated_quantity = 0
@@ -69,6 +95,8 @@ def post_entries(entries, reference_doctype, reference_name, idempotency_key, wa
         return frappe.get_all("WMS Stock Ledger Entry", filters={"idempotency_key": ["like", f"{idempotency_key}:%"]}, pluck="name", order_by="creation asc")
     if round(sum(flt(x["quantity"]) for x in entries), 6) != 0 and len(entries) > 1:
         frappe.throw(_("Transfer postings must balance to zero"))
+    entries = [dict(e) for e in entries]
+    for e in entries: _resolve_owner(e)
     # Lock every balance row this batch will touch up front, in one globally-consistent sorted
     # order - not the order entries happen to be listed in - so opposite-direction transfers
     # between the same two rows can never deadlock waiting on each other. Any remaining,
@@ -128,12 +156,13 @@ def relocate_hu_balances(hu_name, new_bin):
     # - this only keeps the balance table's bookkeeping honest about where the HU actually is.
     for hu in _hu_and_descendants(hu_name):
         rows = frappe.get_all("WMS Stock Balance", filters={"handling_unit": hu, "storage_bin": ["!=", new_bin]}, fields=[
-            "name", "warehouse", "product", "batch_no", "serial_no", "stock_type",
+            "name", "warehouse", "product", "batch_no", "serial_no", "stock_type", "stock_owner", "entitled_party",
             "quantity", "allocated_quantity", "stock_uom", "first_receipt_date", "shelf_life_expiry_date",
         ])
         for row in rows:
             new_values = {"warehouse": row.warehouse, "product": row.product, "batch_no": row.batch_no,
-                          "serial_no": row.serial_no, "handling_unit": hu, "storage_bin": new_bin, "stock_type": row.stock_type}
+                          "serial_no": row.serial_no, "handling_unit": hu, "storage_bin": new_bin, "stock_type": row.stock_type,
+                          "stock_owner": row.stock_owner, "entitled_party": row.entitled_party}
             new_name = _balance_name(new_values)
             for name in sorted({row.name, new_name}):
                 _lock_balance(name)
@@ -144,7 +173,7 @@ def relocate_hu_balances(hu_name, new_bin):
             target = _get_balance_for_update(new_name) or frappe.new_doc("WMS Stock Balance")
             if target.is_new():
                 target.name = new_name
-                for key in DIMENSIONS: target.set(key, new_values.get(key))
+                for key in DIMENSIONS + OWNER_KEYS: target.set(key, new_values.get(key))
                 target.stock_uom = row.stock_uom
                 target.quantity = 0
                 target.allocated_quantity = 0
@@ -170,11 +199,16 @@ def transfer_stock(*, source, destination, quantity, movement_type, reference_do
     # like (see _upsert_balance). Read before the source balance is decremented; if the caller
     # already knows better (a receipt inline with a transfer, e.g. inspection routing) its own
     # destination dict wins.
+    # the stock keeps its owner wherever it goes: resolved on the source side, inherited by the destination unless that names its own
+    probe = {**shared, "handling_unit": source.get("handling_unit"), "storage_bin": source.get("storage_bin"), "stock_type": source.get("stock_type"), "quantity": -quantity,
+             **{k: source[k] for k in OWNER_KEYS if k in source}}
+    _resolve_owner(probe)
+    owner_values = {k: probe[k] for k in OWNER_KEYS if k in probe}
     source_name = _balance_name({**shared, "handling_unit": source.get("handling_unit"),
-        "storage_bin": source.get("storage_bin"), "stock_type": source.get("stock_type")})
+        "storage_bin": source.get("storage_bin"), "stock_type": source.get("stock_type"), **owner_values})
     carried = frappe.db.get_value("WMS Stock Balance", source_name, ["first_receipt_date", "shelf_life_expiry_date"], as_dict=True) or {}
-    negative = {**shared, **source, "quantity": -quantity, "movement_type": movement_type}
-    positive = {**shared, **destination, "quantity": quantity, "movement_type": movement_type,
+    negative = {**shared, **source, **owner_values, "quantity": -quantity, "movement_type": movement_type}
+    positive = {**shared, **owner_values, **destination, "quantity": quantity, "movement_type": movement_type,
         "first_receipt_date": destination.get("first_receipt_date") or carried.get("first_receipt_date"),
         "shelf_life_expiry_date": destination.get("shelf_life_expiry_date") or carried.get("shelf_life_expiry_date")}
     return post_entries([negative, positive], reference_doctype, reference_name, idempotency_key, warehouse_task, device)
@@ -197,13 +231,13 @@ def rebuild_balances(warehouse=None, product=None):
     if product: filters["product"] = product
     condition_sql = " and ".join(f"`{k}`=%({k})s" for k in filters) or "1=1"
     rows = frappe.db.sql(f"""
-        select warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type,
+        select warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type, stock_owner, entitled_party,
                sum(quantity) as quantity, max(stock_uom) as stock_uom,
                min(case when quantity > 0 then posting_datetime end) as first_receipt_date,
                max(posting_datetime) as last_movement_date
         from `tabWMS Stock Ledger Entry`
         where {condition_sql}
-        group by warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type
+        group by warehouse, product, batch_no, serial_no, handling_unit, storage_bin, stock_type, stock_owner, entitled_party
     """, filters, as_dict=True)
     touched = set()
     for row in rows:
@@ -212,7 +246,7 @@ def rebuild_balances(warehouse=None, product=None):
         doc = _get_balance_for_update(name) or frappe.new_doc("WMS Stock Balance")
         if doc.is_new():
             doc.name = name
-            for key in DIMENSIONS: doc.set(key, row.get(key))
+            for key in DIMENSIONS + OWNER_KEYS: doc.set(key, row.get(key))
             doc.allocated_quantity = 0
         doc.quantity = flt(row.quantity)
         doc.stock_uom = row.stock_uom

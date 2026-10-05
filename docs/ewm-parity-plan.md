@@ -76,7 +76,7 @@ Shipped: D1 coordinates, access type, fire section, stack height x lane depth ca
 
 ## Phase E - Decision-gated work (all options requested 2026-10-05)
 
-Status: **E3 PPF, E4 transportation unit, E5 quality samples/usage decisions, E6 extension hooks, E7 reports done**; E1 owner/PETD and E2 document model + types in progress; MFS/PLC and scale integration still open.
+Status: **E1 owner/PETD, E2 document types + delivery request / final delivery, E3 PPF, E4 transportation unit, E5 quality samples/usage decisions, E6 extension hooks, E7 reports done**. MFS/PLC and scale integration still open (need hardware to test).
 
 Large or business-dependent; decide before any work starts.
 

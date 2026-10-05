@@ -51,6 +51,8 @@ IN_SCOPE_DOCTYPES = [
     "WO Creation Rule",
     "Inspection Rule",
     "WMS Exception Code",
+    "WMS Stock Owner",
+    "WMS Document Type",
     "WMS Usage Decision",
     "PPF Action Profile",
     "WMS Block Reason",

@@ -29,6 +29,8 @@
   "WO Creation Rule",
   "Inspection Rule",
   "WMS Exception Code",
+  "WMS Stock Owner",
+  "WMS Document Type",
   "WMS Usage Decision",
   "PPF Action Profile",
   "WMS Block Reason",
@@ -2482,6 +2484,132 @@
     ]
    }
   },
+  "WMS Stock Owner": {
+   "name": "WMS Stock Owner",
+   "module": "WMS Inventory",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "owner_code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "owner_name",
+     "label": "Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "partner_type",
+     "label": "Business Partner Type",
+     "fieldtype": "Select",
+     "options": "Company\nCustomer\nSupplier\nOther",
+     "default": "Company"
+    },
+    {
+     "fieldname": "partner",
+     "label": "Business Partner",
+     "fieldtype": "Data",
+     "description": "The ERPNext Company / Customer / Supplier this owner stands for."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "owner_code"
+    ]
+   }
+  },
+  "WMS Document Type": {
+   "name": "WMS Document Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "document_type_code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "document_type_name",
+     "label": "Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "category",
+     "label": "Category",
+     "fieldtype": "Select",
+     "options": "Inbound Delivery\nOutbound Delivery\nWarehouse Request\nDelivery Request\nFinal Outbound Delivery",
+     "reqd": 1
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "description": "Blank = every warehouse."
+    },
+    {
+     "fieldname": "is_default",
+     "label": "Default",
+     "fieldtype": "Check",
+     "description": "Used for new documents of the category (in the warehouse) that name no type."
+    },
+    {
+     "fieldname": "number_range",
+     "label": "Number Range",
+     "fieldtype": "Link",
+     "options": "WMS Number Range",
+     "description": "Names the documents of this type from this range instead of the category's general one."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "defaults",
+     "label": "Field Defaults",
+     "fieldtype": "Table",
+     "options": "WMS Document Type Default",
+     "description": "Filled in on a new document when the field is blank."
+    },
+    {
+     "fieldname": "field_control",
+     "label": "Field Control",
+     "fieldtype": "Table",
+     "options": "WMS Document Type Field"
+    },
+    {
+     "fieldname": "status_transitions",
+     "label": "Status Profile",
+     "fieldtype": "Table",
+     "options": "WMS Document Type Transition",
+     "description": "Allowed changes of the Status field when saving a document of this type. Empty = any change."
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "document_type_code"
+    ]
+   }
+  },
   "WMS Usage Decision": {
    "name": "WMS Usage Decision",
    "module": "WMS Inventory",
@@ -4156,6 +4284,86 @@
     "type": "none"
    }
   },
+  "WMS Document Type Default": {
+   "name": "WMS Document Type Default",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "fieldname",
+     "label": "Field",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "value",
+     "label": "Default Value",
+     "fieldtype": "Data"
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Document Type Field": {
+   "name": "WMS Document Type Field",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "fieldname",
+     "label": "Field",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "control",
+     "label": "Control",
+     "fieldtype": "Select",
+     "options": "Required\nRead Only\nHidden",
+     "reqd": 1,
+     "description": "Required and Read Only are enforced on save (Read Only: not after creation); Required, Read Only and Hidden also shape the form."
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS Document Type Transition": {
+   "name": "WMS Document Type Transition",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "from_status",
+     "label": "From Status",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "to_status",
+     "label": "To Status",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "allowed_role",
+     "label": "Allowed Role",
+     "fieldtype": "Link",
+     "options": "Role",
+     "description": "Blank = anyone who may edit the document."
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
   "WMS Route Stop": {
    "name": "WMS Route Stop",
    "module": "WMS Shipping",
@@ -4273,6 +4481,22 @@
     {
      "target": "Storage Bin",
      "label": "Planned Cross-Docking \u2192 Staging Bin"
+    },
+    {
+     "target": "WMS Document Type",
+     "label": "WMS Document Type"
+    },
+    {
+     "target": "WMS Delivery Request",
+     "label": "Delivery Request"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -4318,6 +4542,14 @@
     {
      "target": "WMS Exception Code",
      "label": "Items \u2192 Discrepancy Code"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Items \u2192 Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Items \u2192 Party Entitled to Dispose"
     },
     {
      "target": "Goods Receipt",
@@ -4591,6 +4823,18 @@
     {
      "target": "Stock Entry",
      "label": "ERPNext Stock Entry"
+    },
+    {
+     "target": "WMS Document Type",
+     "label": "WMS Document Type"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -4725,6 +4969,14 @@
     {
      "target": "Storage Bin",
      "label": "Final Destination Bin"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -4909,6 +5161,22 @@
     {
      "target": "DocType",
      "label": "ERP Source Document Type"
+    },
+    {
+     "target": "WMS Document Type",
+     "label": "WMS Document Type"
+    },
+    {
+     "target": "WMS Delivery Request",
+     "label": "Delivery Request"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -4946,6 +5214,14 @@
     {
      "target": "WMS Stock Type",
      "label": "Stock Type"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -5210,6 +5486,14 @@
     {
      "target": "UOM",
      "label": "Stock UOM"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -5267,6 +5551,14 @@
     {
      "target": "User",
      "label": "Posting User"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     }
    ]
   },

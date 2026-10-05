@@ -841,6 +841,22 @@ SAP's product-driven storage search: indicators on the product pick the storage 
 * **Reports** - *WMS Task Analysis* (by task type / resource / day / product), *WMS Bin Utilization*, *WMS Resource Activity* (efficiency against the
   labor standards), *WMS Outbound Status*; linked from the WMS workspace.
 
+## Owner and party entitled to dispose, document types, delivery requests (Phase E, part 2)
+
+* **Owner / Party Entitled to Dispose** - `WMS Stock Owner` master; `stock_owner` and `entitled_party` are stock dimensions on `WMS Stock Balance` and
+  the ledger (part of a balance's identity only when set, so the balances of owner-less stock are exactly as before). Set on an Inbound Delivery (and,
+  per row, on a Goods Receipt Item) they come with the stock at receipt, through putaway requests/tasks, moves (a transfer keeps the stock's owner) and
+  allocation: an Outbound Delivery with an owner only allocates that owner's stock, one without only the warehouse's own. A decrement that names no owner
+  takes the owner of the stock it is booked from (the owner-less stock first; two owners in the same place must be named explicitly). Cross-docking
+  matches deliveries of the same owner; replenishment, production staging and kitting use owner-less stock only. The ERPNext mirror does not carry the
+  owner.
+* **WMS Document Type** (category Inbound Delivery / Outbound Delivery / Warehouse Request / Delivery Request / Final Outbound Delivery, optional
+  warehouse, default flag): *Number Range*, *Field Defaults* (new documents), *Field Control* (Required / Read Only / Hidden, enforced on save and applied to
+  the form) and a *Status Profile* (allowed status changes, optionally per role). PPF profiles can be limited to a document type.
+* **WMS Delivery Request** - replication keeps the unedited replica of what the ERP document asked for (SAP's inbound / outbound delivery request) next to
+  each delivery order it creates; the order links it (`delivery_request`), withdrawing the order marks it Cancelled. **Final Outbound Delivery** - created
+  when a goods issue is posted (items as issued), marked Reversed with it.
+
 ## Modules
 
 | Module | Contains |

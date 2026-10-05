@@ -29,6 +29,8 @@
     "move_top_hu",
     "stock_type_from",
     "stock_type_to",
+    "stock_owner",
+    "entitled_party",
     "movement_type",
     "warehouse_order",
     "queue",
@@ -316,6 +318,22 @@
       "options": "Storage Bin",
       "read_only": 1,
       "description": "Layout-oriented storage control: this task goes to an intermediate bin first; a follow-up task takes the goods on to this bin."
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     }
   ],
   "autoname": "WT-.##########",

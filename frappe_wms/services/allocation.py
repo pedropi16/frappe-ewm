@@ -55,8 +55,10 @@ def _by_removal_sequence(balances, item, warehouse, stock_type):
     kept = [b for b in balances if types.get(b.storage_bin) in rank]
     return sorted(kept, key=lambda b: rank[types[b.storage_bin]])
 
-def _candidate_balances(row, warehouse, customer=None):
-    filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
+def _candidate_balances(row, warehouse, customer=None, owner=None, party=None):
+    # Stock is allocated to a delivery of the same owner / party entitled to dispose; a delivery naming none only takes the warehouse's own (owner-less) stock.
+    filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0],
+        "stock_owner": owner or ["in", ["", None]], "entitled_party": party or ["in", ["", None]]}
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
     requirements = _required_characteristics(row)
     if requirements:
@@ -111,7 +113,7 @@ def allocate_delivery(delivery_name):
     created=[]
     for row in doc.items:
         needed=flt(row.requested_quantity)-flt(row.allocated_quantity)
-        for stock in _candidate_balances(row,doc.warehouse,doc.get("customer")):
+        for stock in _candidate_balances(row,doc.warehouse,doc.get("customer"),doc.get("stock_owner"),doc.get("entitled_party")):
             if needed<=0: break
             # One locking read, not "lock, then plain get_value": at REPEATABLE READ the plain read
             # returns this transaction's older snapshot, so two deliveries allocating the same
@@ -119,7 +121,7 @@ def allocate_delivery(delivery_name):
             fresh = frappe.db.get_value("WMS Stock Balance", stock.name, ["available_quantity", "allocated_quantity"], as_dict=True, for_update=True)
             if not fresh or flt(fresh.available_quantity) <= 0: continue
             qty=min(needed,flt(fresh.available_quantity))
-            allocation=frappe.get_doc({"doctype":"Stock Allocation","outbound_delivery":doc.name,"outbound_delivery_item":row.name,"product":row.item,"stock_balance":stock.name,"storage_bin":stock.storage_bin,"handling_unit":stock.handling_unit,"batch_no":stock.batch_no,"serial_no":stock.serial_no,"stock_type":stock.stock_type,"allocated_quantity":qty,"status":"Allocated"})
+            allocation=frappe.get_doc({"doctype":"Stock Allocation","outbound_delivery":doc.name,"outbound_delivery_item":row.name,"product":row.item,"stock_balance":stock.name,"storage_bin":stock.storage_bin,"handling_unit":stock.handling_unit,"batch_no":stock.batch_no,"serial_no":stock.serial_no,"stock_type":stock.stock_type,"stock_owner":stock.stock_owner,"entitled_party":stock.entitled_party,"allocated_quantity":qty,"status":"Allocated"})
             # Stock Allocation is an internal bookkeeping record this function creates as a side
             # effect of an already-role-gated action (require_role above) - same as every other
             # WMS-internal doctype insert across the codebase (Warehouse Request, Warehouse Task,

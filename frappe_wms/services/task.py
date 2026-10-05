@@ -85,7 +85,7 @@ def create_tasks_for_request(request_name, batch_key=None):
                 "forced_storage_type": process_type.default_destination_storage_type, "reserved_hu_counts": reserved_hu_counts})
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
-        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": priority, "status": "Open", "idempotency_key": idempotency_key})
+        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "stock_owner": request.stock_owner, "entitled_party": request.entitled_party, "movement_type": movement_type, "priority": priority, "status": "Open", "idempotency_key": idempotency_key})
         from frappe_wms.services.layout_control import reroute
         reroute(task)  # layout-oriented storage control: via an intermediate bin when a rule applies
         attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name, default_queue=process_type.default_queue)
@@ -253,7 +253,7 @@ def _create_pick_task_for_group(allocations, wave, batch_key):
     task = frappe.get_doc({
         "doctype": "Warehouse Task", "stock_allocation": first.name, "task_type": "Pick",
         "warehouse": first._warehouse, "product": first.product, "planned_quantity": total_qty, "stock_uom": stock_uom,
-        "batch_no": first.batch_no, "serial_no": first.serial_no, "source_bin": first.storage_bin,
+        "batch_no": first.batch_no, "serial_no": first.serial_no, "source_bin": first.storage_bin, "stock_owner": first.stock_owner, "entitled_party": first.entitled_party,
         "destination_bin": destination_bin, "source_hu": first.handling_unit, "destination_hu": destination_hu,
         "requires_sort_after_pick": requires_sort_after_pick, "unpack_at_destination": unpack_at_destination,
         "stock_type_from": first.stock_type, "stock_type_to": first.stock_type,
@@ -351,7 +351,7 @@ def _release_short_pick_reservation(task, shortfall):
     if not rows: return
     release_allocation({"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no,
         "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin,
-        "stock_type": task.stock_type_from}, shortfall)
+        "stock_type": task.stock_type_from, "stock_owner": task.stock_owner, "entitled_party": task.entitled_party}, shortfall)
     remaining = shortfall
     delivery_names = set()
     for row in rows:
@@ -623,6 +623,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if resolved_destination_hu and task.destination_bin and hu_requirement(frappe.get_cached_doc("Storage Type", frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type"))) == "Forbidden":
         resolved_destination_hu, destination_hu = None, _UNPACK  # Handling Units are not put into this storage type: the stock goes in loose
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
+    if task.stock_owner or task.entitled_party: source.update({"stock_owner": task.stock_owner, "entitled_party": task.entitled_party})  # else resolved from the stock itself
     destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
     if frappe.db.exists("WMS Stock Ledger Entry", {"idempotency_key": f"{key}:1"}):
@@ -790,7 +791,8 @@ def _release_predecessor_gated_tasks(task_name):
 def _update_allocations(task, qty):
     rows = task.get("stock_allocations") or ([frappe._dict(stock_allocation=task.stock_allocation, allocated_quantity=qty)] if task.stock_allocation else [])
     if not rows: return
-    release_allocation({"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from}, qty)
+    release_allocation({"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from,
+        "stock_owner": task.stock_owner, "entitled_party": task.entitled_party}, qty)
     remaining = qty
     for row in rows:
         if remaining <= 0: break

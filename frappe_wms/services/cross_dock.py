@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import flt
 
-def find_cross_dock_demand(warehouse, item, stock_type, quantity):
+def find_cross_dock_demand(warehouse, item, stock_type, quantity, owner=None, party=None):
     # Earliest-need-first across every open, unallocated line for this product/stock_type in
     # the warehouse - a genuinely new query, nothing like it existed before this. Only
     # deliveries with a staging_bin already resolved are candidates, since that's where the
@@ -14,8 +14,9 @@ def find_cross_dock_demand(warehouse, item, stock_type, quantity):
         where d.warehouse=%(warehouse)s and d.docstatus=1 and di.item=%(item)s
             and di.required_stock_type=%(stock_type)s and di.requested_quantity > di.allocated_quantity
             and d.staging_bin is not null and d.staging_bin != ''
+            and ifnull(d.stock_owner, '') = %(owner)s and ifnull(d.entitled_party, '') = %(party)s
         order by d.delivery_date asc, d.creation asc
-    """, {"warehouse": warehouse, "item": item, "stock_type": stock_type}, as_dict=True)
+    """, {"warehouse": warehouse, "item": item, "stock_type": stock_type, "owner": owner or "", "party": party or ""}, as_dict=True)
     matched = []
     remaining = flt(quantity)
     for row in rows:
@@ -111,7 +112,7 @@ def plan_cross_dock(inbound_delivery):
         already = sum(flt(p.planned_quantity) - flt(p.consumed_quantity) for p in doc.cross_dock_plan if p.inbound_delivery_item == row.name and p.status == "Planned")
         open_qty = flt(row.expected_quantity) - flt(row.received_quantity) - already
         if open_qty <= 0.000001: continue
-        for match in find_cross_dock_demand(doc.warehouse, row.item, row.expected_stock_type or "AVAILABLE", open_qty):
+        for match in find_cross_dock_demand(doc.warehouse, row.item, row.expected_stock_type or "AVAILABLE", open_qty, doc.get("stock_owner"), doc.get("entitled_party")):
             reserve_cross_dock_demand(match)
             frappe.get_doc({"doctype": "Inbound Cross Dock Plan", "parent": doc.name, "parenttype": "Inbound Delivery", "parentfield": "cross_dock_plan", "inbound_delivery_item": row.name,
                 "item": row.item, "outbound_delivery": match["delivery"], "outbound_delivery_item": match["delivery_item"], "staging_bin": match["staging_bin"],

@@ -99,7 +99,7 @@ def stock_overview(warehouse, product=None, storage_bin=None, storage_type=None,
     if batch_no: filters["batch_no"] = wildcard_filter(batch_no)
     if serial_no: filters["serial_no"] = wildcard_filter(serial_no)
     rows = frappe.get_list("WMS Stock Balance", filters=filters, fields=[
-        "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type",
+        "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "stock_owner", "entitled_party",
         "quantity", "allocated_quantity", "available_quantity", "stock_uom", "last_movement_date",
     ], order_by="storage_bin asc, product asc", limit=cint(limit) or 200)
     if storage_type:

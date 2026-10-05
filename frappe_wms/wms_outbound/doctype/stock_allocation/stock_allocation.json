@@ -17,6 +17,8 @@
     "batch_no",
     "serial_no",
     "stock_type",
+    "stock_owner",
+    "entitled_party",
     "allocated_quantity",
     "picked_quantity",
     "status",
@@ -120,6 +122,22 @@
       "fieldname": "allocation_rule",
       "label": "Allocation Rule",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     }
   ],
   "autoname": "ALLOC-.########",

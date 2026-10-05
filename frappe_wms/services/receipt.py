@@ -75,6 +75,11 @@ def post_goods_receipt(doc):
         if row.stock_type == "QUALITY":
             inspection_rows.append(row)
         entry = {"warehouse":doc.warehouse,"product":row.item,"batch_no":row.batch_no,"serial_no":row.serial_no,"handling_unit":row.handling_unit,"storage_bin":doc.receiving_bin,"stock_type":row.stock_type,"quantity":row.quantity,"stock_uom":row.stock_uom,"movement_type":"101","reference_line":row.name}
+        # owner / party entitled to dispose: the receipt row's own, else the inbound delivery's (blank = the warehouse's own stock)
+        owner, party = (row.get("stock_owner"), row.get("entitled_party"))
+        if doc.inbound_delivery and not (owner or party):
+            owner, party = frappe.db.get_value("Inbound Delivery", doc.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
+        if owner or party: entry.update({"stock_owner": owner, "entitled_party": party})
         if product and product.shelf_life_days:
             entry["shelf_life_expiry_date"] = add_days(getdate(doc.posting_datetime), product.shelf_life_days)
         entries.append(entry)
@@ -123,7 +128,10 @@ def create_putaway_requests(receipt_name):
         remaining_qty = flt(row.quantity)
         # Planned cross-docking first: demand reserved for the expected delivery before the goods arrived (plan_cross_dock) - already reserved, so only routed here.
         planned = planned_matches(row.inbound_delivery_item, remaining_qty) if row.inbound_delivery_item else []
-        cross_dock_matches = [m for _plan, m in planned] + find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned))
+        row_owner, row_party = row.get("stock_owner"), row.get("entitled_party")
+        if receipt.inbound_delivery and not (row_owner or row_party):
+            row_owner, row_party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
+        cross_dock_matches = [m for _plan, m in planned] + find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned), row_owner, row_party)
         planned_by_match = {id(m): plan for plan, m in planned}
         if cross_dock_matches:
             cross_dock_process_type = determine_process_type(receipt.warehouse, "Internal Move", item=row.item, stock_type=row.stock_type, default="INTERNAL_MOVE")
@@ -157,7 +165,10 @@ def create_putaway_requests(receipt_name):
             if step:
                 process_type = step.process_type
                 process_step = step.step_code
-        req=frappe.get_doc({"doctype":"Warehouse Request","request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        owner, party = row.get("stock_owner"), row.get("entitled_party")
+        if receipt.inbound_delivery and not (owner or party):
+            owner, party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
+        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 

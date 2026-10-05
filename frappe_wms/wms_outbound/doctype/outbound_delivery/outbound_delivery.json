@@ -13,6 +13,8 @@
     "document_type",
     "delivery_request",
     "customer",
+    "stock_owner",
+    "entitled_party",
     "ship_to_party",
     "delivery_date",
     "priority",
@@ -243,6 +245,22 @@
       "fieldtype": "Link",
       "options": "WMS Delivery Request",
       "read_only": 1
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     }
   ],
   "autoname": "OBD-.########",
