@@ -3,7 +3,7 @@ from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation
 from frappe_wms.services.determination import determine_destination_bin, determine_process_type
-from frappe_wms.services.bin_rules import incoming_load, validate_destination_bin
+from frappe_wms.services.bin_rules import hu_requirement, incoming_load, validate_destination_bin
 from frappe_wms.services.warehouse_order import attach_task, sync_warehouse_order, release_next_in_sequence, _sequence_gate_blocks, _eligible_queues, RESOURCE_ROLES
 from frappe_wms.services.storage_process import advance_to_next_step
 from frappe_wms.services.printing import create_print_spool
@@ -71,22 +71,24 @@ def create_tasks_for_request(request_name, batch_key=None):
     batch_key = batch_key or frappe.generate_hash(length=10)
     reserved_hu_counts = {}
     created = []
+    source_bin = request.source_bin or process_type.default_source_bin
+    priority = request.priority if request.priority and request.priority != "Normal" else (process_type.default_priority or "Normal")
     for chunk_qty in chunks:
-        destination_bin = request.destination_bin
+        destination_bin = request.destination_bin or process_type.default_destination_bin
         if not destination_bin and process_type and process_type.destination_required:
             hu_type = frappe.db.get_value("Handling Unit", request.source_hu, "hu_type") if request.source_hu else None
-            source_storage_type = frappe.db.get_value("Storage Bin", request.source_bin, "storage_type") if request.source_bin else None
+            source_storage_type = frappe.db.get_value("Storage Bin", source_bin, "storage_type") if source_bin else None
             incoming_weight, incoming_volume = incoming_load(request.product, chunk_qty)
             destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product,
                 "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type,
-                "incoming_weight": incoming_weight, "incoming_volume": incoming_volume, "destination_hu": request.destination_hu or request.source_hu,
-                "reserved_hu_counts": reserved_hu_counts})
+                "incoming_weight": incoming_weight, "incoming_volume": incoming_volume, "incoming_quantity": chunk_qty, "destination_hu": request.destination_hu or request.source_hu,
+                "forced_storage_type": process_type.default_destination_storage_type, "reserved_hu_counts": reserved_hu_counts})
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
-        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": idempotency_key})
+        task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": priority, "status": "Open", "idempotency_key": idempotency_key})
         from frappe_wms.services.layout_control import reroute
         reroute(task)  # layout-oriented storage control: via an intermediate bin when a rule applies
-        attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name)
+        attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name, default_queue=process_type.default_queue)
         task.insert(ignore_permissions=True)
         created.append(task.name)
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
@@ -115,7 +117,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
         if len(held) == 1 and held[0][0] == product and flt(quantity) >= flt(held[0][1]) - 0.000001: destination_hu = source_hu
     hu_type = frappe.db.get_value("Handling Unit", source_hu, "hu_type") if source_hu else None
     incoming_weight, incoming_volume = incoming_load(product, quantity)
-    validate_destination_bin(destination_bin, item=product, stock_type=stock_type, hu_type=hu_type,
+    validate_destination_bin(destination_bin, item=product, incoming_quantity=quantity, stock_type=stock_type, hu_type=hu_type,
         batch_no=batch_no, destination_hu=destination_hu or source_hu, incoming_weight=incoming_weight, incoming_volume=incoming_volume)
     process_type_name = determine_process_type(warehouse, "Internal Move", item=product, stock_type=stock_type, default="INTERNAL_MOVE")
     process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
@@ -220,6 +222,9 @@ def _pick_destination(process_type, first):
     # Single-Step (default) is exactly today's behavior, unchanged: pick straight to the
     # delivery's own staging bin.
     strategy = process_type.picking_strategy or "Single-Step"
+    from frappe_wms.services.determination import wms_product_warehouse
+    per_warehouse = wms_product_warehouse(first.product, first._warehouse)
+    if per_warehouse and per_warehouse.two_step_picking: strategy = "Two-Step"  # the product's own flag
     if strategy == "Two-Step":
         shared_bin = frappe.db.get_value("WMS Warehouse", first._warehouse, "default_picking_staging_bin")
         if not shared_bin: frappe.throw(_("WMS Warehouse {0} has no Default Picking Staging Bin configured for Two-Step Picking").format(first._warehouse))
@@ -566,6 +571,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         resolved_destination_hu = None
     else:
         resolved_destination_hu = task.destination_hu or task.source_hu
+    if resolved_destination_hu and task.destination_bin and hu_requirement(frappe.get_cached_doc("Storage Type", frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type"))) == "Forbidden":
+        resolved_destination_hu, destination_hu = None, _UNPACK  # Handling Units are not put into this storage type: the stock goes in loose
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
     destination = {"handling_unit": resolved_destination_hu, "storage_bin": task.destination_bin, "stock_type": task.stock_type_to or task.stock_type_from}
     key = idempotency_key or f"{task.idempotency_key or task.name}:{already_confirmed}"
@@ -589,7 +596,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         # Capacity/blocked/mixing rules were checked when the bin was chosen at planning; re-checked (and the bin locked) now that stock lands in it,
         # since two receipts planned back to back can both have been given the same "first empty" bin.
         weight, volume = incoming_load(task.product, posted_qty)
-        validate_destination_bin(task.destination_bin, item=task.product, stock_type=task.stock_type_to or task.stock_type_from,
+        validate_destination_bin(task.destination_bin, item=task.product, incoming_quantity=posted_qty, stock_type=task.stock_type_to or task.stock_type_from,
             hu_type=frappe.db.get_value("Handling Unit", resolved_destination_hu, "hu_type") if resolved_destination_hu else None, batch_no=task.batch_no,
             destination_hu=resolved_destination_hu, incoming_weight=weight, incoming_volume=volume, incoming_hu_count=1 if resolved_destination_hu else 0, require_hu=False)
     if posted_qty > 0:
@@ -656,7 +663,7 @@ def _resolve_partial_hu_move(task, qty):
         return task.source_hu
     storage_type = frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type")
     # A Pick/Cross Dock must end in an HU: shipping finds the staged HU through the task's destination_hu.
-    if task.task_type not in ("Pick", "Cross Dock") and not frappe.db.get_value("Storage Type", storage_type, "hu_managed"):
+    if task.task_type not in ("Pick", "Cross Dock") and hu_requirement(frappe.get_cached_doc("Storage Type", storage_type)) != "Mandatory":
         return None
     frappe.throw(_("Handling Unit {0} still holds {1} {2} in {3} after this - scan the Handling Unit (tote, carton or new pallet) you are putting these {4} into, or move the whole Handling Unit.").format(
         task.source_hu, frappe.format(remaining, "Float"), task.stock_uom or "", task.source_bin, frappe.format(qty, "Float")),

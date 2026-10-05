@@ -21,3 +21,4 @@ frappe_wms.patches.v0_2.backfill_partially_posted_count_mirrors
 frappe_wms.patches.v0_2.backfill_default_number_ranges
 frappe_wms.patches.v0_2.backfill_unqueued_cross_dock_tasks
 frappe_wms.patches.v0_2.backfill_storage_bin_check_digits
+frappe_wms.patches.v0_2.backfill_storage_type_hu_requirement

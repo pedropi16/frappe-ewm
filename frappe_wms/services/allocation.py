@@ -13,7 +13,7 @@ from frappe_wms.utils import require_role
 # mid-repack. None of that should be up for grabs by a delivery's FIFO allocation just because
 # the ledger still shows it as "available" there - nothing else marks staged/received stock as
 # reserved or in-transit once it physically arrives at that bin.
-NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing", "Yard")
+NON_ALLOCATABLE_STORAGE_ROLES = ("Receiving", "Staging", "Shipping", "Door", "Packing", "Yard", "Identification Point")
 
 # A balance row's own storage-role/bin-flag exclusion above says nothing about the Handling
 # Unit it's tied to - a Blocked HU (an operator's own "don't touch this" flag, e.g. Repack
@@ -43,6 +43,17 @@ def _required_characteristics(row):
     # in memory before the first save, but comes back empty after insert+reload).
     raw = row.get("required_characteristics")
     return json.loads(raw) if raw else {}
+
+def _by_removal_sequence(balances, item, warehouse, stock_type):
+    """The product's stock removal control indicator selects a Storage Type Search Sequence: stock is taken from its storage types in that
+    order (the strategy still orders within a type) and not from types outside it. Without an indicator or sequence nothing changes."""
+    from frappe_wms.services.determination import _search_sequence_storage_types, product_indicators, search_sequence_for
+    sequence = search_sequence_for(warehouse, "Removal", "stock_removal_control_indicator", product_indicators(item, warehouse).get("stock_removal_control_indicator"), stock_type)
+    if not sequence: return balances
+    rank = {t: i for i, t in enumerate(_search_sequence_storage_types(sequence, stock_type))}
+    types = dict(frappe.db.sql("select name, storage_type from `tabStorage Bin` where name in %s", (tuple({b.storage_bin for b in balances if b.storage_bin}) or ("",),)))
+    kept = [b for b in balances if types.get(b.storage_bin) in rank]
+    return sorted(kept, key=lambda b: rank[types[b.storage_bin]])
 
 def _candidate_balances(row, warehouse, customer=None):
     filters={"warehouse":warehouse,"product":row.item,"stock_type":row.required_stock_type,"available_quantity":[">",0]}
@@ -80,6 +91,9 @@ def _candidate_balances(row, warehouse, customer=None):
         non_allocatable_hus = set(frappe.get_all("Handling Unit", filters={"name": ["in", list(hu_names)], "status": ["in", NON_ALLOCATABLE_HU_STATUSES]}, pluck="name"))
         balances = [b for b in balances if not b.handling_unit or b.handling_unit not in non_allocatable_hus]
 
+    bin_names = {b.storage_bin for b in balances if b.storage_bin}
+    if not bin_names: return balances
+    balances = _by_removal_sequence(balances, row.item, warehouse, row.required_stock_type)
     bin_names = {b.storage_bin for b in balances if b.storage_bin}
     if not bin_names: return balances
     non_allocatable_bins = set(frappe.get_all("Storage Bin", filters={"name": ["in", list(bin_names)], "removal_blocked": 1}, pluck="name"))

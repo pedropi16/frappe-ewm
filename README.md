@@ -758,6 +758,27 @@ reversal of a cancelled consumption entry.
   is chosen or checked) and *Do Not Unpack* (no loose/partial moves out of the HU, no repacking, no deconsolidation).
   A product cannot carry indicators that require different storage groups.
 
+## Control indicators and storage determination (Phase A)
+
+SAP's product-driven storage search: indicators on the product pick the storage types searched, and the storage type carries defaults.
+
+* **Putaway Control Indicator / Stock Removal Control Indicator / Storage Section Indicator** - small masters, set on the product's
+  warehouse row (WMS Product Warehouse; WMS Product is the fallback).
+* **Storage Type Search Sequence** takes an indicator (direction Putaway: putaway control indicator; direction Removal: stock removal
+  control indicator). Putaway search order of storage types: the Bin Determination Rule's own storage type or sequence, the process type's
+  default destination storage type, the product's putaway control indicator sequence, then the product's preferred storage type.
+  If no rule yields a bin, the indicator's storage types are tried with each type's **Default Putaway Strategy**.
+* **Removal**: a product with a stock removal control indicator is picked from the sequence's storage types in that order (the removal
+  strategy orders within a type); stock in types outside the sequence is not allocated. No indicator: unchanged.
+* **Storage Section Indicator**: a section carrying an indicator only takes products with it; a product with the indicator prefers those
+  sections, then sections without one.
+* **Storage Type Limits** on the product warehouse row: maximum quantity of the product per storage type (stops putaway into a full type).
+* **Storage Type**: *HU Requirement* Optional / Mandatory / Forbidden (Forbidden: HUs are unpacked on putaway and the stock goes in
+  loose; supersedes the old HU managed flag, migrated by patch), *HU Type Check* switch for the bin-type size check, *Default Putaway
+  Strategy*, capacity method *Max Quantity* (bin or bin type `maximum_quantity`), role *Identification Point*.
+* **Warehouse Process Type defaults**: source/destination storage type and bin, queue, priority - used when the request does not say.
+* **Two-Step Picking** flag on the product warehouse row forces picks through the shared picking staging bin.
+
 ## Modules
 
 | Module | Contains |

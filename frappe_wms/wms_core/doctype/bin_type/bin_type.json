@@ -13,6 +13,7 @@
     "maximum_hus",
     "maximum_weight",
     "maximum_volume",
+    "maximum_quantity",
     "length",
     "width",
     "height",
@@ -73,6 +74,12 @@
       "label": "Maximum HUs",
       "fieldtype": "Int",
       "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
+    },
+    {
+      "fieldname": "maximum_quantity",
+      "label": "Maximum Quantity",
+      "fieldtype": "Float",
+      "description": "Capacity check method Max Quantity: most stock (any product, stock UoM) the bin holds. A bin's own value wins over its Bin Type's."
     }
   ],
   "autoname": "field:bin_type_code",

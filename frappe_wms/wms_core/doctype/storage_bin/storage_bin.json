@@ -27,6 +27,7 @@
     "maximum_hus",
     "maximum_weight",
     "maximum_volume",
+    "maximum_quantity",
     "current_hu_count",
     "current_weight",
     "putaway_blocked",
@@ -216,6 +217,12 @@
       "options": "Storage Group",
       "in_standard_filter": 1,
       "description": "Groups bins of this storage type for layout-oriented storage control and handling-indicator restrictions."
+    },
+    {
+      "fieldname": "maximum_quantity",
+      "label": "Maximum Quantity",
+      "fieldtype": "Float",
+      "description": "Capacity check method Max Quantity: most stock (any product, stock UoM) the bin holds. A bin's own value wins over its Bin Type's."
     }
   ],
   "autoname": "field:bin_code",

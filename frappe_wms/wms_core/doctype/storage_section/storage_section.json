@@ -11,6 +11,7 @@
     "storage_type",
     "section_code",
     "section_name",
+    "section_indicator",
     "active"
   ],
   "fields": [
@@ -42,6 +43,12 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "section_indicator",
+      "label": "Storage Section Indicator",
+      "fieldtype": "Link",
+      "options": "Storage Section Indicator"
     }
   ],
   "autoname": "format:{storage_type}-{section_code}",

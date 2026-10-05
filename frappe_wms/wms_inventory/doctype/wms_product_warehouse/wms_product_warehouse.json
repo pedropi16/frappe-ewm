@@ -12,6 +12,11 @@
     "warehouse",
     "fixed_bin",
     "preferred_storage_type",
+    "putaway_control_indicator",
+    "stock_removal_control_indicator",
+    "storage_section_indicator",
+    "two_step_picking",
+    "storage_type_limits",
     "process_type_determination_indicator",
     "active"
   ],
@@ -60,6 +65,36 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "putaway_control_indicator",
+      "label": "Putaway Control Indicator",
+      "fieldtype": "Link",
+      "options": "Putaway Control Indicator"
+    },
+    {
+      "fieldname": "stock_removal_control_indicator",
+      "label": "Stock Removal Control Indicator",
+      "fieldtype": "Link",
+      "options": "Stock Removal Control Indicator"
+    },
+    {
+      "fieldname": "storage_section_indicator",
+      "label": "Storage Section Indicator",
+      "fieldtype": "Link",
+      "options": "Storage Section Indicator"
+    },
+    {
+      "fieldname": "two_step_picking",
+      "label": "Two-Step Picking",
+      "fieldtype": "Check",
+      "description": "Picks of this product always go through the shared picking staging bin, whatever the process type says."
+    },
+    {
+      "fieldname": "storage_type_limits",
+      "label": "Storage Type Limits",
+      "fieldtype": "Table",
+      "options": "WMS Product Storage Type"
     }
   ],
   "autoname": "format:{warehouse}-{item}",

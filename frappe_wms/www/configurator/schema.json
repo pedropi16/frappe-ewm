@@ -7,6 +7,9 @@
   "Storage Section",
   "Bin Type",
   "Storage Group",
+  "Putaway Control Indicator",
+  "Stock Removal Control Indicator",
+  "Storage Section Indicator",
   "Activity Area",
   "Storage Bin",
   "Work Center",
@@ -368,7 +371,7 @@
      "fieldname": "storage_role",
      "label": "Storage Role",
      "fieldtype": "Select",
-     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard",
+     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nIdentification Point",
      "reqd": 1
     },
     {
@@ -390,13 +393,13 @@
      "fieldname": "hu_managed",
      "label": "HU Managed",
      "fieldtype": "Check",
-     "default": 1
+     "description": "Superseded by HU Requirement."
     },
     {
      "fieldname": "capacity_check_method",
      "label": "Capacity Check Method",
      "fieldtype": "Select",
-     "options": "None\nHU Count\nWeight\nVolume",
+     "options": "None\nHU Count\nWeight\nVolume\nMax Quantity",
      "reqd": 1,
      "default": "None"
     },
@@ -415,6 +418,28 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "hu_requirement",
+     "label": "HU Requirement",
+     "fieldtype": "Select",
+     "options": "Optional\nMandatory\nForbidden",
+     "default": "Mandatory",
+     "description": "Mandatory: only Handling Units are put into its bins. Forbidden: stock is put in loose (HUs are unpacked on putaway). Optional (or blank): either. Blank on an old type follows the previous HU managed flag."
+    },
+    {
+     "fieldname": "hu_type_check",
+     "label": "HU Type Check",
+     "fieldtype": "Check",
+     "default": 1,
+     "description": "Check that the HU type fits the bin type (size) at putaway."
+    },
+    {
+     "fieldname": "putaway_strategy",
+     "label": "Default Putaway Strategy",
+     "fieldtype": "Select",
+     "options": "\nFixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
+     "description": "Used when no Bin Determination Rule applies."
     }
    ],
    "key": {
@@ -456,6 +481,12 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "section_indicator",
+     "label": "Storage Section Indicator",
+     "fieldtype": "Link",
+     "options": "Storage Section Indicator"
     }
    ],
    "key": {
@@ -524,6 +555,12 @@
      "label": "Maximum HUs",
      "fieldtype": "Int",
      "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
+    },
+    {
+     "fieldname": "maximum_quantity",
+     "label": "Maximum Quantity",
+     "fieldtype": "Float",
+     "description": "Capacity check method Max Quantity: most stock (any product, stock UoM) the bin holds. A bin's own value wins over its Bin Type's."
     }
    ],
    "key": {
@@ -577,6 +614,123 @@
     "fields": [
      "storage_type",
      "group_code"
+    ]
+   }
+  },
+  "Putaway Control Indicator": {
+   "name": "Putaway Control Indicator",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "indicator_code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "indicator_name",
+     "label": "Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text",
+     "description": "Set on the product (per warehouse). It selects the Storage Type Search Sequence a putaway uses - which storage types are tried, in which order."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "indicator_code"
+    ]
+   }
+  },
+  "Stock Removal Control Indicator": {
+   "name": "Stock Removal Control Indicator",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "indicator_code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "indicator_name",
+     "label": "Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text",
+     "description": "Set on the product (per warehouse). It selects the Storage Type Search Sequence a removal (picking) uses; stock in storage types outside that sequence is not picked."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "indicator_code"
+    ]
+   }
+  },
+  "Storage Section Indicator": {
+   "name": "Storage Section Indicator",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "indicator_code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "indicator_name",
+     "label": "Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text",
+     "description": "Set on the product and on storage sections. A section with an indicator takes only products carrying it; a product with the indicator prefers those sections."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "indicator_code"
     ]
    }
   },
@@ -786,6 +940,12 @@
      "fieldtype": "Link",
      "options": "Storage Group",
      "description": "Groups bins of this storage type for layout-oriented storage control and handling-indicator restrictions."
+    },
+    {
+     "fieldname": "maximum_quantity",
+     "label": "Maximum Quantity",
+     "fieldtype": "Float",
+     "description": "Capacity check method Max Quantity: most stock (any product, stock UoM) the bin holds. A bin's own value wins over its Bin Type's."
     }
    ],
    "key": {
@@ -1202,6 +1362,45 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "default_source_storage_type",
+     "label": "Default Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "default_source_bin",
+     "label": "Default Source Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin"
+    },
+    {
+     "fieldname": "default_destination_storage_type",
+     "label": "Default Destination Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "description": "Used when the request names no destination: bin determination looks only in this storage type."
+    },
+    {
+     "fieldname": "default_destination_bin",
+     "label": "Default Destination Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Used when the request names no destination."
+    },
+    {
+     "fieldname": "default_queue",
+     "label": "Default Queue",
+     "fieldtype": "Link",
+     "options": "Warehouse Queue",
+     "description": "Used when no queue is determined for the task."
+    },
+    {
+     "fieldname": "default_priority",
+     "label": "Default Priority",
+     "fieldtype": "Select",
+     "options": "\nLow\nNormal\nHigh\nUrgent"
     }
    ],
    "key": {
@@ -1698,6 +1897,20 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "putaway_control_indicator",
+     "label": "Putaway Control Indicator",
+     "fieldtype": "Link",
+     "options": "Putaway Control Indicator",
+     "description": "Direction Putaway: used for products carrying this indicator."
+    },
+    {
+     "fieldname": "stock_removal_control_indicator",
+     "label": "Stock Removal Control Indicator",
+     "fieldtype": "Link",
+     "options": "Stock Removal Control Indicator",
+     "description": "Direction Removal: used for products carrying this indicator."
     }
    ],
    "key": {
@@ -3641,6 +3854,18 @@
     {
      "target": "Handling Indicator",
      "label": "Handling Indicators \u2192 Handling Indicator"
+    },
+    {
+     "target": "Putaway Control Indicator",
+     "label": "Putaway Control Indicator"
+    },
+    {
+     "target": "Stock Removal Control Indicator",
+     "label": "Stock Removal Control Indicator"
+    },
+    {
+     "target": "Storage Section Indicator",
+     "label": "Storage Section Indicator"
     }
    ]
   },
@@ -3662,6 +3887,22 @@
     {
      "target": "Storage Type",
      "label": "Preferred Storage Type"
+    },
+    {
+     "target": "Putaway Control Indicator",
+     "label": "Putaway Control Indicator"
+    },
+    {
+     "target": "Stock Removal Control Indicator",
+     "label": "Stock Removal Control Indicator"
+    },
+    {
+     "target": "Storage Section Indicator",
+     "label": "Storage Section Indicator"
+    },
+    {
+     "target": "Storage Type",
+     "label": "Storage Type Limits \u2192 Storage Type"
     }
    ]
   },

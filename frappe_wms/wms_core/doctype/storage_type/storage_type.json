@@ -16,6 +16,9 @@
     "allow_mixed_stock_types",
     "allow_mixed_batches",
     "hu_managed",
+    "hu_requirement",
+    "hu_type_check",
+    "putaway_strategy",
     "capacity_check_method",
     "putaway_blocked",
     "removal_blocked",
@@ -49,7 +52,7 @@
       "fieldname": "storage_role",
       "label": "Storage Role",
       "fieldtype": "Select",
-      "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard",
+      "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nIdentification Point",
       "reqd": 1,
       "in_list_view": 1
     },
@@ -75,13 +78,14 @@
       "fieldname": "hu_managed",
       "label": "HU Managed",
       "fieldtype": "Check",
-      "default": 1
+      "hidden": 1,
+      "description": "Superseded by HU Requirement."
     },
     {
       "fieldname": "capacity_check_method",
       "label": "Capacity Check Method",
       "fieldtype": "Select",
-      "options": "None\nHU Count\nWeight\nVolume",
+      "options": "None\nHU Count\nWeight\nVolume\nMax Quantity",
       "reqd": 1,
       "default": "None"
     },
@@ -103,6 +107,28 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "hu_requirement",
+      "label": "HU Requirement",
+      "fieldtype": "Select",
+      "options": "Optional\nMandatory\nForbidden",
+      "description": "Mandatory: only Handling Units are put into its bins. Forbidden: stock is put in loose (HUs are unpacked on putaway). Optional (or blank): either. Blank on an old type follows the previous HU managed flag.",
+      "default": "Mandatory"
+    },
+    {
+      "fieldname": "hu_type_check",
+      "label": "HU Type Check",
+      "fieldtype": "Check",
+      "default": 1,
+      "description": "Check that the HU type fits the bin type (size) at putaway."
+    },
+    {
+      "fieldname": "putaway_strategy",
+      "label": "Default Putaway Strategy",
+      "fieldtype": "Select",
+      "options": "\nFixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
+      "description": "Used when no Bin Determination Rule applies."
     }
   ],
   "autoname": "format:{warehouse}-{storage_type_code}",

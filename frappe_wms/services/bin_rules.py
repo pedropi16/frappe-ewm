@@ -80,6 +80,25 @@ def hu_load(hu_name):
     return weight or None, volume or None
 
 
+def hu_requirement(storage_type):
+    """Forbidden / Optional / Mandatory. The old yes/no HU managed flag still counts as Mandatory (it is hidden now, set by the migration patch)."""
+    if storage_type.get("hu_managed"): return "Mandatory"
+    return storage_type.get("hu_requirement") or "Optional"
+
+
+def storage_type_quantity_violation(item, warehouse, storage_type, incoming_quantity):
+    """The product's maximum quantity for this storage type (WMS Product Warehouse > Storage Type Limits) would be exceeded."""
+    from frappe_wms.services.determination import wms_product_warehouse
+    row = wms_product_warehouse(item, warehouse)
+    limit = next((flt(r.maximum_quantity) for r in (row.storage_type_limits if row else []) if r.storage_type == storage_type and flt(r.maximum_quantity) > 0), None)
+    if limit is None: return None
+    held = frappe.db.sql("""select coalesce(sum(b.quantity), 0) from `tabWMS Stock Balance` b join `tabStorage Bin` sb on sb.name = b.storage_bin
+        where b.product=%s and sb.storage_type=%s and b.quantity>0""", (item, storage_type))[0][0]
+    if flt(held) + flt(incoming_quantity) > limit + 0.000001:
+        return _("maximum quantity {0} of {1} in storage type {2} would be exceeded").format(limit, item, storage_type)
+    return None
+
+
 def hu_fits_bin_type(hu_type, bin_type):
     """Size check of an HU type against a bin type (its footprint and height) - only where both sides carry a size (the footprint may turn 90 degrees, the height may not)."""
     hu = frappe.get_cached_doc("Handling Unit Type", hu_type)
@@ -91,13 +110,14 @@ def hu_fits_bin_type(hu_type, bin_type):
 
 
 def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_no=None,
-                    destination_hu=None, incoming_weight=None, incoming_hu_count=1, incoming_volume=None, lock=False, require_hu=True):
+                    destination_hu=None, incoming_weight=None, incoming_hu_count=1, incoming_volume=None, incoming_quantity=None, lock=False, require_hu=True):
     bin_doc = frappe.get_doc("Storage Bin", bin_name, for_update=lock)
     storage_type = frappe.get_cached_doc("Storage Type", bin_doc.storage_type)
     bin_type = frappe.get_cached_doc("Bin Type", bin_doc.bin_type) if bin_doc.bin_type else None
     # A bin's own limits win; a blank one comes from its Bin Type (the size class of the location).
-    max_hus, max_weight, max_volume = (bin_doc.maximum_hus or (bin_type and bin_type.maximum_hus),
-        bin_doc.maximum_weight or (bin_type and bin_type.maximum_weight), bin_doc.maximum_volume or (bin_type and bin_type.maximum_volume))
+    max_hus, max_weight, max_volume, max_quantity = (bin_doc.maximum_hus or (bin_type and bin_type.maximum_hus),
+        bin_doc.maximum_weight or (bin_type and bin_type.maximum_weight), bin_doc.maximum_volume or (bin_type and bin_type.maximum_volume),
+        bin_doc.maximum_quantity or (bin_type and bin_type.maximum_quantity))
     if not bin_doc.active or bin_doc.putaway_blocked:
         return [_("bin is inactive or blocked for putaway")]
 
@@ -114,7 +134,9 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
         groups = product_handling(item)[0]
         if groups and bin_doc.storage_group not in groups:
             reasons.append(_("handling indicator requires storage group {0}").format(", ".join(sorted(groups))))
-    if bin_type and hu_type and not hu_fits_bin_type(hu_type, bin_type):
+    if item and incoming_quantity and (reason := storage_type_quantity_violation(item, bin_doc.warehouse, bin_doc.storage_type, incoming_quantity)):
+        reasons.append(reason)
+    if bin_type and hu_type and storage_type.get("hu_type_check", 1) and not hu_fits_bin_type(hu_type, bin_type):
         reasons.append(_("HU type {0} does not fit bin type {1}").format(hu_type, bin_type.name))
 
     method = storage_type.capacity_check_method
@@ -124,11 +146,15 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
     elif method == "Weight" and max_weight and incoming_weight:
         if live_weight(bin_name, lock) + flt(incoming_weight) > flt(max_weight):
             reasons.append(_("weight capacity exceeded"))
+    elif method == "Max Quantity" and max_quantity and incoming_quantity:
+        held = sum(flt(r[0]) for r in frappe.db.sql("select quantity from `tabWMS Stock Balance` where storage_bin=%s and quantity>0" + (" for update" if lock else ""), bin_name))
+        if held + flt(incoming_quantity) > flt(max_quantity) + 0.000001:
+            reasons.append(_("quantity capacity exceeded"))
     elif method == "Volume" and max_volume and incoming_volume:
         if live_volume(bin_name, lock) + flt(incoming_volume) > flt(max_volume):
             reasons.append(_("volume capacity exceeded"))
 
-    if require_hu and storage_type.hu_managed and not destination_hu:
+    if require_hu and hu_requirement(storage_type) == "Mandatory" and not destination_hu:
         reasons.append(_("storage type requires a Handling Unit"))
 
     if _mixing_rules_enforced():

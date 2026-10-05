@@ -13,6 +13,12 @@
     "activity",
     "source_required",
     "destination_required",
+    "default_source_storage_type",
+    "default_source_bin",
+    "default_destination_storage_type",
+    "default_destination_bin",
+    "default_queue",
+    "default_priority",
     "hu_required",
     "stock_required",
     "confirmation_mode",
@@ -113,6 +119,45 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "default_source_storage_type",
+      "label": "Default Source Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type"
+    },
+    {
+      "fieldname": "default_source_bin",
+      "label": "Default Source Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "default_destination_storage_type",
+      "label": "Default Destination Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "description": "Used when the request names no destination: bin determination looks only in this storage type."
+    },
+    {
+      "fieldname": "default_destination_bin",
+      "label": "Default Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Used when the request names no destination."
+    },
+    {
+      "fieldname": "default_queue",
+      "label": "Default Queue",
+      "fieldtype": "Link",
+      "options": "Warehouse Queue",
+      "description": "Used when no queue is determined for the task."
+    },
+    {
+      "fieldname": "default_priority",
+      "label": "Default Priority",
+      "fieldtype": "Select",
+      "options": "\nLow\nNormal\nHigh\nUrgent"
     }
   ],
   "autoname": "field:process_type_code",

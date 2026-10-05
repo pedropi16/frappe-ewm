@@ -1,0 +1,35 @@
+{
+  "name": "WMS Product Storage Type",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "storage_type",
+    "maximum_quantity"
+  ],
+  "fields": [
+    {
+      "fieldname": "storage_type",
+      "label": "Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "maximum_quantity",
+      "label": "Maximum Quantity",
+      "fieldtype": "Float",
+      "in_list_view": 1,
+      "description": "Most of this product the storage type may hold (stock UoM). Putaway into the type stops there."
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

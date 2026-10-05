@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt
-from frappe_wms.services.bin_rules import bin_violations, live_hu_count
+from frappe_wms.services.bin_rules import bin_violations, live_hu_count, storage_type_quantity_violation
 
 def determine_storage_process(context):
     rules=frappe.get_all("Process Determination Rule",filters={"active":1,"warehouse":context["warehouse"]},fields=["*"],order_by="priority asc")
@@ -43,6 +43,21 @@ def wms_product_warehouse(item, warehouse):
     name = frappe.db.exists("WMS Product Warehouse", {"item": item, "warehouse": warehouse, "active": 1})
     return frappe.get_cached_doc("WMS Product Warehouse", name) if name else None
 
+def product_indicators(item, warehouse):
+    """Putaway/removal control and storage section indicators of a product: its warehouse row first, then the product."""
+    fields = ("putaway_control_indicator", "stock_removal_control_indicator", "storage_section_indicator")
+    if not item: return frappe._dict()
+    row = wms_product_warehouse(item, warehouse)
+    product = frappe.db.get_value("WMS Product", {"item": item}, list(fields), as_dict=True) or {}
+    return frappe._dict({f: (row and row.get(f)) or product.get(f) for f in fields})
+
+def search_sequence_for(warehouse, direction, indicator_field, indicator, stock_type):
+    """The Storage Type Search Sequence of a control indicator: one for the exact stock type, else one without a stock type."""
+    if not indicator: return None
+    rows = frappe.get_all("Storage Type Search Sequence", filters={"warehouse": warehouse, "direction": direction, indicator_field: indicator, "active": 1}, fields=["name", "stock_type"], order_by="creation asc")
+    exact = [r.name for r in rows if stock_type and r.stock_type == stock_type]
+    return (exact or [r.name for r in rows if not r.stock_type] or [None])[0]
+
 def _preferred_storage_type(item, warehouse):
     per_warehouse = wms_product_warehouse(item, warehouse)
     if per_warehouse and per_warehouse.preferred_storage_type:
@@ -54,12 +69,25 @@ def _search_sequence_storage_types(search_sequence, stock_type):
     rows = [r for r in seq.storage_types if not seq.stock_type or seq.stock_type == stock_type]
     return [r.storage_type for r in sorted(rows, key=lambda r: r.sequence or 0)]
 
+def _sections_by_indicator(storage_type):
+    return {s.name: s.section_indicator for s in frappe.get_all("Storage Section", filters={"storage_type": storage_type}, fields=["name", "section_indicator"])}
+
+def _filter_by_section_indicator(bins, storage_type, indicator):
+    """A section carrying an indicator only takes products with it; a product with the indicator prefers those sections, then sections without one."""
+    indicators = _sections_by_indicator(storage_type)
+    if not any(indicators.values()): return bins
+    section_of = lambda b: indicators.get(b.storage_section) if b.storage_section else None  # noqa: E731
+    matching = [b for b in bins if indicator and section_of(b) == indicator]
+    return matching or [b for b in bins if not section_of(b)]
+
 def _candidate_bins_for_storage_type(warehouse, storage_type, section, context, group=None):
     filters={"warehouse":warehouse,"storage_type":storage_type,"active":1,"putaway_blocked":0}
     if section: filters["storage_section"]=section
     if group: filters["storage_group"]=group
+    if context.get("item") and context.get("incoming_quantity") and storage_type_quantity_violation(context["item"], warehouse, storage_type, context["incoming_quantity"]): return []
     bins=frappe.get_all("Storage Bin",filters=filters,
-        fields=["name","maximum_hus","maximum_weight","sequence","aisle"],order_by="sequence asc")
+        fields=["name","maximum_hus","maximum_weight","sequence","aisle","storage_section"],order_by="sequence asc")
+    bins=_filter_by_section_indicator(bins, storage_type, context.get("section_indicator"))
     # reserved_hu_counts: a same-call, not-yet-posted count of HUs already assigned to a bin by
     # an earlier chunk of the same oversized request (task.py's full-pallet task splitting).
     # live_hu_count only sees what's actually posted, so without this, splitting a large
@@ -73,9 +101,27 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context, 
     for b in bins: b.current_hu_count = live_hu_count(b.name) + reserved.get(b.name, 0)
     return [b for b in bins if not bin_violations(b.name, item=context.get("item"), stock_type=context.get("stock_type"),
         hu_type=context.get("hu_type"), batch_no=context.get("batch_no"), destination_hu=context.get("destination_hu"),
-        incoming_weight=context.get("incoming_weight"), incoming_volume=context.get("incoming_volume"), incoming_hu_count=flt(context.get("incoming_hu_count", 1)) + reserved.get(b.name, 0))]
+        incoming_weight=context.get("incoming_weight"), incoming_volume=context.get("incoming_volume"), incoming_quantity=context.get("incoming_quantity"),
+        incoming_hu_count=flt(context.get("incoming_hu_count", 1)) + reserved.get(b.name, 0))]
+
+def _putaway_storage_types(context, rule=None):
+    """Storage types to search, strongest source first: the rule's own type or sequence, the process type's default, the product's
+    putaway control indicator (its Storage Type Search Sequence), then the product's preferred storage type."""
+    if rule and rule.destination_storage_type: return [rule.destination_storage_type]
+    if rule and rule.search_sequence: return _search_sequence_storage_types(rule.search_sequence, context.get("stock_type"))
+    if context.get("forced_storage_type"): return [context["forced_storage_type"]]
+    item = context.get("item")
+    if not item: return []
+    sequence = search_sequence_for(context["warehouse"], "Putaway", "putaway_control_indicator", context.get("_indicators", {}).get("putaway_control_indicator"), context.get("stock_type"))
+    if sequence: return _search_sequence_storage_types(sequence, context.get("stock_type"))
+    # Falls back to the product's preferred storage type when nothing fixes one - also the fix for a latent bug:
+    # destination_storage_type isn't reqd on Bin Determination Rule, but a blank value used to make the Storage Bin
+    # filter become "storage_type IS NULL", which can never match, so a rule left without one was dead code.
+    preferred = _preferred_storage_type(item, context["warehouse"])
+    return [preferred] if preferred else []
 
 def determine_destination_bin(context):
+    if context.get("item"): context["_indicators"] = product_indicators(context["item"], context["warehouse"]); context["section_indicator"] = context["_indicators"].get("storage_section_indicator")
     rules=frappe.get_all("Bin Determination Rule",filters={"active":1,"warehouse":context["warehouse"],"activity":context["activity"]},fields=["*"],order_by="priority asc")
     for rule in rules:
         checks=("item","item_group","stock_type","hu_type","source_storage_type")
@@ -87,22 +133,7 @@ def determine_destination_bin(context):
             per_warehouse = wms_product_warehouse(context["item"], context["warehouse"])
             context["_fixed_bin"] = per_warehouse.fixed_bin if per_warehouse else None
 
-        if rule.destination_storage_type:
-            storage_types = [rule.destination_storage_type]
-        elif rule.search_sequence:
-            storage_types = _search_sequence_storage_types(rule.search_sequence, context.get("stock_type"))
-        elif context.get("item"):
-            # Falls back to the product's preferred storage type when a rule doesn't fix one -
-            # also the fix for a latent bug: destination_storage_type isn't reqd on Bin
-            # Determination Rule, but a blank value used to make the Storage Bin filter below
-            # become "storage_type IS NULL", which can never match (Storage Bin.storage_type
-            # is reqd), so any rule left without one was silently dead code.
-            preferred = _preferred_storage_type(context["item"], context["warehouse"])
-            storage_types = [preferred] if preferred else []
-        else:
-            storage_types = []
-
-        for storage_type in storage_types:
+        for storage_type in _putaway_storage_types(context, rule):
             # A search sequence tries each storage type in turn, moving to the next only if
             # the current one has zero usable bins - a single destination_storage_type or the
             # preferred_storage_type fallback are just one-element sequences of this same loop.
@@ -110,6 +141,12 @@ def determine_destination_bin(context):
             if not bins: continue
             bin_name=_apply_bin_strategy(rule.strategy,bins,context)
             if bin_name: return bin_name
+    # No rule gave a bin: the storage types the product's indicators lead to, each with its own default putaway strategy.
+    for storage_type in _putaway_storage_types(context):
+        strategy = frappe.db.get_value("Storage Type", storage_type, "putaway_strategy")
+        if not strategy: continue
+        bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, None, context)
+        if bins and (bin_name := _apply_bin_strategy(strategy, bins, context)): return bin_name
     frappe.throw(_("No destination bin could be determined"))
 
 def determine_route(warehouse, carrier=None):

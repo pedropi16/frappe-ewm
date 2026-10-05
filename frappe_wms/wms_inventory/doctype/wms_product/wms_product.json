@@ -17,6 +17,9 @@
     "minimum_remaining_shelf_life",
     "default_hu_type",
     "preferred_storage_type",
+    "putaway_control_indicator",
+    "stock_removal_control_indicator",
+    "storage_section_indicator",
     "full_hu_quantity",
     "gross_weight_per_unit",
     "volume_per_unit",
@@ -119,6 +122,25 @@
       "fieldtype": "Table",
       "options": "WMS Product Handling Indicator",
       "description": "How the product has to be handled, set up under Handling Indicator (temperature sensitive, must not be unpacked ...)."
+    },
+    {
+      "fieldname": "putaway_control_indicator",
+      "label": "Putaway Control Indicator",
+      "fieldtype": "Link",
+      "options": "Putaway Control Indicator",
+      "description": "Used when the product's warehouse row sets none."
+    },
+    {
+      "fieldname": "stock_removal_control_indicator",
+      "label": "Stock Removal Control Indicator",
+      "fieldtype": "Link",
+      "options": "Stock Removal Control Indicator"
+    },
+    {
+      "fieldname": "storage_section_indicator",
+      "label": "Storage Section Indicator",
+      "fieldtype": "Link",
+      "options": "Storage Section Indicator"
     }
   ],
   "autoname": "field:item",

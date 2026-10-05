@@ -22,16 +22,18 @@ import frappe
 # configurator's scope changes. A few optional links point "forward" (WMS Warehouse's default
 # bins -> Storage Bin, which itself needs the warehouse); those are filled in by a second pass.
 APPLY_ORDER = [
-    "Bin Type", "Handling Unit Type", "WMS Exception Code", "WMS Movement Type",
-    "WMS Stock Type", "Packaging Material", "WMS Settings", "Warehouse Process Type",
+    "Bin Type", "Handling Unit Type", "Putaway Control Indicator",
+    "Stock Removal Control Indicator", "Storage Section Indicator", "WMS Exception Code",
+    "WMS Movement Type", "WMS Stock Type", "Packaging Material", "WMS Settings",
     "Packaging Spec", "WMS Warehouse", "Activity Area", "Billing Rate", "Count Tolerance Group",
     "Inspection Rule", "Labor Standard", "Storage Type", "WMS Number Range",
-    "WMS Resource Group", "WO Creation Rule", "Warehouse Process Type Determination Rule",
-    "Cycle Count Rule", "Storage Group", "Storage Section", "Storage Type Search Sequence",
-    "WMS HU Number Pool", "Warehouse Queue", "Handling Indicator", "Storage Bin",
-    "Bin Determination Rule", "Layout Storage Control", "Removal Rule", "Replenishment Rule",
-    "Storage Process", "WMS Route", "Work Center", "Process Determination Rule",
-    "Production Supply Area", "WMS Resource", "Wave Template", "WMS Print Determination Rule",
+    "WMS Resource Group", "WO Creation Rule", "Cycle Count Rule", "Storage Group",
+    "Storage Section", "Storage Type Search Sequence", "WMS HU Number Pool", "Warehouse Queue",
+    "Handling Indicator", "Storage Bin", "Bin Determination Rule", "Layout Storage Control",
+    "Removal Rule", "Replenishment Rule", "WMS Route", "Warehouse Process Type", "Work Center",
+    "Production Supply Area", "Storage Process", "WMS Resource",
+    "Warehouse Process Type Determination Rule", "Wave Template", "Process Determination Rule",
+    "WMS Print Determination Rule",
 ]
 
 

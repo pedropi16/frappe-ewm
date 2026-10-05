@@ -13,7 +13,9 @@ Estimates are rough working days for one developer including tests and deploymen
 6. **Desktop vs RF:** planning/staging/maintenance screens are desk Pages or doctype forms; the RF app only executes tasks.
 7. Known baseline: 6 failures + 1 error in the suite come from dev-DB resource pollution, not from the code (see PLAN.md); a new failure outside that list is a regression.
 
-## Phase A - Product control indicators and determination (about 10 days)
+## Phase A - Product control indicators and determination (about 10 days) - DONE 2026-10-05
+
+Shipped: A1, A2, A3, A4, A6 (HU requirement, HU type check switch, max quantity capacity, default putaway strategy, identification point), A7 defaults (storage type/bin, queue, priority), A5 max quantity per storage type and the two-step flag. **Not built (deferred):** velocity code, warehouse product group, nesting factor (A5); default *removal* strategy on the storage type (A6); rough bin determination and the extra determination-matrix keys document type / item type / process / control indicator (A7). Decisions taken as in SAP: the control indicator is the primary mechanism and `preferred_storage_type` stays only as the last fallback.
 
 The core of SAP's putaway/removal search; everything else in storage determination hangs off it.
 

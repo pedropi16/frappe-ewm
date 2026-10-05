@@ -125,7 +125,7 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
 # actually scoped to) never got a look in.
 DESTINATION_DRIVEN_TASK_TYPES = {"Putaway"}
 
-def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None):
+def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None, default_queue=None):
     # Called on an unsaved Warehouse Task before insert; sets warehouse_order/queue/assigned_resource
     # in place. Every task gets a Warehouse Order, queue or not - a task with no Warehouse Queue
     # configured for its activity/area simply gets one with a blank queue, so it still batches
@@ -138,7 +138,7 @@ def attach_task(task_doc, batch_key, reference_doctype=None, reference_name=None
         if bin_name:
             storage_type, activity_area = frappe.db.get_value("Storage Bin", bin_name, ["storage_type", "activity_area"])
             if storage_type: break
-    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area)
+    queue = determine_queue(task_doc.warehouse, task_doc.task_type, storage_type, activity_area) or default_queue
     item_group = frappe.db.get_value("Item", task_doc.product, "item_group") if task_doc.product else None
     stock_type = task_doc.get("stock_type_from")
     rule = _matching_wo_creation_rule(task_doc.warehouse, task_doc.task_type, item_group, stock_type)
