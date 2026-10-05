@@ -67,10 +67,16 @@ def validate(doc, method=None):
         return
 
     warehouses = set()
+    # Backflushed consumption of a Work Order with a Production Material Request: its materials leave the PSA's
+    # warehouse in ERPNext and are booked out of the PSA in the WMS on submit (services/production_supply).
+    skip = ()
+    if doc.doctype == "Stock Entry":
+        from frappe_wms.services.production_supply import stock_entry_is_pmr_consumption
+        if stock_entry_is_pmr_consumption(doc): skip = ("s_warehouse",)
     if config["level"] == "item":
         for table in config.get("tables", ("items",)):
             for row in doc.get(table) or []:
-                for field in config["fields"]:
+                for field in (f for f in config["fields"] if f not in skip):
                     value = row.get(field)
                     if value:
                         warehouses.add(value)

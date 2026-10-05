@@ -1,6 +1,6 @@
 {
-  "name": "Production Supply Area",
-  "module": "WMS Core",
+  "name": "Production Material Request",
+  "module": "WMS Execution",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -8,66 +8,70 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
+    "work_order",
     "warehouse",
-    "psa_code",
-    "psa_name",
-    "supply_bin",
-    "workstations",
-    "deconsolidation_work_center",
-    "active"
+    "production_item",
+    "qty",
+    "planned_date",
+    "status",
+    "items"
   ],
   "fields": [
+    {
+      "fieldname": "work_order",
+      "label": "Work Order",
+      "fieldtype": "Link",
+      "options": "Work Order",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
     {
       "fieldname": "warehouse",
       "label": "Warehouse",
       "fieldtype": "Link",
       "options": "WMS Warehouse",
       "reqd": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "production_item",
+      "label": "Production Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "qty",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "read_only": 1
+    },
+    {
+      "fieldname": "planned_date",
+      "label": "Planned Date",
+      "fieldtype": "Date",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Open\nPartially Staged\nStaged\nPartially Consumed\nConsumed\nClosed\nCancelled",
+      "default": "Open",
+      "read_only": 1,
+      "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
     },
     {
-      "fieldname": "psa_code",
-      "label": "PSA Code",
-      "fieldtype": "Data",
-      "reqd": 1,
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "psa_name",
-      "label": "PSA Name",
-      "fieldtype": "Data",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "supply_bin",
-      "label": "Supply Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "reqd": 1,
-      "in_list_view": 1,
-      "description": "The bin at the production floor staged material is put into, and consumed from as orders start or complete."
-    },
-    {
-      "fieldname": "workstations",
-      "label": "Workstations",
+      "fieldname": "items",
+      "label": "Materials",
       "fieldtype": "Table",
-      "options": "PSA Workstation",
-      "description": "Operations running at these workstations are supplied through this PSA."
-    },
-    {
-      "fieldname": "deconsolidation_work_center",
-      "label": "Deconsolidation Work Center",
-      "fieldtype": "Link",
-      "options": "Work Center",
-      "description": "Optional: material picked in several areas is collected here before it moves to the supply bin."
-    },
-    {
-      "fieldname": "active",
-      "label": "Active",
-      "fieldtype": "Check",
-      "default": 1,
-      "in_list_view": 1
+      "options": "Production Material Request Item"
     }
   ],
   "sort_field": "modified",
@@ -186,6 +190,5 @@
       "print": 1
     }
   ],
-  "autoname": "format:{warehouse}-{psa_code}",
-  "title_field": "psa_name"
+  "autoname": "PMR-.#####"
 }

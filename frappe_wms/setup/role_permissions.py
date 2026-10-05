@@ -28,7 +28,7 @@ EXECUTION = [
     "WMS Exception Code", "WMS Print Spool", "WMS Resource", "WMS Resource Group", "WMS Task Difference",
     "Handling Unit", "Handling Unit Event", "Goods Receipt", "Inbound Delivery", "WMS Batch Characteristic Value",
     "WMS Physical Inventory Count", "WMS Posting Change", "WMS Quality Inspection", "WMS Stock Balance", "WMS Stock Ledger Entry",
-    "Goods Issue", "Outbound Delivery", "Packing Order", "Stock Allocation", "VAS Order", "WMS Wave", "WMS Shipment",
+    "Goods Issue", "Production Material Request", "Outbound Delivery", "Packing Order", "Stock Allocation", "VAS Order", "WMS Wave", "WMS Shipment",
     "WMS Dock Appointment",
 ]
 # Customizing: readable by every WMS role, maintained by WMS Process Engineer.

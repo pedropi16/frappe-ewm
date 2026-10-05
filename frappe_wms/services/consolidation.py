@@ -286,15 +286,8 @@ def update_consolidation_progress(task, qty):
             line.status = "Deconsolidated"
 
     statuses = [l.status for l in group.lines]
-    delivered = False
     if statuses and all(s in LINE_DONE_STATUSES for s in statuses):
         group.gather_status = "Fully Gathered"
-        if group.material_request and group.status != "Completed":
-            # Production supply: the set on its HU in the supply bin is the delivery - no split to destinations follows.
-            group.status = "Completed"
-            group.completed_at = now_datetime()
-            group.completed_by = frappe.session.user
-            delivered = True
     elif any(s in LINE_DONE_STATUSES for s in statuses):
         group.gather_status = "Partially Gathered"
     if statuses and all(s == "Deconsolidated" for s in statuses):
@@ -302,9 +295,6 @@ def update_consolidation_progress(task, qty):
         group.completed_at = now_datetime()
         group.completed_by = frappe.session.user
     group.save(ignore_permissions=True)
-    if delivered:
-        from frappe_wms.services.production_supply import on_group_gathered
-        on_group_gathered(group)
 
 
 def cancel_consolidation_lines_for_allocations(allocation_names):

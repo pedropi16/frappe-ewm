@@ -10,9 +10,6 @@
   "field_order": [
     "warehouse",
     "staging_bin",
-    "production_supply_area",
-    "material_request",
-    "deconsolidation_bin",
     "target_hu",
     "priority",
     "status",
@@ -95,31 +92,6 @@
       "fieldtype": "Link",
       "options": "User",
       "read_only": 1
-    },
-    {
-      "fieldname": "production_supply_area",
-      "label": "Production Supply Area",
-      "fieldtype": "Link",
-      "options": "Production Supply Area",
-      "read_only": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "material_request",
-      "label": "Material Request",
-      "fieldtype": "Link",
-      "options": "Material Request",
-      "read_only": 1,
-      "in_standard_filter": 1,
-      "description": "Set when this group delivers one Material Request's material to a Production Supply Area."
-    },
-    {
-      "fieldname": "deconsolidation_bin",
-      "label": "Deconsolidation Location",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "read_only": 1,
-      "description": "The location of the deconsolidation work center collecting this Material Request's material."
     }
   ],
   "autoname": "CONSOL-.########",

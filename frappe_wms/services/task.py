@@ -396,6 +396,8 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
             if already_confirmed > 0: advance_to_next_step(task)  # nothing moved: no successor step with quantity 0
             _update_request(task.warehouse_request)
             _release_short_pick_reservation(task, original_planned - revised_quantity)
+            from frappe_wms.services.production_supply import on_staging_short
+            on_staging_short(task, original_planned - revised_quantity)
             # Only relocate the HU if this task actually moved real, ledger-backed stock
             # (already_confirmed > 0 via an earlier confirm_task call) - closing a task that
             # denied its full quantity with nothing ever confirmed has no stock movement to
@@ -599,6 +601,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if fully_confirmed: advance_to_next_step(task)
     _update_request(task.warehouse_request)
     _update_allocations(task, posted_qty)
+    from frappe_wms.services.production_supply import on_staging_confirmed
+    on_staging_confirmed(task, posted_qty)
     if task.consolidation_group_line:
         from frappe_wms.services.consolidation import update_consolidation_progress
         update_consolidation_progress(task, posted_qty)
@@ -771,9 +775,6 @@ def _update_request(name):
         if request.reference_doctype == "Work Order":
             from frappe_wms.services.erp_sync_queue import dispatch
             dispatch("work_order_transfer", request)
-        elif request.reference_doctype == "Material Request":
-            from frappe_wms.services.production_supply import on_request_completed
-            on_request_completed(request)
 
 def _relocate_hu_for_task(task, destination_hu=None):
     # An explicit "no HU" (see _UNPACK) means only the stock moved, not a container - the source

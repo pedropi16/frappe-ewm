@@ -67,18 +67,7 @@ class TestProductionSupply(IntegrationTestCase):
         if not frappe.db.exists("Handling Unit Type", "TEST-PSUP-PALLET"):
             frappe.get_doc({"doctype": "Handling Unit Type", "hu_type_code": "TEST-PSUP-PALLET", "hu_type_name": "Test PSup Pallet"}).insert(ignore_permissions=True)
 
-    def _second_rm(self):
-        rm2 = "WMS-TEST-PSUP-RM2"
-        if not frappe.db.exists("Item", rm2):
-            frappe.get_doc({"doctype": "Item", "item_code": rm2, "item_name": "PSUP RM2", "item_group": frappe.get_all("Item Group", limit=1, pluck="name")[0],
-                "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
-        if not frappe.db.exists("WMS Product", {"item": rm2}):
-            frappe.get_doc({"doctype": "WMS Product", "item": rm2, "stock_uom": self.uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
-        if not frappe.db.exists("WMS Product Warehouse", f"{self.warehouse}-{rm2}"):
-            frappe.get_doc({"doctype": "WMS Product Warehouse", "item": rm2, "warehouse": self.warehouse, "preferred_storage_type": f"{self.warehouse}-SRC", "active": 1}).insert(ignore_permissions=True)
-        return rm2
-
-    def _seed_rm_stock(self, qty, item=None):
+    def _seed_rm_stock(self, qty):
         # A real Goods Receipt (not a raw ledger post) so ERPNext's own side also has
         # valuated stock for this item/warehouse - the Material Transfer for Manufacture
         # this test exercises later draws from ERPNext's stock ledger, not WMS's.
@@ -86,10 +75,10 @@ class TestProductionSupply(IntegrationTestCase):
         hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "TEST-PSUP-PALLET", "warehouse": self.warehouse, "current_bin": self.recv_bin, "status": "Open"})
         hu.insert(ignore_permissions=True)
         ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "supplier": supplier, "receiving_bin": self.recv_bin,
-            "items": [{"line_number": 1, "item": item or self.rm, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
+            "items": [{"line_number": 1, "item": self.rm, "expected_quantity": qty, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE"}]})
         ind.insert(ignore_permissions=True)
         gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.warehouse, "receiving_bin": self.recv_bin,
-            "items": [{"inbound_delivery_item": ind.items[0].name, "item": item or self.rm, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
+            "items": [{"inbound_delivery_item": ind.items[0].name, "item": self.rm, "quantity": qty, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]})
         gr.insert(ignore_permissions=True)
         gr.submit()
         requests = create_putaway_requests(gr.name)
@@ -153,51 +142,48 @@ class TestProductionSupply(IntegrationTestCase):
         balance = frappe.get_all("WMS Stock Balance", filters={"product": self.fg, "warehouse": self.warehouse}, fields=["quantity"])
         self.assertEqual(sum(b.quantity for b in balance), 5)
 
-    def _material_request(self, lines):
-        mr = frappe.get_doc({"doctype": "Material Request", "material_request_type": "Material Transfer", "company": self.company,
-            "schedule_date": nowdate(), "set_from_warehouse": self.wh.erpnext_warehouse,
-            "items": [{"item_code": item, "qty": q, "uom": self.uom, "stock_uom": self.uom, "conversion_factor": 1,
-                "warehouse": self.wip_warehouse, "from_warehouse": self.wh.erpnext_warehouse, "schedule_date": nowdate()} for item, q in lines]})
-        mr.insert(ignore_permissions=True)
-        mr.submit()
-        return mr
-
-    def test_material_request_is_supplied_through_a_psa_and_delivered_when_complete(self):
-        coll, supply = f"{self.warehouse}-PSA-COLL", f"{self.warehouse}-PSA-SUP"
-        for b in (coll, supply):
-            if not frappe.db.exists("Storage Bin", b):
-                frappe.get_doc({"doctype": "Storage Bin", "bin_code": b, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
-        wc = frappe.get_doc({"doctype": "Work Center", "warehouse": self.warehouse, "work_center_code": frappe.generate_hash(length=5), "work_center_name": "Test Deco",
-            "work_center_type": "Deconsolidation", "active": 1, "bin": coll, "locations": [{"storage_bin": coll}]}).insert(ignore_permissions=True)
-        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Test PSA",
-            "production_warehouse": self.wip_warehouse, "deconsolidation_work_center": wc.name, "supply_bin": supply}).insert(ignore_permissions=True)
-        self.addCleanup(lambda: psa.db_set("active", 0))  # an active PSA on the WIP warehouse reroutes Work Order staging for every other test
-        frappe.db.set_single_value("WMS Settings", "default_handling_unit_type", "TEST-PSUP-PALLET")
-        rm2 = self._second_rm()
+    def test_pmr_staging_single_and_cross_order_and_backflushed_consumption(self):
+        from frappe_wms.services import production_supply as ps
+        supply = f"{self.warehouse}-PSA-SUP"
+        if not frappe.db.exists("Storage Bin", supply):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": supply, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Test PSA", "supply_bin": supply}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))  # an active PSA turns Work Orders of this warehouse into PMRs
         self._seed_rm_stock(50)
-        self._seed_rm_stock(50, item=rm2)
 
-        mr = self._material_request([(self.rm, 6), (rm2, 4)])
-        requests = frappe.get_all("Warehouse Request", filters={"reference_doctype": "Material Request", "reference_name": mr.name}, pluck="name", order_by="creation asc")
-        self.assertEqual(len(requests), 2)
-        self.assertEqual({frappe.db.get_value("Warehouse Request", r, "destination_bin") for r in requests}, {coll})
-        group = frappe.db.get_value("Consolidation Group", {"material_request": mr.name})
-        self.assertEqual(frappe.db.get_value("Consolidation Group", group, "production_supply_area"), psa.name)
+        wo = self._submit_work_order(qty=10)  # 2 RM per FG
+        self.assertFalse(frappe.get_all("Warehouse Request", filters={"reference_doctype": "Work Order", "reference_name": wo.name}), "the PMR drives staging, not the direct pull")
+        pmr = frappe.get_doc("Production Material Request", {"work_order": wo.name})
+        item = pmr.items[0]
+        self.assertEqual((item.product, item.psa, item.required_quantity, pmr.status), (self.rm, psa.name, 20, "Open"))
 
-        task = frappe.get_all("Warehouse Task", filters={"warehouse_request": requests[0]}, pluck="name")[0]
-        pick_into_new_hu(task, confirmed_quantity=6)
-        self.assertFalse(frappe.get_all("Warehouse Task", filters={"task_type": "Consolidation", "consolidation_group_line": ["is", "set"]}),
-            "the order is not complete: nothing is delivered yet")
+        proposal = [r for r in ps.staging_overview(psa.name) if r.pmr_item == item.name][0]["proposals"][0]
+        self.assertEqual(proposal.storage_bin, self.source_bin)
+        source = {"source_bin": proposal.storage_bin, "source_hu": proposal.handling_unit, "batch_no": proposal.batch_no}
 
-        task = frappe.get_all("Warehouse Task", filters={"warehouse_request": requests[1]}, pluck="name")[0]
-        pick_into_new_hu(task, confirmed_quantity=4)
-        gather = frappe.get_all("Warehouse Task", filters={"task_type": "Consolidation", "destination_bin": supply}, fields=["name", "planned_quantity", "source_hu"], order_by="creation asc, name asc")
-        self.assertEqual(sorted(g.planned_quantity for g in gather), [4, 6])
-        for g in gather: confirm_task(g.name, scanned_source=g.source_hu, confirmed_quantity=g.planned_quantity)
+        single = ps.stage_items(psa.name, "Single Order", [{**source, "pmr_item": item.name, "quantity": 12}])
+        pick_into_new_hu(single[0]["task"], confirmed_quantity=12)
+        item.reload()
+        self.assertEqual((item.tasked_quantity, item.staged_quantity), (12, 12))
+        self.assertEqual(frappe.db.get_value("Production Material Request", pmr.name, "status"), "Partially Staged")
 
-        grp = frappe.get_doc("Consolidation Group", group)
-        self.assertEqual((grp.status, grp.gather_status), ("Completed", "Fully Gathered"))
-        self.assertEqual(frappe.db.get_value("Handling Unit", grp.target_hu, "current_bin"), supply)
-        for r in requests:
-            se = frappe.get_doc("Stock Entry", frappe.db.get_value("Warehouse Request", r, "erpnext_stock_entry"))
-            self.assertEqual((se.stock_entry_type, se.items[0].t_warehouse), ("Material Transfer", self.wip_warehouse))
+        cross = ps.stage_items(psa.name, "Cross Order", [{**source, "product": self.rm, "pmr_items": [item.name], "quantity": 8}])
+        pick_into_new_hu(cross[0]["task"], confirmed_quantity=8)
+        item.reload()
+        self.assertEqual((item.tasked_quantity, item.staged_quantity), (20, 12), "cross-order stock is pooled, not reserved")
+        self.assertEqual(frappe.db.get_value("Production Material Request", pmr.name, "status"), "Staged")
+        self.assertEqual(ps.pool_available(psa.name, self.rm), 8)
+        with self.assertRaises(frappe.ValidationError):
+            ps.stage_items(psa.name, "Single Order", [{**source, "pmr_item": item.name, "quantity": 1}])
+
+        real_se = frappe.get_all("Stock Entry", limit=1, pluck="name")[0]  # the ledger entry links to a real document
+        entry = lambda qty, n: frappe._dict(purpose="Manufacture", work_order=wo.name, name=real_se, items=[frappe._dict(  # noqa: E731
+            s_warehouse=self.wh.erpnext_warehouse, item_code=self.rm, qty=qty, transfer_qty=qty, name=f"row{n}", is_finished_item=0, is_scrap_item=0)])
+        ps.consume_from_stock_entry(entry(15, 1))  # 12 reserved + 3 from the pool
+        item.reload()
+        self.assertEqual(item.consumed_quantity, 15)
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 5)
+        with self.assertRaises(frappe.ValidationError):
+            ps.consume_from_stock_entry(entry(6, 2))
+        ps.consume_from_stock_entry(entry(5, 3))
+        self.assertEqual(frappe.db.get_value("Production Material Request", pmr.name, "status"), "Consumed")

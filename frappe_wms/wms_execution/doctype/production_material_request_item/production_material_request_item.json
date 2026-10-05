@@ -1,0 +1,91 @@
+{
+  "name": "Production Material Request Item",
+  "module": "WMS Execution",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "work_order_item",
+    "product",
+    "stock_uom",
+    "operation",
+    "psa",
+    "required_quantity",
+    "tasked_quantity",
+    "staged_quantity",
+    "consumed_quantity"
+  ],
+  "fields": [
+    {
+      "fieldname": "work_order_item",
+      "label": "Work Order Item",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "UOM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "read_only": 1
+    },
+    {
+      "fieldname": "operation",
+      "label": "Operation",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "psa",
+      "label": "Production Supply Area",
+      "fieldtype": "Link",
+      "options": "Production Supply Area",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "required_quantity",
+      "label": "Required",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "tasked_quantity",
+      "label": "Tasked",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "in_list_view": 1,
+      "description": "Quantity with staging tasks, single-order or cross-order."
+    },
+    {
+      "fieldname": "staged_quantity",
+      "label": "Staged (reserved)",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "in_list_view": 1,
+      "description": "Confirmed into the PSA by single-order staging: reserved to this item only."
+    },
+    {
+      "fieldname": "consumed_quantity",
+      "label": "Consumed",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

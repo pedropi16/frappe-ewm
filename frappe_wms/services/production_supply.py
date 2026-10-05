@@ -1,99 +1,256 @@
-"""Production supply through a Production Supply Area (PSA), the SAP EWM way: a Material Request (the production
-material request) pulls material from the warehouse into one free location of the PSA's deconsolidation Work Center -
-one location per request - and once every line has arrived a Consolidation Group gathers it onto one Handling Unit in
-the PSA's supply bin: the delivery to production, where it is consumed as orders start or complete.
+"""Production supply the SAP EWM way: one warehouse, Production Supply Areas (PSA) inside it, and a
+Production Material Request (PMR) per production order listing the materials it needs.
 
-Reuses the replenishment pipeline (storage -> location) and the Consolidation Group (location -> supply bin); this
-module only wires them to a Material Request.
+* PMR: created when the Work Order is submitted (the CO01 analogue), one item per required material, each
+  resolved to the PSA of its operation's workstation.
+* Staging: stock is moved from a chosen storage bin into the PSA's supply bin by ordinary Warehouse Requests/
+  Tasks (the Replenish pipeline). Single-order staging references one PMR item: the staged quantity is reserved
+  to it and only it can consume it. Cross-order staging serves several PMR items with one movement: the stock
+  sits in the PSA unreserved and any open PMR for that product can consume it.
+* Consumption: backflushed from ERPNext's Manufacture / Material Consumption entry for the Work Order; the
+  supply bin's stock is booked out, never more than was staged for that order (plus the unreserved pool).
+
+The reservation is bookkeeping on the PMR item, not a stock dimension: a PSA bin may hold several orders' stock.
 """
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import flt, getdate
 
-from frappe_wms.services.determination import _preferred_storage_type
-from frappe_wms.services.replenishment import _create_replenishment_request
+from frappe_wms.services.determination import determine_process_type
+from frappe_wms.services.stock import post_entries
+from frappe_wms.utils import require_role
 
-
-def resolve_psa(wms_warehouse, production_warehouse):
-    return frappe.db.get_value("Production Supply Area", {"warehouse": wms_warehouse, "production_warehouse": production_warehouse, "active": 1},
-        ["name", "deconsolidation_work_center", "supply_bin"], as_dict=True)
-
-
-def psa_for_production_warehouse(production_warehouse):
-    return frappe.db.exists("Production Supply Area", {"production_warehouse": production_warehouse, "active": 1})
+OPEN_STATUSES = ("Open", "Partially Staged", "Staged", "Partially Consumed")
+CONSUMING_PURPOSES = ("Manufacture", "Material Consumption for Manufacture")
+STAGE_ROLES = ("WMS Operator", "WMS Supervisor", "WMS Picker")
 
 
-def _free_location(work_center):
-    # Locked so two Material Requests submitted at once never get the same location. Free = holds no stock and is
-    # not the collection point of another open group.
-    frappe.db.get_value("Work Center", work_center, "name", for_update=True)
-    taken = set(frappe.get_all("Consolidation Group", filters={"status": ["in", ["Draft", "Open"]], "deconsolidation_bin": ["is", "set"]}, pluck="deconsolidation_bin"))
-    for loc in frappe.get_all("Work Center Location", filters={"parent": work_center, "parenttype": "Work Center"}, pluck="storage_bin", order_by="idx asc"):
-        if loc in taken or not frappe.db.get_value("Storage Bin", loc, "active"): continue
-        if frappe.db.exists("WMS Stock Balance", {"storage_bin": loc, "quantity": [">", 0]}): continue
-        return loc
-    return None
+# ------------------------------------------------------------------ PMR from the Work Order
+
+def _wms_warehouse(erpnext_warehouse):
+    return frappe.db.get_value("WMS Warehouse", {"erpnext_warehouse": erpnext_warehouse}, "name") if erpnext_warehouse else None
 
 
-def _group_for(material_request, psa, warehouse):
-    """The order's group, with its location in the deconsolidation work center (assigned once, on first use)."""
-    name = frappe.db.get_value("Consolidation Group", {"material_request": material_request, "status": ["!=", "Cancelled"]})
-    if name: return name, frappe.db.get_value("Consolidation Group", name, "deconsolidation_bin")
-    location = _free_location(psa.deconsolidation_work_center)
-    if not location: frappe.throw(_("No free location in deconsolidation work center {0}").format(psa.deconsolidation_work_center))
-    group = frappe.get_doc({"doctype": "Consolidation Group", "warehouse": warehouse, "staging_bin": psa.supply_bin, "priority": "High",
-        "status": "Draft", "gather_status": "Not Started", "production_supply_area": psa.name, "material_request": material_request, "deconsolidation_bin": location})
-    group.insert(ignore_permissions=True)
-    return group.name, location
+def resolve_psa(warehouse, workstation=None):
+    """The PSA that supplies a workstation; with none given (or listed), the warehouse's only active PSA."""
+    if workstation:
+        for parent in frappe.get_all("PSA Workstation", filters={"workstation": workstation, "parenttype": "Production Supply Area"}, pluck="parent"):
+            if frappe.db.get_value("Production Supply Area", parent, ["warehouse", "active"]) == (warehouse, 1): return parent
+    only = frappe.get_all("Production Supply Area", filters={"warehouse": warehouse, "active": 1}, pluck="name", limit=2)
+    return only[0] if len(only) == 1 else None
 
 
-def on_material_request_submit(doc):
-    """A Material Transfer into a PSA's production warehouse: request each line from the WMS-managed source warehouse
-    into the order's location in the PSA's deconsolidation work center. Best effort like Work Order staging - a line with no stock or config is noted on
-    the request instead of blocking its submission."""
-    if doc.material_request_type != "Material Transfer": return
-    for row in doc.items:
-        source = row.get("from_warehouse") or doc.get("set_from_warehouse")
-        wms_warehouse = frappe.db.get_value("WMS Warehouse", {"erpnext_warehouse": source}, "name") if source else None
-        psa = resolve_psa(wms_warehouse, row.warehouse) if wms_warehouse else None
-        if not psa or not frappe.db.exists("WMS Product", {"item": row.item_code, "warehouse_managed": 1}): continue
-        storage_type = _preferred_storage_type(row.item_code, wms_warehouse)
-        try:
-            if not storage_type: frappe.throw(_("{0} has no preferred storage type in {1}").format(row.item_code, wms_warehouse))
-            _, location = _group_for(doc.name, psa, wms_warehouse)
-            _create_replenishment_request(wms_warehouse, row.item_code, location, "AVAILABLE", flt(row.stock_qty) or flt(row.qty), storage_type,
-                reference_doctype="Material Request", reference_name=doc.name, reference_line=row.name, priority="High")
-        except frappe.ValidationError as e:
-            frappe.clear_messages()
-            doc.add_comment("Comment", _("Not supplied by the WMS for {0}: {1}").format(row.item_code, e))
+def create_pmr(wo):
+    warehouse, items = None, []
+    workstations = {o.operation: o.workstation for o in wo.get("operations") or []}
+    default_ws = next(iter(workstations.values()), None)
+    for row in wo.required_items:
+        row_warehouse = _wms_warehouse(row.source_warehouse or wo.source_warehouse)
+        if not row_warehouse or flt(row.required_qty) <= 0: continue
+        if not frappe.db.exists("WMS Product", {"item": row.item_code, "warehouse_managed": 1}): continue
+        warehouse = warehouse or row_warehouse
+        items.append({"work_order_item": row.name, "product": row.item_code, "stock_uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
+            "operation": row.get("operation"), "psa": resolve_psa(row_warehouse, workstations.get(row.get("operation")) or default_ws), "required_quantity": flt(row.required_qty)})
+    if not items or not frappe.db.exists("Production Supply Area", {"warehouse": warehouse, "active": 1}): return None  # no PSA: the Work Order is staged directly (events/work_order)
+    pmr = frappe.get_doc({"doctype": "Production Material Request", "work_order": wo.name, "warehouse": warehouse, "production_item": wo.production_item,
+        "qty": wo.qty, "planned_date": getdate(wo.planned_start_date) if wo.get("planned_start_date") else None, "status": "Open", "items": items})
+    pmr.insert(ignore_permissions=True)
+    return pmr.name
 
 
-def on_request_completed(request):
-    """A supply request reached the order's location. Join it to the order's group; when it was the last open one,
-    gather the whole set onto one HU in the supply bin."""
-    from frappe_wms.services.consolidation import _already_joined, add_consolidation_line, gather_consolidation_group, set_consolidation_target_hu
-    group_name = frappe.db.get_value("Consolidation Group", {"material_request": request.reference_name, "status": ["!=", "Cancelled"]})
-    if not group_name or _already_joined("Warehouse Request", request.name): return
-    group = frappe.get_doc("Consolidation Group", group_name, for_update=True)
-    line = add_consolidation_line(group.name, "Warehouse Request", request.name)
-    supply_bin = frappe.db.get_value("Production Supply Area", group.production_supply_area, "supply_bin")
-    frappe.db.set_value("Consolidation Group Line", line, "final_destination_bin", supply_bin)
-    open_requests = frappe.db.count("Warehouse Request", {"reference_doctype": "Material Request", "reference_name": request.reference_name,
-        "status": ["not in", ["Completed", "Cancelled"]]})
-    if open_requests: return  # the order is not complete yet: what has arrived waits in its location
-    mr = frappe.get_doc("Material Request", request.reference_name)
-    try:
-        # A fresh pallet/carton for the finished set; its type falls back to WMS Settings' default.
-        set_consolidation_target_hu(group.name, frappe.generate_hash(length=10))
-        gather_consolidation_group(group.name)
-    except frappe.ValidationError as e:
-        frappe.clear_messages()
-        mr.add_comment("Comment", _("Complete, but the delivery to the production area could not be started: {0}. Gather the Consolidation Group {1} manually.").format(e, group.name))
+def cancel_pmr(wo):
+    for name in frappe.get_all("Production Material Request", filters={"work_order": wo.name, "status": ["!=", "Cancelled"]}, pluck="name"):
+        frappe.db.set_value("Production Material Request", name, "status", "Cancelled")
 
 
-def on_group_gathered(group):
-    """The set is on its HU in the supply bin: delivered. Post the ERPNext transfer and close the group."""
-    if not group.material_request: return
-    from frappe_wms.services.erp_sync_queue import dispatch
-    for request_name in {l.reference_name for l in group.lines if l.reference_doctype == "Warehouse Request" and l.status != "Cancelled"}:
-        dispatch("material_request_transfer", frappe.get_doc("Warehouse Request", request_name))
+# ------------------------------------------------------------------ reservation arithmetic
+
+def _supply_bin(psa):
+    return frappe.db.get_value("Production Supply Area", psa, "supply_bin")
+
+
+def _psa_stock(psa, product, lock=False):
+    rows = frappe.db.sql("select quantity from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0" + (" for update" if lock else ""), (_supply_bin(psa), product))
+    return sum(flt(r[0]) for r in rows)
+
+
+def _reserved_outstanding(psa, product):
+    row = frappe.db.sql("""select coalesce(sum(greatest(i.staged_quantity - i.consumed_quantity, 0)), 0) from `tabProduction Material Request Item` i
+        join `tabProduction Material Request` p on p.name = i.parent where i.psa=%s and i.product=%s and p.status in %s""", (psa, product, OPEN_STATUSES))
+    return flt(row[0][0])
+
+
+def pool_available(psa, product, lock=False):
+    """Stock in the PSA that no single order reserved - what cross-order staging put there."""
+    return max(_psa_stock(psa, product, lock) - _reserved_outstanding(psa, product), 0)
+
+
+def _refresh_status(pmr_name):
+    items = frappe.db.sql("select required_quantity, tasked_quantity, consumed_quantity from `tabProduction Material Request Item` where parent=%s", pmr_name, as_dict=True)
+    if not items or frappe.db.get_value("Production Material Request", pmr_name, "status") in ("Closed", "Cancelled"): return
+    done = lambda f: all(flt(i[f]) >= flt(i.required_quantity) - 0.000001 for i in items)  # noqa: E731
+    if done("consumed_quantity"): status = "Consumed"
+    elif any(flt(i.consumed_quantity) > 0 for i in items): status = "Partially Consumed"
+    elif done("tasked_quantity"): status = "Staged"  # fully tasked; single-order items also count as reserved once confirmed
+    elif any(flt(i.tasked_quantity) > 0 for i in items): status = "Partially Staged"
+    else: status = "Open"
+    frappe.db.set_value("Production Material Request", pmr_name, "status", status)
+
+
+def close_pmr(pmr_name):
+    """Production is done with the order: what was staged for it and not consumed is released (to be moved back by an ordinary task)."""
+    require_role("WMS Supervisor")
+    frappe.db.set_value("Production Material Request", pmr_name, "status", "Closed")
+
+
+# ------------------------------------------------------------------ staging (the app)
+
+def _source_lines(warehouse, product, psa, limit=5):
+    """Stock lines the material could be staged from, oldest first: storage bins only, not the PSA itself."""
+    return frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.available_quantity from `tabWMS Stock Balance` b
+        join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type
+        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin!=%s
+        and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc limit %s""",
+        (warehouse, product, _supply_bin(psa), limit), as_dict=True)
+
+
+def staging_overview(psa):
+    """Open PMR items of a PSA with source proposals - the data behind the staging app."""
+    require_role(*STAGE_ROLES)
+    warehouse = frappe.db.get_value("Production Supply Area", psa, "warehouse")
+    rows = frappe.db.sql("""select i.name as pmr_item, p.name as pmr, p.work_order, p.planned_date, i.product, i.operation, i.required_quantity, i.tasked_quantity,
+        i.staged_quantity, i.consumed_quantity from `tabProduction Material Request Item` i join `tabProduction Material Request` p on p.name = i.parent
+        where i.psa=%s and p.status in %s and i.required_quantity > i.tasked_quantity order by p.planned_date asc, p.creation asc, i.idx asc""", (psa, OPEN_STATUSES), as_dict=True)
+    for r in rows:
+        r["open_quantity"] = flt(r.required_quantity) - flt(r.tasked_quantity)
+        r["proposals"] = _source_lines(warehouse, r.product, psa)
+    return rows
+
+
+def _create_staging_request(psa, product, source, quantity, reference_doctype, reference_name, reference_line):
+    from frappe_wms.services.task import create_tasks_for_request
+    warehouse, supply_bin = frappe.db.get_value("Production Supply Area", psa, ["warehouse", "supply_bin"])
+    blank = lambda v: v or ["in", ["", None]]  # noqa: E731
+    available = frappe.db.get_value("WMS Stock Balance", {"warehouse": warehouse, "product": product, "storage_bin": source["source_bin"], "handling_unit": blank(source.get("source_hu")),
+        "batch_no": blank(source.get("batch_no")), "serial_no": blank(source.get("serial_no")), "stock_type": "AVAILABLE"}, "available_quantity", for_update=True)
+    if flt(available) < quantity - 0.000001:
+        frappe.throw(_("Only {0} of {1} is available in {2}").format(flt(available), product, source["source_bin"]))
+    request = frappe.get_doc({"doctype": "Warehouse Request", "request_type": "Replenish", "warehouse": warehouse, "product": product, "requested_quantity": quantity,
+        "stock_uom": frappe.db.get_value("Item", product, "stock_uom"), "source_bin": source["source_bin"], "source_hu": source.get("source_hu") or None,
+        "batch_no": source.get("batch_no") or None, "serial_no": source.get("serial_no") or None, "destination_bin": supply_bin, "stock_type": "AVAILABLE",
+        "reference_doctype": reference_doctype, "reference_name": reference_name, "reference_line": reference_line,
+        "process_type": determine_process_type(warehouse, "Replenish", item=product, stock_type="AVAILABLE", default="REPLENISH"), "priority": "High", "status": "Open"})
+    request.insert(ignore_permissions=True)
+    return request.name, create_tasks_for_request(request.name)
+
+
+def stage_items(psa, method, lines):
+    """Create the staging tasks. lines: [{source_bin, source_hu?, batch_no?, serial_no?, quantity, pmr_item}] for "Single Order"
+    (the stock is reserved to that PMR item); [{..., product, pmr_items: [...]}] for "Cross Order" (pooled, any open PMR of the product)."""
+    require_role(*STAGE_ROLES)
+    if method not in ("Single Order", "Cross Order"): frappe.throw(_("Unknown staging method {0}").format(method))
+    created = []
+    for line in lines:
+        quantity = flt(line["quantity"])
+        if quantity <= 0: frappe.throw(_("Quantity must be greater than zero"))
+        names = [line["pmr_item"]] if method == "Single Order" else list(line["pmr_items"])
+        items = [frappe.db.get_value("Production Material Request Item", n, ["name", "parent", "product", "psa", "required_quantity", "tasked_quantity"], as_dict=True, for_update=True) for n in names]
+        if not items or any(not i for i in items): frappe.throw(_("Production Material Request item not found"))
+        if {i.psa for i in items} != {psa} or len({i.product for i in items}) != 1: frappe.throw(_("All items must be for the same product and Production Supply Area {0}").format(psa))
+        for parent in {i.parent for i in items}:
+            if frappe.db.get_value("Production Material Request", parent, "status") not in OPEN_STATUSES: frappe.throw(_("{0} is not open").format(parent))
+        if quantity > sum(flt(i.required_quantity) - flt(i.tasked_quantity) for i in items) + 0.000001: frappe.throw(_("More than is still open on the selected items"))
+        if method == "Single Order":
+            ref = ("Production Material Request", items[0].parent, items[0].name)
+        else:
+            ref = ("Production Supply Area", psa, None)
+        request, task = _create_staging_request(psa, items[0].product, line, quantity, *ref)
+        left = quantity
+        for i in items:
+            take = min(left, flt(i.required_quantity) - flt(i.tasked_quantity))
+            if take > 0:
+                frappe.db.sql("update `tabProduction Material Request Item` set tasked_quantity=tasked_quantity+%s where name=%s", (take, i.name))
+                left -= take
+        for parent in {i.parent for i in items}: _refresh_status(parent)
+        created.append({"warehouse_request": request, "task": task})
+    return created
+
+
+def on_staging_confirmed(task, quantity):
+    """A staging task put stock into the PSA: reserve it to its PMR item (single-order); cross-order stock stays in the pool."""
+    if not task.warehouse_request: return
+    ref = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
+    if ref and ref.reference_doctype == "Production Material Request" and ref.reference_line:
+        frappe.db.sql("update `tabProduction Material Request Item` set staged_quantity=staged_quantity+%s where name=%s", (flt(quantity), ref.reference_line))
+
+
+def on_staging_short(task, shortfall):
+    """A staging task was closed short: that quantity is open for staging again."""
+    if not task.warehouse_request or flt(shortfall) <= 0: return
+    ref = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
+    if not ref: return
+    if ref.reference_doctype == "Production Material Request" and ref.reference_line:
+        frappe.db.sql("update `tabProduction Material Request Item` set tasked_quantity=greatest(tasked_quantity-%s, 0) where name=%s", (flt(shortfall), ref.reference_line))
+        _refresh_status(ref.reference_name)
+    elif ref.reference_doctype == "Production Supply Area":
+        left = flt(shortfall)
+        for i in frappe.db.sql("""select i.name, i.parent, i.tasked_quantity - i.staged_quantity as free from `tabProduction Material Request Item` i where i.psa=%s and i.product=%s
+                and i.tasked_quantity > i.staged_quantity order by i.idx desc""", (ref.reference_name, task.product), as_dict=True):
+            take = min(left, flt(i.free))
+            frappe.db.sql("update `tabProduction Material Request Item` set tasked_quantity=tasked_quantity-%s where name=%s", (take, i.name))
+            _refresh_status(i.parent)
+            left -= take
+            if left <= 0: break
+
+
+# ------------------------------------------------------------------ consumption (backflush from ERPNext)
+
+def _consume_line(pmr_name, product, quantity, reference_doctype, reference_name, key):
+    pmr = frappe.get_doc("Production Material Request", pmr_name, for_update=True)
+    items = [i for i in pmr.items if i.product == product and i.psa]
+    if not items: frappe.throw(_("{0} is not on Production Material Request {1}").format(product, pmr_name))
+    left = flt(quantity)
+    for n, i in enumerate(items):
+        want = left if n == len(items) - 1 else min(left, max(flt(i.required_quantity) - flt(i.consumed_quantity), 0))
+        if want <= 0: continue
+        own = max(flt(i.staged_quantity) - flt(i.consumed_quantity), 0)
+        pool = pool_available(i.psa, product, lock=True)
+        if want > own + pool + 0.000001:
+            frappe.throw(_("Only {0} {1} is staged in {2} for {3}; consume less or stage more first").format(own + pool, product, i.psa, pmr_name))
+        _book_out(i.psa, product, want, reference_doctype, reference_name, f"{key}:{i.name}")
+        frappe.db.sql("update `tabProduction Material Request Item` set consumed_quantity=consumed_quantity+%s where name=%s", (want, i.name))
+        left -= want
+    _refresh_status(pmr_name)
+
+
+def _book_out(psa, product, quantity, reference_doctype, reference_name, key):
+    warehouse, supply_bin = frappe.db.get_value("Production Supply Area", psa, ["warehouse", "supply_bin"])
+    balances = frappe.db.sql("""select handling_unit, batch_no, serial_no, stock_type, stock_uom, quantity from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0
+        order by first_receipt_date asc, name asc for update""", (supply_bin, product), as_dict=True)
+    left, entries = flt(quantity), []
+    for b in balances:
+        take = min(left, flt(b.quantity))
+        if b.serial_no: take = min(take, 1)
+        if take <= 0: continue
+        entries.append({"warehouse": warehouse, "product": product, "batch_no": b.batch_no, "serial_no": b.serial_no, "handling_unit": b.handling_unit, "storage_bin": supply_bin,
+            "stock_type": b.stock_type, "quantity": -take, "stock_uom": b.stock_uom, "movement_type": "601"})
+        left -= take
+        if left <= 0: break
+    if left > 0.000001: frappe.throw(_("Not enough {0} in {1}").format(product, supply_bin))
+    for seq, e in enumerate(entries, 1): post_entries([e], reference_doctype, reference_name, f"{key}:{seq}")
+
+
+def consume_from_stock_entry(se, method=None):
+    """ERPNext booked the consumption of a Work Order's materials: book the same out of the PSA."""
+    if se.get("purpose") not in CONSUMING_PURPOSES or not se.get("work_order"): return
+    pmr = frappe.db.get_value("Production Material Request", {"work_order": se.work_order, "status": ["in", OPEN_STATUSES]})
+    if not pmr: return
+    for row in se.get("items"):
+        if not row.s_warehouse or row.get("is_finished_item") or row.get("is_scrap_item") or not _wms_warehouse(row.s_warehouse): continue
+        _consume_line(pmr, row.item_code, flt(row.transfer_qty) or flt(row.qty), "Stock Entry", se.name, f"PMRC:{se.name}:{row.name}")
+
+
+def stock_entry_is_pmr_consumption(se):
+    """True for a consumption entry of a Work Order with a PMR: its WMS-managed source warehouse is the PSA's, fed by staging."""
+    return se.get("purpose") in CONSUMING_PURPOSES and bool(se.get("work_order")) and bool(
+        frappe.db.exists("Production Material Request", {"work_order": se.work_order, "status": ["in", OPEN_STATUSES]}))

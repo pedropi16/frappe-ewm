@@ -62,10 +62,6 @@ def _work_order_transfer(doc):
     erpnext_sync.sync_work_order_material_transfer(doc)
 
 
-def _material_request_transfer(doc):
-    erpnext_sync.sync_material_request_transfer(doc)
-
-
 def _over_difference(doc):
     if doc.get("erpnext_stock_entry"): return
     erpnext_sync.sync_over_difference(doc)
@@ -92,7 +88,6 @@ OPERATIONS = {
     "quality_inspection": _quality_inspection,
     "kitting_order": _kitting_order,
     "work_order_transfer": _work_order_transfer,
-    "material_request_transfer": _material_request_transfer,
     "over_difference": _over_difference,
     "count_rows": _count_rows,
 }

@@ -713,31 +713,31 @@ to Destinations once fully gathered. Creating a new Consolidation Group
 itself (choosing the warehouse and staging bin) is a desk/API action, not RF
 — the same "supervisor plans, operator executes" split as Kitting Order.
 
-## Production Supply Area (PSA)
+## Production Supply Area (PSA) and Production Material Request (PMR)
 
-Production supply the SAP EWM way, driven by a **Material Request** (the production material request) instead of the
-Work Order itself.
+Production supply the SAP EWM way: one warehouse, Production Supply Areas inside it, and a **Production Material
+Request** per production order listing the materials it needs (`services/production_supply.py`).
 
-A **Production Supply Area** (`warehouse`, `production_warehouse`, `deconsolidation_work_center`, `supply_bin`) ties an
-ERPNext production warehouse (e.g. Work In Progress) to a **Deconsolidation Work Center** - a `Work Center` of type
-Deconsolidation with a list of **Locations** (bins) - and to the **supply bin** at the production floor.
+* **PSA** - `warehouse`, `supply_bin`, the `workstations` it serves, an optional `deconsolidation_work_center` (a
+  `Work Center` of type Deconsolidation with a **Locations** list; the optional collection hop is not wired into
+  staging yet). A warehouse with an active PSA works with PMRs; one without keeps the direct Work Order staging.
+* **PMR** - created when the ERPNext Work Order is submitted: one item per required WMS-managed material, with the PSA
+  of its operation's workstation (the warehouse's only PSA when there is just one). Items track `required`,
+  `tasked`, `staged` (reserved) and `consumed` quantities; the PMR status follows them.
+* **Staging** (API `frappe_wms.api.production_supply`: `staging_overview`, `stage_items`) - the open PMR items of a PSA
+  with source proposals (oldest stock first); pick the storage bin the stock is taken from and create the tasks.
+  Plain Replenish requests/tasks move the stock into the supply bin.
+  * *Single Order*: the task references one PMR item; the staged quantity is reserved to it and only it can consume it.
+  * *Cross Order*: one movement serves several PMR items; the stock sits in the PSA unreserved (the pool) and any open
+    PMR for that product can consume it.
+* **Consumption** - backflushed from ERPNext: submitting a Manufacture / Material Consumption for Manufacture Stock
+  Entry for the Work Order books the same quantity out of the supply bin (reserved quantity first, then the pool) and
+  refuses more than was staged. The stock guard lets that entry's source warehouse through.
+* The reservation is bookkeeping on the PMR item, not a stock dimension: a PSA bin can hold several orders' stock.
+* `close_pmr` (Supervisor) releases what was staged for an order and not consumed; moving it back is an ordinary task.
 
-1. A submitted **Material Request** (Material Transfer) into a PSA's production warehouse takes one free location of
-   the work center (no stock, not another open request's) and raises, per line, a replenishment request from the
-   WMS-managed source warehouse into it (`services/production_supply.py`). A **Consolidation Group** tracks the request
-   (`production_supply_area`, `material_request`, `deconsolidation_bin`). A line that cannot be supplied (no stock, no
-   preferred storage type, no free location) is noted as a comment on the Material Request.
-2. Each request is picked and confirmed through the ordinary Task wizard. Until every line has arrived, the material
-   waits in its location.
-3. When the last line arrives the group gathers the whole set onto one new Handling Unit in the supply bin (the move to
-   production); once gathered the group is Completed, the location is free again, and an ERPNext **Material Transfer**
-   is posted per request, linked to the Material Request line.
-
-A Work Order whose WIP warehouse belongs to a PSA is no longer staged directly on submit - its Material Request
-supplies it. Work Orders without a PSA behave as before.
-
-Not built yet: picking onto trolleys / mixed pallets that carry several orders with automatic deconsolidation into the
-locations, and consumption of the supply bin as orders start or complete.
+Not built yet: the staging screen itself (Monitor / RF), the optional deconsolidation hop, returning unused material,
+reversal of a cancelled consumption entry.
 
 ## Modules
 
