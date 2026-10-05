@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js?v=a5c8c6a993";
-import * as Store from "./store.js?v=a5c8c6a993";
-import { el } from "./render.js?v=a5c8c6a993";
+import * as Schema from "./schema.js?v=b1b5613c18";
+import * as Store from "./store.js?v=b1b5613c18";
+import { el } from "./render.js?v=b1b5613c18";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const svg = (tag, attrs = {}, children = []) => {
@@ -17,17 +17,18 @@ const BANDS = [
   { title: "CONFIGURATION", sub: "set up once - this is what a profile contains", lanes: [
     { title: "1 · Structure", sub: "what physically exists", kind: "config", items: [
       "WMS Warehouse", "Storage Type", "Storage Section", "Storage Bin", "Bin Type", "Activity Area",
-      "Work Center", "WMS Stock Type", "Handling Unit Type", "Packaging Material", "Packaging Spec" ] },
+      "Work Center", "WMS Stock Type", "Storage Group", "Handling Unit Type Group", "Handling Unit Type", "Packaging Material", "Packaging Spec", "Production Supply Area", "WMS Stock Owner" ] },
     { title: "2 · Building blocks", sub: "what a task is made of", kind: "config", items: [
       "WMS Settings", "WMS Movement Type", "Warehouse Process Type", "Storage Process",
-      "Storage Type Search Sequence", "WMS Exception Code", "WMS Number Range", "WMS HU Number Pool" ] },
+      "Storage Type Search Sequence", "WMS Exception Code", "WMS Block Reason", "WMS Usage Decision", "WMS Document Type", "WMS Number Range", "WMS HU Number Pool" ] },
     { title: "3 · Rules", sub: "how the system decides", kind: "config", items: [
       "Process Determination Rule", "Bin Determination Rule", "Removal Rule",
       "Warehouse Process Type Determination Rule", "WO Creation Rule", "Inspection Rule",
-      "Replenishment Rule", "Count Tolerance Group", "Cycle Count Rule", "WMS Print Determination Rule" ] },
+      "Replenishment Rule", "Count Tolerance Group", "Cycle Count Rule", "WMS Print Determination Rule",
+      "Putaway Control Indicator", "Stock Removal Control Indicator", "Storage Section Indicator", "Handling Indicator", "Layout Storage Control", "Production Supply Control Cycle" ] },
     { title: "4 · Execution & control", sub: "who does it, how it ships", kind: "config", items: [
       "WMS Route", "Warehouse Queue", "WMS Resource Group", "WMS Resource",
-      "Wave Template", "Labor Standard", "Billing Rate" ] },
+      "Wave Template", "Labor Standard", "Billing Rate", "PPF Action Profile", "WMS MFS Endpoint", "WMS MFS Telegram Type" ] },
     { title: "5 · ERPNext masters", sub: "already exist in ERPNext", kind: "erp", items: [
       "Company", "Warehouse", "Item", "Item Group", "Customer", "Supplier", "Print Format", "User" ] },
   ] },

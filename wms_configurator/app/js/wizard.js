@@ -1,14 +1,14 @@
-import * as Schema from "./schema.js?v=a5c8c6a993";
-import * as Store from "./store.js?v=a5c8c6a993";
-import { renderRecordForm, el } from "./render.js?v=a5c8c6a993";
-import { renderPresetPicker } from "./presets.js?v=a5c8c6a993";
-import { renderBinGenerator } from "./binpattern.js?v=a5c8c6a993";
-import { renderReviewStep } from "./review.js?v=a5c8c6a993";
-import { renderMapStep } from "./diagram.js?v=a5c8c6a993";
-import { renderRecordTable } from "./listview.js?v=a5c8c6a993";
-import * as ERP from "./erp.js?v=a5c8c6a993";
-import { previewPull, commitPull } from "./sitesync.js?v=a5c8c6a993";
-import { toast } from "./render.js?v=a5c8c6a993";
+import * as Schema from "./schema.js?v=b1b5613c18";
+import * as Store from "./store.js?v=b1b5613c18";
+import { renderRecordForm, el } from "./render.js?v=b1b5613c18";
+import { renderPresetPicker } from "./presets.js?v=b1b5613c18";
+import { renderBinGenerator } from "./binpattern.js?v=b1b5613c18";
+import { renderReviewStep } from "./review.js?v=b1b5613c18";
+import { renderMapStep } from "./diagram.js?v=b1b5613c18";
+import { renderRecordTable } from "./listview.js?v=b1b5613c18";
+import * as ERP from "./erp.js?v=b1b5613c18";
+import { previewPull, commitPull } from "./sitesync.js?v=b1b5613c18";
+import { toast } from "./render.js?v=b1b5613c18";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },
@@ -41,6 +41,10 @@ export const STEPS = [
     help: "The activity + movement-type combinations tasks are built from (unload, putaway, pick, stage, load, ...). The seeded set usually covers an MVP.",
   },
   {
+    id: "indicators", title: "Storage Groups & Indicators", doctypes: ["Storage Group", "Putaway Control Indicator", "Stock Removal Control Indicator", "Storage Section Indicator", "Handling Indicator", "Layout Storage Control"],
+    help: "Storage Groups subdivide a Storage Type (e.g. an aisle). The three control indicators are set on the product and pick the search sequence or section; Handling Indicators force a storage group or forbid unpacking. Layout Storage Control routes goods through an intermediate group before the final bin.",
+  },
+  {
     id: "determination", title: "Determination Rules", doctypes: ["Bin Determination Rule", "Process Determination Rule", "Storage Type Search Sequence"],
     help: "Bin Determination Rule needs at least one fallback per (warehouse, activity) with no item/stock-type filters so determination never dead-ends. Process Determination Rule needs at least one fallback per (warehouse, document type).",
   },
@@ -57,7 +61,7 @@ export const STEPS = [
     help: "Both optional. Process Type Determination Rule re-routes an activity to a different Warehouse Process Type by item/priority/warehouse. WO Creation Rule caps tasks per Warehouse Order.",
   },
   {
-    id: "inspection", title: "Inspection & Exceptions", doctypes: ["Inspection Rule", "WMS Exception Code"],
+    id: "inspection", title: "Inspection & Exceptions", doctypes: ["Inspection Rule", "WMS Exception Code", "WMS Usage Decision", "WMS Block Reason"],
     help: "Inspection Rule auto-routes matching Goods Receipt rows to QUALITY. Exception Codes are the reasons operators can raise on a task — the presets include a standard set.",
   },
   {
@@ -73,7 +77,7 @@ export const STEPS = [
     help: "The seeded global fallback (HU-########, SHIP-########) works out of the box — add a narrower range only where a different prefix/window is needed. Print Determination Rules route events (HU Created, Goods Issue Posted, ...) to a printer.",
   },
   {
-    id: "handling-units", title: "Handling Units & Packaging", doctypes: ["Handling Unit Type", "Packaging Material", "Packaging Spec"],
+    id: "handling-units", title: "Handling Units & Packaging", doctypes: ["Handling Unit Type Group", "Handling Unit Type", "Packaging Material", "Packaging Spec"],
     help: "Handling Unit Types (pallet, carton, ...) and, optionally, per-item Packaging Specs describing how each item is packed into them.",
   },
   {
@@ -83,6 +87,18 @@ export const STEPS = [
   {
     id: "resources", title: "Resources & Queues", doctypes: ["WMS Resource", "WMS Resource Group", "Warehouse Queue", "Work Center"],
     help: "Without at least one active Warehouse Queue per (warehouse, activity), tasks are worked directly and never get Auto-pull / the Blocked-On Hold lifecycle. Pool Resources into a Resource Group so a Queue can point at the group.",
+  },
+  {
+    id: "production", title: "Production Supply", doctypes: ["Production Supply Area", "Production Supply Control Cycle"],
+    help: "Production Supply Areas (PSA) are the line-side bins a Work Order's materials are staged to. A Control Cycle per PSA and product picks the staging method (pick parts, crate parts, direct consumption).",
+  },
+  {
+    id: "owners", title: "Owners, Document Types & Actions", doctypes: ["WMS Stock Owner", "WMS Document Type", "PPF Action Profile"],
+    help: "Stock Owners hold stock for a business partner (also mirrored to ERPNext as Inventory Dimensions). Document Types default, control and number the delivery documents; PPF Action Profiles run actions on document events.",
+  },
+  {
+    id: "mfs", title: "Material Flow System (PLC)", doctypes: ["WMS MFS Endpoint", "WMS MFS Telegram Type"],
+    help: "An Endpoint is the TCP link to a PLC; Telegram Types describe the fixed-position layout of each outbound or inbound telegram. Skip if no automation is connected.",
   },
   {
     id: "advanced", title: "Advanced (optional)", doctypes: ["Wave Template", "Labor Standard", "Billing Rate"],
