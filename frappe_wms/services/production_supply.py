@@ -302,6 +302,21 @@ def consume_from_stock_entry(se, method=None):
         _consume_line(pmr, row.item_code, flt(row.transfer_qty) or flt(row.qty), "Stock Entry", se.name, f"PMRC:{se.name}:{row.name}")
 
 
+def reverse_consumption(se, method=None):
+    """The consumption entry was cancelled in ERPNext: put what it booked out of the PSA back, and the PMR items' consumed quantity with it."""
+    entries = frappe.get_all("WMS Stock Ledger Entry", filters={"reference_doctype": "Stock Entry", "reference_name": se.name, "idempotency_key": ["like", "PMRC:%"],
+        "reversal_of": ["in", [None, ""]]}, fields=["*"], order_by="creation asc")
+    pmrs = set()
+    for n, e in enumerate(entries, 1):
+        values = {k: e.get(k) for k in ("warehouse", "product", "batch_no", "serial_no", "handling_unit", "storage_bin", "stock_type", "stock_uom")}
+        values.update({"quantity": -flt(e.quantity), "movement_type": "602", "reversal_of": e.name})
+        post_entries([values], "Stock Entry", se.name, f"PMRC-REV:{e.name}")
+        item = e.idempotency_key.split(":")[3]  # PMRC:<entry>:<row>:<pmr item>:<seq>:<n>
+        frappe.db.sql("update `tabProduction Material Request Item` set consumed_quantity=greatest(consumed_quantity-%s, 0) where name=%s", (-flt(e.quantity), item))
+        pmrs.add(frappe.db.get_value("Production Material Request Item", item, "parent"))
+    for pmr in pmrs: _refresh_status(pmr)
+
+
 def stock_entry_is_pmr_consumption(se):
     """True for a consumption entry of a Work Order with a PMR: its WMS-managed source warehouse is the PSA's, fed by staging."""
     return se.get("purpose") in CONSUMING_PURPOSES and bool(se.get("work_order")) and bool(

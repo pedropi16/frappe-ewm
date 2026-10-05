@@ -391,13 +391,13 @@ def raise_exception(task_name, exception_code, remarks=None, revised_quantity=No
         if revised_quantity < already_confirmed: frappe.throw(_("Revised quantity cannot be less than what is already confirmed"))
         if revised_quantity > original_planned: frappe.throw(_("Revised quantity cannot exceed the planned quantity"))
         task.db_set("planned_quantity", revised_quantity, update_modified=True)
+        from frappe_wms.services.production_supply import on_staging_short
+        on_staging_short(task, original_planned - revised_quantity)  # a staging task that now moves less: the rest is open for staging again
         if round(already_confirmed, 6) >= round(revised_quantity, 6):
             task.db_set({"status": "Confirmed", "docstatus": 1}, update_modified=True)
             if already_confirmed > 0: advance_to_next_step(task)  # nothing moved: no successor step with quantity 0
             _update_request(task.warehouse_request)
             _release_short_pick_reservation(task, original_planned - revised_quantity)
-            from frappe_wms.services.production_supply import on_staging_short
-            on_staging_short(task, original_planned - revised_quantity)
             # Only relocate the HU if this task actually moved real, ledger-backed stock
             # (already_confirmed > 0 via an earlier confirm_task call) - closing a task that
             # denied its full quantity with nothing ever confirmed has no stock movement to

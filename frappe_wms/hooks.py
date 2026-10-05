@@ -82,7 +82,7 @@ doc_events = {
     "WMS Opening Stock Load": {"autoname": _NUMBER_RANGE_AUTONAME},
     "WMS Posting Change": {"autoname": _NUMBER_RANGE_AUTONAME},
     "Stock Entry": {"validate": "frappe_wms.events.erpnext_stock_guard.validate", "before_cancel": "frappe_wms.events.erpnext_stock_guard.before_cancel",
-        "on_submit": "frappe_wms.services.production_supply.consume_from_stock_entry"},
+        "on_submit": "frappe_wms.services.production_supply.consume_from_stock_entry", "on_cancel": "frappe_wms.services.production_supply.reverse_consumption"},
     "Delivery Note": {
         "validate": "frappe_wms.events.erpnext_stock_guard.validate",
         "on_update": "frappe_wms.services.erp_integration.on_draft_document_update",

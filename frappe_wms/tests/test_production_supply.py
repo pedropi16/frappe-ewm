@@ -204,3 +204,61 @@ class TestProductionSupply(IntegrationTestCase):
         tasks = frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", frappe.get_all("Warehouse Request", filters={"reference_doctype": "Production Material Request"}, pluck="name")], "product": self.rm}, fields=["planned_quantity", "source_bin"])
         self.assertEqual((sum(t.planned_quantity for t in tasks), tasks[0].source_bin), (20, self.source_bin))
         self.assertEqual(ps.auto_stage(psa.name), [], "nothing left open: running again creates nothing")
+
+    def test_real_manufacture_entry_is_consumed_out_of_the_psa_with_the_stock_guard_on(self):
+        from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
+        from frappe_wms.services import production_supply as ps
+        supply = f"{self.warehouse}-PSA-SUP"
+        if not frappe.db.exists("Storage Bin", supply):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": supply, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Real PSA", "supply_bin": supply, "staging_mode": "Automatic"}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        frappe.db.set_single_value("WMS Settings", "enforce_wms_only_stock_movements", 1)
+        self._seed_rm_stock(50)
+
+        wo = frappe.get_doc({"doctype": "Work Order", "production_item": self.fg, "bom_no": self.bom_name, "qty": 5, "company": self.company, "planned_start_date": nowdate(),
+            "source_warehouse": self.wh.erpnext_warehouse, "wip_warehouse": self.wip_warehouse, "fg_warehouse": self.fg_erpnext_warehouse, "skip_transfer": 1, "from_wip_warehouse": 0})
+        wo.insert(ignore_permissions=True)
+        wo.submit()
+        pmr = frappe.get_doc("Production Material Request", {"work_order": wo.name})
+        self.assertEqual(pmr.items[0].tasked_quantity, 10, "automatic PSA staged the 2 x 5 RM")
+        for task in frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", frappe.get_all("Warehouse Request", filters={"reference_doctype": "Production Material Request", "reference_name": pmr.name}, pluck="name")]}, pluck="name"):
+            pick_into_new_hu(task, confirmed_quantity=frappe.db.get_value("Warehouse Task", task, "planned_quantity"))
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 10)
+
+        se = frappe.get_doc(make_stock_entry(wo.name, "Manufacture", 5))
+        se.fg_completed_qty = 5
+        from unittest.mock import patch
+        from frappe_wms.events.erpnext_stock_guard import validate as guard
+        with patch("frappe_wms.services.production_supply.stock_entry_is_pmr_consumption", return_value=False):
+            with self.assertRaises(frappe.ValidationError): guard(se)  # without the exemption the guard refuses the WMS-managed source warehouse
+        guard(se)
+        se.insert(ignore_permissions=True)
+        se.submit()  # the guard must let the consumption through, and the hook books it out of the PSA
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 0)
+        item = frappe.get_doc("Production Material Request", pmr.name).items[0]
+        self.assertEqual((item.consumed_quantity, frappe.db.get_value("Production Material Request", pmr.name, "status")), (10, "Consumed"))
+
+        se.cancel()  # cancelled in ERPNext: the PSA gets the material back
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 10)
+        item = frappe.get_doc("Production Material Request", pmr.name).items[0]
+        self.assertEqual((item.consumed_quantity, frappe.db.get_value("Production Material Request", pmr.name, "status")), (0, "Staged"))
+
+    def test_short_closing_a_staging_task_makes_the_quantity_open_again(self):
+        from frappe_wms.services import production_supply as ps
+        from frappe_wms.services.task import raise_exception
+        supply = f"{self.warehouse}-PSA-SUP"
+        if not frappe.db.exists("Storage Bin", supply):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": supply, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Short PSA", "supply_bin": supply}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=5)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        proposal = max(ps.staging_overview(psa.name)[0]["proposals"], key=lambda p: p.available_quantity)
+        out = ps.stage_items(psa.name, "Single Order", [{"source_bin": proposal.storage_bin, "source_hu": proposal.handling_unit, "batch_no": proposal.batch_no, "pmr_item": item.name, "quantity": 10}])
+        code = frappe.get_all("WMS Exception Code", filters={"allows_quantity_change": 1, "active": 1}, pluck="name", limit=1)
+        if not code: self.skipTest("no quantity-changing exception code configured")
+        raise_exception(out[0]["task"], code[0], remarks="short", revised_quantity=4)
+        item.reload()
+        self.assertEqual((item.tasked_quantity, item.required_quantity - item.tasked_quantity), (4, 6), "the 6 not found can be staged again")
