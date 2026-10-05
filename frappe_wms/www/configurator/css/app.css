@@ -319,17 +319,18 @@ table.child-table td { min-width: 110px; vertical-align: middle; }
 /* ---- configuration map ---- */
 .map-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
 .map-svg { display: block; min-width: 760px; width: 100%; height: auto; font-family: inherit; }
-.map-lane { fill: color-mix(in srgb, var(--text) 3%, transparent); stroke: var(--border); stroke-dasharray: 3 4; }
-.map-col-title { font-size: 13px; font-weight: 700; fill: var(--text); }
+.map-lane { --h: 0; --s: 0%; fill: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 9%, transparent); stroke: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 45%, var(--border)); stroke-dasharray: 3 4; }
+.map-col-title { --h: 0; --s: 0%; font-size: 13px; font-weight: 700; fill: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 70%, var(--text)); }
 .map-col-sub { font-size: 11px; fill: var(--text-dim); }
 .map-edge-line { fill: none; stroke: var(--text-dim); stroke-width: 1.1; opacity: .3; transition: opacity .12s, stroke .12s; }
 .map-arrow { fill: var(--text-dim); }
 .map-edge.active .map-edge-line { stroke: var(--accent); stroke-width: 2; opacity: 1; }
 .map-edge.dim .map-edge-line { opacity: .06; }
 .map-node { cursor: pointer; outline: none; transition: opacity .12s; }
-.map-node-box { fill: var(--panel); stroke: var(--border); stroke-width: 1.2; transition: stroke .12s, fill .12s; }
+.map-node { --h: 0; --s: 0%; }
+.map-node-box { fill: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 7%, var(--panel)); stroke: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 50%, var(--border)); stroke-width: 1.2; transition: stroke .12s, fill .12s; }
 .map-node-label { font-size: 12px; fill: var(--text-dim); pointer-events: none; }
-.map-node.has-data .map-node-box { fill: color-mix(in srgb, var(--accent) 12%, var(--panel)); stroke: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.map-node.has-data .map-node-box { fill: color-mix(in srgb, hsl(var(--h) var(--s) 50%) 32%, var(--panel)); stroke: hsl(var(--h) var(--s) 55%); stroke-width: 1.8; }
 .map-node.has-data .map-node-label { fill: var(--text); font-weight: 600; }
 .map-node:hover .map-node-box, .map-node:focus-visible .map-node-box { stroke: var(--accent); }
 .map-node.selected .map-node-box { stroke: var(--accent); stroke-width: 2.4; }
@@ -338,8 +339,8 @@ table.child-table td { min-width: 110px; vertical-align: middle; }
 .map-badge-text { font-size: 11px; font-weight: 700; fill: var(--accent-contrast); pointer-events: none; }
 .map-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 4px; font-size: 12px; color: var(--text-dim); }
 .lg::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -2px; border: 1px solid var(--border); }
-.lg-data::before { background: color-mix(in srgb, var(--accent) 22%, var(--panel)); border-color: var(--accent); }
-.lg-empty::before { background: var(--panel); }
+.lg-data::before { background: color-mix(in srgb, var(--text-dim) 40%, var(--panel)); border-color: var(--text-dim); border-width: 2px; }
+.lg-empty::before { background: color-mix(in srgb, var(--text-dim) 8%, var(--panel)); }
 .lg-arrow::before { display: none; }
 .map-detail { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
 .map-detail h3 { margin: 0 0 4px; font-size: 15px; }
@@ -374,7 +375,7 @@ table.child-table td { min-width: 110px; vertical-align: middle; }
 .map-band-title { font-size: 12px; font-weight: 800; letter-spacing: .12em; fill: var(--accent); }
 .map-band-sub { font-size: 11.5px; fill: var(--text-dim); }
 .map-node.kind-runtime .map-node-box { stroke-dasharray: 4 3; }
-.map-node.kind-erp .map-node-box { fill: color-mix(in srgb, var(--text) 5%, var(--panel)); }
+.map-node.kind-erp .map-node-box { fill: color-mix(in srgb, var(--text) 9%, var(--panel)); stroke: var(--text-dim); }
 .map-node.kind-erp .map-node-label { font-style: italic; }
 .lg-runtime::before { border-style: dashed; background: var(--panel); }
 .lg-erp::before { background: color-mix(in srgb, var(--text) 8%, var(--panel)); }

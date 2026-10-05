@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js?v=8cbadb8fa0";
-import * as Store from "./store.js?v=8cbadb8fa0";
-import { el } from "./render.js?v=8cbadb8fa0";
+import * as Schema from "./schema.js?v=2147aeedbd";
+import * as Store from "./store.js?v=2147aeedbd";
+import { el } from "./render.js?v=2147aeedbd";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const svg = (tag, attrs = {}, children = []) => {
@@ -48,6 +48,10 @@ const BANDS = [
   ] },
 ];
 
+// One hue per lane so the columns are told apart in light and dark mode; ERPNext lanes stay neutral (sat 0).
+const HUES = { config: [210, 170, 275, 35], runtime: [140, 190, 320, 20, 250] };
+const laneStyle = (kind, ci) => kind === "erp" ? "--h:0;--s:0%" : `--h:${HUES[kind][ci % HUES[kind].length]};--s:65%`;
+
 const SHORT = {
   "Warehouse Process Type Determination Rule": "Process Type Determination",
   "Storage Type Search Sequence": "Storage Type Search Seq.",
@@ -68,7 +72,7 @@ function layout(hasEdge) {
     const top = y;
     const nodesTop = top + BAND_HEAD + LANE_HEAD;
     lanes.forEach((lane, ci) => lane.items.forEach((name, ri) => {
-      pos[name] = { x: LEFT + ci * COL_W, y: nodesTop + ri * ROW_H, col: ci, band: bi, kind: lane.kind };
+      pos[name] = { x: LEFT + ci * COL_W, y: nodesTop + ri * ROW_H, col: ci, band: bi, kind: lane.kind, style: laneStyle(lane.kind, ci) };
     }));
     const height = BAND_HEAD + LANE_HEAD + rows * ROW_H + 6;
     y = top + height + BAND_GAP;
@@ -158,8 +162,8 @@ export function renderMapStep(container, { openDoctype }) {
     root.appendChild(svg("text", { x: LEFT + band.title.length * 11 + 16, y: band.top + 16, class: "map-band-sub" }, band.sub));
     band.lanes.forEach((lane, ci) => {
       const x = LEFT + ci * COL_W;
-      root.appendChild(svg("rect", { x: x - 10, y: band.top + BAND_HEAD - 6, width: NODE_W + 20, height: band.height - BAND_HEAD + 6, rx: 12, class: "map-lane" }));
-      root.appendChild(svg("text", { x, y: band.top + BAND_HEAD + 12, class: "map-col-title" }, lane.title));
+      root.appendChild(svg("rect", { x: x - 10, y: band.top + BAND_HEAD - 6, width: NODE_W + 20, height: band.height - BAND_HEAD + 6, rx: 12, class: "map-lane", style: laneStyle(lane.kind, ci) }));
+      root.appendChild(svg("text", { x, y: band.top + BAND_HEAD + 12, class: "map-col-title", style: laneStyle(lane.kind, ci) }, lane.title));
       root.appendChild(svg("text", { x, y: band.top + BAND_HEAD + 28, class: "map-col-sub" }, lane.sub));
     });
   });
@@ -180,7 +184,7 @@ export function renderMapStep(container, { openDoctype }) {
   const nodeEls = {};
   for (const name of Object.keys(pos)) {
     const p = pos[name];
-    const g = svg("g", { class: `map-node kind-${p.kind}`, transform: `translate(${p.x},${p.y})`, tabindex: "0", role: "button" });
+    const g = svg("g", { class: `map-node kind-${p.kind}`, transform: `translate(${p.x},${p.y})`, tabindex: "0", role: "button", style: p.style });
     g.appendChild(svg("rect", { width: NODE_W, height: NODE_H, rx: 8, class: "map-node-box" }));
     g.appendChild(svg("text", { x: 12, y: NODE_H / 2 + 4, class: "map-node-label" }, SHORT[name] || name));
     const count = svg("g", { class: "map-node-count" });

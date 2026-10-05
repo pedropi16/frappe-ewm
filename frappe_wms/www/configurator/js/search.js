@@ -1,7 +1,7 @@
 // Topbar search: jump to a step, a doctype, a field's doctype or a record of the profile. "/" or Ctrl+K focuses it.
-import * as Schema from "./schema.js?v=8cbadb8fa0";
-import * as Store from "./store.js?v=8cbadb8fa0";
-import { STEPS, goToStep, openRecord } from "./wizard.js?v=8cbadb8fa0";
+import * as Schema from "./schema.js?v=2147aeedbd";
+import * as Store from "./store.js?v=2147aeedbd";
+import { STEPS, goToStep, openRecord } from "./wizard.js?v=2147aeedbd";
 
 const MAX = 14;
 const stepOf = (dt) => STEPS.findIndex((s) => s.doctypes && s.doctypes.includes(dt));
