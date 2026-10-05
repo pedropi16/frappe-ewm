@@ -32,6 +32,12 @@ def auto_stage(psa):
 
 @frappe.whitelist()
 @retry_on_deadlock
+def return_unused(pmr_item):
+    return ps.return_unused(pmr_item)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
 def stage_items(psa, method, lines):
     return ps.stage_items(psa, method, parse_json(lines, "lines"))
 

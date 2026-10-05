@@ -33,7 +33,7 @@ APPLY_ORDER = [
     "Removal Rule", "Replenishment Rule", "WMS Route", "Warehouse Process Type", "Work Center",
     "Production Supply Area", "Storage Process", "WMS Resource",
     "Warehouse Process Type Determination Rule", "Wave Template", "Process Determination Rule",
-    "WMS Print Determination Rule",
+    "Production Supply Control Cycle", "WMS Print Determination Rule",
 ]
 
 

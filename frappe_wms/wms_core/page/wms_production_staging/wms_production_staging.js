@@ -15,6 +15,11 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
   page.add_inner_button(__("Refresh"), () => load());
   const $body = $(`<div class="wms-staging"></div>`).appendTo(page.main);
   $body.on("change", "select.wms-src", function () { setQty($(this).closest("tr")); });
+  $body.on("click", "button.wms-return", async function () {
+    const out = await call("return_unused", { pmr_item: $(this).data("item") });
+    frappe.show_alert({ message: __("{0} return task(s) created", [out.length]), indicator: "green" });
+    load();
+  });
 
   const psa = () => psaField.get_value();
   const srcLabel = (p) => `${p.storage_bin}${p.handling_unit ? " · " + p.handling_unit : ""}${p.batch_no ? " · " + p.batch_no : ""} (${flt(p.available_quantity)})`;
@@ -47,14 +52,15 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
       <td><select class="form-control input-xs wms-src">${srcOptions(g.proposals)}</select></td>
       <td><input type="number" step="any" class="form-control input-xs wms-qty" style="width:90px"></td></tr>`).join("");
     const status = state.status.map((r) => `<tr><td><a href="/app/production-material-request/${encodeURIComponent(r.pmr)}">${esc(r.pmr)}</a></td><td>${esc(r.work_order)}</td><td>${esc(__(r.status))}</td>
-      <td>${esc(r.product)}</td><td class="text-right">${flt(r.required_quantity)}</td><td class="text-right">${flt(r.tasked_quantity)}</td><td class="text-right">${flt(r.staged_quantity)}</td><td class="text-right">${flt(r.consumed_quantity)}</td></tr>`).join("");
+      <td>${esc(r.product)}</td><td class="text-right">${flt(r.required_quantity)}</td><td class="text-right">${flt(r.tasked_quantity)}</td><td class="text-right">${flt(r.staged_quantity)}</td><td class="text-right">${flt(r.consumed_quantity)}</td>
+      <td>${flt(r.staged_quantity) > flt(r.consumed_quantity) ? `<button class="btn btn-xs btn-default wms-return" data-item="${esc(r.pmr_item)}">${__("Return unused")}</button>` : ""}</td></tr>`).join("");
     $body.html(`<h5 style="margin-top:14px;">${__("Open for staging")}</h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th></th><th>${single ? __("PMR") : __("PMRs")}</th><th>${__("Work Order")}</th><th>${__("Date")}</th><th>${__("Product")}</th><th>${__("Operation")}</th>
         <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Open")}</th><th>${__("Take from")}</th><th>${__("Quantity")}</th></tr></thead>
         <tbody>${open || `<tr><td colspan="11" class="text-muted">${__("Nothing open for staging.")}</td></tr>`}</tbody></table></div>
       <h5 style="margin-top:22px;">${__("Production Material Requests")}</h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th>${__("PMR")}</th><th>${__("Work Order")}</th><th>${__("Status")}</th><th>${__("Product")}</th>
-        <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Staged (reserved)")}</th><th>${__("Consumed")}</th></tr></thead><tbody>${status}</tbody></table></div>`);
+        <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Staged (reserved)")}</th><th>${__("Consumed")}</th><th></th></tr></thead><tbody>${status}</tbody></table></div>`);
     $body.find("tbody tr[data-g]").each(function () { setQty($(this)); });
   }
 

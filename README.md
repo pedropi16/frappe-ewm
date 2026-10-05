@@ -715,29 +715,35 @@ itself (choosing the warehouse and staging bin) is a desk/API action, not RF
 
 ## Production Supply Area (PSA) and Production Material Request (PMR)
 
-Production supply the SAP EWM way: one warehouse, Production Supply Areas inside it, and a **Production Material
-Request** per production order listing the materials it needs (`services/production_supply.py`).
+Production supply the SAP EWM way: one warehouse, Production Supply Areas inside it, and a **Production Material Request** per production
+order listing the materials it needs (`services/production_supply.py`).
 
-* **PSA** - `warehouse`, `supply_bin`, the `workstations` it serves, an optional `deconsolidation_work_center` (a
-  `Work Center` of type Deconsolidation with a **Locations** list; the optional collection hop is not wired into
-  staging yet). A warehouse with an active PSA works with PMRs; one without keeps the direct Work Order staging.
-* **PMR** - created when the ERPNext Work Order is submitted: one item per required WMS-managed material, with the PSA
-  of its operation's workstation (the warehouse's only PSA when there is just one). Items track `required`,
-  `tasked`, `staged` (reserved) and `consumed` quantities; the PMR status follows them.
-* **Staging** (API `frappe_wms.api.production_supply`: `staging_overview`, `stage_items`) - the open PMR items of a PSA
-  with source proposals (oldest stock first); pick the storage bin the stock is taken from and create the tasks.
-  Plain Replenish requests/tasks move the stock into the supply bin.
-  * *Single Order*: the task references one PMR item; the staged quantity is reserved to it and only it can consume it.
-  * *Cross Order*: one movement serves several PMR items; the stock sits in the PSA unreserved (the pool) and any open
-    PMR for that product can consume it.
-* **Consumption** - backflushed from ERPNext: submitting a Manufacture / Material Consumption for Manufacture Stock
-  Entry for the Work Order books the same quantity out of the supply bin (reserved quantity first, then the pool) and
-  refuses more than was staged. The stock guard lets that entry's source warehouse through.
+* **PSA** - `warehouse`, a default `supply_bin` plus further `bins`, the `workstations` it serves, an optional `deconsolidation_work_center`
+  and a staging mode (Manual / Automatic). A warehouse with an active PSA works with PMRs; one without keeps the direct Work Order staging.
+* **Control cycle** (`Production Supply Control Cycle`, PSA + material) - how a material is staged to its PSA and into which PSA bin:
+  *Pick Parts* (per order, reserved to it; the default), *Release Order Parts* (the demand of several orders staged as one pooled movement),
+  *Crate Parts* (kept between a minimum and maximum in the PSA bin, independent of orders; checked hourly and after each consumption),
+  *Direct Consumption* (not staged; consumption is taken from the storage bins where the material is).
+* **PMR** - created when the ERPNext Work Order is submitted: one item per required WMS-managed material, with the PSA of its operation's
+  workstation (the warehouse's only PSA when there is just one). Items track `required`, `tasked`, `staged` (reserved) and `consumed`
+  quantities; the PMR status follows them.
+* **Staging** (desk page *Production Staging*; API `frappe_wms.api.production_supply`) - the open PMR items of a PSA with source proposals
+  (oldest stock first, less what open tasks already take); choose the storage bin each line is taken from and create the tasks. Single Order
+  reserves the staged quantity to the PMR item; Cross Order serves several items with one movement into the unreserved pool. An Automatic PSA
+  stages by control cycle when the PMR is created and hourly (`auto_stage`).
+* **Deconsolidation hop** - with a deconsolidation work center on the PSA, an order's first leg goes to its own free location there (stored on
+  the PMR); the leg on to the PSA is created when it is confirmed (the layout storage control mechanism). The quantity counts as staged only when
+  it reaches the PSA.
+* **Consumption** - backflushed from ERPNext: submitting a Manufacture / Material Consumption for Manufacture Stock Entry for the Work Order
+  books the same quantity out of the PSA's bins (reserved quantity first, then the pool) and refuses more than was staged; Direct Consumption
+  items book out of storage. Cancelling the entry puts the material back.
+* **Return unused** (button on the staging page, `return_unused`) - tasks from the PSA bins back to storage for staged-minus-consumed of a PMR
+  item (destination by the usual putaway determination); the reservation is released as they are confirmed. `close_pmr` (Supervisor) releases
+  what is left of the reservation.
 * The reservation is bookkeeping on the PMR item, not a stock dimension: a PSA bin can hold several orders' stock.
-* `close_pmr` (Supervisor) releases what was staged for an order and not consumed; moving it back is an ordinary task.
 
-Not built yet: the staging screen itself (Monitor / RF), the optional deconsolidation hop, returning unused material,
-reversal of a cancelled consumption entry.
+Not built yet: SAP's PSA as storage type + section (here: a set of bins), a manual page for aggregated release-order-parts over a time window,
+returns of pooled (unreserved) stock.
 
 ## Bin types, storage groups, layout storage control, handling indicators
 

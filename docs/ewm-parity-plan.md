@@ -31,7 +31,9 @@ The core of SAP's putaway/removal search; everything else in storage determinati
 
 Dependencies: A6 touches `bin_rules.bin_violations` (shared by planning, confirm and moves) - do it after A2/A3 so one test file covers the combined behaviour. Decision needed: whether PCI replaces `preferred_storage_type` or sits beside it (recommendation: beside, PCI wins when set).
 
-## Phase B - Production supply completion (about 9 days)
+## Phase B - Production supply completion (about 9 days) - DONE 2026-10-05
+
+Shipped: B1 (PSA bins table + control cycle with staging bin), B2 crate parts, B3 direct consumption, B4 return unused (task + staging page button), B5 deconsolidation hop, B6 release order parts (auto-staging as one pooled movement per product). **Not built:** a manual page for aggregated release-order-parts over a time window; returning pooled (unreserved) stock; PSA as storage type + section. Decision taken as in SAP: several bins per PSA.
 
 | Item | Change | Test |
 | --- | --- | --- |

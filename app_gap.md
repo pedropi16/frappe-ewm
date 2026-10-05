@@ -500,9 +500,9 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 12.4 | Cross-docking | Partial | Opportunistic. **Gap:** planned. |
 | 13 | ECC integration (CIF, qRFC, logs) | Done | Direct ERPNext integration; WMS ERP Sync Log with queued retry replaces qRFC. |
 | 14 | Warehouse monitor | Done | WMS Monitor with the node tree, selection, actions. |
-| 15.1 | PSA and control cycle | Partial | PSA (supply bin, workstations, staging mode). **Gap:** control cycle (plant + PSA + material -> staging type/bin, min/max); PSA with several bins. |
-| 15.2 | Staging methods | Partial | Pick parts = single-order; release order parts = cross-order. **Gap:** crate parts (min/max replenishment per PSA), direct consumption. |
-| 15.3 | PMR, staging, consumption | Done | PMR from the Work Order, staging tasks, backflush from the Manufacture entry (reserved first, then pool). **Gap:** returning unused material. |
+| 15.1 | PSA and control cycle | Done | PSA with several bins, workstations, staging mode; Production Supply Control Cycle (PSA + material -> method, staging bin, min/max) (Phase B). PSA is a set of bins, not storage type + section. |
+| 15.2 | Staging methods | Done | Pick parts, release order parts (auto-staged as one pooled movement), crate parts (min/max, hourly + after consumption), direct consumption (Phase B). |
+| 15.3 | PMR, staging, consumption | Done | PMR from the Work Order, staging tasks (optionally via the deconsolidation work center), backflush from the Manufacture entry (reserved first, then pool), return of unused material (Phase B). |
 | 15.4 | Receipt from production | Done | FG receipt from a Work Order through GR and putaway. |
 | 16 | Core tables | n/a | Mapped by design (ledger + balance replace quants). |
 | 17 | Extension BAdIs | Partial | `wms_removal_strategies` hook; no general strategy-override hooks for putaway, WOCR, queue. |

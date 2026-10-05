@@ -1,6 +1,6 @@
 {
-  "name": "Production Supply Area",
-  "module": "WMS Core",
+  "name": "Production Supply Control Cycle",
+  "module": "WMS Setup",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -8,61 +8,60 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "warehouse",
-    "psa_code",
-    "psa_name",
-    "supply_bin",
-    "bins",
-    "staging_mode",
-    "workstations",
-    "deconsolidation_work_center",
+    "production_supply_area",
+    "product",
+    "staging_method",
+    "staging_bin",
+    "minimum_quantity",
+    "maximum_quantity",
     "active"
   ],
   "fields": [
     {
-      "fieldname": "warehouse",
-      "label": "Warehouse",
+      "fieldname": "production_supply_area",
+      "label": "Production Supply Area",
       "fieldtype": "Link",
-      "options": "WMS Warehouse",
+      "options": "Production Supply Area",
       "reqd": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
     },
     {
-      "fieldname": "psa_code",
-      "label": "PSA Code",
-      "fieldtype": "Data",
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
       "reqd": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "psa_name",
-      "label": "PSA Name",
-      "fieldtype": "Data",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "supply_bin",
-      "label": "Supply Bin (default)",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
+      "fieldname": "staging_method",
+      "label": "Staging Method",
+      "fieldtype": "Select",
+      "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption",
+      "default": "Pick Parts",
       "reqd": 1,
       "in_list_view": 1,
-      "description": "The bin at the production floor staged material is put into, and consumed from as orders start or complete."
+      "description": "Pick Parts: staged per order, reserved to it. Release Order Parts: demand of several orders staged together, pooled. Crate Parts: kept between a minimum and maximum in the PSA, independent of orders. Direct Consumption: not staged, consumed from where it is stored."
     },
     {
-      "fieldname": "workstations",
-      "label": "Workstations",
-      "fieldtype": "Table",
-      "options": "PSA Workstation",
-      "description": "Operations running at these workstations are supplied through this PSA."
-    },
-    {
-      "fieldname": "deconsolidation_work_center",
-      "label": "Deconsolidation Work Center",
+      "fieldname": "staging_bin",
+      "label": "Staging Bin",
       "fieldtype": "Link",
-      "options": "Work Center",
-      "description": "Optional: material picked in several areas is collected here before it moves to the supply bin."
+      "options": "Storage Bin",
+      "description": "One of the PSA's bins; blank = its supply bin."
+    },
+    {
+      "fieldname": "minimum_quantity",
+      "label": "Minimum Quantity",
+      "fieldtype": "Float",
+      "description": "Crate Parts: replenish when the PSA stock falls below this."
+    },
+    {
+      "fieldname": "maximum_quantity",
+      "label": "Maximum Quantity",
+      "fieldtype": "Float",
+      "description": "Crate Parts: replenish up to this."
     },
     {
       "fieldname": "active",
@@ -70,21 +69,6 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
-    },
-    {
-      "fieldname": "staging_mode",
-      "label": "Staging Mode",
-      "fieldtype": "Select",
-      "options": "Manual\nAutomatic",
-      "default": "Manual",
-      "description": "Automatic: open PMR items are staged by single-order tasks from the oldest stock, when the PMR is created and hourly. Manual: staged in the Production Staging app."
-    },
-    {
-      "fieldname": "bins",
-      "label": "Further Bins",
-      "fieldtype": "Table",
-      "options": "PSA Bin",
-      "description": "More bins of this PSA (rack positions, line-side bins). The supply bin is the default; a control cycle can name another."
     }
   ],
   "sort_field": "modified",
@@ -203,6 +187,5 @@
       "print": 1
     }
   ],
-  "autoname": "format:{warehouse}-{psa_code}",
-  "title_field": "psa_name"
+  "autoname": "format:{production_supply_area}-{product}"
 }

@@ -14,6 +14,7 @@
     "qty",
     "planned_date",
     "status",
+    "deconsolidation_bin",
     "items"
   ],
   "fields": [
@@ -72,6 +73,14 @@
       "label": "Materials",
       "fieldtype": "Table",
       "options": "Production Material Request Item"
+    },
+    {
+      "fieldname": "deconsolidation_bin",
+      "label": "Deconsolidation Location",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "description": "The location of the PSA's deconsolidation work center collecting this order's material before it moves to the PSA."
     }
   ],
   "sort_field": "modified",

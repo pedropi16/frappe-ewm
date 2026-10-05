@@ -262,3 +262,133 @@ class TestProductionSupply(IntegrationTestCase):
         raise_exception(out[0]["task"], code[0], remarks="short", revised_quantity=4)
         item.reload()
         self.assertEqual((item.tasked_quantity, item.required_quantity - item.tasked_quantity), (4, 6), "the 6 not found can be staged again")
+
+    # ------------------------------------------------------------------ Phase B: control cycles, crate parts, direct consumption, returns, deconsolidation hop
+
+    def _bin(self, code):
+        name = f"{self.warehouse}-{code}"
+        if not frappe.db.exists("Storage Bin", name):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": name, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 3}).insert(ignore_permissions=True)
+        return name
+
+    def _psa(self, extra_bins=(), mode="Manual", **kw):
+        supply = self._bin(f"B-{frappe.generate_hash(length=5)}")
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "B PSA", "supply_bin": supply, "staging_mode": mode,
+            "bins": [{"storage_bin": b} for b in extra_bins], **kw}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        return psa
+
+    def _cycle(self, psa, method, **kw):
+        return frappe.get_doc({"doctype": "Production Supply Control Cycle", "production_supply_area": psa.name, "product": self.rm, "staging_method": method, **kw}).insert(ignore_permissions=True)
+
+    def _entry(self, wo, qty, n):
+        real_se = frappe.get_all("Stock Entry", limit=1, pluck="name")[0]
+        return frappe._dict(purpose="Manufacture", work_order=wo.name, name=real_se, items=[frappe._dict(
+            s_warehouse=self.wh.erpnext_warehouse, item_code=self.rm, qty=qty, transfer_qty=qty, name=f"brow{n}{frappe.generate_hash(length=4)}", is_finished_item=0, is_scrap_item=0)])
+
+    def _confirm_all(self, tasks, hu=True):
+        for t in ([tasks] if isinstance(tasks, str) else tasks):
+            qty = frappe.db.get_value("Warehouse Task", t, "planned_quantity")
+            pick_into_new_hu(t, confirmed_quantity=qty) if hu else confirm_task(t, confirmed_quantity=qty)
+
+    def test_control_cycle_picks_the_psa_bin_and_stock_counts_over_all_psa_bins(self):
+        from frappe_wms.services import production_supply as ps
+        second = self._bin(f"S2-{frappe.generate_hash(length=4)}")
+        psa = self._psa(extra_bins=[second])
+        self._cycle(psa, "Pick Parts", staging_bin=second)
+        with self.assertRaises(frappe.ValidationError): self._cycle(psa, "Pick Parts", staging_bin=self._bin("NOTPSA"))  # not one of the PSA's bins
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=5)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        self.assertEqual(item.psa, psa.name)
+        src = ps.staging_overview(psa.name)[0]["proposals"][0]
+        out = ps.stage_items(psa.name, "Single Order", [{"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "pmr_item": item.name, "quantity": 10}])
+        self.assertEqual(frappe.db.get_value("Warehouse Task", out[0]["task"], "destination_bin"), second)
+        self._confirm_all(out[0]["task"])
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 10)
+        ps.consume_from_stock_entry(self._entry(wo, 10, 1))
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 0)
+
+    def test_crate_parts_are_kept_between_minimum_and_maximum_independent_of_orders(self):
+        from frappe_wms.services import production_supply as ps
+        psa = self._psa()
+        self._cycle(psa, "Crate Parts", minimum_quantity=5, maximum_quantity=20)
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=2)
+        self.assertEqual(ps.staging_overview(psa.name), [], "crate parts need no staging per order")
+        created = ps.check_crate_parts(psa.name)
+        self.assertEqual(sum(frappe.db.get_value("Warehouse Task", c["task"], "planned_quantity") for c in created), 20)
+        self.assertEqual(ps.check_crate_parts(psa.name), [], "the tasks on their way count: nothing more is raised")
+        self._confirm_all([c["task"] for c in created])
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 20)
+        self.assertEqual(ps.check_crate_parts(psa.name), [], "stock above the minimum")
+        ps._book_out(psa.name, self.rm, 18, "Stock Entry", frappe.get_all("Stock Entry", limit=1, pluck="name")[0], f"test-crate:{frappe.generate_hash(length=6)}")
+        refill = ps.check_crate_parts(psa.name)
+        self.assertEqual(sum(frappe.db.get_value("Warehouse Task", c["task"], "planned_quantity") for c in refill), 18, "back up to the maximum")
+
+    def test_direct_consumption_takes_the_material_from_where_it_is_stored(self):
+        from frappe_wms.services import production_supply as ps
+        psa = self._psa()
+        self._cycle(psa, "Direct Consumption")
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=5)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        self.assertEqual(item.tasked_quantity, item.required_quantity, "never staged")
+        before = frappe.db.sql("select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where product=%s and warehouse=%s", (self.rm, self.warehouse))[0][0]
+        ps.consume_from_stock_entry(self._entry(wo, 4, 2))
+        after = frappe.db.sql("select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where product=%s and warehouse=%s", (self.rm, self.warehouse))[0][0]
+        self.assertEqual(before - after, 4)
+        self.assertEqual((ps._psa_stock(psa.name, self.rm), frappe.get_doc("Production Material Request", item.parent).items[0].consumed_quantity), (0, 4))
+
+    def test_unused_staged_material_goes_back_to_storage_and_the_reservation_is_released(self):
+        from frappe_wms.services import production_supply as ps
+        psa = self._psa()
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=6)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        src = max(ps.staging_overview(psa.name)[0]["proposals"], key=lambda p: p.available_quantity)
+        out = ps.stage_items(psa.name, "Single Order", [{"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "pmr_item": item.name, "quantity": 12}])
+        self._confirm_all(out[0]["task"])
+        ps.consume_from_stock_entry(self._entry(wo, 5, 3))
+        back = ps.return_unused(item.name)
+        self.assertEqual(sum(frappe.db.get_value("Warehouse Task", b["task"], "planned_quantity") for b in back), 7)
+        for b in back: confirm_task(b["task"], confirmed_quantity=frappe.db.get_value("Warehouse Task", b["task"], "planned_quantity"))
+        item.reload()
+        self.assertEqual((item.staged_quantity, item.consumed_quantity, ps._psa_stock(psa.name, self.rm)), (5, 5, 0))
+        with self.assertRaises(frappe.ValidationError): ps.return_unused(item.name)
+
+    def test_staging_through_the_deconsolidation_work_center_takes_the_order_to_its_location_first(self):
+        from frappe_wms.services import production_supply as ps
+        loc = self._bin(f"DECO-{frappe.generate_hash(length=4)}")
+        wc = frappe.get_doc({"doctype": "Work Center", "warehouse": self.warehouse, "work_center_code": frappe.generate_hash(length=5), "work_center_name": "Deco", "work_center_type": "Deconsolidation",
+            "active": 1, "bin": loc, "locations": [{"storage_bin": loc}]}).insert(ignore_permissions=True)
+        psa = self._psa(deconsolidation_work_center=wc.name)
+        self._seed_rm_stock(50)
+        wo = self._submit_work_order(qty=5)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        src = max(ps.staging_overview(psa.name)[0]["proposals"], key=lambda p: p.available_quantity)
+        out = ps.stage_items(psa.name, "Single Order", [{"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "pmr_item": item.name, "quantity": 10}])
+        first = frappe.get_doc("Warehouse Task", out[0]["task"])
+        self.assertEqual((first.destination_bin, first.final_destination_bin), (loc, psa.supply_bin))
+        self.assertEqual(frappe.db.get_value("Production Material Request", item.parent, "deconsolidation_bin"), loc)
+        pick_into_new_hu(first.name, confirmed_quantity=10)
+        self.assertEqual(frappe.get_doc("Production Material Request", item.parent).items[0].staged_quantity, 0, "not in the PSA yet")
+        leg = frappe.get_all("Warehouse Task", filters={"predecessor_task": first.name}, fields=["name", "source_bin", "destination_bin", "planned_quantity"])[0]
+        self.assertEqual((leg.source_bin, leg.destination_bin, leg.planned_quantity), (loc, psa.supply_bin, 10))
+        confirm_task(leg.name, confirmed_quantity=10)
+        self.assertEqual((frappe.get_doc("Production Material Request", item.parent).items[0].staged_quantity, ps._psa_stock(psa.name, self.rm)), (10, 10))
+
+    def test_release_order_parts_stage_the_demand_of_several_orders_in_one_pooled_movement(self):
+        from frappe_wms.services import production_supply as ps
+        psa = self._psa()
+        self._cycle(psa, "Release Order Parts")
+        self._seed_rm_stock(50)
+        wos = [self._submit_work_order(qty=5), self._submit_work_order(qty=5)]
+        staged = ps.auto_stage(psa.name)
+        requests = {s["warehouse_request"] for s in staged}
+        self.assertEqual({frappe.db.get_value("Warehouse Request", r, "reference_doctype") for r in requests}, {"Production Supply Area"})
+        self.assertEqual(sum(frappe.db.get_value("Warehouse Request", r, "requested_quantity") for r in requests), 20)
+        items = [frappe.get_doc("Production Material Request", {"work_order": w.name}).items[0] for w in wos]
+        self.assertEqual([i.tasked_quantity for i in items], [10, 10])
+        self._confirm_all([s["task"] for s in staged])
+        self.assertEqual((ps.pool_available(psa.name, self.rm), [frappe.get_doc("Production Material Request", i.parent).items[0].staged_quantity for i in items]), (20, [0, 0]), "pooled, not reserved")

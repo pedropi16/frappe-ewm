@@ -20,6 +20,7 @@
   "Layout Storage Control",
   "Handling Indicator",
   "Production Supply Area",
+  "Production Supply Control Cycle",
   "Process Determination Rule",
   "Storage Process",
   "Storage Type Search Sequence",
@@ -1678,7 +1679,7 @@
     },
     {
      "fieldname": "supply_bin",
-     "label": "Supply Bin",
+     "label": "Supply Bin (default)",
      "fieldtype": "Link",
      "options": "Storage Bin",
      "reqd": 1,
@@ -1711,6 +1712,13 @@
      "options": "Manual\nAutomatic",
      "default": "Manual",
      "description": "Automatic: open PMR items are staged by single-order tasks from the oldest stock, when the PMR is created and hourly. Manual: staged in the Production Staging app."
+    },
+    {
+     "fieldname": "bins",
+     "label": "Further Bins",
+     "fieldtype": "Table",
+     "options": "PSA Bin",
+     "description": "More bins of this PSA (rack positions, line-side bins). The supply bin is the default; a control cycle can name another."
     }
    ],
    "key": {
@@ -1719,6 +1727,71 @@
     "fields": [
      "warehouse",
      "psa_code"
+    ]
+   }
+  },
+  "Production Supply Control Cycle": {
+   "name": "Production Supply Control Cycle",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "production_supply_area",
+     "label": "Production Supply Area",
+     "fieldtype": "Link",
+     "options": "Production Supply Area",
+     "reqd": 1
+    },
+    {
+     "fieldname": "product",
+     "label": "Product",
+     "fieldtype": "Link",
+     "options": "Item",
+     "reqd": 1
+    },
+    {
+     "fieldname": "staging_method",
+     "label": "Staging Method",
+     "fieldtype": "Select",
+     "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption",
+     "reqd": 1,
+     "default": "Pick Parts",
+     "description": "Pick Parts: staged per order, reserved to it. Release Order Parts: demand of several orders staged together, pooled. Crate Parts: kept between a minimum and maximum in the PSA, independent of orders. Direct Consumption: not staged, consumed from where it is stored."
+    },
+    {
+     "fieldname": "staging_bin",
+     "label": "Staging Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "One of the PSA's bins; blank = its supply bin."
+    },
+    {
+     "fieldname": "minimum_quantity",
+     "label": "Minimum Quantity",
+     "fieldtype": "Float",
+     "description": "Crate Parts: replenish when the PSA stock falls below this."
+    },
+    {
+     "fieldname": "maximum_quantity",
+     "label": "Maximum Quantity",
+     "fieldtype": "Float",
+     "description": "Crate Parts: replenish up to this."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{production_supply_area}-{product}",
+    "fields": [
+     "production_supply_area",
+     "product"
     ]
    }
   },
@@ -3345,6 +3418,25 @@
      "label": "Task Type",
      "fieldtype": "Select",
      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nSort",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "PSA Bin": {
+   "name": "PSA Bin",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "storage_bin",
+     "label": "Storage Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
      "reqd": 1
     }
    ],

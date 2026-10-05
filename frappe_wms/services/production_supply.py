@@ -51,6 +51,8 @@ def create_pmr(wo):
         warehouse = warehouse or row_warehouse
         items.append({"work_order_item": row.name, "product": row.item_code, "stock_uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
             "operation": row.get("operation"), "psa": resolve_psa(row_warehouse, workstations.get(row.get("operation")) or default_ws), "required_quantity": flt(row.required_qty)})
+        cycle = control_cycle(items[-1]["psa"], row.item_code) if items[-1]["psa"] else None
+        if cycle and cycle.staging_method in ("Crate Parts", "Direct Consumption"): items[-1]["tasked_quantity"] = items[-1]["required_quantity"]  # nothing to stage per order
     if not items or not frappe.db.exists("Production Supply Area", {"warehouse": warehouse, "active": 1}): return None  # no PSA: the Work Order is staged directly (events/work_order)
     pmr = frappe.get_doc({"doctype": "Production Material Request", "work_order": wo.name, "warehouse": warehouse, "production_item": wo.production_item,
         "qty": wo.qty, "planned_date": getdate(wo.planned_start_date) if wo.get("planned_start_date") else None, "status": "Open", "items": items})
@@ -71,8 +73,30 @@ def _supply_bin(psa):
     return frappe.db.get_value("Production Supply Area", psa, "supply_bin")
 
 
+def psa_bins(psa):
+    """Every bin of a PSA: the default supply bin first, then its further bins."""
+    bins = [_supply_bin(psa)] + frappe.get_all("PSA Bin", filters={"parent": psa, "parenttype": "Production Supply Area"}, pluck="storage_bin", order_by="idx asc")
+    return list(dict.fromkeys(b for b in bins if b))
+
+
+def control_cycle(psa, product):
+    return frappe.db.get_value("Production Supply Control Cycle", {"production_supply_area": psa, "product": product, "active": 1},
+        ["name", "staging_method", "staging_bin", "minimum_quantity", "maximum_quantity"], as_dict=True)
+
+
+def staging_bin(psa, product):
+    """Where a material is staged in its PSA: its control cycle's bin, else the PSA's supply bin."""
+    cycle = control_cycle(psa, product)
+    return (cycle and cycle.staging_bin) or _supply_bin(psa)
+
+
+def _deco_locations(psa):
+    work_center = frappe.db.get_value("Production Supply Area", psa, "deconsolidation_work_center")
+    return frappe.get_all("Work Center Location", filters={"parent": work_center, "parenttype": "Work Center"}, pluck="storage_bin", order_by="idx asc") if work_center else []
+
+
 def _psa_stock(psa, product, lock=False):
-    rows = frappe.db.sql("select quantity from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0" + (" for update" if lock else ""), (_supply_bin(psa), product))
+    rows = frappe.db.sql("select quantity from `tabWMS Stock Balance` where storage_bin in %s and product=%s and quantity>0" + (" for update" if lock else ""), (tuple(psa_bins(psa)), product))
     return sum(flt(r[0]) for r in rows)
 
 
@@ -124,9 +148,9 @@ def _source_lines(warehouse, product, psa, limit=5):
 def _raw_source_lines(warehouse, product, psa, limit):
     return frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.available_quantity from `tabWMS Stock Balance` b
         join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type
-        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin!=%s
+        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin not in %s
         and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc limit %s""",
-        (warehouse, product, _supply_bin(psa), limit), as_dict=True)
+        (warehouse, product, tuple(psa_bins(psa) + _deco_locations(psa)) or ("",), limit), as_dict=True)
 
 
 def staging_overview(psa):
@@ -144,7 +168,8 @@ def staging_overview(psa):
 
 def _create_staging_request(psa, product, source, quantity, reference_doctype, reference_name, reference_line):
     from frappe_wms.services.task import create_tasks_for_request
-    warehouse, supply_bin = frappe.db.get_value("Production Supply Area", psa, ["warehouse", "supply_bin"])
+    warehouse = frappe.db.get_value("Production Supply Area", psa, "warehouse")
+    supply_bin = staging_bin(psa, product)
     blank = lambda v: v or ["in", ["", None]]  # noqa: E731
     available = frappe.db.get_value("WMS Stock Balance", {"warehouse": warehouse, "product": product, "storage_bin": source["source_bin"], "handling_unit": blank(source.get("source_hu")),
         "batch_no": blank(source.get("batch_no")), "serial_no": blank(source.get("serial_no")), "stock_type": "AVAILABLE"}, "available_quantity", for_update=True)
@@ -157,7 +182,33 @@ def _create_staging_request(psa, product, source, quantity, reference_doctype, r
         "reference_doctype": reference_doctype, "reference_name": reference_name, "reference_line": reference_line,
         "process_type": determine_process_type(warehouse, "Replenish", item=product, stock_type="AVAILABLE", default="REPLENISH"), "priority": "High", "status": "Open"})
     request.insert(ignore_permissions=True)
-    return request.name, create_tasks_for_request(request.name)
+    task = create_tasks_for_request(request.name)
+    if reference_doctype == "Production Material Request": _via_deconsolidation(psa, reference_name, task)
+    return request.name, task
+
+
+def _free_location(psa, pmr):
+    """The order's location in the deconsolidation work center - assigned once, a free one (no stock, no open task, not another open order's)."""
+    current = frappe.db.get_value("Production Material Request", pmr, "deconsolidation_bin")
+    if current: return current
+    taken = set(frappe.get_all("Production Material Request", filters={"status": ["in", OPEN_STATUSES], "deconsolidation_bin": ["is", "set"]}, pluck="deconsolidation_bin"))
+    for loc in _deco_locations(psa):
+        if loc in taken or not frappe.db.get_value("Storage Bin", loc, "active"): continue
+        if frappe.db.exists("WMS Stock Balance", {"storage_bin": loc, "quantity": [">", 0]}) or frappe.db.exists("Warehouse Task", {"destination_bin": loc, "docstatus": 0, "status": ["!=", "Cancelled"]}): continue
+        frappe.db.set_value("Production Material Request", pmr, "deconsolidation_bin", loc)
+        return loc
+    return None
+
+
+def _via_deconsolidation(psa, pmr, tasks):
+    """PSA with a deconsolidation work center: the first leg goes to the order's location there; the leg on to the PSA is created when it is confirmed
+    (the layout storage control mechanism, services/layout_control)."""
+    if not frappe.db.get_value("Production Supply Area", psa, "deconsolidation_work_center"): return
+    location = _free_location(psa, pmr)
+    if not location: frappe.throw(_("No free location in the deconsolidation work center of {0}").format(psa))
+    for task in ([tasks] if isinstance(tasks, str) else tasks):
+        final = frappe.db.get_value("Warehouse Task", task, "destination_bin")
+        if final != location: frappe.db.set_value("Warehouse Task", task, {"destination_bin": location, "final_destination_bin": final})
 
 
 def stage_items(psa, method, lines):
@@ -195,46 +246,117 @@ def stage_items(psa, method, lines):
 def pmr_overview(psa):
     """The PSA's PMR items with their progress - the status half of the staging app."""
     require_role(*STAGE_ROLES)
-    return frappe.db.sql("""select p.name as pmr, p.work_order, p.status, p.planned_date, i.product, i.operation, i.required_quantity, i.tasked_quantity,
+    return frappe.db.sql("""select i.name as pmr_item, p.name as pmr, p.work_order, p.status, p.planned_date, i.product, i.operation, i.required_quantity, i.tasked_quantity,
         i.staged_quantity, i.consumed_quantity from `tabProduction Material Request Item` i join `tabProduction Material Request` p on p.name = i.parent
         where i.psa=%s and p.status in %s order by p.planned_date asc, p.creation asc, i.idx asc""", (psa, OPEN_STATUSES), as_dict=True)
 
 
+def _source_plan(psa, product, quantity):
+    """Source stock lines (oldest first) covering up to quantity: [(line, take)]."""
+    plan, left = [], quantity
+    for src in _source_lines(frappe.db.get_value("Production Supply Area", psa, "warehouse"), product, psa, limit=50):
+        take = min(left, flt(src.available_quantity))
+        plan.append(({"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "serial_no": src.serial_no}, take))
+        left -= take
+        if left <= 0.000001: break
+    return plan
+
+
+def _try_stage(psa, method, line):
+    frappe.db.savepoint("wms_auto_stage")
+    try:
+        return stage_items(psa, method, [line])
+    except frappe.ValidationError:
+        frappe.db.rollback(save_point="wms_auto_stage")
+        frappe.clear_messages()
+        return []
+
+
 def auto_stage(psa):
-    """Single-order staging of every open item from the oldest stock - what an Automatic PSA does on its own."""
+    """Stage every open item by its control cycle: Pick Parts (the default) per order from the oldest stock, Release Order Parts as one
+    pooled movement per product over all the open orders. Crate Parts and Direct Consumption need no staging per order."""
     require_role(*STAGE_ROLES)
-    staged = []
+    staged, aggregated = [], {}
     for r in staging_overview(psa):
-        left, lines = r.open_quantity, []
-        for src in _source_lines(frappe.db.get_value("Production Supply Area", psa, "warehouse"), r.product, psa, limit=50):
-            take = min(left, flt(src.available_quantity))
-            lines.append({"source_bin": src.storage_bin, "source_hu": src.handling_unit, "batch_no": src.batch_no, "serial_no": src.serial_no, "pmr_item": r.pmr_item, "quantity": take})
-            left -= take
-            if left <= 0.000001: break
-        for line in lines:
-            frappe.db.savepoint("wms_auto_stage")
-            try:
-                staged += stage_items(psa, "Single Order", [line])
-            except frappe.ValidationError:
-                frappe.db.rollback(save_point="wms_auto_stage")
-                frappe.clear_messages()
+        cycle = control_cycle(psa, r.product)
+        if cycle and cycle.staging_method == "Release Order Parts":
+            aggregated.setdefault(r.product, []).append(r)
+            continue
+        for src, take in _source_plan(psa, r.product, r.open_quantity):
+            staged += _try_stage(psa, "Single Order", {**src, "pmr_item": r.pmr_item, "quantity": take})
+    for product, rows in aggregated.items():
+        for src, take in _source_plan(psa, product, sum(r.open_quantity for r in rows)):
+            staged += _try_stage(psa, "Cross Order", {**src, "product": product, "pmr_items": [r.pmr_item for r in rows], "quantity": take})
     return staged
+
+
+def check_crate_parts(psa=None, product=None):
+    """Crate Parts: keep the material of a control cycle between its minimum and maximum in its PSA bin, independent of any order."""
+    filters = {"active": 1, "staging_method": "Crate Parts", **({"production_supply_area": psa} if psa else {}), **({"product": product} if product else {})}
+    created = []
+    for c in frappe.get_all("Production Supply Control Cycle", filters=filters, fields=["production_supply_area", "product", "staging_bin", "minimum_quantity", "maximum_quantity"]):
+        target = c.staging_bin or _supply_bin(c.production_supply_area)
+        held = flt(frappe.db.sql("select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0", (target, c.product))[0][0])
+        coming = flt(frappe.db.sql("""select coalesce(sum(planned_quantity - confirmed_quantity), 0) from `tabWarehouse Task` where docstatus=0 and destination_bin=%s and product=%s
+            and status in ('Open', 'On Hold', 'Available', 'Assigned', 'In Process', 'Partially Confirmed')""", (target, c.product))[0][0])
+        if held + coming >= flt(c.minimum_quantity): continue
+        for src, take in _source_plan(c.production_supply_area, c.product, flt(c.maximum_quantity) - held - coming):
+            frappe.db.savepoint("wms_crate")
+            try:
+                request, task = _create_staging_request(c.production_supply_area, c.product, src, take, "Production Supply Control Cycle", f"{c.production_supply_area}-{c.product}", None)
+                created.append({"warehouse_request": request, "task": task})
+            except frappe.ValidationError:
+                frappe.db.rollback(save_point="wms_crate")
+                frappe.clear_messages()
+    return created
+
+
+def return_unused(pmr_item):
+    """Material staged for an order and not consumed goes back to storage (tasks from the PSA bins, destination by the usual putaway
+    determination); the reservation is released as each task is confirmed."""
+    require_role(*STAGE_ROLES)
+    from frappe_wms.services.task import create_tasks_for_request
+    item = frappe.db.get_value("Production Material Request Item", pmr_item, ["name", "parent", "product", "psa", "staged_quantity", "consumed_quantity"], as_dict=True, for_update=True)
+    if not item: frappe.throw(_("Production Material Request item not found"))
+    left = flt(item.staged_quantity) - flt(item.consumed_quantity)
+    if left <= 0.000001: frappe.throw(_("Nothing staged and unconsumed for this item"))
+    warehouse = frappe.db.get_value("Production Supply Area", item.psa, "warehouse")
+    balances = frappe.db.sql("""select storage_bin, handling_unit, batch_no, serial_no, quantity, stock_uom from `tabWMS Stock Balance` where storage_bin in %s and product=%s and quantity>0
+        order by first_receipt_date desc, name desc""", (tuple(psa_bins(item.psa)), item.product), as_dict=True)  # the newest first: the oldest stays for production
+    created = []
+    for b in balances:
+        take = min(left, flt(b.quantity))
+        if take <= 0: continue
+        request = frappe.get_doc({"doctype": "Warehouse Request", "request_type": "Putaway", "warehouse": warehouse, "product": item.product, "requested_quantity": take, "stock_uom": b.stock_uom,
+            "source_bin": b.storage_bin, "source_hu": b.handling_unit or None, "batch_no": b.batch_no or None, "serial_no": b.serial_no or None, "stock_type": "AVAILABLE",
+            "reference_doctype": "Production Material Request", "reference_name": item.parent, "reference_line": item.name,
+            "process_type": determine_process_type(warehouse, "Putaway", item=item.product, stock_type="AVAILABLE", default="GR_PUTAWAY"), "priority": "Normal", "status": "Open"})
+        request.insert(ignore_permissions=True)
+        created.append({"warehouse_request": request.name, "task": create_tasks_for_request(request.name)})
+        left -= take
+        if left <= 0.000001: break
+    return created
 
 
 def run_auto_staging():
     """Scheduler: every Automatic PSA stages what is open (stock may have arrived since)."""
     for psa in frappe.get_all("Production Supply Area", filters={"active": 1, "staging_mode": "Automatic"}, pluck="name"):
         auto_stage(psa)
+    check_crate_parts()
     frappe.db.commit()
 
 
 def on_staging_confirmed(task, quantity):
     """A staging task put stock into the PSA: reserve it to its PMR item (single-order); cross-order stock stays in the pool."""
     if not task.warehouse_request: return
-    ref = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
+    ref = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line", "request_type"], as_dict=True)
+    if ref and ref.reference_doctype == "Production Material Request" and ref.reference_line and ref.request_type == "Putaway":
+        # material returned from the PSA to storage: no longer reserved to the order
+        frappe.db.sql("update `tabProduction Material Request Item` set staged_quantity=greatest(staged_quantity-%s, 0) where name=%s", (flt(quantity), ref.reference_line))
+        return
     if ref and ref.reference_doctype == "Production Material Request" and ref.reference_line:
         psa = frappe.db.get_value("Production Material Request Item", ref.reference_line, "psa")
-        if not psa or task.destination_bin != _supply_bin(psa): return  # a first leg to an intermediate bin (layout storage control): staged when it reaches the PSA
+        if not psa or task.destination_bin not in psa_bins(psa): return  # a first leg to an intermediate bin (layout storage control): staged when it reaches the PSA
         frappe.db.sql("update `tabProduction Material Request Item` set staged_quantity=staged_quantity+%s where name=%s", (flt(quantity), ref.reference_line))
 
 
@@ -267,30 +389,42 @@ def _consume_line(pmr_name, product, quantity, reference_doctype, reference_name
     for n, i in enumerate(items):
         want = left if n == len(items) - 1 else min(left, max(flt(i.required_quantity) - flt(i.consumed_quantity), 0))
         if want <= 0: continue
-        own = max(flt(i.staged_quantity) - flt(i.consumed_quantity), 0)
-        pool = pool_available(i.psa, product, lock=True)
-        if want > own + pool + 0.000001:
-            frappe.throw(_("Only {0} {1} is staged in {2} for {3}; consume less or stage more first").format(own + pool, product, i.psa, pmr_name))
-        _book_out(i.psa, product, want, reference_doctype, reference_name, f"{key}:{i.name}")
+        cycle = control_cycle(i.psa, product)
+        direct = bool(cycle and cycle.staging_method == "Direct Consumption")  # never staged: taken from where it is stored
+        if not direct:
+            own = max(flt(i.staged_quantity) - flt(i.consumed_quantity), 0)
+            pool = pool_available(i.psa, product, lock=True)
+            if want > own + pool + 0.000001:
+                frappe.throw(_("Only {0} {1} is staged in {2} for {3}; consume less or stage more first").format(own + pool, product, i.psa, pmr_name))
+        _book_out(i.psa, product, want, reference_doctype, reference_name, f"{key}:{i.name}", direct=direct)
         frappe.db.sql("update `tabProduction Material Request Item` set consumed_quantity=consumed_quantity+%s where name=%s", (want, i.name))
         left -= want
     _refresh_status(pmr_name)
+    for psa in {i.psa for i in items}: check_crate_parts(psa, product)  # consumption may have emptied a crate-parts bin
 
 
-def _book_out(psa, product, quantity, reference_doctype, reference_name, key):
-    warehouse, supply_bin = frappe.db.get_value("Production Supply Area", psa, ["warehouse", "supply_bin"])
-    balances = frappe.db.sql("""select handling_unit, batch_no, serial_no, stock_type, stock_uom, quantity from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0
-        order by first_receipt_date asc, name asc for update""", (supply_bin, product), as_dict=True)
+def _book_out(psa, product, quantity, reference_doctype, reference_name, key, direct=False):
+    """Book quantity out of the PSA's bins - or, for Direct Consumption, out of the storage bins the material sits in (oldest first)."""
+    warehouse = frappe.db.get_value("Production Supply Area", psa, "warehouse")
+    bins = tuple(psa_bins(psa))
+    if direct:
+        balances = frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.stock_type, b.stock_uom, b.available_quantity as quantity from `tabWMS Stock Balance` b
+            join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE'
+            and b.available_quantity>0 and b.storage_bin not in %s and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc for update""",
+            (warehouse, product, bins), as_dict=True)
+    else:
+        balances = frappe.db.sql("""select storage_bin, handling_unit, batch_no, serial_no, stock_type, stock_uom, quantity from `tabWMS Stock Balance` where storage_bin in %s and product=%s and quantity>0
+            order by first_receipt_date asc, name asc for update""", (bins, product), as_dict=True)
     left, entries = flt(quantity), []
     for b in balances:
         take = min(left, flt(b.quantity))
         if b.serial_no: take = min(take, 1)
         if take <= 0: continue
-        entries.append({"warehouse": warehouse, "product": product, "batch_no": b.batch_no, "serial_no": b.serial_no, "handling_unit": b.handling_unit, "storage_bin": supply_bin,
+        entries.append({"warehouse": warehouse, "product": product, "batch_no": b.batch_no, "serial_no": b.serial_no, "handling_unit": b.handling_unit, "storage_bin": b.storage_bin,
             "stock_type": b.stock_type, "quantity": -take, "stock_uom": b.stock_uom, "movement_type": "601"})
         left -= take
         if left <= 0: break
-    if left > 0.000001: frappe.throw(_("Not enough {0} in {1}").format(product, supply_bin))
+    if left > 0.000001: frappe.throw(_("Not enough {0} in {1}").format(product, ", ".join(bins) if not direct else warehouse))
     for seq, e in enumerate(entries, 1): post_entries([e], reference_doctype, reference_name, f"{key}:{seq}")
 
 

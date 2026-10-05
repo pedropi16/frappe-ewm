@@ -42,6 +42,7 @@ IN_SCOPE_DOCTYPES = [
     "Layout Storage Control",
     "Handling Indicator",
     "Production Supply Area",
+    "Production Supply Control Cycle",
     "Process Determination Rule",
     "Storage Process",
     "Storage Type Search Sequence",
