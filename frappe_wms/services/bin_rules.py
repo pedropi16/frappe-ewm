@@ -81,13 +81,13 @@ def hu_load(hu_name):
 
 
 def hu_fits_bin_type(hu_type, bin_type):
-    """Size check of an HU type against a bin type - only where both sides carry a size (the footprint may turn 90 degrees, the height may not)."""
+    """Size check of an HU type against a bin type (its footprint and height) - only where both sides carry a size (the footprint may turn 90 degrees, the height may not)."""
     hu = frappe.get_cached_doc("Handling Unit Type", hu_type)
     if all(flt(hu.get(d)) > 0 and flt(bin_type.get(d)) > 0 for d in ("length", "width", "height")):
         a, b = sorted((flt(hu.length), flt(hu.width)), reverse=True)
         c, d = sorted((flt(bin_type.length), flt(bin_type.width)), reverse=True)
         if a > c or b > d or flt(hu.height) > flt(bin_type.height): return False
-    return not (flt(hu.maximum_weight) and flt(bin_type.maximum_weight) and flt(hu.maximum_weight) > flt(bin_type.maximum_weight))
+    return True
 
 
 def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_no=None,
