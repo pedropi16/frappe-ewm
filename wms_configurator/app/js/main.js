@@ -1,9 +1,10 @@
-import { loadSchema } from "./schema.js?v=b1b5613c18";
-import * as Store from "./store.js?v=b1b5613c18";
-import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js?v=b1b5613c18";
-import { initConnectModal } from "./connect.js?v=b1b5613c18";
-import * as ERP from "./erp.js?v=b1b5613c18";
-import { exportProfile, importProfileFromFile } from "./export_import.js?v=b1b5613c18";
+import { loadSchema } from "./schema.js?v=8cbadb8fa0";
+import * as Store from "./store.js?v=8cbadb8fa0";
+import { initSearch } from "./search.js?v=8cbadb8fa0";
+import { initWizard, goToStep, renderStep, currentStep } from "./wizard.js?v=8cbadb8fa0";
+import { initConnectModal } from "./connect.js?v=8cbadb8fa0";
+import * as ERP from "./erp.js?v=8cbadb8fa0";
+import { exportProfile, importProfileFromFile } from "./export_import.js?v=8cbadb8fa0";
 
 async function main() {
   await loadSchema();
@@ -52,6 +53,7 @@ async function main() {
 
   initConnectModal(ERP);
   initWizard();
+  initSearch();
 
   const hasData = Object.values(Store.getProfile().records).some((r) => r.length);
   if (hasData) goToStep("settings");

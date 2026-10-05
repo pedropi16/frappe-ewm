@@ -9,12 +9,13 @@
      no-trailing-slash form. This file is the frappe_wms www copy of
      wms_configurator/app/index.html - keep them in sync (see wms_configurator/README.md). -->
 <base href="/configurator/">
-<link rel="stylesheet" href="css/app.css?v=b1b5613c18">
+<link rel="stylesheet" href="css/app.css?v=8cbadb8fa0">
 </head>
 <body>
 <div id="app">
   <header class="topbar">
     <div class="brand">WMS Configurator</div>
+    <div class="search-wrap"><input id="global-search" class="search-input" type="search" placeholder="Search steps, doctypes, fields, records  ( / )" autocomplete="off" spellcheck="false"><div id="search-results" class="search-results" hidden></div></div>
     <input id="profile-name" class="profile-name-input" placeholder="Untitled profile" spellcheck="false">
     <div class="topbar-actions">
       <button id="erp-status" class="erp-pill" type="button" title="Connection to ERPNext"></button>
@@ -50,6 +51,6 @@
 </div>
 
 <script>window.frappe = { csrf_token: "{{ csrf_token }}" };</script>
-<script type="module" src="js/main.js?v=b1b5613c18"></script>
+<script type="module" src="js/main.js?v=8cbadb8fa0"></script>
 </body>
 </html>

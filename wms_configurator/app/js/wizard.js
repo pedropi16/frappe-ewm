@@ -1,14 +1,14 @@
-import * as Schema from "./schema.js?v=b1b5613c18";
-import * as Store from "./store.js?v=b1b5613c18";
-import { renderRecordForm, el } from "./render.js?v=b1b5613c18";
-import { renderPresetPicker } from "./presets.js?v=b1b5613c18";
-import { renderBinGenerator } from "./binpattern.js?v=b1b5613c18";
-import { renderReviewStep } from "./review.js?v=b1b5613c18";
-import { renderMapStep } from "./diagram.js?v=b1b5613c18";
-import { renderRecordTable } from "./listview.js?v=b1b5613c18";
-import * as ERP from "./erp.js?v=b1b5613c18";
-import { previewPull, commitPull } from "./sitesync.js?v=b1b5613c18";
-import { toast } from "./render.js?v=b1b5613c18";
+import * as Schema from "./schema.js?v=8cbadb8fa0";
+import * as Store from "./store.js?v=8cbadb8fa0";
+import { renderRecordForm, el } from "./render.js?v=8cbadb8fa0";
+import { renderPresetPicker } from "./presets.js?v=8cbadb8fa0";
+import { renderBinGenerator } from "./binpattern.js?v=8cbadb8fa0";
+import { renderReviewStep } from "./review.js?v=8cbadb8fa0";
+import { renderMapStep } from "./diagram.js?v=8cbadb8fa0";
+import { renderRecordTable } from "./listview.js?v=8cbadb8fa0";
+import * as ERP from "./erp.js?v=8cbadb8fa0";
+import { previewPull, commitPull } from "./sitesync.js?v=8cbadb8fa0";
+import { toast } from "./render.js?v=8cbadb8fa0";
 
 export const STEPS = [
   { id: "start", title: "Start", kind: "preset" },
@@ -131,6 +131,14 @@ export function goToStep(idOrIndex) {
   renderStepper();
   renderStep(activeIndex);
   document.getElementById("step-content").scrollTop = 0;
+}
+
+export function openRecord(doctypeName, id) {
+  const i = STEPS.findIndex((s) => s.doctypes && s.doctypes.includes(doctypeName));
+  if (i < 0) return;
+  goToStep(i);
+  editing = { doctypeName, id };
+  renderStep(i);
 }
 
 function stepRecordCount(step) {

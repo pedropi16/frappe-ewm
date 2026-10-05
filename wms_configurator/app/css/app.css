@@ -459,3 +459,13 @@ tr.rec-row.selected { background: color-mix(in srgb, var(--accent) 9%, transpare
 .diff-new { color: #2f7a3f; font-weight: 600; }
 code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .modal-card .inline-check { flex-direction: row; align-items: center; color: var(--text); }
+
+.search-wrap { position: relative; flex: 1 1 260px; max-width: 420px; }
+.search-input { width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 14px; }
+.search-results { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); max-height: 60vh; overflow-y: auto; z-index: 30; }
+.search-row { display: flex; gap: 8px; align-items: baseline; padding: 7px 10px; cursor: pointer; font-size: 13px; }
+.search-row.active, .search-row:hover { background: var(--step-bg); }
+.search-kind { flex: none; width: 56px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--accent); }
+.search-title { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-sub { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.search-empty { padding: 10px; color: var(--text-dim); font-size: 13px; }

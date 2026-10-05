@@ -1,5 +1,5 @@
-import * as Schema from "./schema.js?v=b1b5613c18";
-import * as ERP from "./erp.js?v=b1b5613c18";
+import * as Schema from "./schema.js?v=8cbadb8fa0";
+import * as ERP from "./erp.js?v=8cbadb8fa0";
 
 const UNRESETTABLE = new Set(["Section Break", "Column Break", "Tab Break", "Table"]);
 

@@ -1,6 +1,6 @@
-import * as Schema from "./schema.js?v=b1b5613c18";
-import * as Store from "./store.js?v=b1b5613c18";
-import { el, fieldInput, toast } from "./render.js?v=b1b5613c18";
+import * as Schema from "./schema.js?v=8cbadb8fa0";
+import * as Store from "./store.js?v=8cbadb8fa0";
+import { el, fieldInput, toast } from "./render.js?v=8cbadb8fa0";
 
 const TEXTY = ["Data", "Link", "Select", "Small Text", "Text Editor"];
 
