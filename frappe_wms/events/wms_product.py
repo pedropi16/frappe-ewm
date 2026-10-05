@@ -9,3 +9,6 @@ def validate_product(doc, method=None):
         doc.stock_uom = item.stock_uom
     elif doc.stock_uom != item.stock_uom:
         frappe.throw(_("Stock UOM {0} does not match the ERPNext Item's stock UOM {1}").format(doc.stock_uom, item.stock_uom))
+    groups = {frappe.db.get_value("Handling Indicator", r.indicator, "required_storage_group") for r in doc.get("handling_indicators") or []} - {None, ""}
+    if len(groups) > 1:
+        frappe.throw(_("The handling indicators of {0} require different storage groups ({1}); a bin is in only one").format(doc.item, ", ".join(sorted(groups))))

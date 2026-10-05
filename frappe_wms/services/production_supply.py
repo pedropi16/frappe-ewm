@@ -233,6 +233,8 @@ def on_staging_confirmed(task, quantity):
     if not task.warehouse_request: return
     ref = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name", "reference_line"], as_dict=True)
     if ref and ref.reference_doctype == "Production Material Request" and ref.reference_line:
+        psa = frappe.db.get_value("Production Material Request Item", ref.reference_line, "psa")
+        if not psa or task.destination_bin != _supply_bin(psa): return  # a first leg to an intermediate bin (layout storage control): staged when it reaches the PSA
         frappe.db.sql("update `tabProduction Material Request Item` set staged_quantity=staged_quantity+%s where name=%s", (flt(quantity), ref.reference_line))
 
 

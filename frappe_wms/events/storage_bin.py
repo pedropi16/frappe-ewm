@@ -6,5 +6,7 @@ def validate_storage_bin(doc, method=None):
         storage_type = frappe.get_cached_doc("Storage Type", doc.storage_type)
         if storage_type.warehouse != doc.warehouse:
             frappe.throw(_("Storage type and storage bin must belong to the same warehouse"))
+    if doc.get("storage_group") and frappe.db.get_value("Storage Group", doc.storage_group, "storage_type") != doc.storage_type:
+        frappe.throw(_("Storage group {0} does not belong to storage type {1}").format(doc.storage_group, doc.storage_type))
     if doc.maximum_hus and doc.maximum_hus < 0:
         frappe.throw(_("Maximum HUs cannot be negative"))

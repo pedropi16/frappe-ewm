@@ -1,6 +1,6 @@
 {
-  "name": "Bin Type",
-  "module": "WMS Core",
+  "name": "Handling Indicator",
+  "module": "WMS Inventory",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -8,58 +8,48 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "bin_type_code",
-    "bin_type_name",
-    "maximum_hus",
-    "maximum_weight",
-    "maximum_volume",
-    "length",
-    "width",
-    "height",
+    "indicator_code",
+    "indicator_name",
+    "required_storage_group",
+    "no_unpack",
+    "description",
     "active"
   ],
   "fields": [
     {
-      "fieldname": "bin_type_code",
-      "label": "Bin Type Code",
+      "fieldname": "indicator_code",
+      "label": "Indicator Code",
       "fieldtype": "Data",
       "reqd": 1,
       "unique": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "bin_type_name",
-      "label": "Bin Type Name",
+      "fieldname": "indicator_name",
+      "label": "Indicator Name",
       "fieldtype": "Data",
+      "reqd": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "maximum_weight",
-      "label": "Maximum Weight",
-      "fieldtype": "Float"
+      "fieldname": "required_storage_group",
+      "label": "Required Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group",
+      "in_list_view": 1,
+      "description": "Products with this indicator are only put into bins of this storage group (e.g. a cold room for temperature-sensitive goods)."
     },
     {
-      "fieldname": "maximum_volume",
-      "label": "Maximum Volume",
-      "fieldtype": "Float"
+      "fieldname": "no_unpack",
+      "label": "Do Not Unpack",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "description": "The product stays in its Handling Unit: no loose or partial moves out of it, no repacking, no deconsolidation."
     },
     {
-      "fieldname": "length",
-      "label": "Length",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
-    },
-    {
-      "fieldname": "width",
-      "label": "Width",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
-    },
-    {
-      "fieldname": "height",
-      "label": "Height",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Small Text"
     },
     {
       "fieldname": "active",
@@ -67,16 +57,8 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
-    },
-    {
-      "fieldname": "maximum_hus",
-      "label": "Maximum HUs",
-      "fieldtype": "Int",
-      "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
     }
   ],
-  "autoname": "field:bin_type_code",
-  "title_field": "bin_type_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
@@ -192,5 +174,7 @@
       "export": 1,
       "print": 1
     }
-  ]
+  ],
+  "autoname": "field:indicator_code",
+  "title_field": "indicator_name"
 }

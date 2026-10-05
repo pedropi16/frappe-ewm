@@ -739,6 +739,25 @@ Request** per production order listing the materials it needs (`services/product
 Not built yet: the staging screen itself (Monitor / RF), the optional deconsolidation hop, returning unused material,
 reversal of a cancelled consumption entry.
 
+## Bin types, storage groups, layout storage control, handling indicators
+
+* **Bin Type** - the size class of a location (inner length/width/height, maximum weight, volume and number of HUs: a
+  pallet bin, a shelf for boxes). A Handling Unit Type with a size (length/width/height) is only put into bins whose
+  Bin Type fits it - the footprint may turn 90 degrees, the height may not - so no list of allowed HU types per bin is
+  needed (the explicit list on a bin still works as an extra restriction). A bin's own capacity fields win; a blank one
+  comes from its Bin Type. Where either side has no size nothing is checked.
+* **Storage Group** - belongs to a Storage Type and groups its bins (an aisle, a production supply area, a cold room);
+  set on the Storage Bin. A Bin Determination Rule can target a group (`destination_storage_group`).
+* **Layout Storage Control** (SAP layout-oriented storage control) - a rule per warehouse: for goods going from a source
+  storage type/group to a destination storage type/group, an intermediate storage type (+ group/section, or a fixed
+  bin) is used. A request's task is created to the intermediate bin with the real destination in `final_destination_bin`;
+  when it is fully confirmed the second leg to the destination is created from what actually arrived. The request is
+  complete only when the last leg is.
+* **Handling Indicator** - configurable handling rules on a product (WMS Product > Handling Indicators):
+  *Required Storage Group* (temperature sensitive goods only go into the cold group - enforced wherever a destination bin
+  is chosen or checked) and *Do Not Unpack* (no loose/partial moves out of the HU, no repacking, no deconsolidation).
+  A product cannot carry indicators that require different storage groups.
+
 ## Modules
 
 | Module | Contains |

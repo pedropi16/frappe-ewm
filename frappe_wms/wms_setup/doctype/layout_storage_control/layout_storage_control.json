@@ -1,6 +1,6 @@
 {
-  "name": "Bin Type",
-  "module": "WMS Core",
+  "name": "Layout Storage Control",
+  "module": "WMS Setup",
   "custom": 0,
   "is_submittable": 0,
   "istable": 0,
@@ -8,58 +8,89 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "bin_type_code",
-    "bin_type_name",
-    "maximum_hus",
-    "maximum_weight",
-    "maximum_volume",
-    "length",
-    "width",
-    "height",
+    "warehouse",
+    "priority",
+    "source_storage_type",
+    "source_storage_group",
+    "destination_storage_type",
+    "destination_storage_group",
+    "intermediate_storage_type",
+    "intermediate_storage_group",
+    "intermediate_storage_section",
+    "intermediate_bin",
     "active"
   ],
   "fields": [
     {
-      "fieldname": "bin_type_code",
-      "label": "Bin Type Code",
-      "fieldtype": "Data",
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
       "reqd": 1,
-      "unique": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "priority",
+      "label": "Priority",
+      "fieldtype": "Int",
+      "default": 1,
+      "in_list_view": 1,
+      "description": "Lowest number is tried first."
+    },
+    {
+      "fieldname": "source_storage_type",
+      "label": "Source Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
       "in_list_view": 1
     },
     {
-      "fieldname": "bin_type_name",
-      "label": "Bin Type Name",
-      "fieldtype": "Data",
+      "fieldname": "source_storage_group",
+      "label": "Source Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group"
+    },
+    {
+      "fieldname": "destination_storage_type",
+      "label": "Destination Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
       "in_list_view": 1
     },
     {
-      "fieldname": "maximum_weight",
-      "label": "Maximum Weight",
-      "fieldtype": "Float"
+      "fieldname": "destination_storage_group",
+      "label": "Destination Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group"
     },
     {
-      "fieldname": "maximum_volume",
-      "label": "Maximum Volume",
-      "fieldtype": "Float"
+      "fieldname": "intermediate_storage_type",
+      "label": "Intermediate Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "reqd": 1,
+      "in_list_view": 1
     },
     {
-      "fieldname": "length",
-      "label": "Length",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
+      "fieldname": "intermediate_storage_group",
+      "label": "Intermediate Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group",
+      "description": "Only bins of this group (e.g. the end of the aisle the goods are brought to)."
     },
     {
-      "fieldname": "width",
-      "label": "Width",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
+      "fieldname": "intermediate_storage_section",
+      "label": "Intermediate Storage Section",
+      "fieldtype": "Link",
+      "options": "Storage Section"
     },
     {
-      "fieldname": "height",
-      "label": "Height",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
+      "fieldname": "intermediate_bin",
+      "label": "Intermediate Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Optional fixed bin; otherwise the first usable bin of the type/group/section."
     },
     {
       "fieldname": "active",
@@ -67,16 +98,8 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
-    },
-    {
-      "fieldname": "maximum_hus",
-      "label": "Maximum HUs",
-      "fieldtype": "Int",
-      "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
     }
   ],
-  "autoname": "field:bin_type_code",
-  "title_field": "bin_type_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
@@ -192,5 +215,6 @@
       "export": 1,
       "print": 1
     }
-  ]
+  ],
+  "autoname": "LSC-.#####"
 }

@@ -32,7 +32,9 @@ def repack_loose(storage_bin, source_hu, destination_hu, items, reference_doctyp
         warehouse = hu.warehouse
     warehouse = warehouse or frappe.db.get_value("Storage Bin", storage_bin, "warehouse")
     if not items: frappe.throw(_("Nothing to repack - add at least one item line"))
+    from frappe_wms.services.handling_indicators import check_unpack
     for i,item in enumerate(items,1):
+        if item.get("item"): check_unpack(item["item"], source_hu, destination_hu)
         # A malformed line used to surface as a raw KeyError (HTTP 500) halfway through posting.
         missing = [k for k in ("item", "quantity", "stock_uom", "stock_type") if not item.get(k)]
         if missing: frappe.throw(_("Repack line {0} is missing {1}").format(i, ", ".join(missing)))

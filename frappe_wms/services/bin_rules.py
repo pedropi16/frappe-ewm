@@ -80,10 +80,24 @@ def hu_load(hu_name):
     return weight or None, volume or None
 
 
+def hu_fits_bin_type(hu_type, bin_type):
+    """Size check of an HU type against a bin type - only where both sides carry a size (the footprint may turn 90 degrees, the height may not)."""
+    hu = frappe.get_cached_doc("Handling Unit Type", hu_type)
+    if all(flt(hu.get(d)) > 0 and flt(bin_type.get(d)) > 0 for d in ("length", "width", "height")):
+        a, b = sorted((flt(hu.length), flt(hu.width)), reverse=True)
+        c, d = sorted((flt(bin_type.length), flt(bin_type.width)), reverse=True)
+        if a > c or b > d or flt(hu.height) > flt(bin_type.height): return False
+    return not (flt(hu.maximum_weight) and flt(bin_type.maximum_weight) and flt(hu.maximum_weight) > flt(bin_type.maximum_weight))
+
+
 def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_no=None,
                     destination_hu=None, incoming_weight=None, incoming_hu_count=1, incoming_volume=None, lock=False, require_hu=True):
     bin_doc = frappe.get_doc("Storage Bin", bin_name, for_update=lock)
     storage_type = frappe.get_cached_doc("Storage Type", bin_doc.storage_type)
+    bin_type = frappe.get_cached_doc("Bin Type", bin_doc.bin_type) if bin_doc.bin_type else None
+    # A bin's own limits win; a blank one comes from its Bin Type (the size class of the location).
+    max_hus, max_weight, max_volume = (bin_doc.maximum_hus or (bin_type and bin_type.maximum_hus),
+        bin_doc.maximum_weight or (bin_type and bin_type.maximum_weight), bin_doc.maximum_volume or (bin_type and bin_type.maximum_volume))
     if not bin_doc.active or bin_doc.putaway_blocked:
         return [_("bin is inactive or blocked for putaway")]
 
@@ -95,15 +109,23 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
         if hu_type not in {r.hu_type for r in bin_doc.allowed_hu_types}:
             reasons.append(_("HU type {0} is not in the bin's whitelist").format(hu_type))
 
+    if item:
+        from frappe_wms.services.handling_indicators import product_handling
+        groups = product_handling(item)[0]
+        if groups and bin_doc.storage_group not in groups:
+            reasons.append(_("handling indicator requires storage group {0}").format(", ".join(sorted(groups))))
+    if bin_type and hu_type and not hu_fits_bin_type(hu_type, bin_type):
+        reasons.append(_("HU type {0} does not fit bin type {1}").format(hu_type, bin_type.name))
+
     method = storage_type.capacity_check_method
-    if method == "HU Count" and bin_doc.maximum_hus:
-        if live_hu_count(bin_name, lock) + flt(incoming_hu_count) > flt(bin_doc.maximum_hus):
+    if method == "HU Count" and max_hus:
+        if live_hu_count(bin_name, lock) + flt(incoming_hu_count) > flt(max_hus):
             reasons.append(_("HU count capacity exceeded"))
-    elif method == "Weight" and bin_doc.maximum_weight and incoming_weight:
-        if live_weight(bin_name, lock) + flt(incoming_weight) > flt(bin_doc.maximum_weight):
+    elif method == "Weight" and max_weight and incoming_weight:
+        if live_weight(bin_name, lock) + flt(incoming_weight) > flt(max_weight):
             reasons.append(_("weight capacity exceeded"))
-    elif method == "Volume" and bin_doc.maximum_volume and incoming_volume:
-        if live_volume(bin_name, lock) + flt(incoming_volume) > flt(bin_doc.maximum_volume):
+    elif method == "Volume" and max_volume and incoming_volume:
+        if live_volume(bin_name, lock) + flt(incoming_volume) > flt(max_volume):
             reasons.append(_("volume capacity exceeded"))
 
     if require_hu and storage_type.hu_managed and not destination_hu:

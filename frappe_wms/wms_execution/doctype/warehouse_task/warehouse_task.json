@@ -23,6 +23,7 @@
     "serial_no",
     "source_bin",
     "destination_bin",
+    "final_destination_bin",
     "source_hu",
     "destination_hu",
     "move_top_hu",
@@ -307,6 +308,14 @@
       "read_only": 1,
       "in_standard_filter": 1,
       "description": "Set for a chained Storage Process step - this task starts On Hold until the predecessor is fully confirmed, independent of any Warehouse Order sequencing."
+    },
+    {
+      "fieldname": "final_destination_bin",
+      "label": "Final Destination Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1,
+      "description": "Layout-oriented storage control: this task goes to an intermediate bin first; a follow-up task takes the goods on to this bin."
     }
   ],
   "autoname": "WT-.##########",

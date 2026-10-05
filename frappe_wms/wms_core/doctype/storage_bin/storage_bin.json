@@ -14,6 +14,7 @@
     "warehouse",
     "storage_type",
     "storage_section",
+    "storage_group",
     "bin_type",
     "activity_area",
     "parent_bin",
@@ -207,6 +208,14 @@
       "default": 1,
       "in_list_view": 1,
       "in_standard_filter": 1
+    },
+    {
+      "fieldname": "storage_group",
+      "label": "Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group",
+      "in_standard_filter": 1,
+      "description": "Groups bins of this storage type for layout-oriented storage control and handling-indicator restrictions."
     }
   ],
   "autoname": "field:bin_code",

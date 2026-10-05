@@ -19,6 +19,7 @@
     "destination_storage_type",
     "search_sequence",
     "destination_section",
+    "destination_storage_group",
     "fixed_destination_bin",
     "strategy",
     "active"
@@ -115,6 +116,12 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "destination_storage_group",
+      "label": "Destination Storage Group",
+      "fieldtype": "Link",
+      "options": "Storage Group"
     }
   ],
   "autoname": "BDR-.#####",

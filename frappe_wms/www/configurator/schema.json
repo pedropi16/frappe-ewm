@@ -6,6 +6,7 @@
   "Storage Type",
   "Storage Section",
   "Bin Type",
+  "Storage Group",
   "Activity Area",
   "Storage Bin",
   "Work Center",
@@ -13,6 +14,9 @@
   "WMS Movement Type",
   "Warehouse Process Type",
   "Bin Determination Rule",
+  "Layout Storage Control",
+  "Handling Indicator",
+  "Production Supply Area",
   "Process Determination Rule",
   "Storage Process",
   "Storage Type Search Sequence",
@@ -74,6 +78,13 @@
      "fieldtype": "Check",
      "default": "0",
      "description": "When enabled, confirm_task requires an actual scan (source bin/HU, destination bin/HU, and product) for every field the task has one to check, instead of the check being skippable by simply omitting the scanned value. Off by default - today's RF app already gates this client-side, so most warehouses do not need server-side enforcement; turn on where a bypassed or scripted confirmation would be a real risk."
+    },
+    {
+     "fieldname": "require_bin_check_digits",
+     "label": "Require Bin Check Digits",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "When enabled, confirming a task against a bin with no Handling Unit also involved (Putaway, Internal Move, Posting Change) asks for the bin's check digits instead of its barcode - a short code printed only on the bin's physical label, never shown in the RF app or any task list, so entering it correctly proves the operator is actually standing at that bin. Off by default: every Storage Bin needs its check digits label printed before this is safe to turn on."
     },
     {
      "fieldname": "blind_counting",
@@ -487,29 +498,85 @@
     {
      "fieldname": "length",
      "label": "Length",
-     "fieldtype": "Float"
+     "fieldtype": "Float",
+     "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
     },
     {
      "fieldname": "width",
      "label": "Width",
-     "fieldtype": "Float"
+     "fieldtype": "Float",
+     "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
     },
     {
      "fieldname": "height",
      "label": "Height",
-     "fieldtype": "Float"
+     "fieldtype": "Float",
+     "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
     },
     {
      "fieldname": "active",
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "maximum_hus",
+     "label": "Maximum HUs",
+     "fieldtype": "Int",
+     "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
     }
    ],
    "key": {
     "type": "field",
     "fields": [
      "bin_type_code"
+    ]
+   }
+  },
+  "Storage Group": {
+   "name": "Storage Group",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "storage_type",
+     "label": "Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "group_code",
+     "label": "Group Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "group_name",
+     "label": "Group Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text",
+     "description": "E.g. all bins of an aisle (intermediate storage for layout-oriented storage control), a production supply area, a cold section."
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{storage_type}-{group_code}",
+    "fields": [
+     "storage_type",
+     "group_code"
     ]
    }
   },
@@ -571,6 +638,13 @@
      "fieldname": "bin_name",
      "label": "Bin Name",
      "fieldtype": "Data"
+    },
+    {
+     "fieldname": "check_digits",
+     "label": "Check Digits",
+     "fieldtype": "Data",
+     "description": "Auto-generated, printed on the bin's physical label only - never shown in the RF app or any task list, so confirming it proves the operator is actually at this bin (WMS Settings: Require Bin Check Digits).",
+     "read_only": 1
     },
     {
      "fieldname": "warehouse",
@@ -705,6 +779,13 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "storage_group",
+     "label": "Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group",
+     "description": "Groups bins of this storage type for layout-oriented storage control and handling-indicator restrictions."
     }
    ],
    "key": {
@@ -881,6 +962,13 @@
      "fieldtype": "Check",
      "default": "0",
      "description": "Let the packer send stock that is not physically there to the warehouse difference bin (only stock not picked for a delivery)."
+    },
+    {
+     "fieldname": "locations",
+     "label": "Locations",
+     "fieldtype": "Table",
+     "options": "Work Center Location",
+     "description": "The bins this station works with. A Deconsolidation station collects the picked material of one production order per location."
     }
    ],
    "key": {
@@ -1218,10 +1306,221 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "destination_storage_group",
+     "label": "Destination Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group"
     }
    ],
    "key": {
     "type": "none"
+   }
+  },
+  "Layout Storage Control": {
+   "name": "Layout Storage Control",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "default": 1,
+     "description": "Lowest number is tried first."
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Source Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "source_storage_group",
+     "label": "Source Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group"
+    },
+    {
+     "fieldname": "destination_storage_type",
+     "label": "Destination Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type"
+    },
+    {
+     "fieldname": "destination_storage_group",
+     "label": "Destination Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group"
+    },
+    {
+     "fieldname": "intermediate_storage_type",
+     "label": "Intermediate Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "reqd": 1
+    },
+    {
+     "fieldname": "intermediate_storage_group",
+     "label": "Intermediate Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group",
+     "description": "Only bins of this group (e.g. the end of the aisle the goods are brought to)."
+    },
+    {
+     "fieldname": "intermediate_storage_section",
+     "label": "Intermediate Storage Section",
+     "fieldtype": "Link",
+     "options": "Storage Section"
+    },
+    {
+     "fieldname": "intermediate_bin",
+     "label": "Intermediate Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Optional fixed bin; otherwise the first usable bin of the type/group/section."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Handling Indicator": {
+   "name": "Handling Indicator",
+   "module": "WMS Inventory",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "indicator_code",
+     "label": "Indicator Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "indicator_name",
+     "label": "Indicator Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "required_storage_group",
+     "label": "Required Storage Group",
+     "fieldtype": "Link",
+     "options": "Storage Group",
+     "description": "Products with this indicator are only put into bins of this storage group (e.g. a cold room for temperature-sensitive goods)."
+    },
+    {
+     "fieldname": "no_unpack",
+     "label": "Do Not Unpack",
+     "fieldtype": "Check",
+     "description": "The product stays in its Handling Unit: no loose or partial moves out of it, no repacking, no deconsolidation."
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Small Text"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "indicator_code"
+    ]
+   }
+  },
+  "Production Supply Area": {
+   "name": "Production Supply Area",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "psa_code",
+     "label": "PSA Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "psa_name",
+     "label": "PSA Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "supply_bin",
+     "label": "Supply Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1,
+     "description": "The bin at the production floor staged material is put into, and consumed from as orders start or complete."
+    },
+    {
+     "fieldname": "workstations",
+     "label": "Workstations",
+     "fieldtype": "Table",
+     "options": "PSA Workstation",
+     "description": "Operations running at these workstations are supplied through this PSA."
+    },
+    {
+     "fieldname": "deconsolidation_work_center",
+     "label": "Deconsolidation Work Center",
+     "fieldtype": "Link",
+     "options": "Work Center",
+     "description": "Optional: material picked in several areas is collected here before it moves to the supply bin."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    },
+    {
+     "fieldname": "staging_mode",
+     "label": "Staging Mode",
+     "fieldtype": "Select",
+     "options": "Manual\nAutomatic",
+     "default": "Manual",
+     "description": "Automatic: open PMR items are staged by single-order tasks from the oldest stock, when the PMR is created and hourly. Manual: staged in the Production Staging app."
+    }
+   ],
+   "key": {
+    "type": "format",
+    "format": "{warehouse}-{psa_code}",
+    "fields": [
+     "warehouse",
+     "psa_code"
+    ]
    }
   },
   "Process Determination Rule": {
@@ -2183,6 +2482,24 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "length",
+     "label": "Length",
+     "fieldtype": "Float",
+     "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+     "fieldname": "width",
+     "label": "Width",
+     "fieldtype": "Float",
+     "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+     "fieldname": "height",
+     "label": "Height",
+     "fieldtype": "Float",
+     "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
     }
    ],
    "key": {
@@ -2822,6 +3139,25 @@
     "type": "none"
    }
   },
+  "PSA Workstation": {
+   "name": "PSA Workstation",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "workstation",
+     "label": "Workstation",
+     "fieldtype": "Link",
+     "options": "Workstation",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
   "Packaging Spec Level": {
    "name": "Packaging Spec Level",
    "module": "WMS Handling Units",
@@ -3048,6 +3384,25 @@
      "fieldname": "description",
      "label": "Description",
      "fieldtype": "Data"
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Work Center Location": {
+   "name": "Work Center Location",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "storage_bin",
+     "label": "Storage Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1
     }
    ],
    "key": {
@@ -3282,6 +3637,10 @@
     {
      "target": "Storage Type",
      "label": "Preferred Storage Type"
+    },
+    {
+     "target": "Handling Indicator",
+     "label": "Handling Indicators \u2192 Handling Indicator"
     }
    ]
   },
@@ -3506,6 +3865,10 @@
     {
      "target": "Warehouse Task",
      "label": "Predecessor Task"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Final Destination Bin"
     }
    ]
   },
@@ -4069,6 +4432,10 @@
     {
      "target": "Item",
      "label": "Product"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "Assigned Resource"
     },
     {
      "target": "Item",

@@ -54,9 +54,10 @@ def _search_sequence_storage_types(search_sequence, stock_type):
     rows = [r for r in seq.storage_types if not seq.stock_type or seq.stock_type == stock_type]
     return [r.storage_type for r in sorted(rows, key=lambda r: r.sequence or 0)]
 
-def _candidate_bins_for_storage_type(warehouse, storage_type, section, context):
+def _candidate_bins_for_storage_type(warehouse, storage_type, section, context, group=None):
     filters={"warehouse":warehouse,"storage_type":storage_type,"active":1,"putaway_blocked":0}
     if section: filters["storage_section"]=section
+    if group: filters["storage_group"]=group
     bins=frappe.get_all("Storage Bin",filters=filters,
         fields=["name","maximum_hus","maximum_weight","sequence","aisle"],order_by="sequence asc")
     # reserved_hu_counts: a same-call, not-yet-posted count of HUs already assigned to a bin by
@@ -105,7 +106,7 @@ def determine_destination_bin(context):
             # A search sequence tries each storage type in turn, moving to the next only if
             # the current one has zero usable bins - a single destination_storage_type or the
             # preferred_storage_type fallback are just one-element sequences of this same loop.
-            bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, rule.destination_section, context)
+            bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, rule.destination_section, context, rule.destination_storage_group)
             if not bins: continue
             bin_name=_apply_bin_strategy(rule.strategy,bins,context)
             if bin_name: return bin_name

@@ -84,6 +84,8 @@ def create_tasks_for_request(request_name, batch_key=None):
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
         task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": request.source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, "movement_type": movement_type, "priority": request.priority or "Normal", "status": "Open", "idempotency_key": idempotency_key})
+        from frappe_wms.services.layout_control import reroute
+        reroute(task)  # layout-oriented storage control: via an intermediate bin when a rule applies
         attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name)
         task.insert(ignore_permissions=True)
         created.append(task.name)
@@ -575,6 +577,9 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         resolved_destination_hu = _resolve_partial_hu_move(task, posted_qty)
         destination["handling_unit"] = resolved_destination_hu
         if resolved_destination_hu is None: destination_hu = _UNPACK
+    if posted_qty > 0 and verify and task.source_hu and task.task_type != "Repack":
+        from frappe_wms.services.handling_indicators import check_unpack
+        check_unpack(task.product, task.source_hu, resolved_destination_hu)
     if posted_qty > 0 and resolved_destination_hu and resolved_destination_hu != task.source_hu and task.destination_bin and frappe.db.sql(
             "select 1 from `tabWMS Stock Balance` where handling_unit=%s and storage_bin!=%s and quantity>0 limit 1", (resolved_destination_hu, task.destination_bin)):
         # Relocating the destination HU would leave its existing stock behind: one HU in two bins.
@@ -598,7 +603,10 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     updates = {"confirmed_quantity": new_confirmed, "status": status, "confirmed_at": now_datetime(), "confirmed_by": frappe.session.user, "confirmation_device": device, "idempotency_key": key, "destination_hu": resolved_destination_hu}
     if fully_confirmed: updates["docstatus"] = 1
     task.db_set(updates, update_modified=True)
-    if fully_confirmed: advance_to_next_step(task)
+    if fully_confirmed:
+        advance_to_next_step(task)
+        from frappe_wms.services.layout_control import advance
+        advance(task)
     _update_request(task.warehouse_request)
     _update_allocations(task, posted_qty)
     from frappe_wms.services.production_supply import on_staging_confirmed
@@ -767,7 +775,8 @@ def _update_delivery_picking_status(delivery_name):
 
 def _update_request(name):
     if not name: return
-    totals = frappe.db.sql("select coalesce(sum(planned_quantity),0), coalesce(sum(confirmed_quantity),0), count(*), sum(status='Confirmed') from `tabWarehouse Task` where warehouse_request=%s and docstatus<2 for update", name)[0]
+    # created = what the request asked to move: a follow-up leg (storage process step, intermediate bin) moves the same goods again
+    totals = frappe.db.sql("select coalesce(sum(case when ifnull(predecessor_task, '') = '' then planned_quantity end),0), coalesce(sum(case when ifnull(predecessor_task, '') = '' then confirmed_quantity end),0), count(*), sum(status='Confirmed') from `tabWarehouse Task` where warehouse_request=%s and docstatus<2 for update", name)[0]
     status = "Completed" if totals[2] and totals[2] == totals[3] else "In Process"
     frappe.db.set_value("Warehouse Request", name, {"created_quantity": totals[0], "confirmed_quantity": totals[1], "status": status})
     if status == "Completed":

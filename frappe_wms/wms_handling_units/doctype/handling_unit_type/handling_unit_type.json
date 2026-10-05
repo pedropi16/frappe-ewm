@@ -13,6 +13,9 @@
     "category",
     "maximum_weight",
     "maximum_volume",
+    "length",
+    "width",
+    "height",
     "nestable",
     "reusable",
     "requires_seal",
@@ -86,6 +89,24 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "length",
+      "label": "Length",
+      "fieldtype": "Float",
+      "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+      "fieldname": "width",
+      "label": "Width",
+      "fieldtype": "Float",
+      "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+      "fieldname": "height",
+      "label": "Height",
+      "fieldtype": "Float",
+      "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
     }
   ],
   "autoname": "field:hu_type_code",

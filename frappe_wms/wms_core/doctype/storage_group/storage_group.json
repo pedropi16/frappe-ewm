@@ -1,5 +1,5 @@
 {
-  "name": "Bin Type",
+  "name": "Storage Group",
   "module": "WMS Core",
   "custom": 0,
   "is_submittable": 0,
@@ -8,58 +8,34 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "bin_type_code",
-    "bin_type_name",
-    "maximum_hus",
-    "maximum_weight",
-    "maximum_volume",
-    "length",
-    "width",
-    "height",
-    "active"
+    "storage_type",
+    "group_code",
+    "group_name",
+    "active",
+    "description"
   ],
   "fields": [
     {
-      "fieldname": "bin_type_code",
-      "label": "Bin Type Code",
+      "fieldname": "storage_type",
+      "label": "Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "group_code",
+      "label": "Group Code",
       "fieldtype": "Data",
       "reqd": 1,
-      "unique": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "bin_type_name",
-      "label": "Bin Type Name",
+      "fieldname": "group_name",
+      "label": "Group Name",
       "fieldtype": "Data",
       "in_list_view": 1
-    },
-    {
-      "fieldname": "maximum_weight",
-      "label": "Maximum Weight",
-      "fieldtype": "Float"
-    },
-    {
-      "fieldname": "maximum_volume",
-      "label": "Maximum Volume",
-      "fieldtype": "Float"
-    },
-    {
-      "fieldname": "length",
-      "label": "Length",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
-    },
-    {
-      "fieldname": "width",
-      "label": "Width",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
-    },
-    {
-      "fieldname": "height",
-      "label": "Height",
-      "fieldtype": "Float",
-      "description": "Inner size of a bin of this type (same unit as the HU types'). A Handling Unit fits when its type's size fits, in either floor orientation."
     },
     {
       "fieldname": "active",
@@ -69,14 +45,12 @@
       "in_list_view": 1
     },
     {
-      "fieldname": "maximum_hus",
-      "label": "Maximum HUs",
-      "fieldtype": "Int",
-      "description": "How many top-level Handling Units a bin of this type holds (a pallet location: 1). A bin's own value wins."
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Small Text",
+      "description": "E.g. all bins of an aisle (intermediate storage for layout-oriented storage control), a production supply area, a cold section."
     }
   ],
-  "autoname": "field:bin_type_code",
-  "title_field": "bin_type_name",
   "sort_field": "modified",
   "sort_order": "DESC",
   "doctype": "DocType",
@@ -192,5 +166,7 @@
       "export": 1,
       "print": 1
     }
-  ]
+  ],
+  "autoname": "format:{storage_type}-{group_code}",
+  "title_field": "group_name"
 }

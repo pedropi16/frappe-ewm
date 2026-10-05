@@ -24,14 +24,14 @@ import frappe
 APPLY_ORDER = [
     "Bin Type", "Handling Unit Type", "WMS Exception Code", "WMS Movement Type",
     "WMS Stock Type", "Packaging Material", "WMS Settings", "Warehouse Process Type",
-    "Packaging Spec", "WMS Warehouse", "Activity Area", "Billing Rate",
-    "Count Tolerance Group", "Inspection Rule", "Labor Standard", "Storage Type",
-    "WMS Number Range", "WMS Resource Group", "WO Creation Rule",
-    "Warehouse Process Type Determination Rule", "Cycle Count Rule", "Storage Section",
-    "Storage Type Search Sequence", "WMS HU Number Pool", "Warehouse Queue",
-    "Storage Bin", "Bin Determination Rule", "Removal Rule", "Replenishment Rule",
+    "Packaging Spec", "WMS Warehouse", "Activity Area", "Billing Rate", "Count Tolerance Group",
+    "Inspection Rule", "Labor Standard", "Storage Type", "WMS Number Range",
+    "WMS Resource Group", "WO Creation Rule", "Warehouse Process Type Determination Rule",
+    "Cycle Count Rule", "Storage Group", "Storage Section", "Storage Type Search Sequence",
+    "WMS HU Number Pool", "Warehouse Queue", "Handling Indicator", "Storage Bin",
+    "Bin Determination Rule", "Layout Storage Control", "Removal Rule", "Replenishment Rule",
     "Storage Process", "WMS Route", "Work Center", "Process Determination Rule",
-    "WMS Resource", "Wave Template", "WMS Print Determination Rule",
+    "Production Supply Area", "WMS Resource", "Wave Template", "WMS Print Determination Rule",
 ]
 
 

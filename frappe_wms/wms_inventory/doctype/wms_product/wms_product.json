@@ -21,6 +21,7 @@
     "gross_weight_per_unit",
     "volume_per_unit",
     "abc_indicator",
+    "handling_indicators",
     "active"
   ],
   "fields": [
@@ -111,6 +112,13 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "handling_indicators",
+      "label": "Handling Indicators",
+      "fieldtype": "Table",
+      "options": "WMS Product Handling Indicator",
+      "description": "How the product has to be handled, set up under Handling Indicator (temperature sensitive, must not be unpacked ...)."
     }
   ],
   "autoname": "field:item",
