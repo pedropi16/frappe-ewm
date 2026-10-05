@@ -804,6 +804,24 @@ SAP's product-driven storage search: indicators on the product pick the storage 
   the goods arrive (table *Planned Cross-Docking* on the Inbound Delivery); the goods receipt sends exactly that stock to the delivery's staging bin and
   the remainder is put away or matched opportunistically. Completing the inbound delivery short, or removing the outbound one, gives the demand back.
 
+## Topography, labor and handling units (Phase D)
+
+* **Storage Bin** - X/Y/Z coordinates, access type, fire containment section; bulk storage *stack height* x *lane depth* is the capacity when
+  Maximum HUs is blank. A bin whose coordinates are all zero counts as having none.
+* **Bin sort per activity** - `Activity Area > Bin Sort` (activity, bin, sort sequence) is the walk-path order of the area's bins for Pick / Putaway /
+  Internal Move / Inventory Count / Replenish; **Generate Walk Path** (button on the Activity Area form, `services/travel.generate_walk_path`) fills it
+  from the coordinates as a serpentine through the aisles. Pick tasks take their sequence from it (`sort_sequence`), a bin without an entry keeps its
+  own sequence.
+* **Travel distance** - Manhattan distance between bins (`services/travel.py`); a Warehouse Order's `travel_distance` is the walk over its tasks'
+  source bins in sequence and on to the last destination (kept up to date as tasks are added).
+* **Labor Standard** formula (`services/labor.py`): planned seconds = (base allowance + seconds per unit x quantity + travel seconds per distance unit x the
+  task's leg + handling seconds per kg / per volume unit) x (1 + PF&D %); used by the resource efficiency KPI.
+* **Handling Unit** - outer length/width/height and *maximum payload* default from the HU type (new `maximum_payload`, `hu_type_group` on the type);
+  a posting that would carry more than the HU's payload is refused. Statuses *Planned* and *In Transit* exist (set by integrations or by hand, no
+  automatic transitions) and `current_resource` records a carrying resource.
+* **Packaging Spec condition technique** - a spec can be for a customer or a supplier (named `item-customer`); `determine_packaging_spec` takes the
+  customer's, then the supplier's, then the generic spec (named by the item as before). Packing by instruction and VAS use it with the delivery's customer.
+
 ## Modules
 
 | Module | Contains |

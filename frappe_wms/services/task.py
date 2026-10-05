@@ -245,7 +245,8 @@ def _create_pick_task_for_group(allocations, wave, batch_key):
     process_type = frappe.get_cached_doc("Warehouse Process Type", process_type_name)
     stock_uom = frappe.db.get_value("WMS Stock Balance", first.stock_balance, "stock_uom")
     total_qty = sum(flt(a.allocated_quantity) for a in allocations)
-    sequence = frappe.db.get_value("Storage Bin", first.storage_bin, "sequence") or 0
+    from frappe_wms.services.travel import sort_sequence
+    sequence = sort_sequence(first.storage_bin, "Pick")  # the walk path of the bin's activity area, else its own sequence
     priority_order = ("Low", "Normal", "High", "Urgent")
     priority = max((a._priority or "Normal" for a in allocations), key=priority_order.index)
     destination_bin, destination_hu, requires_sort_after_pick, unpack_at_destination = _pick_destination(process_type, first)

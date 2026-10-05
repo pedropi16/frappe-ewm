@@ -36,6 +36,7 @@
   "WMS Number Range",
   "WMS HU Number Pool",
   "WMS Print Determination Rule",
+  "Handling Unit Type Group",
   "Handling Unit Type",
   "Packaging Material",
   "Packaging Spec",
@@ -784,6 +785,13 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "bin_sort",
+     "label": "Bin Sort",
+     "fieldtype": "Table",
+     "options": "Activity Area Bin Sort",
+     "description": "Walk-path order of the area's bins per activity; a bin without a row keeps its own sequence. Generate it from the bins' coordinates with the Generate Walk Path action."
     }
    ],
    "key": {
@@ -973,6 +981,46 @@
      "fieldtype": "Link",
      "options": "WMS Block Reason",
      "description": "Why the bin is blocked."
+    },
+    {
+     "fieldname": "x_coordinate",
+     "label": "X",
+     "fieldtype": "Float",
+     "description": "Position in the warehouse (same unit for all bins, e.g. metres): the travel distance between bins is computed from it."
+    },
+    {
+     "fieldname": "y_coordinate",
+     "label": "Y",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "z_coordinate",
+     "label": "Z",
+     "fieldtype": "Float",
+     "description": "Height of the bin."
+    },
+    {
+     "fieldname": "access_type",
+     "label": "Access Type",
+     "fieldtype": "Data",
+     "description": "What is needed to reach the bin (forklift, reach truck, ladder ...)."
+    },
+    {
+     "fieldname": "fire_containment_section",
+     "label": "Fire Containment Section",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "stack_height",
+     "label": "Stack Height",
+     "fieldtype": "Int",
+     "description": "Bulk storage: HUs stacked on top of each other."
+    },
+    {
+     "fieldname": "lane_depth",
+     "label": "Lane Depth",
+     "fieldtype": "Int",
+     "description": "Bulk storage: HUs one behind the other. Stack height x lane depth is the bin's capacity when Maximum HUs is blank."
     }
    ],
    "key": {
@@ -2807,6 +2855,33 @@
     "type": "none"
    }
   },
+  "Handling Unit Type Group": {
+   "name": "Handling Unit Type Group",
+   "module": "WMS Handling Units",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "group_code",
+     "label": "Group Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "group_name",
+     "label": "Group Name",
+     "fieldtype": "Data",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "group_code"
+    ]
+   }
+  },
   "Handling Unit Type": {
    "name": "Handling Unit Type",
    "module": "WMS Handling Units",
@@ -2891,6 +2966,18 @@
      "label": "Height",
      "fieldtype": "Float",
      "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+     "fieldname": "hu_type_group",
+     "label": "HU Type Group",
+     "fieldtype": "Link",
+     "options": "Handling Unit Type Group"
+    },
+    {
+     "fieldname": "maximum_payload",
+     "label": "Maximum Payload",
+     "fieldtype": "Float",
+     "description": "Heaviest load the HU carries. Copied to new HUs of this type; a HU with a payload refuses more."
     }
    ],
    "key": {
@@ -3002,13 +3089,24 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "customer",
+     "label": "Customer",
+     "fieldtype": "Link",
+     "options": "Customer",
+     "description": "Condition: this spec applies to this customer's deliveries (beats the supplier and generic specs)."
+    },
+    {
+     "fieldname": "supplier",
+     "label": "Supplier",
+     "fieldtype": "Link",
+     "options": "Supplier",
+     "description": "Condition: this spec applies to this supplier's goods."
     }
    ],
    "key": {
-    "type": "field",
-    "fields": [
-     "item"
-    ]
+    "type": "none"
    }
   },
   "WMS Route": {
@@ -3464,6 +3562,35 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "base_allowance_seconds",
+     "label": "Base Allowance (s)",
+     "fieldtype": "Float",
+     "description": "Fixed time per task (get the equipment, scan, confirm)."
+    },
+    {
+     "fieldname": "travel_seconds_per_meter",
+     "label": "Travel (s per distance unit)",
+     "fieldtype": "Float",
+     "description": "Times the task's own leg (source to destination bin, from the coordinates)."
+    },
+    {
+     "fieldname": "handling_seconds_per_kg",
+     "label": "Handling (s per kg)",
+     "fieldtype": "Float",
+     "description": "Times the task's weight (gross weight per unit x quantity)."
+    },
+    {
+     "fieldname": "handling_seconds_per_volume",
+     "label": "Handling (s per volume unit)",
+     "fieldtype": "Float"
+    },
+    {
+     "fieldname": "pfd_percent",
+     "label": "Personal, Fatigue & Delay %",
+     "fieldtype": "Percent",
+     "description": "Added on top of the total."
     }
    ],
    "key": {
@@ -3530,6 +3657,38 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Activity Area Bin Sort": {
+   "name": "Activity Area Bin Sort",
+   "module": "WMS Core",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "activity",
+     "label": "Activity",
+     "fieldtype": "Select",
+     "options": "Pick\nPutaway\nInternal Move\nInventory Count\nReplenish",
+     "reqd": 1
+    },
+    {
+     "fieldname": "storage_bin",
+     "label": "Storage Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1
+    },
+    {
+     "fieldname": "sequence",
+     "label": "Sort Sequence",
+     "fieldtype": "Int",
+     "reqd": 1
     }
    ],
    "key": {
@@ -4063,6 +4222,10 @@
     {
      "target": "WMS Shipment",
      "label": "Shipment"
+    },
+    {
+     "target": "WMS Resource",
+     "label": "At Resource"
     }
    ]
   },

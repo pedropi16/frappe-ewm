@@ -58,6 +58,14 @@ def search_sequence_for(warehouse, direction, indicator_field, indicator, stock_
     exact = [r.name for r in rows if stock_type and r.stock_type == stock_type]
     return (exact or [r.name for r in rows if not r.stock_type] or [None])[0]
 
+def determine_packaging_spec(item, customer=None, supplier=None):
+    """Condition technique: the packaging spec of a product for a customer, else for a supplier, else the generic one."""
+    conditions = ([{"customer": customer}] if customer else []) + ([{"supplier": supplier}] if supplier else []) + [{"customer": ["in", ["", None]], "supplier": ["in", ["", None]]}]
+    for condition in conditions:
+        name = frappe.db.get_value("Packaging Spec", {"item": item, "active": 1, **condition})
+        if name: return name
+    return None
+
 def _preferred_storage_type(item, warehouse):
     per_warehouse = wms_product_warehouse(item, warehouse)
     if per_warehouse and per_warehouse.preferred_storage_type:

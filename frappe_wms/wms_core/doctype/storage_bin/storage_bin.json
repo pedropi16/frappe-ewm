@@ -23,6 +23,13 @@
     "rack",
     "level",
     "position",
+    "x_coordinate",
+    "y_coordinate",
+    "z_coordinate",
+    "access_type",
+    "fire_containment_section",
+    "stack_height",
+    "lane_depth",
     "sequence",
     "maximum_hus",
     "maximum_weight",
@@ -231,6 +238,46 @@
       "fieldtype": "Link",
       "options": "WMS Block Reason",
       "description": "Why the bin is blocked."
+    },
+    {
+      "fieldname": "x_coordinate",
+      "label": "X",
+      "fieldtype": "Float",
+      "description": "Position in the warehouse (same unit for all bins, e.g. metres): the travel distance between bins is computed from it."
+    },
+    {
+      "fieldname": "y_coordinate",
+      "label": "Y",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "z_coordinate",
+      "label": "Z",
+      "fieldtype": "Float",
+      "description": "Height of the bin."
+    },
+    {
+      "fieldname": "access_type",
+      "label": "Access Type",
+      "fieldtype": "Data",
+      "description": "What is needed to reach the bin (forklift, reach truck, ladder ...)."
+    },
+    {
+      "fieldname": "fire_containment_section",
+      "label": "Fire Containment Section",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "stack_height",
+      "label": "Stack Height",
+      "fieldtype": "Int",
+      "description": "Bulk storage: HUs stacked on top of each other."
+    },
+    {
+      "fieldname": "lane_depth",
+      "label": "Lane Depth",
+      "fieldtype": "Int",
+      "description": "Bulk storage: HUs one behind the other. Stack height x lane depth is the bin's capacity when Maximum HUs is blank."
     }
   ],
   "autoname": "field:bin_code",

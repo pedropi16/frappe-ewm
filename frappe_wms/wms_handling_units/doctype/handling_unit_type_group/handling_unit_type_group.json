@@ -1,5 +1,5 @@
 {
-  "name": "Packaging Spec",
+  "name": "Handling Unit Type Group",
   "module": "WMS Handling Units",
   "custom": 0,
   "is_submittable": 0,
@@ -8,49 +8,24 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "item",
-    "customer",
-    "supplier",
-    "levels",
-    "active"
+    "group_code",
+    "group_name"
   ],
   "fields": [
     {
-      "fieldname": "item",
-      "label": "Item",
-      "fieldtype": "Link",
-      "options": "Item",
+      "fieldname": "group_code",
+      "label": "Group Code",
+      "fieldtype": "Data",
       "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "levels",
-      "label": "Levels",
-      "fieldtype": "Table",
-      "options": "Packaging Spec Level",
-      "description": "Ordered smallest to largest (e.g. Each, Case, Pallet). Each level's quantity is how many of the level before it make one of this level."
-    },
-    {
-      "fieldname": "active",
-      "label": "Active",
-      "fieldtype": "Check",
-      "default": 1,
+      "unique": 1,
       "in_list_view": 1
     },
     {
-      "fieldname": "customer",
-      "label": "Customer",
-      "fieldtype": "Link",
-      "options": "Customer",
-      "description": "Condition: this spec applies to this customer's deliveries (beats the supplier and generic specs)."
-    },
-    {
-      "fieldname": "supplier",
-      "label": "Supplier",
-      "fieldtype": "Link",
-      "options": "Supplier",
-      "description": "Condition: this spec applies to this supplier's goods."
+      "fieldname": "group_name",
+      "label": "Group Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
     }
   ],
   "sort_field": "modified",
@@ -168,5 +143,7 @@
       "export": 1,
       "print": 1
     }
-  ]
+  ],
+  "autoname": "field:group_code",
+  "title_field": "group_name"
 }

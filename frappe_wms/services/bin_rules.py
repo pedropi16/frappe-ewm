@@ -115,7 +115,8 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
     storage_type = frappe.get_cached_doc("Storage Type", bin_doc.storage_type)
     bin_type = frappe.get_cached_doc("Bin Type", bin_doc.bin_type) if bin_doc.bin_type else None
     # A bin's own limits win; a blank one comes from its Bin Type (the size class of the location).
-    max_hus, max_weight, max_volume, max_quantity = (bin_doc.maximum_hus or (bin_type and bin_type.maximum_hus),
+    stacked = (bin_doc.stack_height or 0) * (bin_doc.lane_depth or 0)  # bulk storage: HUs per stack x lane depth
+    max_hus, max_weight, max_volume, max_quantity = (bin_doc.maximum_hus or stacked or (bin_type and bin_type.maximum_hus),
         bin_doc.maximum_weight or (bin_type and bin_type.maximum_weight), bin_doc.maximum_volume or (bin_type and bin_type.maximum_volume),
         bin_doc.maximum_quantity or (bin_type and bin_type.maximum_quantity))
     if not bin_doc.active or bin_doc.putaway_blocked:

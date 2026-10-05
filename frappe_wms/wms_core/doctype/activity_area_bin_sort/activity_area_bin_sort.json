@@ -1,0 +1,44 @@
+{
+  "name": "Activity Area Bin Sort",
+  "module": "WMS Core",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "activity",
+    "storage_bin",
+    "sequence"
+  ],
+  "fields": [
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Pick\nPutaway\nInternal Move\nInventory Count\nReplenish",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Storage Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sequence",
+      "label": "Sort Sequence",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

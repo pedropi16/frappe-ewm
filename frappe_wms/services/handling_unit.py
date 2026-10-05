@@ -102,7 +102,7 @@ def recompute_measurements(hu_name):
     # live from WMS Product.gross_weight_per_unit/volume_per_unit instead of the dead fields
     # they started as. Storage Bin.current_weight (tasks.recalculate_stale_bin_capacity) and
     # capacity-aware putaway (services/determination.py) both depend on this being accurate.
-    hu = frappe.db.get_value("Handling Unit", hu_name, ["tare_weight", "hu_type"], as_dict=True)
+    hu = frappe.db.get_value("Handling Unit", hu_name, ["tare_weight", "hu_type", "max_payload_weight"], as_dict=True)
     if not hu: return
     rows = frappe.db.sql("""
         select b.quantity, p.gross_weight_per_unit, p.volume_per_unit
@@ -113,6 +113,8 @@ def recompute_measurements(hu_name):
     net_weight = sum(flt(r.quantity) * flt(r.gross_weight_per_unit) for r in rows)
     volume = sum(flt(r.quantity) * flt(r.volume_per_unit) for r in rows)
     gross_weight = net_weight + flt(hu.tare_weight)
+    if flt(hu.max_payload_weight) and net_weight > flt(hu.max_payload_weight) + 0.000001:
+        frappe.throw(_("Handling Unit {0} would carry {1}, more than its maximum payload {2}").format(hu_name, net_weight, hu.max_payload_weight))
     limits = frappe.db.get_value("Handling Unit Type", hu.hu_type, ["maximum_weight", "maximum_volume"], as_dict=True) if hu.hu_type else None
     if total_qty <= 0:
         stock_status = "Empty"

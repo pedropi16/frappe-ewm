@@ -11,6 +11,7 @@
     "warehouse",
     "area_code",
     "area_name",
+    "bin_sort",
     "active"
   ],
   "fields": [
@@ -42,6 +43,13 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "bin_sort",
+      "label": "Bin Sort",
+      "fieldtype": "Table",
+      "options": "Activity Area Bin Sort",
+      "description": "Walk-path order of the area's bins per activity; a bin without a row keeps its own sequence. Generate it from the bins' coordinates with the Generate Walk Path action."
     }
   ],
   "autoname": "format:{warehouse}-{area_code}",

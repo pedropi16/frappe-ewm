@@ -26,6 +26,11 @@ class HandlingUnit(Document):
                 frappe.throw(_("A nested Handling Unit must be created in its parent's bin"))
         if not self.current_bin:
             frappe.throw(_("A Storage Bin or a Parent Handling Unit is required"))
+        # outer size and payload default from the HU type
+        defaults = frappe.db.get_value("Handling Unit Type", self.hu_type, ["length", "width", "height", "maximum_payload"], as_dict=True) or {}
+        for field in ("length", "width", "height"):
+            if not self.get(field) and defaults.get(field): self.set(field, defaults[field])
+        if not self.max_payload_weight and defaults.get("maximum_payload"): self.max_payload_weight = defaults["maximum_payload"]
         if not self.warehouse:
             self.warehouse = frappe.db.get_value("Storage Bin", self.current_bin, "warehouse")
         if not self.warehouse:

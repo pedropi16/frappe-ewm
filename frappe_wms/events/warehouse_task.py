@@ -13,6 +13,10 @@ def validate_task(doc, method=None):
         if doc.get(field) and frappe.db.get_value("Storage Bin", doc.get(field), "warehouse") != doc.warehouse:
             frappe.throw(_("Task bin does not belong to the task warehouse"))
 
+def update_order_distance(doc, method=None):
+    from frappe_wms.services.travel import update_order_distance as _update
+    _update(doc.warehouse_order)
+
 def prevent_direct_cancel_after_posting(doc, method=None):
     if frappe.db.exists("WMS Stock Ledger Entry", {"warehouse_task": doc.name}):
         frappe.throw(_("This task has already posted stock movements and cannot be cancelled directly. Use frappe_wms.services.task.reverse_task to post a compensating reversal instead."))

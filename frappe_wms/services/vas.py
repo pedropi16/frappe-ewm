@@ -59,10 +59,12 @@ def create_vas_order_from_packaging_spec(handling_unit, work_center_bin):
     hu = frappe.get_doc("Handling Unit", handling_unit)
     item = frappe.db.get_value("WMS Stock Balance", {"handling_unit": handling_unit, "quantity": [">", 0]}, "product")
     if not item: frappe.throw(_("Handling Unit {0} has no stock to build VAS activities for").format(handling_unit))
-    if not frappe.db.exists("Packaging Spec", {"item": item, "active": 1}):
+    from frappe_wms.services.determination import determine_packaging_spec
+    spec = determine_packaging_spec(item, customer=frappe.db.get_value("Outbound Delivery", hu.outbound_delivery, "customer") if hu.get("outbound_delivery") else None)
+    if not spec:
         frappe.throw(_("Item {0} has no active Packaging Spec").format(item))
     stock_uom = frappe.db.get_value("WMS Product", {"item": item}, "stock_uom")
-    levels = frappe.get_all("Packaging Spec Level", filters={"parent": item, "parenttype": "Packaging Spec"}, fields=["level_name"], order_by="idx asc")
+    levels = frappe.get_all("Packaging Spec Level", filters={"parent": spec, "parenttype": "Packaging Spec"}, fields=["level_name"], order_by="idx asc")
     activities = [{
         "step_no": i, "activity_type": "Kit", "instruction": _("Kit to {0}").format(level.level_name),
         "quantity": full_hu_quantity(item, level.level_name), "stock_uom": stock_uom, "packaging_spec_level": level.level_name,

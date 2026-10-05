@@ -13,6 +13,8 @@
     "category",
     "maximum_weight",
     "maximum_volume",
+    "hu_type_group",
+    "maximum_payload",
     "length",
     "width",
     "height",
@@ -107,6 +109,18 @@
       "label": "Height",
       "fieldtype": "Float",
       "description": "Outer size, same unit as Bin Type. With a size on both sides the HU is only put into bins whose Bin Type fits it - no list of allowed HU types per bin needed."
+    },
+    {
+      "fieldname": "hu_type_group",
+      "label": "HU Type Group",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type Group"
+    },
+    {
+      "fieldname": "maximum_payload",
+      "label": "Maximum Payload",
+      "fieldtype": "Float",
+      "description": "Heaviest load the HU carries. Copied to new HUs of this type; a HU with a payload refuses more."
     }
   ],
   "autoname": "field:hu_type_code",

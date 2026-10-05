@@ -48,6 +48,7 @@ doc_events = {
     "Warehouse Task": {
         "autoname": _NUMBER_RANGE_AUTONAME,
         "validate": "frappe_wms.events.warehouse_task.validate_task",
+        "after_insert": "frappe_wms.events.warehouse_task.update_order_distance",
         "on_cancel": "frappe_wms.events.warehouse_task.prevent_direct_cancel_after_posting",
     },
     "Warehouse Request": {"autoname": _NUMBER_RANGE_AUTONAME},

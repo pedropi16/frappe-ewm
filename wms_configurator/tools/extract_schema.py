@@ -58,6 +58,7 @@ IN_SCOPE_DOCTYPES = [
     "WMS Number Range",
     "WMS HU Number Pool",
     "WMS Print Determination Rule",
+    "Handling Unit Type Group",
     "Handling Unit Type",
     "Packaging Material",
     "Packaging Spec",

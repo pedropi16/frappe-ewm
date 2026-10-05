@@ -176,10 +176,11 @@ def _node(hu_name):
     return hu
 
 
-def packing_instructions(product):
+def packing_instructions(product, customer=None):
     """Packaging Spec levels for a product: [{level_name, quantity_per_level, hu_type}] - the SAP
-    packing instruction proposal."""
-    spec = frappe.db.get_value("Packaging Spec", {"item": product, "active": 1})
+    packing instruction proposal (the customer's spec when it has one)."""
+    from frappe_wms.services.determination import determine_packaging_spec
+    spec = determine_packaging_spec(product, customer=customer)
     if not spec: return []
     return frappe.get_all("Packaging Spec Level", filters={"parent": spec, "parenttype": "Packaging Spec"},
                           fields=["level_name", "quantity_per_level", "hu_type"], order_by="idx asc")
@@ -282,7 +283,7 @@ def pack_by_instruction(work_center, product, source_hu=None, level_name=None, h
     does not fill a whole HU goes into one last partial HU."""
     wc = _station(work_center, "allow_pack_by_instruction")
     if not wc.allow_create_hu: _station(work_center, "allow_create_hu")
-    levels = packing_instructions(product)
+    levels = packing_instructions(product, frappe.db.get_value("Outbound Delivery", outbound_delivery, "customer") if outbound_delivery else None)
     level = next((l for l in levels if l.level_name == level_name), None) if level_name else (levels[0] if levels else None)
     per_hu = flt(quantity_per_hu) or (flt(level.quantity_per_level) if level else 0)
     hu_type = hu_type or (level.hu_type if level else None) or wc.default_hu_type

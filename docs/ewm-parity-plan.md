@@ -61,7 +61,9 @@ Shipped: C1 (business context + change bin / split / skip / post difference, RF 
 | C7 Pick-time zero stock check | Emptying a bin on a pick raises a zero-stock count. | Short pick creates the count. |
 | C8 Planned cross-docking | Cross dock request created from an expected inbound delivery against open outbound demand before receipt. | Planned demand reserved, receipt routes to staging. |
 
-## Phase D - Topography, labor and handling units (about 8 days)
+## Phase D - Topography, labor and handling units (about 8 days) - DONE 2026-10-05
+
+Shipped: D1 coordinates, access type, fire section, stack height x lane depth capacity; D2 bin sort per activity + walk-path generation + pick task sequencing; D3 Manhattan travel distance and order walk path; D4 labor formula; D5 HU dimensions, payload (enforced), type group, Planned/In Transit statuses, carrying resource; D6 packspec condition technique. **Not built:** network (edge) distance; sorting tasks other than picks by the walk path (their strict arrival-order sequence is unchanged); automatic Planned / In Transit transitions.
 
 | Item | Change | Test |
 | --- | --- | --- |

@@ -13,6 +13,11 @@
     "task_type",
     "item_group",
     "standard_seconds_per_unit",
+    "base_allowance_seconds",
+    "travel_seconds_per_meter",
+    "handling_seconds_per_kg",
+    "handling_seconds_per_volume",
+    "pfd_percent",
     "active"
   ],
   "fields": [
@@ -60,6 +65,35 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "base_allowance_seconds",
+      "label": "Base Allowance (s)",
+      "fieldtype": "Float",
+      "description": "Fixed time per task (get the equipment, scan, confirm)."
+    },
+    {
+      "fieldname": "travel_seconds_per_meter",
+      "label": "Travel (s per distance unit)",
+      "fieldtype": "Float",
+      "description": "Times the task's own leg (source to destination bin, from the coordinates)."
+    },
+    {
+      "fieldname": "handling_seconds_per_kg",
+      "label": "Handling (s per kg)",
+      "fieldtype": "Float",
+      "description": "Times the task's weight (gross weight per unit x quantity)."
+    },
+    {
+      "fieldname": "handling_seconds_per_volume",
+      "label": "Handling (s per volume unit)",
+      "fieldtype": "Float"
+    },
+    {
+      "fieldname": "pfd_percent",
+      "label": "Personal, Fatigue & Delay %",
+      "fieldtype": "Percent",
+      "description": "Added on top of the total."
     }
   ],
   "autoname": "LS-.#####",

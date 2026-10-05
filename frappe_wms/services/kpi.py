@@ -81,13 +81,13 @@ def resource_performance(warehouse, from_date=None, to_date=None):
     elif from_date: filters["confirmed_at"] = [">=", from_date]
     elif to_date: filters["confirmed_at"] = ["<=", f"{to_date} 23:59:59"]
     tasks = frappe.get_all("Warehouse Task", filters=filters,
-        fields=["assigned_resource", "task_type", "product", "planned_quantity", "started_at", "confirmed_at"])
+        fields=["assigned_resource", "task_type", "product", "planned_quantity", "source_bin", "destination_bin", "started_at", "confirmed_at"])
     if not tasks: return []
 
     products = {t.product for t in tasks if t.product}
     item_groups = {row.name: row.item_group for row in frappe.get_all("Item", filters={"name": ["in", list(products)]}, fields=["name", "item_group"])} if products else {}
     standards = frappe.get_all("Labor Standard", filters={"active": 1},
-        fields=["warehouse", "task_type", "item_group", "standard_seconds_per_unit"], order_by="priority asc")
+        fields=["warehouse", "task_type", "item_group", "standard_seconds_per_unit", "base_allowance_seconds", "travel_seconds_per_meter", "handling_seconds_per_kg", "handling_seconds_per_volume", "pfd_percent"], order_by="priority asc")
 
     by_resource = {}
     for t in tasks:
@@ -97,7 +97,8 @@ def resource_performance(warehouse, from_date=None, to_date=None):
         if actual_seconds is not None: bucket["total_actual_seconds"] += actual_seconds
         standard = _matching_labor_standard(standards, warehouse, t.task_type, item_groups.get(t.product))
         if standard and actual_seconds is not None:
-            bucket["planned_seconds"] += flt(standard.standard_seconds_per_unit) * flt(t.planned_quantity)
+            from frappe_wms.services.labor import planned_task_seconds
+            bucket["planned_seconds"] += planned_task_seconds(standard, t)
             bucket["matched_actual_seconds"] += actual_seconds
 
     return [{
