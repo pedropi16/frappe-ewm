@@ -12,6 +12,7 @@
     "work_center_code",
     "work_center_name",
     "bin",
+    "locations",
     "active",
     "work_center_type",
     "inbound_section_bin",
@@ -227,6 +228,13 @@
       "fieldtype": "Check",
       "default": "0",
       "description": "Let the packer send stock that is not physically there to the warehouse difference bin (only stock not picked for a delivery)."
+    },
+    {
+      "fieldname": "locations",
+      "label": "Locations",
+      "fieldtype": "Table",
+      "options": "Work Center Location",
+      "description": "The bins this station works with. A Deconsolidation station collects the picked material of one production order per location."
     }
   ],
   "autoname": "format:{warehouse}-{work_center_code}",

@@ -167,8 +167,10 @@ class TestProductionSupply(IntegrationTestCase):
         for b in (coll, supply):
             if not frappe.db.exists("Storage Bin", b):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": b, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        wc = frappe.get_doc({"doctype": "Work Center", "warehouse": self.warehouse, "work_center_code": frappe.generate_hash(length=5), "work_center_name": "Test Deco",
+            "work_center_type": "Deconsolidation", "active": 1, "bin": coll, "locations": [{"storage_bin": coll}]}).insert(ignore_permissions=True)
         psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Test PSA",
-            "production_warehouse": self.wip_warehouse, "collection_bin": coll, "supply_bin": supply}).insert(ignore_permissions=True)
+            "production_warehouse": self.wip_warehouse, "deconsolidation_work_center": wc.name, "supply_bin": supply}).insert(ignore_permissions=True)
         self.addCleanup(lambda: psa.db_set("active", 0))  # an active PSA on the WIP warehouse reroutes Work Order staging for every other test
         frappe.db.set_single_value("WMS Settings", "default_handling_unit_type", "TEST-PSUP-PALLET")
         rm2 = self._second_rm()

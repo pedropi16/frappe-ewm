@@ -12,7 +12,7 @@
     "psa_code",
     "psa_name",
     "production_warehouse",
-    "collection_bin",
+    "deconsolidation_work_center",
     "supply_bin",
     "active"
   ],
@@ -50,20 +50,12 @@
       "description": "The ERPNext warehouse a Material Request delivers into (e.g. Work In Progress). A submitted Material Transfer to this warehouse is supplied through this PSA."
     },
     {
-      "fieldname": "collection_bin",
-      "label": "Collection Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "reqd": 1,
-      "description": "Where the picked material of one order is collected (the deconsolidation point) until every line of the Material Request has arrived."
-    },
-    {
       "fieldname": "supply_bin",
       "label": "Supply Bin",
       "fieldtype": "Link",
       "options": "Storage Bin",
       "reqd": 1,
-      "description": "The bin at the production floor the complete set is delivered to, on one Handling Unit."
+      "description": "The PSA bin at the production floor: the complete set is delivered here on one Handling Unit, and consumed from here as orders start or complete."
     },
     {
       "fieldname": "active",
@@ -71,6 +63,14 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "deconsolidation_work_center",
+      "label": "Deconsolidation Work Center",
+      "fieldtype": "Link",
+      "options": "Work Center",
+      "reqd": 1,
+      "description": "Everything picked for a Material Request goes to one free location of this station, and moves on to the supply bin once the whole request has arrived."
     }
   ],
   "autoname": "format:{warehouse}-{psa_code}",

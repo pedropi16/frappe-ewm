@@ -715,28 +715,29 @@ itself (choosing the warehouse and staging bin) is a desk/API action, not RF
 
 ## Production Supply Area (PSA)
 
-Production supply the SAP EWM way, driven by a **Material Request** instead of the Work Order itself.
+Production supply the SAP EWM way, driven by a **Material Request** (the production material request) instead of the
+Work Order itself.
 
-A **Production Supply Area** (`warehouse`, `production_warehouse`, `collection_bin`, `supply_bin`) ties an
-ERPNext production warehouse (e.g. Work In Progress) to two bins: the *collection bin* (the deconsolidation
-point where the picked material of one order is collected) and the *supply bin* at the production floor.
+A **Production Supply Area** (`warehouse`, `production_warehouse`, `deconsolidation_work_center`, `supply_bin`) ties an
+ERPNext production warehouse (e.g. Work In Progress) to a **Deconsolidation Work Center** - a `Work Center` of type
+Deconsolidation with a list of **Locations** (bins) - and to the **supply bin** at the production floor.
 
-1. A submitted **Material Request** (Material Transfer) into a PSA's production warehouse raises, per line, a
-   replenishment request from the WMS-managed source warehouse into the PSA's collection bin
-   (`services/production_supply.py`), and opens a **Consolidation Group** for the request
-   (`Consolidation Group.production_supply_area` / `material_request`). A line that cannot be supplied
-   (no stock, no preferred storage type) is noted as a comment on the Material Request.
-2. Each request is picked and confirmed through the ordinary Task wizard and joins the group when it completes.
-   Until every line of the Material Request has arrived, the material waits in the collection bin.
-3. When the last line arrives the group gathers the whole set onto one new Handling Unit in the supply bin (the
-   delivery to production); once gathered the group is Completed and an ERPNext **Material Transfer** is posted per
-   request, linked to the Material Request line.
+1. A submitted **Material Request** (Material Transfer) into a PSA's production warehouse takes one free location of
+   the work center (no stock, not another open request's) and raises, per line, a replenishment request from the
+   WMS-managed source warehouse into it (`services/production_supply.py`). A **Consolidation Group** tracks the request
+   (`production_supply_area`, `material_request`, `deconsolidation_bin`). A line that cannot be supplied (no stock, no
+   preferred storage type, no free location) is noted as a comment on the Material Request.
+2. Each request is picked and confirmed through the ordinary Task wizard. Until every line has arrived, the material
+   waits in its location.
+3. When the last line arrives the group gathers the whole set onto one new Handling Unit in the supply bin (the move to
+   production); once gathered the group is Completed, the location is free again, and an ERPNext **Material Transfer**
+   is posted per request, linked to the Material Request line.
 
 A Work Order whose WIP warehouse belongs to a PSA is no longer staged directly on submit - its Material Request
 supplies it. Work Orders without a PSA behave as before.
 
-Phase 2 (not built yet): picking onto trolleys / mixed pallets that carry several orders, with the deconsolidation
-into a per-order rack created automatically.
+Not built yet: picking onto trolleys / mixed pallets that carry several orders with automatic deconsolidation into the
+locations, and consumption of the supply bin as orders start or complete.
 
 ## Modules
 
