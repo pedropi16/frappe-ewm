@@ -31,6 +31,8 @@
   "WMS Exception Code",
   "WMS Stock Owner",
   "WMS Document Type",
+  "WMS MFS Endpoint",
+  "WMS MFS Telegram Type",
   "WMS Usage Decision",
   "PPF Action Profile",
   "WMS Block Reason",
@@ -1208,6 +1210,63 @@
      "fieldtype": "Table",
      "options": "Work Center Location",
      "description": "The bins this station works with. A Deconsolidation station collects the picked material of one production order per location."
+    },
+    {
+     "fieldname": "scale_enabled",
+     "label": "Scale on the PC",
+     "fieldtype": "Check",
+     "description": "A scale on a serial / USB port: the Repack Center reads the gross weight from it (Chrome / Edge, Web Serial)."
+    },
+    {
+     "fieldname": "scale_baud_rate",
+     "label": "Scale Baud Rate",
+     "fieldtype": "Int",
+     "default": 9600,
+     "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+     "fieldname": "scale_data_bits",
+     "label": "Scale Data Bits",
+     "fieldtype": "Int",
+     "default": 8,
+     "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+     "fieldname": "scale_parity",
+     "label": "Scale Parity",
+     "fieldtype": "Select",
+     "options": "none\neven\nodd",
+     "default": "none",
+     "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+     "fieldname": "scale_stop_bits",
+     "label": "Scale Stop Bits",
+     "fieldtype": "Int",
+     "default": 1,
+     "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+     "fieldname": "scale_pattern",
+     "label": "Scale Reading Pattern",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.scale_enabled",
+     "description": "Regular expression with the number as its first group. Blank: the first number in the line."
+    },
+    {
+     "fieldname": "scale_stable_marker",
+     "label": "Scale Stable Marker",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.scale_enabled",
+     "description": "Only lines containing this text count (e.g. ST for a stable reading). Blank: every line."
+    },
+    {
+     "fieldname": "scale_unit",
+     "label": "Scale Unit",
+     "fieldtype": "Select",
+     "options": "kg\ng\nlb",
+     "default": "kg",
+     "depends_on": "eval:doc.scale_enabled"
     }
    ],
    "key": {
@@ -2607,6 +2666,174 @@
     "type": "field",
     "fields": [
      "document_type_code"
+    ]
+   }
+  },
+  "WMS MFS Endpoint": {
+   "name": "WMS MFS Endpoint",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "endpoint_code",
+     "label": "Endpoint Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "endpoint_name",
+     "label": "Name",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse"
+    },
+    {
+     "fieldname": "mode",
+     "label": "Mode",
+     "fieldtype": "Select",
+     "options": "Client\nServer",
+     "reqd": 1,
+     "default": "Client",
+     "description": "Client: the WMS connects to the PLC to send. Server: the WMS listens (bench execute frappe_wms.services.mfs.listen) and the PLC connects."
+    },
+    {
+     "fieldname": "host",
+     "label": "Host",
+     "fieldtype": "Data",
+     "description": "Client: the PLC's address. Server: the address to listen on."
+    },
+    {
+     "fieldname": "port",
+     "label": "Port",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "terminator",
+     "label": "Terminator",
+     "fieldtype": "Data",
+     "default": "\\n",
+     "description": "Ends a telegram. Escapes: \\n \\r \\t. Blank with a fixed telegram length."
+    },
+    {
+     "fieldname": "telegram_length",
+     "label": "Fixed Telegram Length",
+     "fieldtype": "Int",
+     "description": "0 = telegrams end with the terminator."
+    },
+    {
+     "fieldname": "encoding",
+     "label": "Encoding",
+     "fieldtype": "Data",
+     "default": "ascii"
+    },
+    {
+     "fieldname": "timeout_seconds",
+     "label": "Timeout (s)",
+     "fieldtype": "Int",
+     "default": 5
+    },
+    {
+     "fieldname": "wait_for_ack",
+     "label": "Wait for Acknowledgement",
+     "fieldtype": "Check",
+     "description": "After sending, read one telegram back and log it as the acknowledgement."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "endpoint_code"
+    ]
+   }
+  },
+  "WMS MFS Telegram Type": {
+   "name": "WMS MFS Telegram Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "type_code",
+     "label": "Type Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "endpoint",
+     "label": "Endpoint",
+     "fieldtype": "Link",
+     "options": "WMS MFS Endpoint",
+     "reqd": 1
+    },
+    {
+     "fieldname": "direction",
+     "label": "Direction",
+     "fieldtype": "Select",
+     "options": "Outbound\nInbound",
+     "reqd": 1
+    },
+    {
+     "fieldname": "identifier_start",
+     "label": "Identifier Start",
+     "fieldtype": "Int",
+     "description": "Inbound: where the telegram id sits."
+    },
+    {
+     "fieldname": "identifier_length",
+     "label": "Identifier Length",
+     "fieldtype": "Int"
+    },
+    {
+     "fieldname": "identifier_value",
+     "label": "Identifier Value",
+     "fieldtype": "Data",
+     "description": "Inbound: the id that selects this type."
+    },
+    {
+     "fieldname": "fields",
+     "label": "Layout",
+     "fieldtype": "Table",
+     "options": "WMS MFS Telegram Field"
+    },
+    {
+     "fieldname": "inbound_action",
+     "label": "Inbound Action",
+     "fieldtype": "Select",
+     "options": "None\nConfirm Warehouse Task\nConfirm Yard Task\nCall Method",
+     "default": "None",
+     "description": "Confirm Warehouse Task: fields task + quantity (optional). Confirm Yard Task: field task. Call Method: a handler registered under hooks.py wms_mfs_handlers."
+    },
+    {
+     "fieldname": "action_method",
+     "label": "Handler",
+     "fieldtype": "Data",
+     "depends_on": "eval:doc.inbound_action=='Call Method'"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "type_code"
     ]
    }
   },
@@ -4024,7 +4251,7 @@
      "fieldname": "action_type",
      "label": "Action",
      "fieldtype": "Select",
-     "options": "Create Tasks\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
+     "options": "Create Tasks\nSend MFS Telegram\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
      "reqd": 1
     },
     {
@@ -4032,7 +4259,7 @@
      "label": "Parameters (JSON)",
      "fieldtype": "Code",
      "options": "JSON",
-     "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}."
+     "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}. Send MFS Telegram: {\"type\": \"Telegram type\", \"values\": {\"task\": \"{{ doc.name }}\"}}."
     },
     {
      "fieldname": "execute_once",
@@ -4358,6 +4585,61 @@
      "fieldtype": "Link",
      "options": "Role",
      "description": "Blank = anyone who may edit the document."
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "WMS MFS Telegram Field": {
+   "name": "WMS MFS Telegram Field",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "field_name",
+     "label": "Field",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "start",
+     "label": "Start (0-based)",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "length",
+     "label": "Length",
+     "fieldtype": "Int",
+     "reqd": 1
+    },
+    {
+     "fieldname": "field_type",
+     "label": "Type",
+     "fieldtype": "Select",
+     "options": "String\nInteger\nDecimal",
+     "default": "String"
+    },
+    {
+     "fieldname": "justify",
+     "label": "Justify",
+     "fieldtype": "Select",
+     "options": "\nLeft\nRight",
+     "description": "Strings are padded on the right by default, numbers on the left with zeros."
+    },
+    {
+     "fieldname": "pad",
+     "label": "Pad Character",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "constant",
+     "label": "Constant",
+     "fieldtype": "Data",
+     "description": "A fixed value (e.g. the telegram id, the sender); not taken from the values."
     }
    ],
    "key": {

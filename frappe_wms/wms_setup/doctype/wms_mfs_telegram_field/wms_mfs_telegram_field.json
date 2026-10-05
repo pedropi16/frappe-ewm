@@ -1,0 +1,72 @@
+{
+  "name": "WMS MFS Telegram Field",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "field_name",
+    "start",
+    "length",
+    "field_type",
+    "justify",
+    "pad",
+    "constant"
+  ],
+  "fields": [
+    {
+      "fieldname": "field_name",
+      "label": "Field",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "start",
+      "label": "Start (0-based)",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "length",
+      "label": "Length",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "field_type",
+      "label": "Type",
+      "fieldtype": "Select",
+      "options": "String\nInteger\nDecimal",
+      "default": "String",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "justify",
+      "label": "Justify",
+      "fieldtype": "Select",
+      "options": "\nLeft\nRight",
+      "description": "Strings are padded on the right by default, numbers on the left with zeros."
+    },
+    {
+      "fieldname": "pad",
+      "label": "Pad Character",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "constant",
+      "label": "Constant",
+      "fieldtype": "Data",
+      "description": "A fixed value (e.g. the telegram id, the sender); not taken from the values."
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": []
+}

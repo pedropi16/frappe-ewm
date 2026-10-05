@@ -123,7 +123,14 @@ def _create_todo(doc, params, event):
     return f"todo {todo.name}"
 
 
-ACTIONS = {"Create Tasks": _create_tasks, "Print": _print, "Notify": _notify, "Call Method": _call_method, "Set Field": _set_field, "Create ToDo": _create_todo}
+def _send_mfs(doc, params, event):
+    from frappe_wms.services.mfs import send
+    values = {k: frappe.render_template(str(v), {"doc": doc}) for k, v in (params.get("values") or {}).items()}
+    log = send(params["type"], values, doc.doctype, doc.name)
+    return f"telegram {log}"
+
+
+ACTIONS = {"Send MFS Telegram": _send_mfs, "Create Tasks": _create_tasks, "Print": _print, "Notify": _notify, "Call Method": _call_method, "Set Field": _set_field, "Create ToDo": _create_todo}
 
 
 def run_scheduled_actions():

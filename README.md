@@ -857,6 +857,19 @@ SAP's product-driven storage search: indicators on the product pick the storage 
   each delivery order it creates; the order links it (`delivery_request`), withdrawing the order marks it Cancelled. **Final Outbound Delivery** - created
   when a goods issue is posted (items as issued), marked Reversed with it.
 
+## Material Flow System and scales (Phase F)
+
+* **MFS** (`services/mfs.py`) - `WMS MFS Endpoint` (a PLC connection: the WMS connects as client, or listens as server), `WMS MFS Telegram Type`
+  (a telegram's fixed-position layout; inbound types are selected by an identifier at a position and can *Confirm Warehouse Task*, *Confirm Yard Task* or *Call
+  Method* with a handler registered under `wms_mfs_handlers`), `WMS MFS Telegram` (the log: Queued / Sent / Acknowledged / Received / Processed / Failed).
+  Outbound telegrams are built from values, sent over TCP (optionally waiting for an acknowledgement) and retried by the scheduler up to five times; a PPF
+  action *Send MFS Telegram* starts one from any document event. A server-mode endpoint is served by
+  `bench --site <site> execute frappe_wms.services.mfs.listen --kwargs "{'endpoint': 'PLC1'}"` (run it supervised). Tested against loopback sockets - a real
+  PLC needs its telegram layouts configured.
+* **Scale** - on a Work Center, *Scale on the PC* with the serial settings, a reading pattern, a stable marker and the unit; the Repack Center's close tab then
+  shows **Read scale**, which reads the gross weight through the browser's Web Serial API (Chrome / Edge, `public/js/wms_scale.js`). The line parser is unit
+  tested; the serial part needs a scale to try.
+
 ## Modules
 
 | Module | Contains |

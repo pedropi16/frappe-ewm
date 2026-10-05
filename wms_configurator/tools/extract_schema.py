@@ -53,6 +53,8 @@ IN_SCOPE_DOCTYPES = [
     "WMS Exception Code",
     "WMS Stock Owner",
     "WMS Document Type",
+    "WMS MFS Endpoint",
+    "WMS MFS Telegram Type",
     "WMS Usage Decision",
     "PPF Action Profile",
     "WMS Block Reason",

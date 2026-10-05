@@ -88,7 +88,8 @@ CONFIG_FIELDS = ["name", "warehouse", "bin", "active", "work_center_name", "work
                  "inbound_section_bin", "outbound_section_bin", "default_hu_type", "quantity_proposal", "weigh_on_close",
                  "weight_tolerance_percent", "completeness_check", "close_follow_up", "print_label_on_create", "print_label_on_close",
                  "allow_pack_product", "allow_pack_hu", "allow_unpack", "allow_pack_by_instruction", "allow_create_hu",
-                 "allow_close_hu", "allow_delete_empty_hu", "allow_differences"]
+                 "allow_close_hu", "allow_delete_empty_hu", "allow_differences",
+                 "scale_enabled", "scale_baud_rate", "scale_data_bits", "scale_parity", "scale_stop_bits", "scale_pattern", "scale_stable_marker", "scale_unit"]
 FUNCTION_LABELS = {"allow_pack_product": "Pack Product", "allow_pack_hu": "Pack HU into HU", "allow_unpack": "Take HU out of HU",
                    "allow_pack_by_instruction": "Pack by Packing Instruction", "allow_create_hu": "Create HU",
                    "allow_close_hu": "Close / Reopen HU", "allow_delete_empty_hu": "Delete Empty HU",

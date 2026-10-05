@@ -508,8 +508,8 @@ audit (locking recomputes, atomic quantity updates, HU-source rule enforced over
 | 17 | Extension BAdIs | Done | Hooks: `wms_putaway_strategies`, `wms_removal_strategies`, `wms_wocr_group_key`, `wms_queue_override`, `wms_ppf_actions` (Phase E). |
 | 18 | Exceptions and business contexts | Done | WMS Exception Code with business context and system action (change bin, split task, skip, post difference) plus supervisor/comment/follow-up (Phase C). |
 | 19 | Labor management, travel distance | Partial | Labor Standard with the engineered-standard formula (base + units + travel + handling + PF&D), Manhattan travel distance from coordinates, order walk path, efficiency KPI (Phase D). **Gap:** network distance (shortest path along edges). |
-| 20 | MFS / PLC | n/a | Out of scope. |
-| 21 | Work centers, deconsolidation, packing station | Done | Work Center (types, locations), Packing Center, Consolidation Group. **Gap:** scale (RS232) integration. |
+| 20 | MFS / PLC | Partial | MFS endpoints, fixed-layout telegram types, logged send / receive over TCP with acknowledgement and retry, inbound actions, PPF action, listener (Phase F). Tested on loopback only; no real PLC layouts shipped. |
+| 21 | Work centers, deconsolidation, packing station | Done | Work Center (types, locations, scale settings), Packing Center with Read scale (Web Serial), Consolidation Group (Phase F). |
 | 22 | Embedded analytics | Partial | Monitor KPI views plus four script reports (task analysis, bin utilization, resource activity, outbound status) with charts (Phase E). No separate cube layer. |
 
 ## Risks and open decisions

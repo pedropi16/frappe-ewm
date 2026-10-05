@@ -1,0 +1,226 @@
+{
+  "name": "WMS MFS Endpoint",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "endpoint_code",
+    "endpoint_name",
+    "warehouse",
+    "mode",
+    "host",
+    "port",
+    "terminator",
+    "telegram_length",
+    "encoding",
+    "timeout_seconds",
+    "wait_for_ack",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "endpoint_code",
+      "label": "Endpoint Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "endpoint_name",
+      "label": "Name",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse"
+    },
+    {
+      "fieldname": "mode",
+      "label": "Mode",
+      "fieldtype": "Select",
+      "options": "Client\nServer",
+      "default": "Client",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Client: the WMS connects to the PLC to send. Server: the WMS listens (bench execute frappe_wms.services.mfs.listen) and the PLC connects."
+    },
+    {
+      "fieldname": "host",
+      "label": "Host",
+      "fieldtype": "Data",
+      "description": "Client: the PLC's address. Server: the address to listen on.",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "port",
+      "label": "Port",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "terminator",
+      "label": "Terminator",
+      "fieldtype": "Data",
+      "default": "\\n",
+      "description": "Ends a telegram. Escapes: \\n \\r \\t. Blank with a fixed telegram length."
+    },
+    {
+      "fieldname": "telegram_length",
+      "label": "Fixed Telegram Length",
+      "fieldtype": "Int",
+      "description": "0 = telegrams end with the terminator."
+    },
+    {
+      "fieldname": "encoding",
+      "label": "Encoding",
+      "fieldtype": "Data",
+      "default": "ascii"
+    },
+    {
+      "fieldname": "timeout_seconds",
+      "label": "Timeout (s)",
+      "fieldtype": "Int",
+      "default": 5
+    },
+    {
+      "fieldname": "wait_for_ack",
+      "label": "Wait for Acknowledgement",
+      "fieldtype": "Check",
+      "description": "After sending, read one telegram back and log it as the acknowledgement."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "field:endpoint_code",
+  "title_field": "endpoint_name"
+}

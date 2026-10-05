@@ -135,7 +135,7 @@ doc_events = {
 
 scheduler_events = {
     # ERPNext postings queued by warehouses in "Queued with Retry" mode (services/erp_sync_queue.py).
-    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due", "frappe_wms.services.printing.retry_print_jobs", "frappe_wms.services.ppf.run_scheduled_actions"]},
+    "cron": {"*/10 * * * *": ["frappe_wms.services.erp_sync_queue.retry_due", "frappe_wms.services.printing.retry_print_jobs", "frappe_wms.services.ppf.run_scheduled_actions", "frappe_wms.services.mfs.retry_failed"]},
     "hourly": [
         "frappe_wms.tasks.recalculate_stale_bin_capacity",
         "frappe_wms.tasks.run_replenishment_check",
@@ -171,6 +171,7 @@ wms_removal_strategies = {
 #   wms_wocr_group_key = ["myapp.wms.wo_group"]                         function (task) -> str|None; tasks with different values never share a Warehouse Order
 #   wms_queue_override = ["myapp.wms.pick_queue"]                       function (task, queue) -> queue|None
 #   wms_ppf_actions = {"My action": "myapp.wms.do_it"}                 function (doc, params) for a PPF action of type Call Method
+#   wms_mfs_handlers = {"My handler": "myapp.wms.on_plc"}               function (values, telegram_type) for an inbound MFS telegram with action Call Method
 
 permission_query_conditions = {
     "WMS Stock Ledger Entry": "frappe_wms.permissions.ledger_query",

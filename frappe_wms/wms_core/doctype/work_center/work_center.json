@@ -22,6 +22,14 @@
     "quantity_proposal",
     "weigh_on_close",
     "weight_tolerance_percent",
+    "scale_enabled",
+    "scale_baud_rate",
+    "scale_data_bits",
+    "scale_parity",
+    "scale_stop_bits",
+    "scale_pattern",
+    "scale_stable_marker",
+    "scale_unit",
     "completeness_check",
     "column_break_rules",
     "close_follow_up",
@@ -235,6 +243,63 @@
       "fieldtype": "Table",
       "options": "Work Center Location",
       "description": "The bins this station works with. A Deconsolidation station collects the picked material of one production order per location."
+    },
+    {
+      "fieldname": "scale_enabled",
+      "label": "Scale on the PC",
+      "fieldtype": "Check",
+      "description": "A scale on a serial / USB port: the Repack Center reads the gross weight from it (Chrome / Edge, Web Serial)."
+    },
+    {
+      "fieldname": "scale_baud_rate",
+      "label": "Scale Baud Rate",
+      "fieldtype": "Int",
+      "default": 9600,
+      "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+      "fieldname": "scale_data_bits",
+      "label": "Scale Data Bits",
+      "fieldtype": "Int",
+      "default": 8,
+      "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+      "fieldname": "scale_parity",
+      "label": "Scale Parity",
+      "fieldtype": "Select",
+      "options": "none\neven\nodd",
+      "default": "none",
+      "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+      "fieldname": "scale_stop_bits",
+      "label": "Scale Stop Bits",
+      "fieldtype": "Int",
+      "default": 1,
+      "depends_on": "eval:doc.scale_enabled"
+    },
+    {
+      "fieldname": "scale_pattern",
+      "label": "Scale Reading Pattern",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.scale_enabled",
+      "description": "Regular expression with the number as its first group. Blank: the first number in the line."
+    },
+    {
+      "fieldname": "scale_stable_marker",
+      "label": "Scale Stable Marker",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.scale_enabled",
+      "description": "Only lines containing this text count (e.g. ST for a stable reading). Blank: every line."
+    },
+    {
+      "fieldname": "scale_unit",
+      "label": "Scale Unit",
+      "fieldtype": "Select",
+      "options": "kg\ng\nlb",
+      "default": "kg",
+      "depends_on": "eval:doc.scale_enabled"
     }
   ],
   "autoname": "format:{warehouse}-{work_center_code}",

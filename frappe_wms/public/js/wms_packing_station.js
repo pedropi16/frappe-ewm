@@ -277,6 +277,7 @@
       } else {
         fields = this.field("close_hu", __("HU to close"), { list: hus.filter((h) => !h.label.includes("closed")), ph: __("Scan HU") })
           + this.field("weight", cfg.weigh_on_close === "Required" ? __("Gross weight (required)") : __("Gross weight (from the scale)"), { type: "number", ph: "" })
+          + (cfg.scale_enabled ? `<div style="margin:-6px 0 8px;"><button class="btn btn-default btn-xs wps-scale">${__("Read scale")}</button></div>` : "")
           + this.field("move_to", __("Move to bin (blank = station setting)"), { list: [], ph: __(cfg.close_follow_up || "") });
         action = `<button class="btn btn-primary wps-go">${__("Close HU")} ↵</button>`;
       }
@@ -286,6 +287,17 @@
         <div style="margin-top:10px;">${action}</div>
         <div class="wps-msg ${this.msg ? this.msg.kind : ""}">${esc(this.msg ? this.msg.text : "")}</div>`);
       $s.find(".wps-tab").on("click", (e) => { this.msg = null; this.setTab(e.currentTarget.dataset.tab); });
+      $s.find(".wps-scale").on("click", async () => {
+        await new Promise((resolve) => frappe.require("/assets/frappe_wms/js/wms_scale.js", resolve));
+        if (!window.WMSScale.supported()) { this.msg = { kind: "err", text: __("This browser cannot read a serial scale (use Chrome or Edge).") }; this.drawScanner(); return; }
+        try {
+          this.scale = this.scale || new window.WMSScale.ScaleReader(cfg);
+          const kg = await this.scale.readOnce(5000);
+          if (kg == null) { this.msg = { kind: "err", text: __("The scale sent no reading.") }; }
+          else { this.form.weight = String(kg); this.msg = { kind: "ok", text: __("Scale: {0} kg", [kg]) }; }
+        } catch (e) { this.msg = { kind: "err", text: String(e && e.message || e) }; }
+        this.drawScanner();
+      });
       const $inputs = $s.find(".wps-f");
       $inputs.on("input change", (e) => { this.form[e.target.dataset.k] = e.target.value; this.refreshDynamic(e.target.dataset.k); });
       // Enter moves to the next field, and on the last one runs the action - a scanner's CR suffix drives the whole flow.

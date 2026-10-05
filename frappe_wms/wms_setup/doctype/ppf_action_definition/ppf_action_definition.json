@@ -58,7 +58,7 @@
       "fieldname": "action_type",
       "label": "Action",
       "fieldtype": "Select",
-      "options": "Create Tasks\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
+      "options": "Create Tasks\nSend MFS Telegram\nPrint\nNotify\nCall Method\nSet Field\nCreate ToDo",
       "reqd": 1,
       "in_list_view": 1
     },
@@ -67,7 +67,7 @@
       "label": "Parameters (JSON)",
       "fieldtype": "Code",
       "options": "JSON",
-      "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}."
+      "description": "Print: {\"event\": \"Putaway Confirmed\"}. Notify: {\"recipients\": \"a@x.com\", \"roles\": \"WMS Supervisor\", \"subject\": \"...\", \"message\": \"... {{ doc.name }}\"}. Call Method: {\"method\": \"Registered name\"}. Set Field: {\"field\": \"priority\", \"value\": \"High\"}. Create ToDo: {\"allocated_to\": \"user@x.com\", \"description\": \"...\"}. Scheduled: {\"filters\": {\"status\": \"Open\"}}. Send MFS Telegram: {\"type\": \"Telegram type\", \"values\": {\"task\": \"{{ doc.name }}\"}}."
     },
     {
       "fieldname": "execute_once",

@@ -1,0 +1,209 @@
+{
+  "name": "WMS MFS Telegram Type",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "type_code",
+    "endpoint",
+    "direction",
+    "identifier_start",
+    "identifier_length",
+    "identifier_value",
+    "fields",
+    "inbound_action",
+    "action_method",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "type_code",
+      "label": "Type Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "endpoint",
+      "label": "Endpoint",
+      "fieldtype": "Link",
+      "options": "WMS MFS Endpoint",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "direction",
+      "label": "Direction",
+      "fieldtype": "Select",
+      "options": "Outbound\nInbound",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "identifier_start",
+      "label": "Identifier Start",
+      "fieldtype": "Int",
+      "description": "Inbound: where the telegram id sits."
+    },
+    {
+      "fieldname": "identifier_length",
+      "label": "Identifier Length",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "identifier_value",
+      "label": "Identifier Value",
+      "fieldtype": "Data",
+      "description": "Inbound: the id that selects this type."
+    },
+    {
+      "fieldname": "fields",
+      "label": "Layout",
+      "fieldtype": "Table",
+      "options": "WMS MFS Telegram Field"
+    },
+    {
+      "fieldname": "inbound_action",
+      "label": "Inbound Action",
+      "fieldtype": "Select",
+      "options": "None\nConfirm Warehouse Task\nConfirm Yard Task\nCall Method",
+      "default": "None",
+      "description": "Confirm Warehouse Task: fields task + quantity (optional). Confirm Yard Task: field task. Call Method: a handler registered under hooks.py wms_mfs_handlers."
+    },
+    {
+      "fieldname": "action_method",
+      "label": "Handler",
+      "fieldtype": "Data",
+      "depends_on": "eval:doc.inbound_action=='Call Method'"
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "submit": 0,
+      "cancel": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "autoname": "field:type_code"
+}
