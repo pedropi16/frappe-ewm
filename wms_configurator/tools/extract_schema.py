@@ -40,6 +40,8 @@ IN_SCOPE_DOCTYPES = [
     "Warehouse Process Type",
     "Bin Determination Rule",
     "Layout Storage Control",
+    "Door Determination Rule",
+    "Means of Transport",
     "Handling Indicator",
     "Production Supply Area",
     "Production Supply Control Cycle",

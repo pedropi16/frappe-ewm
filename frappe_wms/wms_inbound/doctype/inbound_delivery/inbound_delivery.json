@@ -10,6 +10,7 @@
   "field_order": [
     "inbound_delivery_number",
     "warehouse",
+    "yard_status",
     "document_type",
     "delivery_request",
     "supplier",
@@ -212,6 +213,14 @@
       "options": "WMS Stock Owner",
       "in_standard_filter": 1,
       "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
+    },
+    {
+      "fieldname": "yard_status",
+      "label": "Yard Status",
+      "fieldtype": "Select",
+      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
+      "read_only": 1,
+      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
     }
   ],
   "autoname": "IBD-.########",

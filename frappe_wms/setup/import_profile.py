@@ -31,7 +31,7 @@ APPLY_ORDER = [
     "WMS Resource Group", "WO Creation Rule", "Cycle Count Rule", "Storage Group",
     "Storage Section", "Storage Type Search Sequence", "WMS Document Type",
     "WMS HU Number Pool", "WMS MFS Telegram Type", "Handling Indicator", "Storage Bin",
-    "Activity Area", "Bin Determination Rule", "Layout Storage Control", "Removal Rule",
+    "Activity Area", "Bin Determination Rule", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Removal Rule",
     "Replenishment Rule", "WMS Route", "WMS Usage Decision", "Work Center",
     "Production Supply Area", "Warehouse Queue", "Wave Template",
     "Production Supply Control Cycle", "WMS Resource", "Warehouse Process Type",

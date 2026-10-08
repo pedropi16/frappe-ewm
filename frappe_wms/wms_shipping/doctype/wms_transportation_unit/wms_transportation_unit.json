@@ -10,13 +10,16 @@
   "field_order": [
     "warehouse",
     "unit_type",
+    "means_of_transport",
     "status",
+    "activity_status",
     "carrier",
     "vehicle_registration",
     "trailer_number",
     "driver_name",
     "seal_number",
     "yard_bin",
+    "checkpoint",
     "door",
     "dock_appointment",
     "shipment",
@@ -123,6 +126,28 @@
       "label": "Departed At",
       "fieldtype": "Datetime",
       "read_only": 1
+    },
+    {
+      "fieldname": "activity_status",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Planned\nActive\nCompleted",
+      "default": "Planned",
+      "read_only": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "checkpoint",
+      "label": "Checkpoint",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "read_only": 1
+    },
+    {
+      "fieldname": "means_of_transport",
+      "label": "Means of Transport",
+      "fieldtype": "Link",
+      "options": "Means of Transport"
     }
   ],
   "sort_field": "modified",

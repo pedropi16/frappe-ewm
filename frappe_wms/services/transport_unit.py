@@ -13,6 +13,7 @@ from frappe_wms.utils import require_role, require_storage_role
 
 YARD_ROLES = ("WMS Operator", "WMS Receiver", "WMS Loader", "WMS Supervisor")
 LIVE = ("Planned", "In Yard", "At Door", "Loading", "Unloading")
+ACTIVITY = {"Planned": "Planned", "In Yard": "Active", "At Door": "Active", "Loading": "Active", "Unloading": "Active", "Departed": "Completed", "Cancelled": "Completed"}  # SAP TU activity
 APPOINTMENT_TO_UNIT = {"Planned": "Planned", "Checked In": "In Yard", "At Door": "At Door", "Completed": "At Door", "Checked Out": "Departed", "No Show": "Cancelled", "Cancelled": "Cancelled"}
 
 
@@ -35,16 +36,18 @@ def create_transport_unit(warehouse, unit_type="Truck", carrier=None, vehicle_re
     return doc.name
 
 
-def arrive(unit, yard_spot=None):
-    """At the gate: the unit takes a yard spot (the one given, else the first free one)."""
+def arrive(unit, yard_spot=None, checkpoint=None):
+    """Arrival at the checkpoint: the unit takes a yard spot (the one given, else the first free one) and its activity becomes Active."""
     require_role(*YARD_ROLES)
     doc = frappe.get_doc("WMS Transportation Unit", unit, for_update=True)
     if doc.status != "Planned": frappe.throw(_("{0} is {1}").format(unit, _(doc.status)))
+    from frappe_wms.services.yard import resolve_checkpoint
+    checkpoint = resolve_checkpoint(doc.warehouse, checkpoint)
     spot = yard_spot or free_yard_spot(doc.warehouse)
     if spot:
         require_storage_role(spot, "Yard", label=_("Yard spot"))
         if _occupant(spot, doc.name): frappe.throw(_("Yard spot {0} is occupied by {1}").format(spot, _occupant(spot, doc.name)))
-    doc.db_set({"status": "In Yard", "yard_bin": spot, "arrived_at": now_datetime()}, update_modified=True)
+    doc.db_set({"status": "In Yard", "activity_status": "Active", "checkpoint": checkpoint, "yard_bin": spot, "arrived_at": now_datetime()}, update_modified=True)
     return {"unit": doc.name, "status": "In Yard", "yard_bin": spot}
 
 
@@ -89,20 +92,39 @@ def start_work(unit, kind):
     if kind not in ("Loading", "Unloading"): frappe.throw(_("Choose Loading or Unloading"))
     doc = frappe.get_doc("WMS Transportation Unit", unit, for_update=True)
     if doc.status != "At Door": frappe.throw(_("{0} must be at a door first").format(unit))
+    limit = doc.means_of_transport and frappe.db.get_value("Means of Transport", doc.means_of_transport, "max_payload_kg")
+    weight = kind == "Loading" and doc.shipment and frappe.db.get_value("WMS Shipment", doc.shipment, "total_weight")
+    if limit and weight and weight > limit:
+        frappe.throw(_("Shipment {0} weighs {1} kg: {2} carries at most {3} kg").format(doc.shipment, weight, doc.means_of_transport, limit))
     doc.db_set("status", kind, update_modified=True)
     return {"unit": unit, "status": kind}
 
 
-def depart(unit):
+def depart(unit, checkpoint=None):
     require_role(*YARD_ROLES)
     doc = frappe.get_doc("WMS Transportation Unit", unit, for_update=True)
     if doc.status not in ("In Yard", "At Door", "Loading", "Unloading"): frappe.throw(_("{0} is {1}").format(unit, _(doc.status)))
+    from frappe_wms.services.yard import require_seal, resolve_checkpoint
+    checkpoint = resolve_checkpoint(doc.warehouse, checkpoint)
+    appointment = doc.dock_appointment and frappe.db.get_value("WMS Dock Appointment", doc.dock_appointment, ["status", "direction"], as_dict=True)
+    direction = appointment.direction if appointment else ("Outbound" if doc.shipment else None)
+    require_seal(doc.warehouse, direction, doc.seal_number)
     if frappe.db.exists("WMS Yard Task", {"transport_unit": unit, "status": "Open"}): frappe.throw(_("{0} still has an open yard task").format(unit))
-    doc.db_set({"status": "Departed", "departed_at": now_datetime(), "yard_bin": None, "door": None}, update_modified=True)
+    doc.db_set({"status": "Departed", "activity_status": "Completed", "departed_at": now_datetime(), "yard_bin": None, "door": None}, update_modified=True)
     if doc.dock_appointment and frappe.db.get_value("WMS Dock Appointment", doc.dock_appointment, "status") in ("Checked In", "At Door", "Completed"):
         from frappe_wms.services.yard import check_out
-        check_out(doc.dock_appointment)
+        check_out(doc.dock_appointment, checkpoint)
     return {"unit": unit, "status": "Departed"}
+
+
+YARD_STATUS = {"Planned": "Expected", "In Yard": "In Yard", "At Door": "At Door", "Loading": "At Door", "Unloading": "At Door", "Departed": "Departed"}
+
+
+def _sync_documents(appointment, unit_status):
+    """Tell the delivery / shipment the truck carries where that truck is (SAP: TU assignment status on the delivery)."""
+    value = YARD_STATUS.get(unit_status)
+    if value and appointment.inbound_delivery: frappe.db.set_value("Inbound Delivery", appointment.inbound_delivery, "yard_status", value, update_modified=False)
+    if value and appointment.shipment: frappe.db.set_value("WMS Shipment", appointment.shipment, "yard_status", value, update_modified=False)
 
 
 def sync_from_appointment(appointment):
@@ -110,12 +132,13 @@ def sync_from_appointment(appointment):
     status = APPOINTMENT_TO_UNIT.get(appointment.status)
     if not status or appointment.status == "Planned": return None
     unit = frappe.db.get_value("WMS Transportation Unit", {"dock_appointment": appointment.name}, "name")
-    values = {"status": status, "yard_bin": appointment.yard_bin if status == "In Yard" else None, "door": appointment.door if status == "At Door" else None}
+    values = {"status": status, "activity_status": ACTIVITY[status], "yard_bin": appointment.yard_bin if status == "In Yard" else None, "door": appointment.door if status == "At Door" else None}
     if status == "Departed": values["departed_at"] = now_datetime()
+    _sync_documents(appointment, status)
     if unit:
         frappe.db.set_value("WMS Transportation Unit", unit, values, update_modified=True)
         return unit
     doc = frappe.get_doc({"doctype": "WMS Transportation Unit", "warehouse": appointment.warehouse, "unit_type": "Truck", "carrier": appointment.carrier, "vehicle_registration": appointment.vehicle_registration,
         "trailer_number": appointment.trailer_number, "driver_name": appointment.driver_name, "dock_appointment": appointment.name, "shipment": appointment.shipment,
-        "inbound_delivery": appointment.inbound_delivery, "arrived_at": appointment.checked_in_at or now_datetime(), **values}).insert(ignore_permissions=True)
+        "inbound_delivery": appointment.inbound_delivery, "checkpoint": appointment.checkpoint, "arrived_at": appointment.checked_in_at or now_datetime(), **values}).insert(ignore_permissions=True)
     return doc.name

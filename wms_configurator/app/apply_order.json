@@ -1,6 +1,7 @@
 [
  "Bin Type",
  "Handling Unit Type Group",
+ "Means of Transport",
  "PPF Action Profile",
  "Putaway Control Indicator",
  "Stock Removal Control Indicator",
@@ -41,6 +42,7 @@
  "WMS Route",
  "WMS Usage Decision",
  "Work Center",
+ "Door Determination Rule",
  "Production Supply Area",
  "Warehouse Queue",
  "Wave Template",

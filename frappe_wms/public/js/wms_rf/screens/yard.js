@@ -10,7 +10,7 @@ import { finishFlow, enteredFresh, sectionCrumb, matchScan } from "#wms/screens/
 // Gate and dock: the day's dock appointments (services/yard.py) - check trucks in, send them to a
 // door, complete and check them out, and take in trucks that arrive without an appointment.
 const M = (m) => `frappe_wms.api.yard.${m}`;
-const st = { board: null, loading: false, name: null, spot: "", door: "", w0: 0, nw: { vehicle: "", direction: "Inbound", spot: "" } };
+const st = { board: null, loading: false, name: null, spot: "", door: "", cp: "", w0: 0, nw: { vehicle: "", direction: "Inbound", spot: "", cp: "" } };
 const warehouse = () => S.resource && S.resource.warehouse;
 const time = (v) => (v ? String(v).slice(11, 16) : "");
 const GROUPS = [["At Door", "At the door"], ["Checked In", "In the yard"], ["Planned", "Expected"], ["Completed", "Done, still on site"]];
@@ -50,6 +50,9 @@ export const yardList = {
   actions: () => ({ primary: { label: _("Truck without appointment"), icon: "+", run: () => nav.go("#/yard-new") } }),
 };
 
+const cpField = (get, set) => (st.board && (st.board.checkpoints || []).length ? Field({ name: "checkpoint", kind: "scan", label: _("Checkpoint"), placeholder: _("Scan checkpoint"),
+  value: get(), onInput: set, onCommit: set }) : null);
+
 async function act(method, args, done) {
   const r = await run(() => api(M(method), { appointment: st.name, ...args }), { label: _("Saving…") });
   if (r === undefined) return false;
@@ -62,7 +65,7 @@ export const yardDetail = {
   id: "yard-detail", pattern: "yard/:name",
   title: () => _("Truck"), crumb: () => sectionCrumb("inbound"), parent: () => "#/yard",
   async enter(ctx) {
-    if (st.name !== ctx.params.name) Object.assign(st, { name: ctx.params.name, spot: "", door: "" });
+    if (st.name !== ctx.params.name) Object.assign(st, { name: ctx.params.name, spot: "", door: "", cp: "" });
     if (enteredFresh(ctx, "yard-detail")) st.w0 = nav.depth;
     if (!find(st.name)) await fetchBoard();
     if (!find(st.name)) return { redirect: "#/yard" };
@@ -75,8 +78,10 @@ export const yardDetail = {
       [_("Direction"), _(a.direction)], [_("Slot"), `${time(a.planned_start)}–${time(a.planned_end)}`], [_("Door"), a.door || "-"],
       [_("Carrier"), a.carrier], [_("Trailer"), a.trailer_number], [_("Carries"), a.inbound_delivery || a.shipment], [_("Yard spot"), a.yard_bin]])));
     if (a.status === "Planned") wrap.append(Section({ hint: _("At the gate: scan the yard spot the truck parks on, or leave it empty.") },
+      cpField(() => st.cp, (v) => { st.cp = v; }),
       Field({ name: "spot", kind: "scan", label: _("Yard spot (optional)"), placeholder: _("Scan yard bin"), value: st.spot, autofocus: true, submitOnEmpty: true,
         onInput: (v) => { st.spot = v; }, onCommit: (v) => { st.spot = v; return checkIn(); } })));
+    if (a.status === "Completed" || a.status === "Checked In" || a.status === "At Door") wrap.append(Section({}, cpField(() => st.cp, (v) => { st.cp = v; })));
     if (a.status === "Planned" || a.status === "Checked In") wrap.append(Section({ hint: _("Scan the door the truck backs onto, or leave it empty for its booked door.") },
       Field({ name: "door", kind: "scan", label: _("Door"), placeholder: a.door || _("Scan door"), value: st.door, autofocus: a.status === "Checked In", submitOnEmpty: true,
         onInput: (v) => { st.door = v; }, onCommit: async (v) => {
@@ -99,14 +104,14 @@ export const yardDetail = {
 };
 
 async function checkIn() {
-  const r = await run(() => api(M("check_in"), { warehouse: warehouse(), appointment: st.name, yard_bin: st.spot.trim() || undefined }), { label: _("Checking in…") });
+  const r = await run(() => api(M("check_in"), { warehouse: warehouse(), appointment: st.name, yard_bin: st.spot.trim() || undefined, checkpoint: st.cp.trim() || undefined }), { label: _("Checking in…") });
   if (r === undefined) return false;
-  feedback.ok(); notify.ok(_("{0} checked in", [st.name]), { ttl: 2500 }); st.spot = "";
+  feedback.ok(); notify.ok(_("{0} checked in", [st.name]), { ttl: 2500 }); st.spot = ""; st.cp = "";
   await fetchBoard();
 }
 const toDoor = async (door) => { const r = await act("to_door", { door: door || undefined }, (x) => _("Go to door {0}", [x.door])); if (r) st.door = ""; return r === false ? false : undefined; };
 const complete = () => act("complete", {}, () => _("{0} done", [st.name]));
-async function checkOut() { if (await act("check_out", {}, () => _("{0} checked out", [st.name]))) finishFlow(st.w0, "#/yard"); }
+async function checkOut() { if (await act("check_out", { checkpoint: st.cp.trim() || undefined }, () => _("{0} checked out", [st.name]))) finishFlow(st.w0, "#/yard"); }
 async function cancelIt() {
   if (!confirm(_("Cancel appointment {0}?", [st.name]))) return;
   if (await act("cancel", {}, () => _("{0} cancelled", [st.name]))) finishFlow(st.w0, "#/yard");
@@ -115,7 +120,7 @@ async function cancelIt() {
 export const yardNew = {
   id: "yard-new", pattern: "yard-new",
   title: () => _("Truck without appointment"), crumb: () => sectionCrumb("inbound"), parent: () => "#/yard",
-  enter(ctx) { if (enteredFresh(ctx, "yard-new")) { st.nw = { vehicle: "", direction: "Inbound", spot: "" }; st.w0 = nav.depth; } },
+  enter(ctx) { if (enteredFresh(ctx, "yard-new")) { st.nw = { vehicle: "", direction: "Inbound", spot: "", cp: "" }; st.w0 = nav.depth; } },
   render() {
     const n = st.nw;
     return h("div", Section({ hint: _("A truck at the gate with no booking. The warehouse decides whether it may come in.") },
@@ -123,6 +128,7 @@ export const yardNew = {
       Field({ name: "direction", kind: "select", label: _("The truck"), value: n.direction, onInput: (v) => { n.direction = v; },
         options: [{ value: "Inbound", label: _("delivers goods (inbound)") }, { value: "Outbound", label: _("collects goods (outbound)") }] }),
       Field({ name: "spot", kind: "scan", label: _("Yard spot (optional)"), placeholder: _("Scan yard bin"), value: n.spot, onInput: (v) => { n.spot = v; }, onCommit: (v) => { n.spot = v; } }),
+      cpField(() => n.cp, (v) => { n.cp = v; }),
       Hint(_("Book trucks ahead in the WMS Monitor's Yard & Doors view."))));
   },
   actions: () => ({ primary: { label: _("Check in"), run: walkIn } }),
@@ -132,7 +138,7 @@ async function walkIn(confirmed = 0) {
   const n = st.nw;
   if (!n.vehicle.trim()) { S.fieldErrors.vehicle = _("Enter the vehicle registration."); feedback.error(); S.focusRequest = "vehicle"; update(); return; }
   const r = await run(() => api(M("check_in"), { warehouse: warehouse(), vehicle_registration: n.vehicle.trim(), direction: n.direction,
-    yard_bin: n.spot.trim() || undefined, confirm_without_appointment: confirmed }), { label: _("Checking in…") });
+    yard_bin: n.spot.trim() || undefined, checkpoint: n.cp.trim() || undefined, confirm_without_appointment: confirmed }), { label: _("Checking in…") });
   if (r === undefined) return;
   if (r.needs_confirmation) { feedback.warn(); if (confirm(r.needs_confirmation)) return walkIn(1); return; }
   feedback.done();

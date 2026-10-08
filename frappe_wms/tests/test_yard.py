@@ -114,3 +114,62 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         task = tu.request_yard_move(first, self.doors[0])
         tu.confirm_yard_move(task)
         self.assertEqual(tu.request_yard_move(second, self.spot) and "ok", "ok", "the spot is free again once the first unit went to its door")
+
+    def _checkpoint(self):
+        frappe.get_doc({"doctype": "Storage Type", "warehouse": self.wh, "storage_type_code": "GATE", "storage_type_name": "GATE", "storage_role": "Checkpoint",
+                        "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        return frappe.get_doc({"doctype": "Storage Bin", "bin_code": f"{self.wh}-G1", "warehouse": self.wh, "storage_type": f"{self.wh}-GATE",
+                               "active": 1, "sequence": 1}).insert(ignore_permissions=True).name
+
+    def test_checkpoint_seal_and_tu_activity(self):
+        from frappe_wms.services import transport_unit as tu
+        gate = self._checkpoint()
+        frappe.db.set_value("WMS Warehouse", self.wh, {"yard_checkpoint_required": 1, "seal_required": 1})
+        a = self._book(self.t0, vehicle_registration="CP-1", direction="Outbound")
+        with self.assertRaises(frappe.ValidationError): yard.check_in(self.wh, appointment=a)          # checkpoint required
+        with self.assertRaises(frappe.ValidationError): yard.check_in(self.wh, appointment=a, checkpoint=self.spot)  # not a checkpoint bin
+        yard.check_in(self.wh, appointment=a, checkpoint=gate)
+        unit = frappe.db.get_value("WMS Transportation Unit", {"dock_appointment": a}, ["name", "activity_status", "checkpoint"], as_dict=True)
+        self.assertEqual((unit.activity_status, unit.checkpoint), ("Active", gate), "arrival at the checkpoint activates the TU")
+        with self.assertRaises(frappe.ValidationError): tu.depart(unit.name, gate)                      # outbound without a seal
+        frappe.db.set_value("WMS Transportation Unit", unit.name, "seal_number", "SEAL-9")
+        with self.assertRaises(frappe.ValidationError): tu.depart(unit.name)                            # departure checkpoint required
+        tu.depart(unit.name, gate)
+        self.assertEqual(frappe.db.get_value("WMS Transportation Unit", unit.name, "activity_status"), "Completed")
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", a, "departure_checkpoint"), gate)
+
+    def test_gate_check_holds_receipt_until_the_truck_is_at_a_door(self):
+        a = self._book(self.t0, vehicle_registration="GC-1")
+        frappe.db.set_value("WMS Dock Appointment", a, "inbound_delivery", "ID-X")  # Link fields are not enforced by the database
+        yard.gate_check(self.wh, inbound_delivery="ID-X")                           # Off: nothing happens
+        frappe.db.set_value("WMS Warehouse", self.wh, "yard_gate_check", "Block")
+        yard.gate_check(self.wh, inbound_delivery="ID-OTHER")                       # no appointment carries it: allowed
+        with self.assertRaises(frappe.ValidationError): yard.gate_check(self.wh, inbound_delivery="ID-X")  # truck not at a door yet
+        frappe.db.set_value("WMS Dock Appointment", a, "status", "At Door")
+        yard.gate_check(self.wh, inbound_delivery="ID-X")                           # at the door: fine
+
+    def test_door_determination_rules_choose_the_door_first(self):
+        frappe.get_doc({"doctype": "Door Determination Rule", "warehouse": self.wh, "priority": 1, "direction": "Outbound", "door": self.doors[1]}).insert(ignore_permissions=True)
+        out = self._book(self.t0, vehicle_registration="OUT-1", direction="Outbound")
+        inn = self._book(self.t0, vehicle_registration="IN-1", direction="Inbound")
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", out, "door"), self.doors[1], "the rule names door 2 for outbound")
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", inn, "door"), self.doors[0], "no rule for inbound: first free door")
+        with self.assertRaises(frappe.ValidationError): self._book(self.t0, vehicle_registration="OUT-2", direction="Outbound")  # both doors taken
+        later = self._book(add_to_date(self.t0, hours=3), vehicle_registration="OUT-3", direction="Outbound")
+        self.assertEqual(frappe.db.get_value("WMS Dock Appointment", later, "door"), self.doors[1])
+
+    def test_means_of_transport_payload_and_delivery_yard_status(self):
+        from frappe_wms.services import transport_unit as tu
+        mot = frappe.get_doc({"doctype": "Means of Transport", "code": f"T-{self.wh}", "max_payload_kg": 1000}).insert(ignore_permissions=True).name
+        shipment = frappe.get_doc({"doctype": "WMS Shipment", "shipment_number": frappe.generate_hash(length=8), "warehouse": self.wh, "status": "Ready to Load",
+                                   "total_weight": 1500}).insert(ignore_permissions=True, ignore_mandatory=True)
+        a = self._book(self.t0, vehicle_registration="PAY-1", direction="Outbound", shipment=shipment.name)
+        yard.check_in(self.wh, appointment=a)
+        self.assertEqual(frappe.db.get_value("WMS Shipment", shipment.name, "yard_status"), "In Yard")
+        unit = frappe.db.get_value("WMS Transportation Unit", {"dock_appointment": a}, "name")
+        frappe.db.set_value("WMS Transportation Unit", unit, "means_of_transport", mot)
+        yard.to_door(a)
+        self.assertEqual(frappe.db.get_value("WMS Shipment", shipment.name, "yard_status"), "At Door")
+        with self.assertRaises(frappe.ValidationError): tu.start_work(unit, "Loading")      # 1500 kg on a 1000 kg unit
+        frappe.db.set_value("WMS Shipment", shipment.name, "total_weight", 900)
+        tu.start_work(unit, "Loading")

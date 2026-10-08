@@ -155,6 +155,8 @@ def confirm_hu_loaded(shipment_name, hu_name, confirm_out_of_sequence=0):
     require_role(*LOAD_ROLES)
     shipment = frappe.get_doc("WMS Shipment", shipment_name, for_update=True)
     if shipment.status not in ("Ready to Load", "Loading"): frappe.throw(_("Shipment is not open for loading"))
+    from frappe_wms.services.yard import gate_check
+    gate_check(shipment.warehouse, shipment=shipment_name)
     row = next((r for r in shipment.handling_units if r.handling_unit == hu_name), None)
     if not row: frappe.throw(_("Handling Unit {0} is not on this shipment").format(hu_name))
     if row.loaded: frappe.throw(_("Handling Unit {0} is already loaded").format(hu_name))

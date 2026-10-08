@@ -52,7 +52,7 @@
       "fieldname": "storage_role",
       "label": "Storage Role",
       "fieldtype": "Select",
-      "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nIdentification Point",
+      "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nCheckpoint\nIdentification Point",
       "reqd": 1,
       "in_list_view": 1
     },

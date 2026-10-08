@@ -42,8 +42,8 @@ way. In short:
   recount/supervisor-approval, scheduled cycle counting (ABC/low-stock/putaway
   PI/bin check/annual), a Difference Analyzer, server-enforced RF scan
   verification, and a KPI/Alerts dashboard on the WMS Monitor.
-- **P4 — Advanced EWM** (7 of 8 areas — yard/transport
-  units/dock-appointment-scheduling deliberately out of scope for this pass):
+- **P4 — Advanced EWM** (7 of 8 areas; yard/transport units/dock appointments
+  were built later, see *Yard and dock appointments*):
   wave templates with cut-off/auto-release, opportunistic cross-docking,
   BOM-driven kitting (Assemble/Disassemble), slotting & rearrangement, labor
   standards/performance, VAS depth (Packaging-Spec-driven step generation,
@@ -604,9 +604,8 @@ scanning as before.
 Seven of SAP EWM's eight Advanced-tier capability areas, each independent and
 each opt-in the same way as everything above — configure it and it engages,
 leave it unconfigured and the rest of the app behaves exactly as before.
-Yard management / transport units / dock appointment scheduling is the one
-area **not** built in this pass (`WMS Route Stop.stop_type = "Yard"` stays a
-purely descriptive label with no behavior behind it).
+Yard management / transport units / dock appointment scheduling was not part
+of this pass; it was built afterwards (see *Yard and dock appointments*).
 
 - **Wave templates + auto-release**: a **Wave Template** (warehouse, optional
   route filter, priority, picking strategy, daily `cutoff_time`,
@@ -1142,6 +1141,17 @@ or `No Show` / `Cancelled`.
 - An appointment not checked in *No Show After (Minutes)* past its start
   becomes No Show and frees its door (hourly job).
 - The arrival is recorded against the plan (minutes early or late).
+- **Checkpoints** (storage role *Checkpoint*): arrival and departure name the gate bin;
+  *Checkpoint Required* makes it mandatory. A transportation unit's **activity** is
+  Planned / Active (from arrival at the checkpoint) / Completed (departure).
+- **Door Determination Rule** (warehouse, priority, direction, route -> door): the
+  rules' doors are tried first, then the other doors.
+- **Means of Transport** master (unit type, max payload) on the transportation unit;
+  loading a shipment heavier than the payload is refused.
+- *Receipt / Loading Needs Truck at Door* (Off / Warn / Block): a delivery or shipment
+  that has a dock appointment can only be received or loaded once its truck is at a door.
+- *Seal Required at Departure*: an outbound truck needs its seal number to leave.
+- Inbound Delivery and WMS Shipment show a **Yard Status** (In Yard / At Door / Departed).
 
 Settings: *WMS Warehouse > Yard and Dock Appointments*. Screens: the Monitor's
 **Yard & Doors** (door board, the day's schedule with Check in / To door /

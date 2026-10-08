@@ -36,6 +36,8 @@
   "remarks",
   "section_times",
   "yard_bin",
+  "checkpoint",
+  "departure_checkpoint",
   "checked_in_at",
   "docked_at",
   "column_break_4",
@@ -207,6 +209,20 @@
    "fieldtype": "Int",
    "read_only": 1,
    "description": "Positive: late."
+  },
+  {
+   "fieldname": "checkpoint",
+   "label": "Checkpoint",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "departure_checkpoint",
+   "label": "Departure Checkpoint",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "read_only": 1
   }
  ],
  "permissions": [

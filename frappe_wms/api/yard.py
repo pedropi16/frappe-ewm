@@ -29,9 +29,9 @@ def create_appointment(warehouse, direction, planned_start, planned_end=None, do
 @frappe.whitelist()
 @retry_on_deadlock
 def check_in(warehouse, appointment=None, vehicle_registration=None, direction=None, carrier=None, trailer_number=None,
-             driver_name=None, yard_bin=None, confirm_without_appointment=0):
+             driver_name=None, yard_bin=None, confirm_without_appointment=0, checkpoint=None):
     return yard.check_in(warehouse, appointment, vehicle_registration, direction, carrier, trailer_number, driver_name, yard_bin,
-                         confirm_without_appointment)
+                         confirm_without_appointment, checkpoint)
 
 
 @frappe.whitelist()
@@ -48,8 +48,8 @@ def complete(appointment):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def check_out(appointment):
-    return yard.check_out(appointment)
+def check_out(appointment, checkpoint=None):
+    return yard.check_out(appointment, checkpoint)
 
 
 @frappe.whitelist()
@@ -68,9 +68,9 @@ def create_transport_unit(warehouse, unit_type="Truck", carrier=None, vehicle_re
 
 @frappe.whitelist()
 @retry_on_deadlock
-def arrive_transport_unit(unit, yard_spot=None):
+def arrive_transport_unit(unit, yard_spot=None, checkpoint=None):
     from frappe_wms.services import transport_unit as tu
-    return tu.arrive(unit, yard_spot)
+    return tu.arrive(unit, yard_spot, checkpoint)
 
 
 @frappe.whitelist()
@@ -96,6 +96,6 @@ def start_transport_unit_work(unit, kind):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def depart_transport_unit(unit):
+def depart_transport_unit(unit, checkpoint=None):
     from frappe_wms.services import transport_unit as tu
-    return tu.depart(unit)
+    return tu.depart(unit, checkpoint)

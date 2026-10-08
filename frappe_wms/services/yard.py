@@ -33,7 +33,37 @@ def doors(warehouse):
 
 def _settings(warehouse):
     return frappe.db.get_value("WMS Warehouse", warehouse, ["dock_slot_minutes", "dock_changeover_minutes", "appointment_check",
-                                                            "no_show_after_minutes"], as_dict=True) or frappe._dict()
+                                                            "no_show_after_minutes", "yard_checkpoint_required", "yard_gate_check", "seal_required"], as_dict=True) or frappe._dict()
+
+
+def resolve_checkpoint(warehouse, checkpoint):
+    """The gate bin of an arrival or departure (SAP: arrival / departure at checkpoint). Required when the warehouse says so."""
+    if checkpoint:
+        from frappe_wms.utils import require_storage_role
+        require_storage_role(checkpoint, "Checkpoint", label=_("Checkpoint"))
+        if frappe.db.get_value("Storage Bin", checkpoint, "warehouse") != warehouse: frappe.throw(_("{0} is not a bin of warehouse {1}").format(checkpoint, warehouse))
+    elif cint(_settings(warehouse).yard_checkpoint_required): frappe.throw(_("Name the checkpoint the truck passes"))
+    return checkpoint
+
+
+def require_seal(warehouse, direction, seal_number):
+    if cint(_settings(warehouse).seal_required) and direction == "Outbound" and not seal_number:
+        frappe.throw(_("An outbound truck needs a seal number before it leaves"))
+
+
+def gate_check(warehouse, inbound_delivery=None, shipment=None):
+    """Receiving or loading a delivery whose truck has a dock appointment needs that truck at a door (Warehouse > Receipt / Loading Needs Truck at Door)."""
+    mode = _settings(warehouse).yard_gate_check or "Off"
+    if mode == "Off": return
+    filters = {"status": ["in", ["Planned", "Checked In"]]}
+    if inbound_delivery: filters["inbound_delivery"] = inbound_delivery
+    elif shipment: filters["shipment"] = shipment
+    else: return
+    waiting = frappe.db.get_value("WMS Dock Appointment", filters, "name")
+    if not waiting: return
+    message = _("Truck {0} is not at a door yet").format(waiting)
+    if mode == "Block": frappe.throw(message)
+    frappe.msgprint(message, indicator="orange", alert=True)
 
 
 def _clashes(door, start, end, warehouse, exclude=None):
@@ -51,11 +81,24 @@ def _occupant(door, exclude=None):
                                ["name", "vehicle_registration"], as_dict=True)
 
 
-def free_door(warehouse, start, end, exclude=None, now=False):
-    """First door with no overlapping booking; with now=True it must also be empty right now
-    (a truck still at a door holds it even when its slot is over or has not started)."""
-    return next((d for d in doors(warehouse) if not _clashes(d, start, end, warehouse, exclude)
-                 and not (now and _occupant(d, exclude))), None)
+def determined_doors(warehouse, direction=None, route=None):
+    """Doors the Door Determination Rules name for this truck (SAP: door determination), best rule first."""
+    rules = frappe.get_all("Door Determination Rule", filters={"warehouse": warehouse, "active": 1}, fields=["door", "direction", "route"], order_by="priority asc, name asc")
+    out = []
+    for r in rules:
+        if r.direction not in (None, "", "Both") and r.direction != direction: continue
+        if r.route and r.route != route: continue
+        if r.door not in out: out.append(r.door)
+    return out
+
+
+def free_door(warehouse, start, end, exclude=None, now=False, direction=None, route=None):
+    """The first free door: the ones the determination rules name come first, then the warehouse's other doors.
+    Free = no overlapping booking; with now=True also empty right now (a truck still at a door holds it
+    even when its slot is over or has not started)."""
+    preferred = determined_doors(warehouse, direction, route)
+    ordered = preferred + [d for d in doors(warehouse) if d not in preferred]
+    return next((d for d in ordered if not _clashes(d, start, end, warehouse, exclude) and not (now and _occupant(d, exclude))), None)
 
 
 def validate_appointment(doc):
@@ -71,7 +114,8 @@ def validate_appointment(doc):
     # A walk-in waits in the yard without a door until it is sent to one.
     if not doc.door and doc.walk_in and doc.status == "Checked In": return
     if not doc.door:
-        doc.door = (frappe.db.get_value("WMS Shipment", doc.shipment, "door") if doc.shipment else None) or free_door(doc.warehouse, start, end, doc.name)
+        route = frappe.db.get_value("WMS Shipment", doc.shipment, "route") if doc.shipment else None
+        doc.door = (frappe.db.get_value("WMS Shipment", doc.shipment, "door") if doc.shipment else None) or free_door(doc.warehouse, start, end, doc.name, direction=doc.direction, route=route)
         if not doc.door: frappe.throw(_("No door is free in warehouse {0} from {1} to {2}").format(doc.warehouse, start, end))
     require_storage_role(doc.door, "Door", label=_("Door"))
     # A truck already at its door holds it, whatever else was planned there.
@@ -121,7 +165,7 @@ def yard_board(warehouse, date=None):
                                                                         "planned_start": ["<", str(day)]},
                                        fields=["*"], order_by="planned_start asc") if r.name not in names]
     at_door = {r.door: r.name for r in rows if r.status == "At Door"}
-    return {"date": str(day), "appointments": rows, "doors": [{"door": d, "occupied_by": at_door.get(d)} for d in doors(warehouse)],
+    return {"date": str(day), "appointments": rows, "doors": [{"door": d, "occupied_by": at_door.get(d)} for d in doors(warehouse)], "checkpoints": _role_bins(warehouse, "Checkpoint"),
             "yard_spots": _role_bins(warehouse, "Yard"), "settings": _settings(warehouse)}
 
 
@@ -135,7 +179,7 @@ def _get(name, *statuses):
 
 
 def check_in(warehouse, appointment=None, vehicle_registration=None, direction=None, carrier=None, trailer_number=None,
-             driver_name=None, yard_bin=None, confirm_without_appointment=0):
+             driver_name=None, yard_bin=None, confirm_without_appointment=0, checkpoint=None):
     """At the gate. Without an appointment, the warehouse's rule decides (Allow / Warn / Block)."""
     require_role(*YARD_ROLES)
     now = now_datetime()
@@ -154,12 +198,13 @@ def check_in(warehouse, appointment=None, vehicle_registration=None, direction=N
         doc = frappe.get_doc({"doctype": "WMS Dock Appointment", "warehouse": warehouse, "direction": direction, "walk_in": 1,
                               "planned_start": now, "planned_end": add_to_date(now, minutes=cint(_settings(warehouse).dock_slot_minutes) or 60),
                               "vehicle_registration": vehicle_registration})
+    checkpoint = resolve_checkpoint(warehouse, checkpoint)
     for field, value in (("carrier", carrier), ("trailer_number", trailer_number), ("driver_name", driver_name), ("vehicle_registration", vehicle_registration)):
         if value: doc.set(field, value)
     if yard_bin:
         from frappe_wms.utils import require_storage_role
         require_storage_role(yard_bin, "Yard", label=_("Yard spot"))
-    doc.update({"status": "Checked In", "checked_in_at": now, "yard_bin": yard_bin})
+    doc.update({"status": "Checked In", "checked_in_at": now, "yard_bin": yard_bin, "checkpoint": checkpoint})
     if doc.is_new(): doc.insert(ignore_permissions=True)
     else: doc.save(ignore_permissions=True)
     from frappe_wms.services.transport_unit import sync_from_appointment
@@ -174,7 +219,8 @@ def to_door(appointment, door=None):
     door = door or doc.door
     if not door:
         now = now_datetime()
-        door = free_door(doc.warehouse, now, max(get_datetime(doc.planned_end), add_to_date(now, minutes=30)), doc.name, now=True)
+        route = frappe.db.get_value("WMS Shipment", doc.shipment, "route") if doc.shipment else None
+        door = free_door(doc.warehouse, now, max(get_datetime(doc.planned_end), add_to_date(now, minutes=30)), doc.name, now=True, direction=doc.direction, route=route)
         if not door: frappe.throw(_("No door is free right now"))
     occupant = _occupant(door, doc.name)
     if occupant: frappe.throw(_("Door {0} is still occupied by {1} ({2})").format(door, occupant.vehicle_registration or "", occupant.name))
@@ -195,11 +241,14 @@ def complete(appointment):
     return {"appointment": doc.name, "status": "Completed"}
 
 
-def check_out(appointment):
+def check_out(appointment, checkpoint=None):
     require_role(*YARD_ROLES)
     doc = _get(appointment, "Checked In", "At Door", "Completed")
+    checkpoint = resolve_checkpoint(doc.warehouse, checkpoint)
+    seal = frappe.db.get_value("WMS Transportation Unit", {"dock_appointment": doc.name}, "seal_number")
+    require_seal(doc.warehouse, doc.direction, seal)
     now = now_datetime()
-    doc.db_set({"status": "Checked Out", "checked_out_at": now, "completed_at": doc.completed_at or (now if doc.status == "At Door" else None)},
+    doc.db_set({"status": "Checked Out", "checked_out_at": now, "departure_checkpoint": checkpoint, "completed_at": doc.completed_at or (now if doc.status == "At Door" else None)},
                update_modified=True)
     doc.status = "Checked Out"
     from frappe_wms.services.transport_unit import sync_from_appointment

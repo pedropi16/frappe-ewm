@@ -10,6 +10,7 @@
   "field_order": [
     "shipment_number",
     "warehouse",
+    "yard_status",
     "route",
     "carrier",
     "vehicle_registration",
@@ -138,6 +139,14 @@
       "fieldname": "seal_number",
       "label": "Seal Number",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "yard_status",
+      "label": "Yard Status",
+      "fieldtype": "Select",
+      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
+      "read_only": 1,
+      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
     }
   ],
   "autoname": "SHIP-.########",

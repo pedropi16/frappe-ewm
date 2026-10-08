@@ -2611,9 +2611,16 @@ class WMSMonitor {
       .then(() => { frappe.show_alert({ message: __("Done"), indicator: "green" }); this.search_yard(); });
     if (method === "check_in") {
       const d = new frappe.ui.Dialog({ title: __("Check in {0}", [appointment]), fields: [
-        { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat(this.yard.yard_spots || []) }],
-        primary_action_label: __("Check in"), primary_action: (v) => { d.hide(); frappe.call("frappe_wms.api.yard.check_in", { warehouse: this.warehouse, appointment, yard_bin: v.yard_bin || undefined })
+        { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat(this.yard.yard_spots || []) },
+        { fieldname: "checkpoint", fieldtype: "Select", label: __("Checkpoint"), options: [""].concat((this.yard && this.yard.checkpoints) || []) }],
+        primary_action_label: __("Check in"), primary_action: (v) => { d.hide(); frappe.call("frappe_wms.api.yard.check_in", { warehouse: this.warehouse, appointment, yard_bin: v.yard_bin || undefined, checkpoint: v.checkpoint || undefined })
           .then(() => { frappe.show_alert({ message: __("Checked in"), indicator: "green" }); this.search_yard(); }); } });
+      d.show(); return;
+    }
+    if (method === "check_out" && ((this.yard && this.yard.checkpoints) || []).length) {
+      const d = new frappe.ui.Dialog({ title: __("Check out {0}", [appointment]), fields: [
+        { fieldname: "checkpoint", fieldtype: "Select", label: __("Checkpoint"), options: [""].concat((this.yard && this.yard.checkpoints) || []) }],
+        primary_action_label: __("Check out"), primary_action: (v) => { d.hide(); call({ checkpoint: v.checkpoint || undefined }); } });
       d.show(); return;
     }
     if (method === "to_door") {
@@ -2659,8 +2666,9 @@ class WMSMonitor {
       { fieldname: "direction", fieldtype: "Select", label: __("Direction"), options: "Inbound\nOutbound", reqd: 1 },
       { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") },
       { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat((this.yard && this.yard.yard_spots) || []) },
+      { fieldname: "checkpoint", fieldtype: "Select", label: __("Checkpoint"), options: [""].concat((this.yard && this.yard.checkpoints) || []) },
     ], primary_action_label: __("Check in"), primary_action: async (v) => {
-      const args = Object.assign({ warehouse: this.warehouse }, v, { yard_bin: v.yard_bin || undefined });
+      const args = Object.assign({ warehouse: this.warehouse }, v, { yard_bin: v.yard_bin || undefined, checkpoint: v.checkpoint || undefined });
       let r = (await frappe.call("frappe_wms.api.yard.check_in", args)).message;
       if (r.needs_confirmation) {
         if (!(await new Promise((res) => frappe.confirm(r.needs_confirmation, () => res(true), () => res(false))))) return;

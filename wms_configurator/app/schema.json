@@ -18,6 +18,8 @@
   "Warehouse Process Type",
   "Bin Determination Rule",
   "Layout Storage Control",
+  "Door Determination Rule",
+  "Means of Transport",
   "Handling Indicator",
   "Production Supply Area",
   "Production Supply Control Cycle",
@@ -359,6 +361,28 @@
      "fieldtype": "Int",
      "default": "120",
      "description": "A planned appointment not checked in this long after its start becomes No Show and frees its door. 0: never."
+    },
+    {
+     "fieldname": "yard_checkpoint_required",
+     "label": "Checkpoint Required",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "Arrival and departure at the gate must name a checkpoint (a bin of a storage type with the Checkpoint role)."
+    },
+    {
+     "fieldname": "yard_gate_check",
+     "label": "Receipt / Loading Needs Truck at Door",
+     "fieldtype": "Select",
+     "options": "Off\nWarn\nBlock",
+     "default": "Off",
+     "description": "A delivery that has a dock appointment can only be received or loaded while its truck is at a door: Warn tells the user, Block refuses."
+    },
+    {
+     "fieldname": "seal_required",
+     "label": "Seal Required at Departure",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "An outbound truck cannot depart without a seal number."
     }
    ],
    "key": {
@@ -398,7 +422,7 @@
      "fieldname": "storage_role",
      "label": "Storage Role",
      "fieldtype": "Select",
-     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nIdentification Point",
+     "options": "Receiving\nStorage\nPicking\nPacking\nStaging\nDoor\nShipping\nDifference\nProduction Supply\nYard\nCheckpoint\nIdentification Point",
      "reqd": 1
     },
     {
@@ -1743,6 +1767,105 @@
    ],
    "key": {
     "type": "none"
+   }
+  },
+  "Door Determination Rule": {
+   "name": "Door Determination Rule",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "priority",
+     "label": "Priority",
+     "fieldtype": "Int",
+     "default": 1,
+     "description": "Lowest number is tried first."
+    },
+    {
+     "fieldname": "direction",
+     "label": "Direction",
+     "fieldtype": "Select",
+     "options": "Both\nInbound\nOutbound",
+     "default": "Both"
+    },
+    {
+     "fieldname": "route",
+     "label": "Route",
+     "fieldtype": "Link",
+     "options": "WMS Route",
+     "description": "Outbound: the shipment's route. Empty: any route."
+    },
+    {
+     "fieldname": "door",
+     "label": "Door",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "reqd": 1,
+     "description": "A bin of a storage type with the Door role."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Means of Transport": {
+   "name": "Means of Transport",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "unit_type",
+     "label": "Unit Type",
+     "fieldtype": "Select",
+     "options": "Truck\nTrailer\nContainer\nRail Car\nVan",
+     "default": "Truck"
+    },
+    {
+     "fieldname": "max_payload_kg",
+     "label": "Max Payload (kg)",
+     "fieldtype": "Float",
+     "description": "0: no limit. Loading a shipment heavier than this onto a unit of this means of transport is refused."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "code"
+    ]
    }
   },
   "Handling Indicator": {
@@ -5718,6 +5841,14 @@
     {
      "target": "Storage Bin",
      "label": "Yard Spot"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Checkpoint"
+    },
+    {
+     "target": "Storage Bin",
+     "label": "Departure Checkpoint"
     }
    ]
   },

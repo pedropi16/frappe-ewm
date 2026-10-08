@@ -40,7 +40,11 @@
     "dock_changeover_minutes",
     "column_break_yard1",
     "appointment_check",
-    "no_show_after_minutes"
+    "no_show_after_minutes",
+    "column_break_yard2",
+    "yard_checkpoint_required",
+    "yard_gate_check",
+    "seal_required"
   ],
   "fields": [
     {
@@ -273,6 +277,32 @@
       "default": "120",
       "non_negative": 1,
       "description": "A planned appointment not checked in this long after its start becomes No Show and frees its door. 0: never."
+    },
+    {
+      "fieldname": "column_break_yard2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "yard_checkpoint_required",
+      "fieldtype": "Check",
+      "label": "Checkpoint Required",
+      "default": "0",
+      "description": "Arrival and departure at the gate must name a checkpoint (a bin of a storage type with the Checkpoint role)."
+    },
+    {
+      "fieldname": "yard_gate_check",
+      "fieldtype": "Select",
+      "label": "Receipt / Loading Needs Truck at Door",
+      "options": "Off\nWarn\nBlock",
+      "default": "Off",
+      "description": "A delivery that has a dock appointment can only be received or loaded while its truck is at a door: Warn tells the user, Block refuses."
+    },
+    {
+      "fieldname": "seal_required",
+      "fieldtype": "Check",
+      "label": "Seal Required at Departure",
+      "default": "0",
+      "description": "An outbound truck cannot depart without a seal number."
     }
   ],
   "autoname": "field:warehouse_code",

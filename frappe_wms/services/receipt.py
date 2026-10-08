@@ -49,6 +49,8 @@ def post_goods_receipt(doc):
     # submit - exactly as reverse_goods_receipt moves it back on cancel; it used to move only on
     # the API path, so a desk-submitted receipt was never counted against its delivery.
     if doc.inbound_delivery:
+        from frappe_wms.services.yard import gate_check
+        gate_check(doc.warehouse, inbound_delivery=doc.inbound_delivery)
         delivery = _lock_inbound_delivery(doc.inbound_delivery)
         if delivery.docstatus == 2: frappe.throw(_("Inbound Delivery {0} is cancelled").format(delivery.name))
         _validate_receipt_quantities(delivery, doc.items)
