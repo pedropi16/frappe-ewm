@@ -350,6 +350,14 @@ def cockpit(warehouse):
             "deliveries_without_shipment": outbound}
 
 
+YARD_STATUS_OF = {"Planned": "Expected", "In Yard": "In Yard", "At Door": "At Door", "Loading": "At Door", "Unloading": "At Door"}
+
+
+def carried_by(appointment):
+    from frappe_wms.services.transport_unit import carried
+    return set().union(*carried(appointment))
+
+
 def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbound_deliveries=None, shipment=None, carrier=None, vehicle_registration=None,
                trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None, inbound_deliveries=None, shipments=None):
     """Books a vehicle for deliveries in one step: shipment (outbound deliveries), appointment, and one transportation unit per
@@ -375,3 +383,25 @@ def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbo
         frappe.db.set_value("Inbound Delivery" if direction == "Inbound" else "WMS Shipment", ref, "yard_status", "Expected", update_modified=False)
         units.append(unit)
     return {"appointment": appointment, "unit": units[0], "units": units, "shipment": outbound[0] if direction == "Outbound" else None}
+
+
+def add_to_truck(appointment, inbound_delivery=None, shipment=None):
+    """Puts one more inbound delivery / shipment on a truck that is already planned or in the yard (not yet departed): a new transportation
+    unit of the same vehicle, in the state its sibling units are in."""
+    require_role(*PLAN_ROLES)
+    a = frappe.get_doc("WMS Dock Appointment", appointment)
+    if a.status in ("Checked Out", "Completed", "Cancelled", "No Show"): frappe.throw(_("Appointment {0} is {1}: the truck can no longer take another delivery").format(a.name, a.status))
+    ref, field, doctype = (inbound_delivery, "inbound_delivery", "Inbound Delivery") if a.direction == "Inbound" else (shipment, "shipment", "WMS Shipment")
+    if not ref: frappe.throw(_("Choose the {0} to put on the truck").format(_(doctype)))
+    if ref in carried_by(a.name): frappe.throw(_("{0} is already on this truck").format(ref))
+    from frappe_wms.services.transport_unit import create_transport_unit
+    siblings = frappe.get_all("WMS Transportation Unit", filters={"dock_appointment": a.name}, fields=["name", "status", "activity_status", "yard_bin", "door", "arrived_at", "means_of_transport"], limit=1)
+    unit = create_transport_unit(a.warehouse, carrier=a.carrier, vehicle_registration=a.vehicle_registration, trailer_number=a.trailer_number, driver_name=a.driver_name,
+                                 dock_appointment=a.name, **{field: ref})
+    if siblings:
+        s0 = siblings[0]
+        frappe.db.set_value("WMS Transportation Unit", unit, {k: s0[k] for k in ("status", "activity_status", "yard_bin", "door", "arrived_at", "means_of_transport") if s0.get(k)})
+        status = s0.status
+    else: status = "Planned"
+    frappe.db.set_value(doctype, ref, "yard_status", YARD_STATUS_OF.get(status, "Expected"), update_modified=False)
+    return {"appointment": a.name, "unit": unit}

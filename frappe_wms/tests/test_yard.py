@@ -231,3 +231,28 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         # the first recurrence day is now full for ACME: the series skips it
         again = yard.create_recurring_appointments(self.wh, "Inbound", add_to_date(self.t0, days=1), "Daily", 2, carrier="ACME")
         self.assertEqual((len(again["created"]), len(again["skipped"])), (0, 2))
+
+    def test_a_planned_truck_can_take_another_delivery_until_it_leaves(self):
+        from frappe_wms.tests.bootstrap import TEST_ITEM, TEST_SUPPLIER
+        uom = frappe.db.get_value("Item", TEST_ITEM, "stock_uom")
+        if not frappe.db.exists("WMS Product", TEST_ITEM):
+            frappe.get_doc({"doctype": "WMS Product", "item": TEST_ITEM, "stock_uom": uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        names = []
+        for _i in range(2):
+            d = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "supplier": TEST_SUPPLIER,
+                                "receiving_bin": self.spot, "items": [{"line_number": 1, "item": TEST_ITEM, "expected_quantity": 1, "stock_uom": uom, "expected_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+            d.submit()
+            names.append(d.name)
+        r = yard.plan_truck(self.wh, "Inbound", self.t0, inbound_delivery=names[0], vehicle_registration="ADD-1")
+        yard.check_in(self.wh, vehicle_registration="ADD-1", yard_bin=self.spot)
+        added = yard.add_to_truck(r["appointment"], inbound_delivery=names[1])
+        self.assertEqual(frappe.db.get_value("WMS Transportation Unit", added["unit"], "status"), "In Yard", "the new unit is where its vehicle is")
+        self.assertEqual(frappe.db.get_value("Inbound Delivery", names[1], "yard_status"), "In Yard")
+        self.assertEqual(len({frappe.db.get_value("WMS Transportation Unit", u, "vehicle") for u in (added["unit"], r["unit"])}), 1)
+        with self.assertRaisesRegex(frappe.ValidationError, "already on this truck"):
+            yard.add_to_truck(r["appointment"], inbound_delivery=names[1])
+        yard.to_door(r["appointment"])
+        self.assertEqual(frappe.db.get_value("WMS Transportation Unit", added["unit"], "status"), "At Door")
+        frappe.db.set_value("WMS Dock Appointment", r["appointment"], "status", "Checked Out")
+        with self.assertRaisesRegex(frappe.ValidationError, "no longer take"):
+            yard.add_to_truck(r["appointment"], inbound_delivery=names[1])

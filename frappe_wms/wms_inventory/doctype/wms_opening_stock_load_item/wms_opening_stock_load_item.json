@@ -20,7 +20,10 @@
     "quantity",
     "stock_uom",
     "shelf_life_expiry_date",
-    "valuation_rate"
+    "valuation_rate",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref"
   ],
   "fields": [
     {
@@ -108,6 +111,23 @@
       "label": "Party Entitled to Dispose",
       "fieldtype": "Link",
       "options": "WMS Stock Owner"
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country"
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock Type",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject"
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data"
     }
   ],
   "sort_field": "modified",

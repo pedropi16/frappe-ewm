@@ -68,6 +68,7 @@ def post_opening_stock_load(name):
             "reference_line": row.name,
         }
         if row.get("stock_owner") or row.get("entitled_party"): entry.update({"stock_owner": row.stock_owner, "entitled_party": row.entitled_party})
+        entry.update({k: row.get(k) for k in ("country_of_origin", "special_stock_type", "special_stock_ref") if row.get(k)})
         if row.shelf_life_expiry_date:
             entry["shelf_life_expiry_date"] = row.shelf_life_expiry_date
         post_entries([entry], doc.doctype, doc.name, f"OSL:{doc.name}:{i}")

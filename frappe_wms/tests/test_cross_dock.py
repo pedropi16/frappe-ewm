@@ -84,6 +84,20 @@ class TestCrossDock(IntegrationTestCase):
         self.assertEqual(request.reference_name, obd.name)
         self.assertEqual(request.requested_quantity, 6)
 
+    def test_warehouse_can_switch_opportunistic_cross_docking_off_or_limit_it_to_due_deliveries(self):
+        item = self._make_item("TEST-XDOCK-ITEM-HZ")
+        obd = self._make_delivery(item, 3)
+        frappe.db.set_value("WMS Warehouse", self.warehouse, "opportunistic_cross_docking", 0)
+        gr = self._submit_gr(self._make_hu(), item, 3)
+        self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr.name)], ["Putaway"])
+        frappe.db.set_value("WMS Warehouse", self.warehouse, {"opportunistic_cross_docking": 1, "cross_dock_horizon_days": 2})
+        frappe.db.set_value("Outbound Delivery", obd.name, "delivery_date", frappe.utils.add_days(nowdate(), 10))
+        gr = self._submit_gr(self._make_hu(), item, 3)
+        self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr.name)], ["Putaway"], "delivery is beyond the horizon")
+        frappe.db.set_value("Outbound Delivery", obd.name, "delivery_date", frappe.utils.add_days(nowdate(), 1))
+        gr = self._submit_gr(self._make_hu(), item, 3)
+        self.assertEqual([frappe.db.get_value("Warehouse Request", n, "request_type") for n in create_putaway_requests(gr.name)], ["Cross Dock"])
+
     def test_partial_match_splits_into_cross_dock_and_putaway_requests(self):
         item = self._make_item("TEST-XDOCK-ITEM-2")
         self._make_delivery(item, 4)

@@ -122,3 +122,9 @@ def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbo
 @retry_on_deadlock
 def create_recurring_appointments(warehouse, direction, first_start, repeat="Weekly", count=4, carrier=None, vehicle_registration=None, door=None, planned_end=None):
     return yard.create_recurring_appointments(warehouse, direction, first_start, repeat, count, carrier=carrier, vehicle_registration=vehicle_registration, door=door, planned_end=planned_end)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def add_to_truck(appointment, inbound_delivery=None, shipment=None):
+    return yard.add_to_truck(appointment, inbound_delivery, shipment)

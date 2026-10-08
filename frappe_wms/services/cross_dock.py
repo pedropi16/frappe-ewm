@@ -6,6 +6,9 @@ def find_cross_dock_demand(warehouse, item, stock_type, quantity, owner=None, pa
     # the warehouse - a genuinely new query, nothing like it existed before this. Only
     # deliveries with a staging_bin already resolved are candidates, since that's where the
     # incoming stock would be routed directly.
+    settings = frappe.db.get_value("WMS Warehouse", warehouse, ["opportunistic_cross_docking", "cross_dock_horizon_days"], as_dict=True) or {}
+    if settings.get("opportunistic_cross_docking") == 0: return []
+    horizon = int(settings.get("cross_dock_horizon_days") or 0)
     rows = frappe.db.sql("""
         select di.name as delivery_item, di.parent as delivery, d.staging_bin,
             (di.requested_quantity - di.allocated_quantity) as outstanding
@@ -16,8 +19,9 @@ def find_cross_dock_demand(warehouse, item, stock_type, quantity, owner=None, pa
             and d.staging_bin is not null and d.staging_bin != ''
             and ifnull(d.stock_owner, '') = %(owner)s and ifnull(d.entitled_party, '') = %(party)s
             and ifnull(di.required_country_of_origin, '') = ''
+            and (%(horizon)s = 0 or d.delivery_date <= date_add(curdate(), interval %(horizon)s day))
         order by d.delivery_date asc, d.creation asc
-    """, {"warehouse": warehouse, "item": item, "stock_type": stock_type, "owner": owner or "", "party": party or ""}, as_dict=True)
+    """, {"warehouse": warehouse, "item": item, "stock_type": stock_type, "owner": owner or "", "party": party or "", "horizon": horizon}, as_dict=True)
     matched = []
     remaining = flt(quantity)
     for row in rows:

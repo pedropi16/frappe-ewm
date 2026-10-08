@@ -46,7 +46,9 @@
     "yard_checkpoint_required",
     "yard_gate_check",
     "seal_required",
-    "dangerous_goods_check"
+    "dangerous_goods_check",
+    "opportunistic_cross_docking",
+    "cross_dock_horizon_days"
   ],
   "fields": [
     {
@@ -318,6 +320,21 @@
       "label": "Dangerous Goods Check",
       "fieldtype": "Check",
       "description": "Enforce hazard-class storage permission, segregation and points limit on destination bins."
+    },
+    {
+      "fieldname": "opportunistic_cross_docking",
+      "label": "Opportunistic Cross-Docking",
+      "fieldtype": "Check",
+      "default": "1",
+      "description": "Goods received are routed straight to the staging bin of open outbound demand instead of being put away."
+    },
+    {
+      "fieldname": "cross_dock_horizon_days",
+      "label": "Cross-Docking Horizon (days)",
+      "fieldtype": "Int",
+      "default": "0",
+      "depends_on": "opportunistic_cross_docking",
+      "description": "Only deliveries due within this many days take received goods directly. 0 = no limit."
     }
   ],
   "autoname": "field:warehouse_code",

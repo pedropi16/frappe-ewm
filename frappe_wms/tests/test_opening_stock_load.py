@@ -56,3 +56,14 @@ class TestOpeningStockLoad(IntegrationTestCase):
         self.assertEqual(balance_after, 0)
         erp_qty_after = flt(frappe.db.get_value("Bin", {"warehouse": self.wh.erpnext_warehouse, "item_code": self.item}, "actual_qty"))
         self.assertEqual(erp_qty_after, 0)
+
+    def test_opening_rows_can_carry_origin_and_special_stock(self):
+        load = frappe.get_doc({"doctype": "WMS Opening Stock Load", "warehouse": self.warehouse,
+            "items": [{"item": self.item, "storage_bin": self.bin1, "stock_type": "AVAILABLE", "quantity": 7, "stock_uom": "Nos", "valuation_rate": 4,
+                       "country_of_origin": "Germany", "special_stock_type": "Sales Order", "special_stock_ref": "SO-OPEN-1"}]})
+        load.insert(ignore_permissions=True)
+        post_opening_stock_load(load.name)
+        row = frappe.db.get_value("WMS Stock Balance", {"product": self.item, "storage_bin": self.bin1, "special_stock_ref": "SO-OPEN-1"}, ["country_of_origin", "quantity"], as_dict=True)
+        self.assertEqual((row.country_of_origin, flt(row.quantity)), ("Germany", 7))
+        cancel_opening_stock_load(load.name)
+        self.assertEqual(flt(frappe.db.get_value("WMS Stock Balance", {"product": self.item, "storage_bin": self.bin1, "special_stock_ref": "SO-OPEN-1"}, "quantity")), 0)

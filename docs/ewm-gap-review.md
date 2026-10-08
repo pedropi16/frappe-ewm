@@ -51,8 +51,11 @@ Update: per-diem storage billing, slotting index (ABC), labor shifts + indirect 
 ## Not built, with the reason
 - HU-based yard moves: receiving creates the HUs at the receiving bin, so there is no HU-on-TU stage to move.
 - TM freight orders, GTS/customs, MES/JIT/kanban, EDI and carrier APIs: need the external system to target; the OpenAPI description and webhooks are the integration surface for now.
-- Opportunistic / transportation cross-docking: cross-docking exists for planned demand only.
+- Transportation cross-docking (inbound HUs routed to an outbound transport by route/carrier, no delivery match): needs transportation planning data this app does not have.
+- ERPNext mirroring of country of origin / special stock: ERPNext's stock ledger has no matching dimension (inventory dimensions are blocked on reconciliations), so the mirror stays per item/batch/owner.
 
 Update: stock key extended with country of origin and special stock (sales order / project), same pattern as owner/party (identity only when set). PSA stays a location concept (Production Supply Area bins), not a stock attribute.
 
 Update: the consolidation group is now a stock attribute (set when a line joins a group, carried through gather and split while the stock is staged to its delivery / PMR).
+
+Update: opportunistic cross-docking existed at receipt; it now has a per-warehouse switch and a horizon (days). Opening-stock rows carry origin / special stock. A planned truck can take another delivery until it leaves (`add_to_truck`).
