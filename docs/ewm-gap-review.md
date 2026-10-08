@@ -41,3 +41,5 @@ Update: cartonization (weight/volume, Planned Shipping HUs, packing station prop
 Update: documented API (OpenAPI generated from code) and webhook catalogue done - docs/api.md. Not covered: TM/GTS/MES/kanban connectors, EDI/carrier APIs.
 
 Update: shipping & receiving cockpit with automatic TU creation done (one inbound delivery per truck; vehicle grouping still open).
+
+Update: vehicle grouping done (WMS Vehicle groups transportation units; one appointment can carry several deliveries/shipments).

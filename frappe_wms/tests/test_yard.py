@@ -192,3 +192,30 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         yard.check_in(self.wh, vehicle_registration="PLAN-1", yard_bin=self.spot)
         self.assertEqual(frappe.db.count("WMS Transportation Unit", {"dock_appointment": r["appointment"]}), 1, "check-in uses the planned unit")
         self.assertEqual([t["next_action"] for t in yard.cockpit(self.wh)["trucks"] if t["name"] == r["appointment"]], ["To Door"])
+
+    def test_one_vehicle_carries_several_deliveries_in_separate_units(self):
+        from frappe_wms.tests.bootstrap import TEST_ITEM, TEST_SUPPLIER
+        uom = frappe.db.get_value("Item", TEST_ITEM, "stock_uom")
+        if not frappe.db.exists("WMS Product", TEST_ITEM):
+            frappe.get_doc({"doctype": "WMS Product", "item": TEST_ITEM, "stock_uom": uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        names = []
+        for _i in range(2):
+            d = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "supplier": TEST_SUPPLIER,
+                                "receiving_bin": self.spot, "items": [{"line_number": 1, "item": TEST_ITEM, "expected_quantity": 1, "stock_uom": uom, "expected_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+            d.submit()
+            names.append(d.name)
+        r = yard.plan_truck(self.wh, "Inbound", self.t0, inbound_deliveries=names, vehicle_registration="TRAIN-1")
+        self.assertEqual(len(r["units"]), 2)
+        self.assertEqual(len({frappe.db.get_value("WMS Transportation Unit", u, "vehicle") for u in r["units"]}), 1, "both units belong to one vehicle")
+        self.assertEqual(frappe.db.count("WMS Vehicle", {"vehicle_registration": "TRAIN-1"}), 1)
+        self.assertEqual({n: frappe.db.get_value("Inbound Delivery", n, "yard_status") for n in names}, {names[0]: "Expected", names[1]: "Expected"})
+        self.assertTrue(all(n not in [d.name for d in yard.cockpit(self.wh)["inbound_without_truck"]] for n in names))
+        yard.check_in(self.wh, vehicle_registration="TRAIN-1", yard_bin=self.spot)
+        yard.to_door(r["appointment"])
+        self.assertEqual({frappe.db.get_value("WMS Transportation Unit", u, "status") for u in r["units"]}, {"At Door"}, "the vehicle's units move together")
+        self.assertEqual({frappe.db.get_value("Inbound Delivery", n, "yard_status") for n in names}, {"At Door"})
+        # the second delivery's truck is gated too
+        frappe.db.set_value("WMS Warehouse", self.wh, "yard_gate_check", "Block")
+        frappe.db.set_value("WMS Dock Appointment", r["appointment"], "status", "Checked In")
+        with self.assertRaisesRegex(frappe.ValidationError, "not at a door"):
+            yard.gate_check(self.wh, inbound_delivery=names[1])

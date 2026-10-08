@@ -112,6 +112,7 @@ def cockpit(warehouse):
 @frappe.whitelist()
 @retry_on_deadlock
 def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbound_deliveries=None, shipment=None, carrier=None, vehicle_registration=None,
-               trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None):
+               trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None, inbound_deliveries=None, shipments=None):
     return yard.plan_truck(warehouse, direction, planned_start, inbound_delivery, frappe.parse_json(outbound_deliveries) if outbound_deliveries else None, shipment,
-                           carrier, vehicle_registration, trailer_number, driver_name, planned_end, door, means_of_transport, route)
+                           carrier, vehicle_registration, trailer_number, driver_name, planned_end, door, means_of_transport, route,
+                           frappe.parse_json(inbound_deliveries) if inbound_deliveries else None, frappe.parse_json(shipments) if shipments else None)

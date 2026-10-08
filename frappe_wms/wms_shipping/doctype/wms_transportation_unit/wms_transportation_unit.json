@@ -9,6 +9,7 @@
   "engine": "InnoDB",
   "field_order": [
     "warehouse",
+    "vehicle",
     "unit_type",
     "means_of_transport",
     "status",
@@ -148,6 +149,14 @@
       "label": "Means of Transport",
       "fieldtype": "Link",
       "options": "Means of Transport"
+    },
+    {
+      "fieldname": "vehicle",
+      "label": "Vehicle",
+      "fieldtype": "Link",
+      "options": "WMS Vehicle",
+      "in_standard_filter": 1,
+      "description": "The vehicle (tractor and trailers) this unit travels with; one vehicle can group several units."
     }
   ],
   "sort_field": "modified",

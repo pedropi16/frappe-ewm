@@ -29,7 +29,7 @@ EXECUTION = [
     "Handling Unit", "Handling Unit Event", "Goods Receipt", "Inbound Delivery", "WMS Batch Characteristic Value",
     "WMS Physical Inventory Count", "WMS Posting Change", "WMS Quality Inspection", "WMS Stock Balance", "WMS Stock Ledger Entry",
     "Goods Issue", "Production Material Request", "Outbound Delivery", "Packing Order", "Stock Allocation", "VAS Order", "WMS Wave", "WMS Shipment",
-    "WMS Dock Appointment", "WMS Transportation Unit", "WMS Yard Task",
+    "WMS Dock Appointment", "WMS Transportation Unit", "WMS Vehicle", "WMS Yard Task",
 ]
 # Customizing: readable by every WMS role, maintained by WMS Process Engineer.
 CUSTOMIZING = [

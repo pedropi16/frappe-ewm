@@ -2624,8 +2624,7 @@ class WMSMonitor {
       $wrap.append(section(title, rows));
       if (rows.length) $wrap.append(this.render_table(rows, columns, doctype));
     };
-    add(__("Trucks"), data.trucks, [["name", __("Appointment")], ["direction", __("Direction")], ["status", __("Status")], ["unit", __("Transportation Unit")],
-      ["activity_status", __("Activity")], ["door", __("Door")], ["vehicle_registration", __("Vehicle")], ["ref", __("Carries"), (r) => esc(r.inbound_delivery || r.shipment || "")],
+    add(__("Trucks"), data.trucks, [["name", __("Appointment")], ["direction", __("Direction")], ["status", __("Status")], ["units", __("Units")], ["activity_status", __("Activity")], ["door", __("Door")], ["vehicle_registration", __("Vehicle")], ["ref", __("Carries"), (r) => esc(r.inbound_delivery || r.shipment || "")],
       ["actions", "", (r) => r.next_action ? `<button type="button" class="btn btn-xs btn-default wms-mon-cp-act" data-a="${esc(r.name)}" data-m="${{ "Check In": "check_in", "To Door": "to_door", "Complete": "complete", "Check Out": "check_out" }[r.next_action]}">${__(r.next_action)}</button>` : ""]], "WMS Dock Appointment");
     add(__("Inbound deliveries without a truck"), data.inbound_without_truck, [["name", __("Delivery")], ["supplier", __("Supplier")], ["expected_arrival", __("Expected")], ["status", __("Status")],
       ["actions", "", (r) => plan("Inbound", r.name)]], "Inbound Delivery");
