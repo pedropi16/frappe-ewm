@@ -18,7 +18,7 @@ removing anything an administrator granted.
 import frappe
 
 ALL_WMS_ROLES = ["WMS Operator", "WMS Receiver", "WMS Picker", "WMS Packer", "WMS Loader", "WMS Inventory Controller",
-                 "WMS Supervisor", "WMS Process Engineer", "WMS Master Data", "WMS Administrator", "WMS Integration User", "WMS Auditor"]
+                 "WMS Supervisor", "WMS Process Engineer", "WMS Master Data", "WMS Administrator", "WMS Integration User", "WMS Auditor", "WMS Yard Clerk", "WMS Yard Planner"]
 READ = {"read": 1, "report": 1, "export": 1, "print": 1}
 MAINTAIN = {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "print": 1}
 
@@ -39,7 +39,7 @@ CUSTOMIZING = [
     "Process Determination Rule", "Removal Rule", "Replenishment Rule", "Storage Process", "Storage Type Search Sequence",
     "Warehouse Process Type", "Warehouse Process Type Determination Rule", "Wave Template", "WMS Movement Type",
     "WO Creation Rule", "WMS Route", "WMS Print Determination Rule", "WMS Number Range", "WMS HU Number Pool",
-    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Hazard Class",
+    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Hazard Class", "Carrier Capacity", "Return Item Type",
     "Putaway Control Indicator", "Stock Removal Control Indicator", "Storage Section Indicator", "Production Supply Control Cycle", "WMS Block Reason", "Handling Unit Type Group", "PPF Action Profile", "WMS Usage Decision", "WMS Stock Owner", "WMS Document Type", "WMS MFS Endpoint", "WMS MFS Telegram Type",
 ]
 MASTER_DATA = ["Storage Bin", "Storage Section", "Activity Area", "Bin Type", "WMS Product", "WMS Product Warehouse",

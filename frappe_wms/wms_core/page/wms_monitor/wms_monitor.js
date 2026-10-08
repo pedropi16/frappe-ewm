@@ -2642,9 +2642,13 @@ class WMSMonitor {
       { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") }, { fieldname: "vehicle_registration", fieldtype: "Data", label: __("Vehicle Registration") },
       { fieldname: "trailer_number", fieldtype: "Data", label: __("Trailer") }, { fieldname: "driver_name", fieldtype: "Data", label: __("Driver") },
       { fieldname: "door", fieldtype: "Select", label: __("Door"), options: [""].concat((this.yard.doors || []).map((x) => x.door)), description: __("Empty: the first free door") },
-      { fieldname: "means_of_transport", fieldtype: "Link", options: "Means of Transport", label: __("Means of Transport") }],
+      { fieldname: "means_of_transport", fieldtype: "Link", options: "Means of Transport", label: __("Means of Transport") },
+      ...(kind === "Delivery" ? [] : [{ fieldname: "also_carries", fieldtype: "Small Text", label: kind === "Inbound" ? __("More inbound deliveries on this vehicle") : __("More shipments on this vehicle"), description: __("One per line - each gets its own transportation unit") }])],
       primary_action_label: __("Plan"), primary_action: (v) => {
+        const more = (v.also_carries || "").split("\n").map((x) => x.trim()).filter(Boolean);
+        delete v.also_carries;
         const args = Object.assign({ warehouse: this.warehouse, direction: kind === "Inbound" ? "Inbound" : "Outbound" }, v);
+        if (more.length) args[kind === "Inbound" ? "inbound_deliveries" : "shipments"] = more;
         if (kind === "Inbound") args.inbound_delivery = name; else if (kind === "Shipment") args.shipment = name; else args.outbound_deliveries = [name];
         frappe.call("frappe_wms.api.yard.plan_truck", args).then(() => { d.hide(); frappe.show_alert({ message: __("Truck planned"), indicator: "green" }); this.search_cockpit(); });
       } });

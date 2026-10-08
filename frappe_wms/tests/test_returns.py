@@ -163,3 +163,14 @@ class TestReturns(IntegrationTestCase):
         after = flt(frappe.db.sql("select sum(actual_qty) from `tabStock Ledger Entry` where item_code=%s and warehouse=%s and is_cancelled=0", (self.item, erpnext_warehouse))[0][0])
         self.assertEqual(after - before, 2)
 
+
+
+class TestReturnItemType(IntegrationTestCase):
+    def test_item_type_decides_the_expected_stock_type(self):
+        from frappe_wms.services.receipt import return_stock_type
+        self.assertEqual(return_stock_type(), "QUALITY")
+        frappe.get_doc({"doctype": "Return Item Type", "code": "RET-SCRAP", "expected_stock_type": "BLOCKED" if frappe.db.exists("WMS Stock Type", "BLOCKED") else "QUALITY"}).insert(ignore_permissions=True)
+        self.assertEqual(return_stock_type("RET-SCRAP"), frappe.db.get_value("Return Item Type", "RET-SCRAP", "expected_stock_type"))
+        frappe.db.set_value("Return Item Type", "RET-SCRAP", "active", 0)
+        with self.assertRaises(frappe.ValidationError):
+            return_stock_type("RET-SCRAP")

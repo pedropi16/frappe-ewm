@@ -16,7 +16,8 @@ from frappe.utils import add_to_date, cint, get_datetime, getdate, now_datetime,
 
 from frappe_wms.utils import require_role
 
-YARD_ROLES = ("WMS Operator", "WMS Receiver", "WMS Loader", "WMS Supervisor")
+YARD_ROLES = ("WMS Operator", "WMS Receiver", "WMS Loader", "WMS Supervisor", "WMS Yard Clerk", "WMS Yard Planner")  # gate, yard moves, door
+PLAN_ROLES = ("WMS Supervisor", "WMS Receiver", "WMS Loader", "WMS Integration User", "WMS Yard Planner")  # appointments, truck planning
 ACTIVE = ("Planned", "Checked In", "At Door")
 
 
@@ -102,6 +103,18 @@ def free_door(warehouse, start, end, exclude=None, now=False, direction=None, ro
     return next((d for d in ordered if not _clashes(d, start, end, warehouse, exclude) and not (now and _occupant(d, exclude))), None)
 
 
+def _check_carrier_capacity(doc, start):
+    """Carrier Capacity: at most so many of a carrier's trucks booked per day (SAP: carrier capacity in appointment scheduling)."""
+    if not doc.carrier or doc.walk_in: return
+    limit = frappe.db.get_value("Carrier Capacity", {"warehouse": doc.warehouse, "carrier": doc.carrier}, "max_trucks_per_day")
+    if not limit: return
+    day = getdate(start)
+    booked = frappe.db.count("WMS Dock Appointment", {"warehouse": doc.warehouse, "carrier": doc.carrier, "name": ["!=", doc.name or ""], "walk_in": 0,
+                                                     "status": ["not in", ["Cancelled", "No Show"]], "planned_start": ["between", [str(day), f"{day} 23:59:59"]]})
+    if booked >= limit:
+        frappe.throw(_("Carrier {0} is limited to {1} trucks on {2} in this warehouse").format(doc.carrier, limit, day), title=_("Carrier Capacity"))
+
+
 def validate_appointment(doc):
     from frappe_wms.utils import require_storage_role
     settings = _settings(doc.warehouse)
@@ -112,6 +125,7 @@ def validate_appointment(doc):
     if doc.direction == "Inbound" and doc.shipment: frappe.throw(_("An inbound appointment cannot carry a shipment"))
     if doc.direction == "Outbound" and doc.inbound_delivery: frappe.throw(_("An outbound appointment cannot carry an inbound delivery"))
     if doc.status not in ACTIVE: return
+    _check_carrier_capacity(doc, start)
     # A walk-in waits in the yard without a door until it is sent to one.
     if not doc.door and doc.walk_in and doc.status == "Checked In": return
     if not doc.door:
@@ -130,13 +144,33 @@ def validate_appointment(doc):
 
 def create_appointment(warehouse, direction, planned_start, planned_end=None, door=None, carrier=None, vehicle_registration=None,
                        trailer_number=None, driver_name=None, inbound_delivery=None, shipment=None, remarks=None):
-    require_role("WMS Supervisor", "WMS Receiver", "WMS Loader", "WMS Integration User")
+    require_role(*PLAN_ROLES)
     doc = frappe.get_doc({"doctype": "WMS Dock Appointment", "warehouse": warehouse, "direction": direction, "planned_start": planned_start,
                           "planned_end": planned_end, "door": door, "carrier": carrier, "vehicle_registration": vehicle_registration,
                           "trailer_number": trailer_number, "driver_name": driver_name, "inbound_delivery": inbound_delivery,
                           "shipment": shipment, "remarks": remarks, "status": "Planned"})
     doc.insert(ignore_permissions=True)
     return doc.name
+
+
+def create_recurring_appointments(warehouse, direction, first_start, repeat="Weekly", count=4, **fields):
+    """Standing appointments (SAP: recurring dock appointments): the same slot every day / week; days that clash or exceed the carrier's capacity are skipped."""
+    require_role(*PLAN_ROLES)
+    step = {"Daily": 1, "Weekly": 7}.get(repeat)
+    if not step: frappe.throw(_("Repeat must be Daily or Weekly"))
+    created, skipped, first_end = [], [], None
+    for i in range(min(cint(count), 60)):
+        start = add_to_date(get_datetime(first_start), days=i * step)
+        try:
+            frappe.db.savepoint("recurring")
+            end = fields.pop("planned_end", None) if i == 0 else first_end
+            first_end = end
+            created.append(create_appointment(warehouse, direction, start, **dict(fields, planned_end=add_to_date(get_datetime(end), days=i * step) if end else None)))
+        except frappe.ValidationError as e:
+            frappe.db.rollback(save_point="recurring")
+            frappe.clear_last_message()
+            skipped.append({"start": str(start), "reason": frappe.utils.strip_html(str(e))})
+    return {"created": created, "skipped": skipped}
 
 
 def free_slots(warehouse, date, minutes=None, from_hour=6, to_hour=22):
@@ -258,7 +292,7 @@ def check_out(appointment, checkpoint=None):
 
 
 def cancel(appointment, reason=None):
-    require_role("WMS Supervisor", "WMS Receiver", "WMS Loader", "WMS Integration User")
+    require_role(*PLAN_ROLES)
     doc = _get(appointment, "Planned")
     doc.db_set({"status": "Cancelled", "remarks": "\n".join(x for x in (doc.remarks, reason) if x)}, update_modified=True)
     return {"appointment": doc.name, "status": "Cancelled"}
@@ -320,7 +354,7 @@ def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbo
                trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None, inbound_deliveries=None, shipments=None):
     """Books a vehicle for deliveries in one step: shipment (outbound deliveries), appointment, and one transportation unit per
     inbound delivery / shipment it carries (SAP: the vehicle groups its transportation units)."""
-    require_role("WMS Supervisor", "WMS Receiver", "WMS Loader", "WMS Integration User")
+    require_role(*PLAN_ROLES)
     inbound = [x for x in [inbound_delivery, *(inbound_deliveries or [])] if x]
     outbound = [x for x in [shipment, *(shipments or [])] if x]
     if direction == "Inbound":

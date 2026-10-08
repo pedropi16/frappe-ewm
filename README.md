@@ -1534,3 +1534,7 @@ install verified end to end — see [Status](#status)), not a certified SAP EWM
 replacement. Validate accounting integration, concurrency, permissions,
 barcode hardware, reversal rules, and migration data in a non-production site
 before go-live.
+
+- **Yard roles**: *WMS Yard Clerk* (gate, yard moves, doors) and *WMS Yard Planner* (appointments, truck planning).
+- **Carrier Capacity** (max trucks per carrier per day, enforced at booking) and **recurring appointments** (`create_recurring_appointments`: daily/weekly series, clashing days skipped).
+- **Return Item Type**: a customer return can be raised with an item type whose stock type it is expected in (default QUALITY).

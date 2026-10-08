@@ -1,5 +1,5 @@
 import frappe
-ROLES=["WMS Operator","WMS Receiver","WMS Picker","WMS Packer","WMS Loader","WMS Inventory Controller","WMS Supervisor","WMS Process Engineer","WMS Master Data","WMS Administrator","WMS Integration User","WMS Auditor"]
+ROLES=["WMS Operator","WMS Receiver","WMS Picker","WMS Packer","WMS Loader","WMS Inventory Controller","WMS Supervisor","WMS Process Engineer","WMS Master Data","WMS Administrator","WMS Integration User","WMS Auditor","WMS Yard Clerk","WMS Yard Planner"]
 
 def ensure_roles():
     for role in ROLES:

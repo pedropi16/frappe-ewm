@@ -53,8 +53,8 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_return_inbound_delivery(delivery_note, warehouse):
-    return _create_return_inbound_delivery(delivery_note, warehouse)
+def create_return_inbound_delivery(delivery_note, warehouse, item_type=None):
+    return _create_return_inbound_delivery(delivery_note, warehouse, item_type)
 
 @frappe.whitelist()
 @retry_on_deadlock

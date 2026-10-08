@@ -7,18 +7,176 @@
  "track_changes": 1,
  "allow_rename": 0,
  "engine": "InnoDB",
- "field_order": ["warehouse", "priority", "direction", "route", "door", "active"],
+ "field_order": [
+  "warehouse",
+  "priority",
+  "direction",
+  "route",
+  "door",
+  "active"
+ ],
  "fields": [
-  {"fieldname": "warehouse", "label": "Warehouse", "fieldtype": "Link", "options": "WMS Warehouse", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-  {"fieldname": "priority", "label": "Priority", "fieldtype": "Int", "default": 1, "in_list_view": 1, "description": "Lowest number is tried first."},
-  {"fieldname": "direction", "label": "Direction", "fieldtype": "Select", "options": "Both\nInbound\nOutbound", "default": "Both", "in_list_view": 1},
-  {"fieldname": "route", "label": "Route", "fieldtype": "Link", "options": "WMS Route", "in_list_view": 1, "description": "Outbound: the shipment's route. Empty: any route."},
-  {"fieldname": "door", "label": "Door", "fieldtype": "Link", "options": "Storage Bin", "reqd": 1, "in_list_view": 1, "description": "A bin of a storage type with the Door role."},
-  {"fieldname": "active", "label": "Active", "fieldtype": "Check", "default": 1}
+  {
+   "fieldname": "warehouse",
+   "label": "Warehouse",
+   "fieldtype": "Link",
+   "options": "WMS Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "priority",
+   "label": "Priority",
+   "fieldtype": "Int",
+   "default": 1,
+   "in_list_view": 1,
+   "description": "Lowest number is tried first."
+  },
+  {
+   "fieldname": "direction",
+   "label": "Direction",
+   "fieldtype": "Select",
+   "options": "Both\nInbound\nOutbound",
+   "default": "Both",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "route",
+   "label": "Route",
+   "fieldtype": "Link",
+   "options": "WMS Route",
+   "in_list_view": 1,
+   "description": "Outbound: the shipment's route. Empty: any route."
+  },
+  {
+   "fieldname": "door",
+   "label": "Door",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "A bin of a storage type with the Door role."
+  },
+  {
+   "fieldname": "active",
+   "label": "Active",
+   "fieldtype": "Check",
+   "default": 1
+  }
  ],
  "autoname": "DDR-.#####",
  "sort_field": "modified",
  "sort_order": "DESC",
  "doctype": "DocType",
- "permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}]
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "WMS Operator",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Receiver",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Picker",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Packer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Loader",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Inventory Controller",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Master Data",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Administrator",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Integration User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Clerk",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Planner",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ]
 }

@@ -358,7 +358,15 @@ def _customer_returns_supplier():
         frappe.get_doc({"doctype": "Supplier", "supplier_name": name, "supplier_type": "Company"}).insert(ignore_permissions=True)
     return name
 
-def create_return_inbound_delivery(delivery_note, warehouse):
+def return_stock_type(item_type=None):
+    """Stock type a customer return is expected in: its Return Item Type's, else QUALITY (always inspected)."""
+    if not item_type: return "QUALITY"
+    stock_type, active = frappe.db.get_value("Return Item Type", item_type, ["expected_stock_type", "active"]) or (None, 0)
+    if not stock_type or not active: frappe.throw(_("Return Item Type {0} does not exist or is inactive").format(item_type))
+    return stock_type
+
+
+def create_return_inbound_delivery(delivery_note, warehouse, item_type=None):
     # Customer return: physically received like any other delivery via the ordinary RF Receive
     # flow (create_and_submit_goods_receipt) against this Inbound Delivery - the only difference
     # is every line is forced into QUALITY so it always gets inspected before restock/scrap
@@ -393,7 +401,7 @@ def create_return_inbound_delivery(delivery_note, warehouse):
         if returnable <= 0: continue
         items.append({
             "line_number": len(items) + 1, "item": row.item_code, "expected_quantity": returnable, "stock_uom": row.stock_uom,
-            "expected_stock_type": "QUALITY", "source_document_type": "Delivery Note",
+            "expected_stock_type": return_stock_type(item_type), "return_item_type": item_type, "source_document_type": "Delivery Note",
             "source_document_number": dn.name, "source_document_line": row.name,
         })
     if not items: frappe.throw(_("Nothing left to return on Delivery Note {0} - it has already been returned, or a return for it is still open").format(dn.name))

@@ -43,6 +43,8 @@ IN_SCOPE_DOCTYPES = [
     "Door Determination Rule",
     "Means of Transport",
     "Hazard Class",
+    "Carrier Capacity",
+    "Return Item Type",
     "Handling Indicator",
     "Production Supply Area",
     "Production Supply Control Cycle",

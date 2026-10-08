@@ -43,3 +43,5 @@ Update: documented API (OpenAPI generated from code) and webhook catalogue done 
 Update: shipping & receiving cockpit with automatic TU creation done (one inbound delivery per truck; vehicle grouping still open).
 
 Update: vehicle grouping done (WMS Vehicle groups transportation units; one appointment can carry several deliveries/shipments).
+
+Update: yard roles, recurring appointments, carrier capacity, return item types done. HU-based yard moves deliberately not built: receiving here creates the HUs at the receiving bin directly, so there is no HU-on-TU stage to move.

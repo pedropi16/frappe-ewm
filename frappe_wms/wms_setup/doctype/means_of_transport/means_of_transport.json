@@ -7,17 +7,162 @@
  "track_changes": 1,
  "allow_rename": 0,
  "engine": "InnoDB",
- "field_order": ["code", "description", "unit_type", "max_payload_kg", "active"],
+ "field_order": [
+  "code",
+  "description",
+  "unit_type",
+  "max_payload_kg",
+  "active"
+ ],
  "fields": [
-  {"fieldname": "code", "label": "Code", "fieldtype": "Data", "reqd": 1, "unique": 1, "in_list_view": 1},
-  {"fieldname": "description", "label": "Description", "fieldtype": "Data", "in_list_view": 1},
-  {"fieldname": "unit_type", "label": "Unit Type", "fieldtype": "Select", "options": "Truck\nTrailer\nContainer\nRail Car\nVan", "default": "Truck", "in_list_view": 1},
-  {"fieldname": "max_payload_kg", "label": "Max Payload (kg)", "fieldtype": "Float", "non_negative": 1, "description": "0: no limit. Loading a shipment heavier than this onto a unit of this means of transport is refused."},
-  {"fieldname": "active", "label": "Active", "fieldtype": "Check", "default": 1}
+  {
+   "fieldname": "code",
+   "label": "Code",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description",
+   "label": "Description",
+   "fieldtype": "Data",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "unit_type",
+   "label": "Unit Type",
+   "fieldtype": "Select",
+   "options": "Truck\nTrailer\nContainer\nRail Car\nVan",
+   "default": "Truck",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "max_payload_kg",
+   "label": "Max Payload (kg)",
+   "fieldtype": "Float",
+   "non_negative": 1,
+   "description": "0: no limit. Loading a shipment heavier than this onto a unit of this means of transport is refused."
+  },
+  {
+   "fieldname": "active",
+   "label": "Active",
+   "fieldtype": "Check",
+   "default": 1
+  }
  ],
  "autoname": "field:code",
  "sort_field": "modified",
  "sort_order": "DESC",
  "doctype": "DocType",
- "permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}]
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "WMS Operator",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Receiver",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Picker",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Packer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Loader",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Inventory Controller",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Master Data",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Administrator",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Integration User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Clerk",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Planner",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ]
 }

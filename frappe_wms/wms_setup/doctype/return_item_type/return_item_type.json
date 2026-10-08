@@ -1,0 +1,60 @@
+{
+  "name": "Return Item Type",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "code",
+    "description",
+    "expected_stock_type",
+    "active"
+  ],
+  "fields": [
+    {
+      "fieldname": "code",
+      "label": "Code",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "expected_stock_type",
+      "label": "Received Into Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Customer returns of this item type are expected in this stock type (QUALITY = inspected first)."
+    },
+    {
+      "fieldname": "active",
+      "label": "Active",
+      "fieldtype": "Check",
+      "default": 1
+    }
+  ],
+  "autoname": "field:code",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}

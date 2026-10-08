@@ -26,7 +26,8 @@
     "source_document_line",
     "purchase_order",
     "purchase_order_item",
-    "status"
+    "status",
+    "return_item_type"
   ],
   "fields": [
     {
@@ -161,6 +162,13 @@
       "default": "Open",
       "read_only": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "return_item_type",
+      "label": "Return Item Type",
+      "fieldtype": "Link",
+      "options": "Return Item Type",
+      "read_only": 1
     }
   ],
   "sort_field": "modified",

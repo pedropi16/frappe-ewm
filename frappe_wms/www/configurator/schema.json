@@ -21,6 +21,8 @@
   "Door Determination Rule",
   "Means of Transport",
   "Hazard Class",
+  "Carrier Capacity",
+  "Return Item Type",
   "Handling Indicator",
   "Production Supply Area",
   "Production Supply Control Cycle",
@@ -1925,6 +1927,78 @@
     "type": "field",
     "fields": [
      "class_code"
+    ]
+   }
+  },
+  "Carrier Capacity": {
+   "name": "Carrier Capacity",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "carrier",
+     "label": "Carrier",
+     "fieldtype": "Data",
+     "reqd": 1,
+     "description": "As typed on the dock appointment"
+    },
+    {
+     "fieldname": "max_trucks_per_day",
+     "label": "Maximum Trucks per Day",
+     "fieldtype": "Int",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Return Item Type": {
+   "name": "Return Item Type",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "code",
+     "label": "Code",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "expected_stock_type",
+     "label": "Received Into Stock Type",
+     "fieldtype": "Link",
+     "options": "WMS Stock Type",
+     "reqd": 1,
+     "description": "Customer returns of this item type are expected in this stock type (QUALITY = inspected first)."
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "code"
     ]
    }
   },
@@ -4955,6 +5029,10 @@
     {
      "target": "Purchase Order",
      "label": "Items \u2192 Purchase Order"
+    },
+    {
+     "target": "Return Item Type",
+     "label": "Items \u2192 Return Item Type"
     },
     {
      "target": "DocType",

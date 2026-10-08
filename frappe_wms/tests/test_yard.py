@@ -219,3 +219,15 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         frappe.db.set_value("WMS Dock Appointment", r["appointment"], "status", "Checked In")
         with self.assertRaisesRegex(frappe.ValidationError, "not at a door"):
             yard.gate_check(self.wh, inbound_delivery=names[1])
+
+    def test_carrier_capacity_and_recurring_appointments(self):
+        frappe.get_doc({"doctype": "Carrier Capacity", "warehouse": self.wh, "carrier": "ACME", "max_trucks_per_day": 1}).insert(ignore_permissions=True)
+        self._book(self.t0, carrier="ACME")
+        with self.assertRaisesRegex(frappe.ValidationError, "limited to 1 trucks"):
+            self._book(add_to_date(self.t0, hours=3), carrier="ACME")
+        self.assertTrue(self._book(add_to_date(self.t0, hours=3), carrier="OTHER"))
+        r = yard.create_recurring_appointments(self.wh, "Inbound", add_to_date(self.t0, days=1), "Daily", 3, carrier="ACME", vehicle_registration="STAND-1")
+        self.assertEqual(len(r["created"]), 3, r)
+        # the first recurrence day is now full for ACME: the series skips it
+        again = yard.create_recurring_appointments(self.wh, "Inbound", add_to_date(self.t0, days=1), "Daily", 2, carrier="ACME")
+        self.assertEqual((len(again["created"]), len(again["skipped"])), (0, 2))

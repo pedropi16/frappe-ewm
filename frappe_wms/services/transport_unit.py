@@ -11,7 +11,7 @@ from frappe.utils import now_datetime
 
 from frappe_wms.utils import require_role, require_storage_role
 
-YARD_ROLES = ("WMS Operator", "WMS Receiver", "WMS Loader", "WMS Supervisor")
+YARD_ROLES = ("WMS Operator", "WMS Receiver", "WMS Loader", "WMS Supervisor", "WMS Yard Clerk", "WMS Yard Planner")  # gate, yard moves, door
 LIVE = ("Planned", "In Yard", "At Door", "Loading", "Unloading")
 ACTIVITY = {"Planned": "Planned", "In Yard": "Active", "At Door": "Active", "Loading": "Active", "Unloading": "Active", "Departed": "Completed", "Cancelled": "Completed"}  # SAP TU activity
 APPOINTMENT_TO_UNIT = {"Planned": "Planned", "Checked In": "In Yard", "At Door": "At Door", "Completed": "At Door", "Checked Out": "Departed", "No Show": "Cancelled", "Cancelled": "Cancelled"}

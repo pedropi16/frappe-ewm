@@ -1,0 +1,53 @@
+{
+  "name": "Carrier Capacity",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "carrier",
+    "max_trucks_per_day"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "carrier",
+      "label": "Carrier",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "As typed on the dock appointment"
+    },
+    {
+      "fieldname": "max_trucks_per_day",
+      "label": "Maximum Trucks per Day",
+      "fieldtype": "Int",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "CAP-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}
