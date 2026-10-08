@@ -20,6 +20,7 @@
   "Layout Storage Control",
   "Door Determination Rule",
   "Means of Transport",
+  "Hazard Class",
   "Handling Indicator",
   "Production Supply Area",
   "Production Supply Control Cycle",
@@ -383,6 +384,19 @@
      "fieldtype": "Check",
      "default": "0",
      "description": "An outbound truck cannot depart without a seal number."
+    },
+    {
+     "fieldname": "recount_different_user",
+     "label": "Different User to Recount",
+     "fieldtype": "Check",
+     "default": "0",
+     "description": "A recount of a physical inventory line must be entered by someone other than the user who counted it first (four-eyes principle)."
+    },
+    {
+     "fieldname": "dangerous_goods_check",
+     "label": "Dangerous Goods Check",
+     "fieldtype": "Check",
+     "description": "Enforce hazard-class storage permission, segregation and points limit on destination bins."
     }
    ],
    "key": {
@@ -491,6 +505,19 @@
      "fieldtype": "Select",
      "options": "\nFixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
      "description": "Used when no Bin Determination Rule applies."
+    },
+    {
+     "fieldname": "allowed_hazard_classes",
+     "label": "Allowed Hazard Classes",
+     "fieldtype": "Table",
+     "options": "Hazard Class Link",
+     "description": "With the warehouse's dangerous goods check on, a hazardous product may only be stored in storage types listing its class."
+    },
+    {
+     "fieldname": "dg_points_limit",
+     "label": "DG Points Limit per Bin",
+     "fieldtype": "Float",
+     "description": "0 = unlimited"
     }
    ],
    "key": {
@@ -1865,6 +1892,39 @@
     "type": "field",
     "fields": [
      "code"
+    ]
+   }
+  },
+  "Hazard Class": {
+   "name": "Hazard Class",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "class_code",
+     "label": "Class",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "description",
+     "label": "Description",
+     "fieldtype": "Data"
+    },
+    {
+     "fieldname": "incompatible_classes",
+     "label": "Never Stored Together With",
+     "fieldtype": "Table",
+     "options": "Hazard Class Link",
+     "description": "Segregation: a bin holding one of these classes refuses this class, and vice versa."
+    }
+   ],
+   "key": {
+    "type": "field",
+    "fields": [
+     "class_code"
     ]
    }
   },
@@ -3594,6 +3654,12 @@
      "label": "Maximum Payload",
      "fieldtype": "Float",
      "description": "Heaviest load the HU carries. Copied to new HUs of this type; a HU with a payload refuses more."
+    },
+    {
+     "fieldname": "cartonizable",
+     "label": "Use for Cartonization",
+     "fieldtype": "Check",
+     "description": "Cartonization may choose this packaging for shipping HUs; limits come from Maximum Weight and Maximum Volume."
     }
    ],
    "key": {
@@ -4323,6 +4389,25 @@
      "label": "Task Type",
      "fieldtype": "Select",
      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nSort",
+     "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Hazard Class Link": {
+   "name": "Hazard Class Link",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": true,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "hazard_class",
+     "label": "Hazard Class",
+     "fieldtype": "Link",
+     "options": "Hazard Class",
      "reqd": 1
     }
    ],
@@ -5118,6 +5203,10 @@
     {
      "target": "Storage Section Indicator",
      "label": "Storage Section Indicator"
+    },
+    {
+     "target": "Hazard Class",
+     "label": "Hazard Class"
     }
    ]
   },
@@ -5562,6 +5651,18 @@
     {
      "target": "Sales Order",
      "label": "Items \u2192 Sales Order"
+    },
+    {
+     "target": "Handling Unit Type",
+     "label": "Planned Shipping HUs \u2192 Packaging"
+    },
+    {
+     "target": "Item",
+     "label": "Planned Shipping HUs \u2192 Item"
+    },
+    {
+     "target": "Handling Unit",
+     "label": "Planned Shipping HUs \u2192 Packed In"
     },
     {
      "target": "DocType",
@@ -6029,6 +6130,10 @@
     {
      "target": "Count Tolerance Group",
      "label": "Items \u2192 Tolerance Group"
+    },
+    {
+     "target": "User",
+     "label": "Items \u2192 Counted By"
     },
     {
      "target": "User",

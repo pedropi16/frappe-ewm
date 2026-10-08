@@ -25,7 +25,11 @@
     "volume_per_unit",
     "abc_indicator",
     "handling_indicators",
-    "active"
+    "active",
+    "hazard_class",
+    "un_number",
+    "packing_group",
+    "dg_points_per_unit"
   ],
   "fields": [
     {
@@ -141,6 +145,30 @@
       "label": "Storage Section Indicator",
       "fieldtype": "Link",
       "options": "Storage Section Indicator"
+    },
+    {
+      "fieldname": "hazard_class",
+      "label": "Hazard Class",
+      "fieldtype": "Link",
+      "options": "Hazard Class",
+      "description": "Dangerous goods: where it may be stored follows from this class."
+    },
+    {
+      "fieldname": "un_number",
+      "label": "UN Number",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "packing_group",
+      "label": "Packing Group",
+      "fieldtype": "Select",
+      "options": "\nI\nII\nIII"
+    },
+    {
+      "fieldname": "dg_points_per_unit",
+      "label": "DG Points per Unit",
+      "fieldtype": "Float",
+      "description": "Hazard points (ADR 1.1.3.6 style) per stock unit; storage types can cap the points per bin."
     }
   ],
   "autoname": "field:item",

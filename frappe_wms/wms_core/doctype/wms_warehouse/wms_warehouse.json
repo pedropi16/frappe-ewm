@@ -45,7 +45,8 @@
     "column_break_yard2",
     "yard_checkpoint_required",
     "yard_gate_check",
-    "seal_required"
+    "seal_required",
+    "dangerous_goods_check"
   ],
   "fields": [
     {
@@ -311,6 +312,12 @@
       "label": "Different User to Recount",
       "default": "0",
       "description": "A recount of a physical inventory line must be entered by someone other than the user who counted it first (four-eyes principle)."
+    },
+    {
+      "fieldname": "dangerous_goods_check",
+      "label": "Dangerous Goods Check",
+      "fieldtype": "Check",
+      "description": "Enforce hazard-class storage permission, segregation and points limit on destination bins."
     }
   ],
   "autoname": "field:warehouse_code",

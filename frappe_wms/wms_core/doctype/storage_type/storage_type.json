@@ -22,7 +22,9 @@
     "capacity_check_method",
     "putaway_blocked",
     "removal_blocked",
-    "active"
+    "active",
+    "allowed_hazard_classes",
+    "dg_points_limit"
   ],
   "fields": [
     {
@@ -129,6 +131,19 @@
       "fieldtype": "Select",
       "options": "\nFixed Bin\nFirst Empty Bin\nAddition to Existing Stock\nBin Sequence\nLeast Utilized Bin\nGeneral Storage\nPallet\nBulk\nNear Fixed Bin",
       "description": "Used when no Bin Determination Rule applies."
+    },
+    {
+      "fieldname": "allowed_hazard_classes",
+      "label": "Allowed Hazard Classes",
+      "fieldtype": "Table",
+      "options": "Hazard Class Link",
+      "description": "With the warehouse's dangerous goods check on, a hazardous product may only be stored in storage types listing its class."
+    },
+    {
+      "fieldname": "dg_points_limit",
+      "label": "DG Points Limit per Bin",
+      "fieldtype": "Float",
+      "description": "0 = unlimited"
     }
   ],
   "autoname": "format:{warehouse}-{storage_type_code}",

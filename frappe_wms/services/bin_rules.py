@@ -137,6 +137,8 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
             reasons.append(_("handling indicator requires storage group {0}").format(", ".join(sorted(groups))))
     if item and incoming_quantity and (reason := storage_type_quantity_violation(item, bin_doc.warehouse, bin_doc.storage_type, incoming_quantity)):
         reasons.append(reason)
+    from frappe_wms.services.dangerous_goods import dg_violations
+    reasons += dg_violations(bin_doc, storage_type, item, incoming_quantity)
     if bin_type and hu_type and storage_type.get("hu_type_check", 1) and not hu_fits_bin_type(hu_type, bin_type):
         reasons.append(_("HU type {0} does not fit bin type {1}").format(hu_type, bin_type.name))
 

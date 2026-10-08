@@ -42,6 +42,7 @@ IN_SCOPE_DOCTYPES = [
     "Layout Storage Control",
     "Door Determination Rule",
     "Means of Transport",
+    "Hazard Class",
     "Handling Indicator",
     "Production Supply Area",
     "Production Supply Control Cycle",

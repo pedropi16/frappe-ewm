@@ -36,3 +36,5 @@ Corrections to the review: an expected-GR/ASN object is effectively the replicat
 Still open: Vehicle grouping several TUs (Y2), HU-based yard moves (Y4), shipping & receiving cockpit with auto TU creation (Y6), recurring appointments / carrier capacity (Y9), yard-specific roles (Y11); delivery splitting (changes ERPNext documents - needs a design call), cartonization, returns item types, dangerous goods, API/webhooks, TM/GTS/MES integrations.
 
 Update: delivery split done and deployed (`services/delivery_split.py`, "Split Delivery" button on Outbound Delivery). Open quantity moves to a new `-S<n>` delivery; a delivery replicated from a draft Delivery Note gets a second draft Delivery Note, a Sales-Order-sourced one gets its Delivery Notes from its own goods issue.
+
+Update: cartonization (weight/volume, Planned Shipping HUs, packing station proposal) and dangerous goods storage control (hazard class, segregation, points limit) done. Not covered: DG on transport/shipping documents, 3D cartonization.

@@ -1,0 +1,51 @@
+{
+  "name": "Hazard Class",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "class_code",
+    "description",
+    "incompatible_classes"
+  ],
+  "fields": [
+    {
+      "fieldname": "class_code",
+      "label": "Class",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "label": "Description",
+      "fieldtype": "Data",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "incompatible_classes",
+      "label": "Never Stored Together With",
+      "fieldtype": "Table",
+      "options": "Hazard Class Link",
+      "description": "Segregation: a bin holding one of these classes refuses this class, and vice versa."
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ],
+  "autoname": "field:class_code"
+}

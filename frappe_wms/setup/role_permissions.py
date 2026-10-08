@@ -39,7 +39,7 @@ CUSTOMIZING = [
     "Process Determination Rule", "Removal Rule", "Replenishment Rule", "Storage Process", "Storage Type Search Sequence",
     "Warehouse Process Type", "Warehouse Process Type Determination Rule", "Wave Template", "WMS Movement Type",
     "WO Creation Rule", "WMS Route", "WMS Print Determination Rule", "WMS Number Range", "WMS HU Number Pool",
-    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport",
+    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Hazard Class",
     "Putaway Control Indicator", "Stock Removal Control Indicator", "Storage Section Indicator", "Production Supply Control Cycle", "WMS Block Reason", "Handling Unit Type Group", "PPF Action Profile", "WMS Usage Decision", "WMS Stock Owner", "WMS Document Type", "WMS MFS Endpoint", "WMS MFS Telegram Type",
 ]
 MASTER_DATA = ["Storage Bin", "Storage Section", "Activity Area", "Bin Type", "WMS Product", "WMS Product Warehouse",
