@@ -24,13 +24,21 @@ def _matching_billing_rate(rates, warehouse, customer, activity):
         return r
     return None
 
+def _storage_lines(rates, warehouse, customer, from_date, to_date):
+    from frappe_wms.services.storage_billing import storage_usage_totals
+    rate = _matching_billing_rate(rates, warehouse, customer, "Storage")
+    totals = storage_usage_totals(warehouse, customer, from_date, to_date) if rate else {}
+    qty = totals.get(rate.uom_basis, 0) if rate else 0
+    if not qty: return []
+    return [{"activity": "Storage", "task_count": 0, "quantity": qty, "uom_basis": rate.uom_basis, "rate": flt(rate.rate),
+             "billing_item": rate.billing_item, "billed_quantity": qty, "charge": flt(rate.rate) * qty}]
+
+
 def generate_billing_for_period(warehouse, customer, from_date, to_date):
     tasks = frappe.get_all("Warehouse Task", filters={
         "warehouse": warehouse, "status": "Confirmed",
         "confirmed_at": ["between", [from_date, f"{to_date} 23:59:59"]],
     }, fields=["name", "task_type", "confirmed_quantity", "stock_allocation", "warehouse_request"])
-    if not tasks: return []
-
     by_type = {}
     for t in tasks:
         delivery = _outbound_delivery_for_task(t)
@@ -39,11 +47,9 @@ def generate_billing_for_period(warehouse, customer, from_date, to_date):
         bucket = by_type.setdefault(t.task_type, {"task_count": 0, "quantity": 0.0})
         bucket["task_count"] += 1
         bucket["quantity"] += flt(t.confirmed_quantity)
-    if not by_type: return []
-
     rates = frappe.get_all("Billing Rate", filters={"active": 1},
         fields=["warehouse", "customer", "activity", "uom_basis", "rate", "billing_item"], order_by="priority asc")
-    lines = []
+    lines = _storage_lines(rates, warehouse, customer, from_date, to_date)
     for activity, bucket in by_type.items():
         rate = _matching_billing_rate(rates, warehouse, customer, activity)
         if not rate: continue

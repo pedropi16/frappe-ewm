@@ -45,7 +45,7 @@
       "fieldname": "activity",
       "label": "Activity",
       "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nSort",
+      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nSort\nStorage",
       "reqd": 1,
       "in_list_view": 1
     },
@@ -53,7 +53,7 @@
       "fieldname": "uom_basis",
       "label": "UOM Basis",
       "fieldtype": "Select",
-      "options": "Per Task\nPer Unit",
+      "options": "Per Task\nPer Unit\nPer HU Day\nPer Bin Day\nPer Unit Day",
       "reqd": 1,
       "in_list_view": 1
     },

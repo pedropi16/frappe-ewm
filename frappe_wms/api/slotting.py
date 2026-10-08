@@ -14,3 +14,9 @@ def generate_rearrangement_tasks(warehouse, recommendations=None):
     if isinstance(recommendations, str):
         recommendations = frappe.parse_json(recommendations)
     return _generate_rearrangement_tasks(warehouse, recommendations)
+
+
+@frappe.whitelist()
+def classify_abc(warehouse, from_date=None, to_date=None, apply=0):
+    from frappe_wms.services.slotting import classify_abc as _classify
+    return _classify(warehouse, from_date, to_date, apply=apply)

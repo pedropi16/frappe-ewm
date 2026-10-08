@@ -64,3 +64,20 @@ def generate_rearrangement_tasks(warehouse, recommendations=None):
         task.insert(ignore_permissions=True)
         created.append(task.name)
     return created
+
+
+def classify_abc(warehouse, from_date=None, to_date=None, a_share=0.8, b_share=0.95, apply=False):
+    """Slotting index by pick frequency: the products behind the first 80% of picks are A, the next 15% B, the rest C
+    (picks = ledger issues, as in analyze_slotting). apply=1 writes the class to WMS Product.abc_indicator."""
+    require_role("WMS Supervisor", "WMS Administrator")
+    rows = frappe.db.sql("""select product, count(*) picks from `tabWMS Stock Ledger Entry`
+        where warehouse=%(w)s and movement_type='401' and (%(f)s is null or date(posting_datetime) >= %(f)s) and (%(t)s is null or date(posting_datetime) <= %(t)s)
+        group by product order by picks desc, product""", {"w": warehouse, "f": from_date, "t": to_date}, as_dict=True)
+    total, running, out = sum(r.picks for r in rows) or 1, 0, []
+    for r in rows:
+        share_before = running / total
+        running += r.picks
+        r["abc"] = "A" if share_before < a_share else "B" if share_before < b_share else "C"
+        out.append(r)
+        if int(apply): frappe.db.set_value("WMS Product", r.product, "abc_indicator", r["abc"])
+    return out

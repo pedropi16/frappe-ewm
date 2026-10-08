@@ -22,6 +22,7 @@
   "Means of Transport",
   "Hazard Class",
   "Carrier Capacity",
+  "Labor Shift",
   "Return Item Type",
   "Handling Indicator",
   "Production Supply Area",
@@ -1956,6 +1957,50 @@
      "label": "Maximum Trucks per Day",
      "fieldtype": "Int",
      "reqd": 1
+    }
+   ],
+   "key": {
+    "type": "none"
+   }
+  },
+  "Labor Shift": {
+   "name": "Labor Shift",
+   "module": "WMS Setup",
+   "issingle": false,
+   "istable": false,
+   "description": "",
+   "fields": [
+    {
+     "fieldname": "warehouse",
+     "label": "Warehouse",
+     "fieldtype": "Link",
+     "options": "WMS Warehouse",
+     "reqd": 1
+    },
+    {
+     "fieldname": "shift_name",
+     "label": "Shift",
+     "fieldtype": "Data",
+     "reqd": 1
+    },
+    {
+     "fieldname": "start_time",
+     "label": "Start",
+     "fieldtype": "Time",
+     "reqd": 1
+    },
+    {
+     "fieldname": "end_time",
+     "label": "End",
+     "fieldtype": "Time",
+     "reqd": 1,
+     "description": "Earlier than the start = the shift runs past midnight"
+    },
+    {
+     "fieldname": "active",
+     "label": "Active",
+     "fieldtype": "Check",
+     "default": 1
     }
    ],
    "key": {
@@ -4384,14 +4429,14 @@
      "fieldname": "activity",
      "label": "Activity",
      "fieldtype": "Select",
-     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nSort",
+     "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nSort\nStorage",
      "reqd": 1
     },
     {
      "fieldname": "uom_basis",
      "label": "UOM Basis",
      "fieldtype": "Select",
-     "options": "Per Task\nPer Unit",
+     "options": "Per Task\nPer Unit\nPer HU Day\nPer Bin Day\nPer Unit Day",
      "reqd": 1
     },
     {

@@ -1538,3 +1538,7 @@ before go-live.
 - **Yard roles**: *WMS Yard Clerk* (gate, yard moves, doors) and *WMS Yard Planner* (appointments, truck planning).
 - **Carrier Capacity** (max trucks per carrier per day, enforced at booking) and **recurring appointments** (`create_recurring_appointments`: daily/weekly series, clashing days skipped).
 - **Return Item Type**: a customer return can be raised with an item type whose stock type it is expected in (default QUALITY).
+
+- **Per-diem storage billing**: a daily snapshot (*Storage Usage Day*) of HUs / bins / units per stock owner; a *Billing Rate* with activity Storage and basis Per HU Day / Per Bin Day / Per Unit Day bills the customer that owns the stock (Stock Owner > Partner Type Customer).
+- **Slotting index**: `frappe_wms.api.slotting.classify_abc` ranks products by pick share (A 80% / B 15% / C 5%) and can write `abc_indicator`.
+- **Labor shifts and indirect labor**: *Labor Shift* master, `start_indirect_labor` / `stop_indirect_labor` (break, cleaning, training...), `labor_summary` (direct vs indirect hours, utilisation against the shift).

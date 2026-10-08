@@ -45,3 +45,5 @@ Update: shipping & receiving cockpit with automatic TU creation done (one inboun
 Update: vehicle grouping done (WMS Vehicle groups transportation units; one appointment can carry several deliveries/shipments).
 
 Update: yard roles, recurring appointments, carrier capacity, return item types done. HU-based yard moves deliberately not built: receiving here creates the HUs at the receiving bin directly, so there is no HU-on-TU stage to move.
+
+Update: per-diem storage billing, slotting index (ABC), labor shifts + indirect labor done.

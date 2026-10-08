@@ -150,6 +150,7 @@ scheduler_events = {
         "frappe_wms.tasks.verify_stock_balance_integrity",
         "frappe_wms.tasks.verify_erpnext_stock_reconciliation",
         "frappe_wms.tasks.generate_scheduled_counts",
+        "frappe_wms.services.storage_billing.snapshot_storage_usage",
     ],
 }
 

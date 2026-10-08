@@ -44,6 +44,7 @@ IN_SCOPE_DOCTYPES = [
     "Means of Transport",
     "Hazard Class",
     "Carrier Capacity",
+    "Labor Shift",
     "Return Item Type",
     "Handling Indicator",
     "Production Supply Area",

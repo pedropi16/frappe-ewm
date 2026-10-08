@@ -1,0 +1,71 @@
+{
+  "name": "Storage Usage Day",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "stock_owner",
+    "usage_date",
+    "hu_count",
+    "bin_count",
+    "quantity"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "usage_date",
+      "label": "Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "hu_count",
+      "label": "Handling Units",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "bin_count",
+      "label": "Bins",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float"
+    }
+  ],
+  "autoname": "hash",
+  "sort_field": "usage_date",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}

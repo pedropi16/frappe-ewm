@@ -29,7 +29,7 @@ EXECUTION = [
     "Handling Unit", "Handling Unit Event", "Goods Receipt", "Inbound Delivery", "WMS Batch Characteristic Value",
     "WMS Physical Inventory Count", "WMS Posting Change", "WMS Quality Inspection", "WMS Stock Balance", "WMS Stock Ledger Entry",
     "Goods Issue", "Production Material Request", "Outbound Delivery", "Packing Order", "Stock Allocation", "VAS Order", "WMS Wave", "WMS Shipment",
-    "WMS Dock Appointment", "WMS Transportation Unit", "WMS Vehicle", "WMS Yard Task",
+    "Storage Usage Day", "Indirect Labor Entry", "WMS Dock Appointment", "WMS Transportation Unit", "WMS Vehicle", "WMS Yard Task",
 ]
 # Customizing: readable by every WMS role, maintained by WMS Process Engineer.
 CUSTOMIZING = [
@@ -39,7 +39,7 @@ CUSTOMIZING = [
     "Process Determination Rule", "Removal Rule", "Replenishment Rule", "Storage Process", "Storage Type Search Sequence",
     "Warehouse Process Type", "Warehouse Process Type Determination Rule", "Wave Template", "WMS Movement Type",
     "WO Creation Rule", "WMS Route", "WMS Print Determination Rule", "WMS Number Range", "WMS HU Number Pool",
-    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Hazard Class", "Carrier Capacity", "Return Item Type",
+    "Warehouse Queue", "WMS Exception Code", "WMS Resource", "WMS Resource Group", "Production Supply Area", "Storage Group", "Handling Indicator", "Layout Storage Control", "Door Determination Rule", "Means of Transport", "Hazard Class", "Carrier Capacity", "Labor Shift", "Return Item Type",
     "Putaway Control Indicator", "Stock Removal Control Indicator", "Storage Section Indicator", "Production Supply Control Cycle", "WMS Block Reason", "Handling Unit Type Group", "PPF Action Profile", "WMS Usage Decision", "WMS Stock Owner", "WMS Document Type", "WMS MFS Endpoint", "WMS MFS Telegram Type",
 ]
 MASTER_DATA = ["Storage Bin", "Storage Section", "Activity Area", "Bin Type", "WMS Product", "WMS Product Warehouse",

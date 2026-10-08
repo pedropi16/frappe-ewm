@@ -1,0 +1,75 @@
+{
+  "name": "Indirect Labor Entry",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "warehouse",
+    "resource",
+    "activity",
+    "started_at",
+    "ended_at",
+    "minutes"
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "resource",
+      "label": "Resource",
+      "fieldtype": "Link",
+      "options": "WMS Resource",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "activity",
+      "label": "Activity",
+      "fieldtype": "Select",
+      "options": "Break\nCleaning\nTraining\nMeeting\nMaintenance\nOther",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "started_at",
+      "label": "Started",
+      "fieldtype": "Datetime",
+      "reqd": 1
+    },
+    {
+      "fieldname": "ended_at",
+      "label": "Ended",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "minutes",
+      "label": "Minutes",
+      "fieldtype": "Float",
+      "read_only": 1,
+      "in_list_view": 1
+    }
+  ],
+  "autoname": "ILE-.#####",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}
