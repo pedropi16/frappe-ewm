@@ -5610,6 +5610,10 @@
     {
      "target": "Country",
      "label": "Country of Origin"
+    },
+    {
+     "target": "Consolidation Group",
+     "label": "Consolidation Group"
     }
    ]
   },
@@ -6159,6 +6163,10 @@
     {
      "target": "Country",
      "label": "Country of Origin"
+    },
+    {
+     "target": "Consolidation Group",
+     "label": "Consolidation Group"
     }
    ]
   },
@@ -6228,6 +6236,10 @@
     {
      "target": "Country",
      "label": "Country of Origin"
+    },
+    {
+     "target": "Consolidation Group",
+     "label": "Consolidation Group"
     }
    ]
   },

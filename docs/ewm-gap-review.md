@@ -54,3 +54,5 @@ Update: per-diem storage billing, slotting index (ABC), labor shifts + indirect 
 - Opportunistic / transportation cross-docking: cross-docking exists for planned demand only.
 
 Update: stock key extended with country of origin and special stock (sales order / project), same pattern as owner/party (identity only when set). PSA stays a location concept (Production Supply Area bins), not a stock attribute.
+
+Update: the consolidation group is now a stock attribute (set when a line joins a group, carried through gather and split while the stock is staged to its delivery / PMR).

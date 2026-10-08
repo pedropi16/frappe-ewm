@@ -4,6 +4,7 @@ from frappe.utils import flt, now_datetime
 from frappe_wms.services.determination import determine_process_type
 from frappe_wms.services.warehouse_order import attach_task
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
+from frappe_wms.services.stock import transfer_stock
 from frappe_wms.services.deconsolidation import create_deconsolidation_tasks
 from frappe_wms.utils import require_role
 
@@ -131,6 +132,7 @@ def add_consolidation_line(group_name, reference_doctype, reference_name):
     group.append("lines", line)
     group.status = "Open"
     group.save(ignore_permissions=True)
+    stage_to_group(group, group.lines[-1])
     return group.lines[-1].name
 
 
@@ -142,6 +144,7 @@ def remove_consolidation_line(group_name, line_name):
         frappe.throw(_("Line not found on this Consolidation Group"))
     if line.status in LINE_DONE_STATUSES:
         frappe.throw(_("Cannot remove a line whose stock is already on the target Handling Unit"))
+    if line.status == "Ready": release_from_group(group, line)
     group.lines = [l for l in group.lines if l.name != line_name]
     group.save(ignore_permissions=True)
 
@@ -167,7 +170,7 @@ def create_consolidation_tasks(destination_hu, destination_bin, warehouse, lines
             "destination_bin": destination_bin, "destination_hu": destination_hu,
             "stock_type_from": line["stock_type"], "stock_type_to": line["stock_type"],
             "movement_type": process_type.movement_type, "priority": "Normal", "status": "Open",
-            "consolidation_group_line": line.get("consolidation_group_line"),
+            "consolidation_group_line": line.get("consolidation_group_line"), "consolidation_group": line.get("consolidation_group"),
         })
         attach_task(task, batch_key)
         task.insert(ignore_permissions=True)
@@ -191,6 +194,57 @@ def _landed_hu(task_names, bin_name):
         fields=["destination_hu"], order_by="confirmed_at desc", limit=1)
     return rows[0].destination_hu if rows else None
 
+def _locate(line):
+    """Quantity and where the line's stock physically sits now (re-resolved against live data)."""
+    if line.reference_doctype == "Stock Allocation":
+        allocation = frappe.get_doc("Stock Allocation", line.reference_name)
+        qty = flt(allocation.picked_quantity) or flt(allocation.allocated_quantity)
+        # allocation.storage_bin is where the stock was BEFORE picking - once Picked, the
+        # Pick task has already moved it (same physical HU, relocated) to the delivery's
+        # own staging bin, which is where it actually sits now.
+        source_bin = frappe.db.get_value("Outbound Delivery", allocation.outbound_delivery, "staging_bin")
+        return qty, source_bin, _landed_hu(_confirmed_tasks_for_allocation(allocation.name), source_bin) or allocation.handling_unit
+    request = frappe.get_doc("Warehouse Request", line.reference_name)
+    # destination_hu is never set for a production-supply request (create_tasks_for_
+    # request only resolves one when destination_bin is absent, and this call always
+    # supplies it) - the physical HU carried unchanged through the Putaway confirm is
+    # request.source_hu (confirm_task falls back to task.source_hu when no destination
+    # HU is given), not destination_hu.
+    source_bin = request.destination_bin
+    confirmed = frappe.get_all("Warehouse Task", filters={"warehouse_request": request.name, "status": "Confirmed"}, pluck="name")
+    return flt(request.confirmed_quantity), source_bin, _landed_hu(confirmed, source_bin) or request.source_hu
+
+
+def _relabel(group, line, qty, bin_, hu, old, new):
+    """Move the line's stock from consolidation group `old` to `new` in place (a posting change; either may be empty = plain stock)."""
+    where = {"handling_unit": hu, "storage_bin": bin_, "stock_type": line.stock_type}
+    transfer_stock(
+        source={"warehouse": group.warehouse, "product": line.product, "batch_no": line.batch_no, "serial_no": line.serial_no, "stock_uom": line.stock_uom, **where, "consolidation_group": old},
+        destination={**where, "consolidation_group": new}, quantity=qty, movement_type="501", reference_doctype="Consolidation Group", reference_name=group.name,
+        idempotency_key=f"CGS:{line.name}:{old or 'plain'}>{new or 'plain'}")
+
+
+def _tagged_qty(group, line, bin_, hu):
+    return flt(frappe.db.sql("""select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where warehouse=%s and product=%s and ifnull(batch_no,'')=%s and ifnull(serial_no,'')=%s
+        and ifnull(handling_unit,'')=%s and storage_bin=%s and stock_type=%s and consolidation_group=%s""",
+        (group.warehouse, line.product, line.batch_no or "", line.serial_no or "", hu or "", bin_, line.stock_type, group.name))[0][0])
+
+
+def stage_to_group(group, line):
+    """The line's stock now carries the group as a stock attribute, for as long as it is staged to its document. Idempotent."""
+    qty, bin_, hu = _locate(line)
+    if qty > 0 and _tagged_qty(group, line, bin_, hu) < qty - 0.000001:
+        _relabel(group, line, qty, bin_, hu, "", group.name)
+    return qty, bin_, hu
+
+
+def release_from_group(group, line):
+    """Stock leaves the group (line removed / cancelled before it was gathered): the attribute goes with it. Lines staged before this attribute existed have none to drop."""
+    qty, bin_, hu = _locate(line)
+    if qty > 0 and _tagged_qty(group, line, bin_, hu) >= qty - 0.000001:
+        _relabel(group, line, qty, bin_, hu, group.name, "")
+
+
 def gather_consolidation_group(group_name):
     require_role("WMS Operator", "WMS Supervisor")
     group = frappe.get_doc("Consolidation Group", group_name)
@@ -207,31 +261,13 @@ def gather_consolidation_group(group_name):
         # Re-resolved against live data, not what was snapshotted when the line was added - a
         # pick denial (revised quantity) or a partial replenishment confirmation between then
         # and now means the real available amount can differ from the original plan.
-        if l.reference_doctype == "Stock Allocation":
-            allocation = frappe.get_doc("Stock Allocation", l.reference_name)
-            qty = flt(allocation.picked_quantity) or flt(allocation.allocated_quantity)
-            # allocation.storage_bin is where the stock was BEFORE picking - once Picked, the
-            # Pick task has already moved it (same physical HU, relocated) to the delivery's
-            # own staging bin, which is where it actually sits now.
-            source_bin = frappe.db.get_value("Outbound Delivery", allocation.outbound_delivery, "staging_bin")
-            source_hu = _landed_hu(_confirmed_tasks_for_allocation(allocation.name), source_bin) or allocation.handling_unit
-        else:
-            request = frappe.get_doc("Warehouse Request", l.reference_name)
-            qty = flt(request.confirmed_quantity)
-            # destination_hu is never set for a production-supply request (create_tasks_for_
-            # request only resolves one when destination_bin is absent, and this call always
-            # supplies it) - the physical HU carried unchanged through the Putaway confirm is
-            # request.source_hu (confirm_task falls back to task.source_hu when no destination
-            # HU is given), not destination_hu.
-            source_bin = request.destination_bin
-            confirmed = frappe.get_all("Warehouse Task", filters={"warehouse_request": request.name, "status": "Confirmed"}, pluck="name")
-            source_hu = _landed_hu(confirmed, source_bin) or request.source_hu
+        qty, source_bin, source_hu = stage_to_group(group, l)
         if qty <= 0:
             continue
         l.quantity = qty
         line_rows.append(l)
         task_lines.append({
-            "consolidation_group_line": l.name, "product": l.product, "batch_no": l.batch_no, "serial_no": l.serial_no,
+            "consolidation_group_line": l.name, "consolidation_group": group.name, "product": l.product, "batch_no": l.batch_no, "serial_no": l.serial_no,
             "stock_type": l.stock_type, "stock_uom": l.stock_uom, "quantity": qty,
             "source_bin": source_bin, "source_hu": source_hu,
         })
@@ -257,7 +293,7 @@ def complete_consolidation_group(group_name):
     decon_lines = [{
         "product": l.product, "batch_no": l.batch_no, "serial_no": l.serial_no, "stock_type": l.stock_type,
         "quantity": l.quantity, "destination_bin": l.final_destination_bin, "destination_hu": l.final_destination_hu,
-        "consolidation_group_line": l.name,
+        "consolidation_group_line": l.name, "consolidation_group": group.name,
     } for l in lines]
     created = create_deconsolidation_tasks(group.target_hu, decon_lines)
     for l, task_name in zip(lines, created):
@@ -310,6 +346,7 @@ def cancel_consolidation_lines_for_allocations(allocation_names):
         touched = False
         for l in group.lines:
             if l.reference_doctype == "Stock Allocation" and l.reference_name in allocation_names and l.status not in LINE_DONE_STATUSES:
+                if l.status == "Ready": release_from_group(group, l)
                 l.status = "Cancelled"
                 touched = True
         if touched:

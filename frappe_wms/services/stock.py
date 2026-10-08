@@ -8,7 +8,9 @@ DIMENSIONS = ("warehouse", "product", "batch_no", "serial_no", "handling_unit", 
 # balance of owner-less stock stays exactly what it always was.
 # Stock attributes (country of origin, special stock = reserved to a sales order / project) behave the same way: identity only when set.
 ATTR_KEYS = ("country_of_origin", "special_stock_type", "special_stock_ref")
-OWNER_KEYS = ("stock_owner", "entitled_party") + ATTR_KEYS
+# The consolidation group is a stock attribute too, but a transient one: the stock carries it while it is staged to a document (outbound delivery /
+# production material request) in a consolidation group.
+OWNER_KEYS = ("stock_owner", "entitled_party") + ATTR_KEYS + ("consolidation_group",)
 
 
 def dim_values(obj):
@@ -22,6 +24,8 @@ def _balance_name(values):
         raw += f"|{values.get('stock_owner') or ''}|{values.get('entitled_party') or ''}"
     if any(values.get(k) for k in ATTR_KEYS):
         raw += "|" + "|".join(str(values.get(k) or "") for k in ATTR_KEYS)
+    if values.get("consolidation_group"):
+        raw += f"|CG|{values['consolidation_group']}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 def _owner_stock_exists():

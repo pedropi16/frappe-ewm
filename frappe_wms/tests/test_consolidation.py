@@ -41,6 +41,7 @@ class TestConsolidation(IntegrationTestCase):
         for code, role in (("GR", "Receiving"), ("BULK", "Storage"), ("PSUP", "Production Supply"), ("RACK", "Storage")):
             if not frappe.db.exists("Storage Type", f"{cls.warehouse}-{code}"):
                 frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": code, "storage_type_name": code, "storage_role": role, "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+            frappe.db.set_value("Storage Type", f"{cls.warehouse}-{code}", "allow_mixed_products", 1)  # the tests share these bins
         for bin_name, st in ((cls.recv_bin, f"{cls.warehouse}-GR"), (cls.bulk_bin, f"{cls.warehouse}-BULK"), (cls.stage_bin, f"{cls.warehouse}-GR"), (cls.psup_bin, f"{cls.warehouse}-PSUP"), (cls.rack_bin, f"{cls.warehouse}-RACK")):
             if not frappe.db.exists("Storage Bin", bin_name):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
@@ -133,6 +134,10 @@ class TestConsolidation(IntegrationTestCase):
         self.assertEqual(len(group["lines"]), 2)
         self.assertEqual({l["status"] for l in group["lines"]}, {"Ready"})
 
+        self.assertEqual(self._grouped(group_name, item, self.stage_bin), 6)  # staged to the group: the stock itself carries it
+        self.assertEqual(self._grouped(group_name, rm, self.psup_bin), 10)
+        self.assertEqual(self._grouped("", item, self.stage_bin), 0)
+
         created = gather_consolidation_group(group_name)
         self.assertEqual(len(created), 2)
         for task_name in created:
@@ -149,6 +154,7 @@ class TestConsolidation(IntegrationTestCase):
         rm2_qty = frappe.db.sql("select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where handling_unit=%s and product=%s", (target_hu, rm))[0][0]
         self.assertEqual(rm_qty, 6)
         self.assertEqual(rm2_qty, 10)  # BOM: 2 RM per FG unit x qty 5
+        self.assertEqual(self._grouped(group_name, item, None, hu=target_hu), 6)  # carried onto the target HU
 
         split_tasks = complete_consolidation_group(group_name)
         self.assertEqual(len(split_tasks), 2)
@@ -165,6 +171,22 @@ class TestConsolidation(IntegrationTestCase):
         psup_qty = frappe.db.sql("select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where storage_bin=%s and product=%s", (self.psup_bin, rm))[0][0]
         self.assertEqual(delivery_stage_qty, 6)
         self.assertEqual(psup_qty, 10)
+        self.assertEqual(self._grouped(group_name, item, self.stage_bin), 6)  # still staged to its delivery / PMR, so still carries the group
+        self.assertEqual(self._grouped(group_name, rm, self.psup_bin), 10)
+
+    def _grouped(self, group, item, bin_, hu=None):
+        return frappe.db.sql("select coalesce(sum(quantity),0) from `tabWMS Stock Balance` where product=%s and ifnull(consolidation_group,'')=%s and storage_bin=ifnull(%s, storage_bin) and ifnull(handling_unit,'')=ifnull(%s, ifnull(handling_unit,''))",
+            (item, group, bin_, hu))[0][0]
+
+    def test_removing_a_line_hands_the_stock_back_without_the_group(self):
+        item = self._make_item("E", preferred_storage_type=f"{self.warehouse}-BULK")
+        _obd, allocation = self._make_picked_allocation(item, 3)
+        group_name = create_consolidation_group(self.warehouse, self.rack_bin)
+        line = add_consolidation_line(group_name, "Stock Allocation", allocation)
+        self.assertEqual(self._grouped(group_name, item, self.stage_bin), 3)
+        remove_consolidation_line(group_name, line)
+        self.assertEqual(self._grouped(group_name, item, self.stage_bin), 0)
+        self.assertEqual(self._grouped("", item, self.stage_bin), 3)
 
     def test_find_joinable_references_excludes_already_joined_lines(self):
         item = self._make_item("B", preferred_storage_type=f"{self.warehouse}-BULK")
@@ -195,22 +217,14 @@ class TestConsolidation(IntegrationTestCase):
 
     def test_cancelling_delivery_before_pick_clears_its_consolidation_line(self):
         item = self._make_item("D", preferred_storage_type=f"{self.warehouse}-BULK")
-        self._receive_and_putaway(item, 5)
-        obd = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.warehouse, "customer": self.customer, "delivery_date": nowdate(), "staging_bin": self.stage_bin,
-            "items": [{"line_number": 1, "item": item, "requested_quantity": 5, "stock_uom": self.uom, "required_stock_type": "AVAILABLE"}]})
-        obd.insert(ignore_permissions=True)
-        obd.submit()
-        allocate_delivery(obd.name)
-        allocation = frappe.get_all("Stock Allocation", filters={"outbound_delivery": obd.name}, pluck="name")[0]
-        frappe.db.set_value("Stock Allocation", allocation, "status", "Picked")  # simulate picked-ness for the join precondition
-        frappe.db.set_value("Stock Allocation", allocation, "picked_quantity", 5)
+        obd, allocation = self._make_picked_allocation(item, 5)
 
         group_name = create_consolidation_group(self.warehouse, self.rack_bin)
         line_name = add_consolidation_line(group_name, "Stock Allocation", allocation)
-        frappe.db.set_value("Stock Allocation", allocation, "status", "Allocated")  # revert so cancellation is actually allowed
-
-        obd.reload()
-        obd.cancel()
+        # a delivery can't be cancelled once picked; the hook it calls is what clears the line
+        from frappe_wms.services.consolidation import cancel_consolidation_lines_for_allocations
+        cancel_consolidation_lines_for_allocations([allocation])
+        self.assertEqual(self._grouped(group_name, item, self.stage_bin), 0)
 
         group = get_consolidation_group(group_name)
         line = next(l for l in group["lines"] if l["name"] == line_name)

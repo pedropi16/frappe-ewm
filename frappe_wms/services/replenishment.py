@@ -33,7 +33,7 @@ def _best_source_bin(warehouse, product, storage_type, stock_type, exclude_bin):
     bins_in_type = frappe.get_all("Storage Bin", filters={"warehouse": warehouse, "storage_type": storage_type, "removal_blocked": 0}, pluck="name")
     if not bins_in_type: return None, 0
     balances = frappe.get_all("WMS Stock Balance", filters={
-        "warehouse": warehouse, "product": product, "stock_type": stock_type, "stock_owner": ["in", ["", None]], "entitled_party": ["in", ["", None]], "special_stock_ref": ["in", ["", None]],
+        "warehouse": warehouse, "product": product, "stock_type": stock_type, "stock_owner": ["in", ["", None]], "entitled_party": ["in", ["", None]], "special_stock_ref": ["in", ["", None]], "consolidation_group": ["in", ["", None]],
         "storage_bin": ["in", bins_in_type], "available_quantity": [">", 0],
     }, fields=["storage_bin", "handling_unit", "batch_no", "serial_no", "available_quantity"], order_by="available_quantity desc")
     balances = [b for b in balances if b.storage_bin != exclude_bin]

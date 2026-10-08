@@ -61,6 +61,7 @@ def _candidate_balances(row, warehouse, customer=None, owner=None, party=None):
         "stock_owner": owner or ["in", ["", None]], "entitled_party": party or ["in", ["", None]]}
     # Special stock (reserved to a sales order / project) is only for deliveries of that order; everyone else sees just the unrestricted stock.
     filters["special_stock_ref"] = ["in", ["", None, row.sales_order]] if row.get("sales_order") else ["in", ["", None]]
+    filters["consolidation_group"] = ["in", ["", None]]  # stock staged to a consolidation group is already spoken for
     if row.get("required_country_of_origin"): filters["country_of_origin"] = row.required_country_of_origin
     if row.required_serial_no: filters["serial_no"]=row.required_serial_no
     requirements = _required_characteristics(row)

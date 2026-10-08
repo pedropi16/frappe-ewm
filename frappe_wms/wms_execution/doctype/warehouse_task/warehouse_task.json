@@ -49,7 +49,8 @@
     "predecessor_task",
     "country_of_origin",
     "special_stock_type",
-    "special_stock_ref"
+    "special_stock_ref",
+    "consolidation_group"
   ],
   "fields": [
     {
@@ -357,6 +358,13 @@
       "fieldname": "special_stock_ref",
       "label": "Special Stock Reference",
       "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "consolidation_group",
+      "label": "Consolidation Group",
+      "fieldtype": "Link",
+      "options": "Consolidation Group",
       "read_only": 1
     }
   ],
