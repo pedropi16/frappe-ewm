@@ -2625,7 +2625,7 @@ class WMSMonitor {
       if (rows.length) $wrap.append(this.render_table(rows, columns, doctype));
     };
     add(__("Trucks"), data.trucks, [["name", __("Appointment")], ["direction", __("Direction")], ["status", __("Status")], ["units", __("Units")], ["activity_status", __("Activity")], ["door", __("Door")], ["vehicle_registration", __("Vehicle")], ["ref", __("Carries"), (r) => esc(r.inbound_delivery || r.shipment || "")],
-      ["actions", "", (r) => r.next_action ? `<button type="button" class="btn btn-xs btn-default wms-mon-cp-act" data-a="${esc(r.name)}" data-m="${{ "Check In": "check_in", "To Door": "to_door", "Complete": "complete", "Check Out": "check_out" }[r.next_action]}">${__(r.next_action)}</button>` : ""]], "WMS Dock Appointment");
+      ["actions", "", (r) => (["Planned", "Checked In", "At Door"].includes(r.status) ? `<button type="button" class="btn btn-xs btn-default wms-mon-cp-add" data-a="${esc(r.name)}" data-d="${esc(r.direction)}">${__("Add Delivery")}</button> ` : "") + (r.next_action ? `<button type="button" class="btn btn-xs btn-default wms-mon-cp-act" data-a="${esc(r.name)}" data-m="${{ "Check In": "check_in", "To Door": "to_door", "Complete": "complete", "Check Out": "check_out" }[r.next_action]}">${__(r.next_action)}</button>` : "")]], "WMS Dock Appointment");
     add(__("Inbound deliveries without a truck"), data.inbound_without_truck, [["name", __("Delivery")], ["supplier", __("Supplier")], ["expected_arrival", __("Expected")], ["status", __("Status")],
       ["actions", "", (r) => plan("Inbound", r.name)]], "Inbound Delivery");
     add(__("Shipments without a truck"), data.shipments_without_truck, [["name", __("Shipment")], ["carrier", __("Carrier")], ["route", __("Route")], ["status", __("Status")],
@@ -2633,12 +2633,23 @@ class WMSMonitor {
     add(__("Picked deliveries without a shipment"), data.deliveries_without_shipment, [["name", __("Delivery")], ["customer", __("Customer")], ["route", __("Route")], ["delivery_date", __("Delivery Date")],
       ["actions", "", (r) => plan("Delivery", r.name)]], "Outbound Delivery");
     $wrap.find(".wms-mon-cp-act").on("click", (e) => this.yard_action(e.currentTarget.dataset.m, e.currentTarget.dataset.a));
+    $wrap.find(".wms-mon-cp-add").on("click", (e) => this.add_to_truck_dialog(e.currentTarget.dataset.a, e.currentTarget.dataset.d));
     $wrap.find(".wms-mon-cp-plan").on("click", (e) => this.plan_truck_dialog(e.currentTarget.dataset.k, e.currentTarget.dataset.n));
+  }
+
+  add_to_truck_dialog(appointment, direction) {
+    const inbound = direction === "Inbound";
+    const d = new frappe.ui.Dialog({ title: __("Add a delivery to {0}", [appointment]), fields: [
+      { fieldname: "ref", fieldtype: "Link", options: inbound ? "Inbound Delivery" : "WMS Shipment", label: inbound ? __("Inbound Delivery") : __("Shipment"), reqd: 1 }],
+      primary_action_label: __("Add"), primary_action: (v) => {
+        frappe.call("frappe_wms.api.yard.add_to_truck", Object.assign({ appointment }, inbound ? { inbound_delivery: v.ref } : { shipment: v.ref }))
+          .then(() => { d.hide(); frappe.show_alert({ message: __("Added to the truck"), indicator: "green" }); this.search_cockpit(); }); } });
+    d.show();
   }
 
   plan_truck_dialog(kind, name) {
     const d = new frappe.ui.Dialog({ title: __("Plan Truck for {0}", [name]), fields: [
-      { fieldname: "planned_start", fieldtype: "Datetime", label: __("Arrival"), reqd: 1, default: frappe.datetime.add_hours(frappe.datetime.now_datetime(), 1) },
+      { fieldname: "planned_start", fieldtype: "Datetime", label: __("Arrival"), reqd: 1, default: moment().add(1, "hours").format("YYYY-MM-DD HH:mm:ss") },
       { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") }, { fieldname: "vehicle_registration", fieldtype: "Data", label: __("Vehicle Registration") },
       { fieldname: "trailer_number", fieldtype: "Data", label: __("Trailer") }, { fieldname: "driver_name", fieldtype: "Data", label: __("Driver") },
       { fieldname: "door", fieldtype: "Select", label: __("Door"), options: [""].concat((this.yard.doors || []).map((x) => x.door)), description: __("Empty: the first free door") },
@@ -2663,7 +2674,7 @@ class WMSMonitor {
         { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat(this.yard.yard_spots || []) },
         { fieldname: "checkpoint", fieldtype: "Select", label: __("Checkpoint"), options: [""].concat((this.yard && this.yard.checkpoints) || []) }],
         primary_action_label: __("Check in"), primary_action: (v) => { d.hide(); frappe.call("frappe_wms.api.yard.check_in", { warehouse: this.warehouse, appointment, yard_bin: v.yard_bin || undefined, checkpoint: v.checkpoint || undefined })
-          .then(() => { frappe.show_alert({ message: __("Checked in"), indicator: "green" }); this.search_yard(); }); } });
+          .then(() => { frappe.show_alert({ message: __("Checked in"), indicator: "green" }); this.search_yard(); this.search_cockpit(); }); } });
       d.show(); return;
     }
     if (method === "check_out" && ((this.yard && this.yard.checkpoints) || []).length) {
@@ -2723,7 +2734,7 @@ class WMSMonitor {
         if (!(await new Promise((res) => frappe.confirm(r.needs_confirmation, () => res(true), () => res(false))))) return;
         r = (await frappe.call("frappe_wms.api.yard.check_in", Object.assign(args, { confirm_without_appointment: 1 }))).message;
       }
-      d.hide(); frappe.show_alert({ message: __("Checked in as {0}", [r.appointment]), indicator: "green" }); this.search_yard();
+      d.hide(); frappe.show_alert({ message: __("Checked in as {0}", [r.appointment]), indicator: "green" }); this.search_yard(); this.search_cockpit();
     } });
     d.show();
   }

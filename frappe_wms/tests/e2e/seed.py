@@ -109,6 +109,9 @@ def cleanup():
         frappe.db.sql(f"delete from `tab{dt}` where handling_unit like 'E2EPC%%' or handling_unit like 'E2EH%%'")
     frappe.db.sql("delete from `tabHandling Unit` where hu_number like 'E2EPC%%' or hu_number like 'E2EH%%'")
     frappe.db.sql("delete from `tabSerial No` where name like 'E2EPCSN%%'")
+    for dt in ("WMS Transportation Unit", "WMS Dock Appointment", "WMS Vehicle", "Inbound Delivery"):
+        if dt == "Inbound Delivery": frappe.db.sql("delete from `tabInbound Delivery Item` where parent in (select name from `tabInbound Delivery` where warehouse=%s)", WAREHOUSE)
+        frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     for dt in ("Warehouse Task", "WMS Stock Ledger Entry", "WMS Stock Balance", "WMS Physical Inventory Count"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
@@ -173,3 +176,26 @@ def packing_stock():
                          "Storage Bin", bin_, f"e2e-pcsn:{n}:{frappe.generate_hash(length=8)}")
     frappe.db.commit()
     print("E2E_PACKING " + json.dumps({"hus": hus, "item": item}))
+
+
+def yard_demo():
+    """Shipping & Receiving cockpit fixture: a door, a yard spot and two submitted inbound deliveries. cleanup() removes them."""
+    frappe.set_user("Administrator")
+    for code, role in (("DOOR", "Door"), ("YARD", "Yard")):
+        if not frappe.db.exists("Storage Type", f"{WAREHOUSE}-{code}"):
+            frappe.get_doc({"doctype": "Storage Type", "warehouse": WAREHOUSE, "storage_type_code": code, "storage_type_name": code, "storage_role": role,
+                            "capacity_check_method": "None", "active": 1}).insert(ignore_permissions=True)
+        bin_ = f"{WAREHOUSE}-{code}1"
+        if not frappe.db.exists("Storage Bin", bin_):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_, "warehouse": WAREHOUSE, "storage_type": f"{WAREHOUSE}-{code}", "active": 1, "sequence": 1}).insert(ignore_permissions=True)
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    supplier = frappe.get_all("Supplier", limit=1, pluck="name")[0]
+    names = []
+    for _i in range(2):
+        d = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": WAREHOUSE, "supplier": supplier,
+                            "receiving_bin": "E2E-WH-RECV", "items": [{"line_number": 1, "item": item, "expected_quantity": 1, "stock_uom": uom, "expected_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+        d.submit(); names.append(d.name)
+    frappe.db.commit()
+    print("E2E_YARD " + json.dumps({"inbound": names}))
+    return {"inbound": names}
