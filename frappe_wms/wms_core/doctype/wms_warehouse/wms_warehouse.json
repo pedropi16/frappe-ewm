@@ -35,6 +35,7 @@
     "kitting_output_hu_required",
     "loading_section",
     "load_sequence_check",
+    "recount_different_user",
     "yard_section",
     "dock_slot_minutes",
     "dock_changeover_minutes",
@@ -303,6 +304,13 @@
       "label": "Seal Required at Departure",
       "default": "0",
       "description": "An outbound truck cannot depart without a seal number."
+    },
+    {
+      "fieldname": "recount_different_user",
+      "fieldtype": "Check",
+      "label": "Different User to Recount",
+      "default": "0",
+      "description": "A recount of a physical inventory line must be entered by someone other than the user who counted it first (four-eyes principle)."
     }
   ],
   "autoname": "field:warehouse_code",

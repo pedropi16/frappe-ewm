@@ -178,6 +178,9 @@ def record_counts(count_name, counted_quantities):
             frappe.throw(_("{0} in {1}: a counted quantity cannot be negative").format(row.product, row.storage_bin or row.handling_unit))
         if row.serial_no and counted not in (0, 1):
             frappe.throw(_("Serial {0} is one unit: count it as 1 (found) or 0 (missing)").format(row.serial_no))
+        if row.recount_count and row.counted_by == frappe.session.user and frappe.db.get_value("WMS Warehouse", doc.warehouse, "recount_different_user"):
+            frappe.throw(_("{0} in {1}: a recount must be done by someone other than {2}, who counted it first").format(row.product, row.storage_bin or row.handling_unit, row.counted_by))
+        row.counted_by = frappe.session.user
         row.counted_quantity = counted
         row.variance = row.counted_quantity - flt(row.book_quantity)
         row.status = "Counted"

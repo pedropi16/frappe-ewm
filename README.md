@@ -494,7 +494,7 @@ and/or percentage threshold) says the variance is out of tolerance, in which
 case the affected rows hold at `Pending Recount` instead of posting.
 `request_recount` resets held rows back to `Open` for re-recording; a
 still-out-of-tolerance recount escalates straight to `Pending Approval`
-rather than looping forever. `approve_variance` (gated by `WMS Supervisor`)
+rather than looping forever. With *Different User to Recount* on the warehouse, a recount line must be entered by someone other than the user who counted it first (four-eyes). `approve_variance` (gated by `WMS Supervisor`)
 posts held rows and closes the count. Counts can also be generated on a
 schedule instead of created by hand: **Cycle Count Rule** covers six
 procedure types (ABC — by `WMS Product.abc_indicator` — Low Stock, reusing

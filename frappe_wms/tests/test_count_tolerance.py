@@ -134,6 +134,22 @@ class TestCountTolerance(IntegrationTestCase):
         result = post_count(count.name)
         self.assertEqual(result["status"], "Posted")
 
+    def test_four_eyes_recount_needs_a_different_user(self):
+        item = self._make_item("TEST-CTG-ITEM-4EYES")
+        count = self._count_and_record(item, 100, 80)
+        post_count(count.name)
+        request_recount(count.name)
+        count.reload()
+        row = count.items[0]
+        self.assertEqual(row.counted_by, frappe.session.user, "the first count remembers who entered it")
+        frappe.db.set_value("WMS Warehouse", self.warehouse, "recount_different_user", 1)
+        try:
+            with self.assertRaises(frappe.ValidationError): record_counts(count.name, {row.name: 99})   # same user again
+            frappe.db.set_value("WMS Physical Inventory Count Item", row.name, "counted_by", "Guest")
+            record_counts(count.name, {row.name: 99})                                                   # somebody else's first count: allowed
+        finally:
+            frappe.db.set_value("WMS Warehouse", self.warehouse, "recount_different_user", 0)
+
     def test_recount_still_out_of_tolerance_escalates_to_pending_approval(self):
         item = self._make_item("TEST-CTG-ITEM-4")
         count = self._count_and_record(item, 100, 80)

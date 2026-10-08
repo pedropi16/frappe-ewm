@@ -20,6 +20,7 @@
     "variance",
     "status",
     "recount_count",
+    "counted_by",
     "tolerance_group"
   ],
   "fields": [
@@ -113,6 +114,13 @@
       "label": "Tolerance Group",
       "fieldtype": "Link",
       "options": "Count Tolerance Group",
+      "read_only": 1
+    },
+    {
+      "fieldname": "counted_by",
+      "label": "Counted By",
+      "fieldtype": "Link",
+      "options": "User",
       "read_only": 1
     }
   ],
