@@ -1,0 +1,83 @@
+{
+  "name": "Planned Shipping HU",
+  "module": "WMS Setup",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 1,
+  "track_changes": 0,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "carton_no",
+    "hu_type",
+    "item",
+    "quantity",
+    "weight",
+    "volume",
+    "handling_unit"
+  ],
+  "fields": [
+    {
+      "fieldname": "carton_no",
+      "label": "Carton",
+      "fieldtype": "Int",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "hu_type",
+      "label": "Packaging",
+      "fieldtype": "Link",
+      "options": "Handling Unit Type",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "item",
+      "label": "Item",
+      "fieldtype": "Link",
+      "options": "Item",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "in_list_view": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "weight",
+      "label": "Weight",
+      "fieldtype": "Float",
+      "read_only": 1
+    },
+    {
+      "fieldname": "volume",
+      "label": "Volume",
+      "fieldtype": "Float",
+      "read_only": 1
+    },
+    {
+      "fieldname": "handling_unit",
+      "label": "Packed In",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "read_only": 1,
+      "description": "Set once a packer creates the HU for this carton."
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "doctype": "DocType"
+}

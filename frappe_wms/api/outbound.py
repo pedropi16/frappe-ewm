@@ -82,3 +82,10 @@ def post_goods_issue_for_delivery(delivery_name):
 def create_return_outbound_delivery(purchase_receipt, warehouse, stock_type="DAMAGED"):
     require_role(*OUTBOUND_ROLES)
     return _create_return_outbound_delivery(purchase_receipt, warehouse, stock_type)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def plan_cartons(delivery_name):
+    from frappe_wms.services.cartonization import plan_cartons as _plan
+    return _plan(delivery_name)

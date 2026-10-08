@@ -356,7 +356,11 @@ def take_to_table(work_center, hu_name):
 
 def create_station_hu(work_center, hu_type=None, hu_number=None, outbound_delivery=None):
     wc = _station(work_center, "allow_create_hu")
-    hu_type = hu_type or wc.default_hu_type
+    planned = None
+    if outbound_delivery and not hu_type:
+        from frappe_wms.services.cartonization import next_planned_hu
+        planned = next_planned_hu(outbound_delivery)  # cartonization proposes the next planned carton
+    hu_type = hu_type or (planned[1] if planned else wc.default_hu_type)
     if not hu_type: frappe.throw(_("Choose the HU type (or set Default Packaging on the Work Center)"))
     frappe.flags.wms_skip_hu_created_print = not wc.print_label_on_create
     try:
@@ -365,6 +369,9 @@ def create_station_hu(work_center, hu_type=None, hu_number=None, outbound_delive
         frappe.flags.wms_skip_hu_created_print = False
     if outbound_delivery:
         frappe.db.set_value("Handling Unit", hu["name"], "outbound_delivery", outbound_delivery)
+    if planned:
+        from frappe_wms.services.cartonization import link_planned_hu
+        link_planned_hu(outbound_delivery, planned[0], hu["name"])
     return {"name": hu["name"], "hu_number": hu.get("hu_number"), "hu_type": hu_type}
 
 

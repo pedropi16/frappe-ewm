@@ -22,7 +22,8 @@
     "reusable",
     "requires_seal",
     "numbering_mode",
-    "active"
+    "active",
+    "cartonizable"
   ],
   "fields": [
     {
@@ -121,6 +122,12 @@
       "label": "Maximum Payload",
       "fieldtype": "Float",
       "description": "Heaviest load the HU carries. Copied to new HUs of this type; a HU with a payload refuses more."
+    },
+    {
+      "fieldname": "cartonizable",
+      "label": "Use for Cartonization",
+      "fieldtype": "Check",
+      "description": "Cartonization may choose this packaging for shipping HUs; limits come from Maximum Weight and Maximum Volume."
     }
   ],
   "autoname": "field:hu_type_code",

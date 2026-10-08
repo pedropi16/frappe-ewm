@@ -2,6 +2,12 @@ frappe.ui.form.on("Outbound Delivery", { refresh(frm) {
   frappe_wms.set_warehouse_filters(frm);
   if (frm.is_new() || frm.doc.docstatus >= 2) return;
   frappe_wms_complete_short(frm);
+  if (frm.doc.docstatus === 1 && !frm.doc.closed_short && frm.doc.packing_status === "Not Started") {
+    frm.add_custom_button(__("Plan Cartons"), () => frappe_wms.call("frappe_wms.api.outbound.plan_cartons", {delivery_name: frm.doc.name}).then(r => {
+      frappe.show_alert({message: __("{0} shipping HU(s) planned", [r.message.cartons]), indicator: "green"});
+      frm.reload_doc();
+    }), __("Actions"));
+  }
   if (frm.doc.docstatus === 1 && !frm.doc.closed_short && frappe.user.has_role(["WMS Supervisor", "WMS Administrator", "System Manager"])) {
     frm.add_custom_button(__("Split Delivery"), () => {
       const open = frm.doc.items.filter(r => flt(r.requested_quantity) - Math.max(flt(r.allocated_quantity), flt(r.picked_quantity), flt(r.packed_quantity), flt(r.issued_quantity)) > 0);
