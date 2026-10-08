@@ -13,6 +13,7 @@
     "company",
     "erpnext_warehouse",
     "default_receiving_bin",
+    "production_receiving_bin",
     "default_shipping_bin",
     "default_difference_bin",
     "default_picking_staging_bin",
@@ -335,6 +336,13 @@
       "default": "0",
       "depends_on": "opportunistic_cross_docking",
       "description": "Only deliveries due within this many days take received goods directly. 0 = no limit."
+    },
+    {
+      "fieldname": "production_receiving_bin",
+      "label": "Production Receiving Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Where goods received from manufacturing arrive first. Blank = the default receiving bin."
     }
   ],
   "autoname": "field:warehouse_code",

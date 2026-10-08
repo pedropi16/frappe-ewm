@@ -16,6 +16,8 @@
     "stock_type",
     "hu_type",
     "source_storage_type",
+    "receipt_origin",
+    "production_supply_area",
     "destination_storage_type",
     "search_sequence",
     "destination_section",
@@ -130,6 +132,21 @@
       "fieldtype": "Data",
       "depends_on": "eval:doc.strategy=='Custom'",
       "description": "Name registered by an app under hooks.py wms_putaway_strategies: a function (bins, context) -> bins, best first."
+    },
+    {
+      "fieldname": "receipt_origin",
+      "label": "Goods Receipt From",
+      "fieldtype": "Select",
+      "options": "\nProduction",
+      "description": "Only for goods received from manufacturing (a Work Order); blank = every receipt."
+    },
+    {
+      "fieldname": "production_supply_area",
+      "label": "Production Supply Area",
+      "fieldtype": "Link",
+      "options": "Production Supply Area",
+      "depends_on": "eval:doc.receipt_origin=='Production'",
+      "description": "Only for output of this PSA; blank = any."
     }
   ],
   "autoname": "BDR-.#####",

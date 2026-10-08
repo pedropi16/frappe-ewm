@@ -41,7 +41,9 @@
     "erpnext_stock_entry",
     "country_of_origin",
     "special_stock_type",
-    "special_stock_ref"
+    "special_stock_ref",
+    "receipt_origin",
+    "production_supply_area"
   ],
   "fields": [
     {
@@ -276,6 +278,20 @@
       "fieldname": "special_stock_ref",
       "label": "Special Stock Reference",
       "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "receipt_origin",
+      "label": "Goods Receipt From",
+      "fieldtype": "Select",
+      "options": "\nProduction",
+      "read_only": 1
+    },
+    {
+      "fieldname": "production_supply_area",
+      "label": "Production Supply Area",
+      "fieldtype": "Link",
+      "options": "Production Supply Area",
       "read_only": 1
     }
   ],

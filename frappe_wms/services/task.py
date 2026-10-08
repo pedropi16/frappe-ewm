@@ -82,7 +82,8 @@ def create_tasks_for_request(request_name, batch_key=None):
             destination_bin = determine_destination_bin({"warehouse": request.warehouse, "activity": process_type.activity, "item": request.product,
                 "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type,
                 "incoming_weight": incoming_weight, "incoming_volume": incoming_volume, "incoming_quantity": chunk_qty, "destination_hu": request.destination_hu or request.source_hu,
-                "forced_storage_type": process_type.default_destination_storage_type, "reserved_hu_counts": reserved_hu_counts})
+                "forced_storage_type": process_type.default_destination_storage_type, "reserved_hu_counts": reserved_hu_counts,
+                "receipt_origin": request.get("receipt_origin"), "production_supply_area": request.get("production_supply_area")})
             reserved_hu_counts[destination_bin] = reserved_hu_counts.get(destination_bin, 0) + 1
         idempotency_key = f"WT:{request.name}" if len(chunks) == 1 else f"WT:{request.name}:{len(created) + 1}"
         task = frappe.get_doc({"doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": task_type, "warehouse": request.warehouse, "product": request.product, "planned_quantity": chunk_qty, "stock_uom": request.stock_uom, "source_bin": source_bin, "destination_bin": destination_bin, "source_hu": request.source_hu, "destination_hu": request.destination_hu, "batch_no": request.batch_no, "serial_no": request.serial_no, "stock_type_from": request.stock_type, "stock_type_to": request.stock_type, **dim_values(request), "movement_type": movement_type, "priority": priority, "status": "Open", "idempotency_key": idempotency_key})

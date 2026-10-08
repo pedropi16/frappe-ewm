@@ -40,7 +40,7 @@ def build_task_for_step(request, step, predecessor):
         destination_bin = determine_destination_bin({
             "warehouse": request.warehouse, "activity": process_type.activity, "item": request.product,
             "stock_type": request.stock_type, "hu_type": hu_type, "source_storage_type": source_storage_type,
-            "destination_hu": source_hu,
+            "destination_hu": source_hu, "receipt_origin": request.get("receipt_origin"), "production_supply_area": request.get("production_supply_area"),
         })
     task = frappe.get_doc({
         "doctype": "Warehouse Task", "warehouse_request": request.name, "task_type": process_type.activity,

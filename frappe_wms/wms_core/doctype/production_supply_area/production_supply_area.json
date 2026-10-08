@@ -12,6 +12,7 @@
     "psa_code",
     "psa_name",
     "supply_bin",
+    "output_bin",
     "bins",
     "staging_mode",
     "workstations",
@@ -85,6 +86,13 @@
       "fieldtype": "Table",
       "options": "PSA Bin",
       "description": "More bins of this PSA (rack positions, line-side bins). The supply bin is the default; a control cycle can name another."
+    },
+    {
+      "fieldname": "output_bin",
+      "label": "Production Output Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Where finished goods of this area are received first (then put away by the Putaway rules for production receipts). Blank = the warehouse's production receiving bin."
     }
   ],
   "sort_field": "modified",

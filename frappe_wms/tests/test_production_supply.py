@@ -50,6 +50,7 @@ class TestProductionSupply(IntegrationTestCase):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "PSUP", "storage_type_name": "Production Supply", "storage_role": "Production Supply", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
         if not frappe.db.exists("Storage Type", f"{cls.warehouse}-GR"):
             frappe.get_doc({"doctype": "Storage Type", "warehouse": cls.warehouse, "storage_type_code": "GR", "storage_type_name": "Receiving", "storage_role": "Receiving", "capacity_check_method": "HU Count", "active": 1}).insert(ignore_permissions=True)
+        for code in ("SRC", "PSUP", "GR"): frappe.db.set_value("Storage Type", f"{cls.warehouse}-{code}", "allow_mixed_products", 1)  # the tests share these bins
         for bin_name, st in ((cls.source_bin, f"{cls.warehouse}-SRC"), (cls.psup_bin, f"{cls.warehouse}-PSUP"), (cls.recv_bin, f"{cls.warehouse}-GR")):
             if not frappe.db.exists("Storage Bin", bin_name):
                 frappe.get_doc({"doctype": "Storage Bin", "bin_code": bin_name, "warehouse": cls.warehouse, "storage_type": st, "active": 1, "sequence": 1}).insert(ignore_permissions=True)
@@ -141,6 +142,30 @@ class TestProductionSupply(IntegrationTestCase):
 
         balance = frappe.get_all("WMS Stock Balance", filters={"product": self.fg, "warehouse": self.warehouse}, fields=["quantity"])
         self.assertEqual(sum(b.quantity for b in balance), 5)
+
+    def test_manufactured_goods_arrive_at_the_psa_output_bin_and_are_put_away_by_the_production_rule(self):
+        for code, st in (("OUT", "GR"), ("FGST", "SRC")):
+            name = f"{self.warehouse}-{code}"
+            if not frappe.db.exists("Storage Bin", name):
+                frappe.get_doc({"doctype": "Storage Bin", "bin_code": name, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-{st}", "active": 1, "sequence": 3}).insert(ignore_permissions=True)
+        out_bin, fg_bin = f"{self.warehouse}-OUT", f"{self.warehouse}-FGST"
+        active = frappe.get_all("Production Supply Area", filters={"warehouse": self.warehouse, "active": 1}, pluck="name")
+        frappe.db.set_value("Production Supply Area", {"warehouse": self.warehouse}, "active", 0)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Output PSA", "supply_bin": self.psup_bin, "output_bin": out_bin}).insert(ignore_permissions=True)
+        rule = frappe.get_doc({"doctype": "Bin Determination Rule", "warehouse": self.warehouse, "activity": "Putaway", "active": 1, "priority": 0, "receipt_origin": "Production",
+                               "production_supply_area": psa.name, "fixed_destination_bin": fg_bin, "strategy": "Least Utilized Bin"}).insert(ignore_permissions=True)
+
+        def restore():  # the module's tests share one transaction: leave the other PSAs as they were
+            frappe.db.set_value("Production Supply Area", psa.name, "active", 0)
+            frappe.db.delete("Bin Determination Rule", {"name": rule.name})
+            for name in active: frappe.db.set_value("Production Supply Area", name, "active", 1)
+        self.addCleanup(restore)
+        wo = self._submit_work_order(qty=3)
+        result = create_fg_receipt_from_work_order(wo.name, self.warehouse, 3, frappe.generate_hash(length=10), hu_type="TEST-PSUP-PALLET")
+        self.assertEqual(frappe.db.get_value("Goods Receipt", result["goods_receipt"], "receiving_bin"), out_bin)
+        request = frappe.get_doc("Warehouse Request", result["warehouse_requests"][0])
+        self.assertEqual((request.receipt_origin, request.production_supply_area), ("Production", psa.name))
+        self.assertEqual(frappe.db.get_value("Warehouse Task", result["warehouse_tasks"][0], "destination_bin"), fg_bin)
 
     def test_pmr_staging_single_and_cross_order_and_backflushed_consumption(self):
         from frappe_wms.services import production_supply as ps

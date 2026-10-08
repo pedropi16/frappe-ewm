@@ -132,7 +132,7 @@ def determine_destination_bin(context):
     if context.get("item"): context["_indicators"] = product_indicators(context["item"], context["warehouse"]); context["section_indicator"] = context["_indicators"].get("storage_section_indicator")
     rules=frappe.get_all("Bin Determination Rule",filters={"active":1,"warehouse":context["warehouse"],"activity":context["activity"]},fields=["*"],order_by="priority asc")
     for rule in rules:
-        checks=("item","item_group","stock_type","hu_type","source_storage_type")
+        checks=("item","item_group","stock_type","hu_type","source_storage_type","receipt_origin","production_supply_area")
         if not all(not rule.get(key) or rule.get(key)==context.get(key) for key in checks): continue
         if rule.fixed_destination_bin: return rule.fixed_destination_bin
         if rule.strategy=="Manual Selection": frappe.throw(_("Bin determination rule {0} requires manual bin selection").format(rule.name))

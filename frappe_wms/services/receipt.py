@@ -173,7 +173,7 @@ def create_putaway_requests(receipt_name):
         owner, party = row.get("stock_owner"), row.get("entitled_party")
         if receipt.inbound_delivery and not (owner or party):
             owner, party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
-        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),**_origin(row, receipt.warehouse),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 
@@ -370,6 +370,15 @@ def _row_attrs(row):
     return out
 
 
+def _origin(row, warehouse):
+    """Goods received from manufacturing (an inbound delivery line sourced from a Work Order): its origin and the Production Supply Area that made it."""
+    if not row.get("inbound_delivery_item"): return {}
+    source_type, source = frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["source_document_type", "source_document_number"]) or (None, None)
+    if source_type != "Work Order" or not source: return {}
+    from frappe_wms.services.production_supply import output_psa
+    return {"receipt_origin": "Production", "production_supply_area": output_psa(source, warehouse)}
+
+
 def return_stock_type(item_type=None):
     """Stock type a customer return is expected in: its Return Item Type's, else QUALITY (always inspected)."""
     if not item_type: return "QUALITY"
@@ -435,7 +444,11 @@ def create_fg_receipt_from_work_order(work_order_name, warehouse, quantity, hand
     # already carries for exactly this, instead of a parallel doctype.
     require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
     wo = frappe.get_doc("Work Order", work_order_name)
-    receiving_bin = frappe.db.get_value("WMS Warehouse", warehouse, "default_receiving_bin")
+    from frappe_wms.services.production_supply import output_psa
+    psa = output_psa(work_order_name, warehouse)
+    # where manufactured goods arrive: their Production Supply Area's output bin, else the warehouse's production receiving bin, else its receiving bin
+    receiving_bin = (psa and frappe.db.get_value("Production Supply Area", psa, "output_bin")) or frappe.db.get_value("WMS Warehouse", warehouse, ["production_receiving_bin", "default_receiving_bin"])
+    if isinstance(receiving_bin, tuple): receiving_bin = receiving_bin[0] or receiving_bin[1]
     if not receiving_bin: frappe.throw(_("Warehouse {0} has no default receiving bin configured").format(warehouse))
     stock_uom = frappe.db.get_value("WMS Product", {"item": wo.production_item}, "stock_uom") or frappe.db.get_value("Item", wo.production_item, "stock_uom")
     handling_unit = get_or_create_handling_unit(handling_unit, hu_type, receiving_bin, warehouse)

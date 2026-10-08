@@ -40,6 +40,12 @@ def resolve_psa(warehouse, workstation=None):
     return only[0] if len(only) == 1 else None
 
 
+def output_psa(work_order, warehouse):
+    """The Production Supply Area a Work Order's finished goods come from: that of its first operation's workstation, else the warehouse's only one."""
+    workstations = frappe.get_all("Work Order Operation", filters={"parent": work_order, "parenttype": "Work Order"}, pluck="workstation", order_by="idx asc")
+    return resolve_psa(warehouse, next((w for w in workstations if w), None))
+
+
 def create_pmr(wo):
     warehouse, items = None, []
     workstations = {o.operation: o.workstation for o in wo.get("operations") or []}
