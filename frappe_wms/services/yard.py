@@ -296,7 +296,7 @@ def cockpit(warehouse):
                    next_action=NEXT_ACTION.get(a.status)) for a in booked]
     carried_in = {a.inbound_delivery for a in booked if a.inbound_delivery}
     carried_out = {a.shipment for a in booked if a.shipment}
-    inbound = [d for d in frappe.get_all("Inbound Delivery", filters={"warehouse": warehouse, "docstatus": 1, "closed_short": 0, "status": ["not in", ["Completed", "Cancelled"]]},
+    inbound = [d for d in frappe.get_all("Inbound Delivery", filters={"warehouse": warehouse, "docstatus": 1, "closed_short": 0, "status": ["in", ["Draft", "Expected", "Arrived", "Receiving", "Partially Received"]]},
                                           fields=["name", "supplier", "expected_arrival", "status"], order_by="expected_arrival asc") if d.name not in carried_in]
     open_shipments = frappe.get_all("WMS Shipment", filters={"warehouse": warehouse, "status": ["in", ["Planned", "Released", "Staging", "Ready to Load", "Loading"]]},
                                     fields=["name", "carrier", "route", "status", "total_weight"], order_by="creation asc")
