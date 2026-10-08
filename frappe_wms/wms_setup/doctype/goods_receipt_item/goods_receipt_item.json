@@ -21,7 +21,8 @@
     "discrepancy_code",
     "country_of_origin",
     "special_stock_type",
-    "special_stock_ref"
+    "special_stock_ref",
+    "destination_bin"
   ],
   "fields": [
     {
@@ -117,6 +118,13 @@
       "fieldname": "special_stock_ref",
       "label": "Special Stock Reference",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "destination_bin",
+      "label": "Direct Placement Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "description": "Put the goods away to exactly this bin instead of letting the putaway rules choose."
     }
   ],
   "sort_field": "modified",

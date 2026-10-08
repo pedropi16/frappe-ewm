@@ -7,6 +7,7 @@ from frappe_wms.services.determination import determine_process_type, determine_
 from frappe_wms.services.storage_process import first_step
 from frappe_wms.services.cross_dock import find_cross_dock_demand, reserve_cross_dock_demand, planned_matches, consume_plan
 from frappe_wms.services.handling_unit import get_or_create_handling_unit
+from frappe_wms.services.bin_rules import validate_destination_bin
 from frappe_wms.services.task import my_resource, create_tasks_for_request, OPEN_TASK_STATUSES, TASK_SUMMARY_FIELDS
 from frappe_wms.utils import require_role
 
@@ -130,13 +131,17 @@ def create_putaway_requests(receipt_name):
         # "Internal Move" process-type determination since physically it's the same kind of
         # bin-to-bin transfer; only the request/task type label is distinct, for traceability.
         remaining_qty = flt(row.quantity)
+        direct_bin = row.get("destination_bin")
+        if direct_bin:  # direct placement: exactly this bin, no cross-docking and no putaway rule
+            hu_type = frappe.db.get_value("Handling Unit", row.handling_unit, "hu_type") if row.handling_unit else None
+            validate_destination_bin(direct_bin, item=row.item, incoming_quantity=remaining_qty, stock_type=row.stock_type, hu_type=hu_type, batch_no=row.batch_no, destination_hu=row.handling_unit)
         # Planned cross-docking first: demand reserved for the expected delivery before the goods arrived (plan_cross_dock) - already reserved, so only routed here.
-        planned = planned_matches(row.inbound_delivery_item, remaining_qty) if row.inbound_delivery_item else []
+        planned = planned_matches(row.inbound_delivery_item, remaining_qty) if row.inbound_delivery_item and not direct_bin else []
         row_owner, row_party = row.get("stock_owner"), row.get("entitled_party")
         if receipt.inbound_delivery and not (row_owner or row_party):
             row_owner, row_party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
         special = _row_attrs(row).get("special_stock_ref")  # reserved stock is never cross-docked to someone else's delivery
-        cross_dock_matches = [m for _plan, m in planned] + ([] if special else find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned), row_owner, row_party))
+        cross_dock_matches = [m for _plan, m in planned] + ([] if special or direct_bin else find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned), row_owner, row_party))
         planned_by_match = {id(m): plan for plan, m in planned}
         if cross_dock_matches:
             cross_dock_process_type = determine_process_type(receipt.warehouse, "Internal Move", item=row.item, stock_type=row.stock_type, default="INTERNAL_MOVE")
@@ -165,6 +170,7 @@ def create_putaway_requests(receipt_name):
             })
         except frappe.ValidationError:
             storage_process = None
+            frappe.clear_messages()  # "no rule matched" is the normal case here, not something to show the user
         if storage_process:
             step = first_step(storage_process)
             if step:
@@ -173,7 +179,7 @@ def create_putaway_requests(receipt_name):
         owner, party = row.get("stock_owner"), row.get("entitled_party")
         if receipt.inbound_delivery and not (owner or party):
             owner, party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
-        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),**_origin(row, receipt.warehouse),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),**_origin(row, receipt.warehouse),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"destination_bin":direct_bin or None,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 
@@ -307,7 +313,30 @@ def _update_inbound_delivery_receipt_progress(delivery_name, items, sign=1):
         frappe.db.set_value("Inbound Delivery", delivery_name, {"receipt_status": "Not Received",
             "status": "Expected" if delivery.docstatus == 1 else "Draft"}, update_modified=False)
 
-def create_and_submit_goods_receipt(inbound_delivery, items):
+def _resolve_new_hus(items, delivery):
+    """A blank handling unit is a new one; "#1", "#2"... name new units several lines share (pack these lines together)."""
+    from frappe_wms.services.numbering import next_number
+    shared = {}
+    for item in items:
+        hu = (item.get("handling_unit") or "").strip()
+        if hu and not hu.startswith("#"):
+            item["handling_unit"] = hu
+            continue
+        hu_type = item.get("hu_type") or frappe.db.get_single_value("WMS Settings", "default_handling_unit_type")
+        if hu and hu in shared:
+            item["handling_unit"] = shared[hu]
+            continue
+        if not hu_type: frappe.throw(_("Choose a Handling Unit Type for the new handling unit"))
+        internal = frappe.db.get_value("Handling Unit Type", hu_type, "numbering_mode") == "Internal"
+        number = None if internal else next_number("Handling Unit", warehouse=delivery.warehouse, hu_type=hu_type)
+        if internal:
+            from frappe_wms.services.handling_unit import create_handling_unit
+            number = create_handling_unit(None, hu_type, delivery.receiving_bin, None, delivery.warehouse)["name"]
+        item["handling_unit"] = number
+        if hu: shared[hu] = number
+
+
+def create_and_submit_goods_receipt(inbound_delivery, items, create_tasks=True):
     # items: [{inbound_delivery_item, item, quantity, stock_uom, handling_unit, stock_type, batch_no, serial_no, hu_type}]
     # hu_type is optional when handling_unit doesn't already exist - it falls back to
     # WMS Settings.default_handling_unit_type so a scan of a fresh pallet/carton auto-registers
@@ -322,6 +351,7 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     for item in items:
         if flt(item.get("quantity")) <= 0: frappe.throw(_("Receipt quantity for {0} must be greater than zero").format(item.get("item")))
     _validate_receipt_quantities(delivery, items)
+    _resolve_new_hus(items, delivery)
     for item in items:
         item["handling_unit"] = get_or_create_handling_unit(
             item.get("handling_unit"), item.get("hu_type"), delivery.receiving_bin, delivery.warehouse,
@@ -336,10 +366,61 @@ def create_and_submit_goods_receipt(inbound_delivery, items):
     gr.flags.ignore_permissions = True
     gr.submit()
     request_names = create_putaway_requests(gr.name)
-    # The goods are received either way; a putaway with no free bin waits in the Monitor.
+    # The goods are received either way; a putaway with no free bin waits in the Monitor - so does one the user chose to plan later.
     from frappe_wms.services.task import plan_requests
-    task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
+    if create_tasks: task_names, unplanned = plan_requests(request_names, batch_key=frappe.generate_hash(length=10))
+    else: task_names, unplanned = [], list(request_names)
     return {"goods_receipt": gr.name, "warehouse_requests": request_names, "warehouse_tasks": task_names, "unplanned_requests": unplanned}
+
+def _open_requests(delivery_name):
+    receipts = frappe.get_all("Goods Receipt", filters={"inbound_delivery": delivery_name, "docstatus": 1}, pluck="name")
+    if not receipts: return []
+    return frappe.get_all("Warehouse Request", filters={"reference_doctype": "Goods Receipt", "reference_name": ["in", receipts], "status": ["in", ["Open", "Partially Tasked"]]},
+                          fields=["name", "request_type", "product", "requested_quantity", "created_quantity", "source_hu", "destination_bin", "status"], order_by="creation asc")
+
+
+def plan_open_putaway(inbound_delivery, destination_bin=None):
+    """Creates the tasks of the delivery's receipts that still have none - optionally putting all of it away to one bin (direct placement)."""
+    require_role("WMS Operator", "WMS Receiver", "WMS Supervisor")
+    requests = [r for r in _open_requests(inbound_delivery) if r.request_type == "Putaway"]
+    if not requests: frappe.throw(_("Nothing is waiting for tasks on {0}").format(inbound_delivery))
+    if destination_bin:
+        if frappe.db.get_value("Storage Bin", destination_bin, "warehouse") != frappe.db.get_value("Inbound Delivery", inbound_delivery, "warehouse"):
+            frappe.throw(_("Storage Bin {0} is not in the delivery's warehouse").format(destination_bin))
+        for r in requests:
+            hu_type = frappe.db.get_value("Handling Unit", r.source_hu, "hu_type") if r.source_hu else None
+            validate_destination_bin(destination_bin, item=r.product, incoming_quantity=flt(r.requested_quantity) - flt(r.created_quantity), stock_type="AVAILABLE", hu_type=hu_type, destination_hu=r.source_hu)
+            frappe.db.set_value("Warehouse Request", r.name, "destination_bin", destination_bin)
+    from frappe_wms.services.task import plan_requests
+    tasks, unplanned = plan_requests([r.name for r in requests], batch_key=frappe.generate_hash(length=10))
+    return {"warehouse_tasks": tasks, "unplanned_requests": unplanned}
+
+
+def inbound_overview(inbound_delivery):
+    """Everything the Inbound Monitor shows of one delivery: lines, receipts, the handling units received into, the putaway requests and their tasks."""
+    require_role("WMS Operator", "WMS Receiver", "WMS Supervisor", "WMS Inventory Controller", "WMS Auditor")
+    doc = frappe.get_doc("Inbound Delivery", inbound_delivery)
+    items = [{"name": r.name, "line_number": r.line_number, "item": r.item, "item_name": r.item_name, "expected": flt(r.expected_quantity), "received": flt(r.received_quantity),
+              "open": max(flt(r.expected_quantity) - flt(r.received_quantity), 0), "stock_uom": r.stock_uom, "status": r.status} for r in doc.items]
+    receipts = frappe.get_all("Goods Receipt", filters={"inbound_delivery": inbound_delivery}, fields=["name", "docstatus", "creation"], order_by="creation asc")
+    rows = frappe.get_all("Goods Receipt Item", filters={"parent": ["in", [r.name for r in receipts] or [""]]}, fields=["parent", "item", "quantity", "handling_unit", "batch_no", "serial_no", "destination_bin"])
+    hus = {}
+    for r in rows:
+        if not r.handling_unit: continue
+        hu = hus.setdefault(r.handling_unit, {"handling_unit": r.handling_unit, "lines": []})
+        hu["lines"].append({"item": r.item, "quantity": flt(r.quantity), "batch_no": r.batch_no, "serial_no": r.serial_no, "destination_bin": r.destination_bin})
+    for name, hu in hus.items():
+        hu.update(frappe.db.get_value("Handling Unit", name, ["hu_type", "current_bin", "status"], as_dict=True) or {})
+    refs = [r.name for r in receipts]
+    requests = frappe.get_all("Warehouse Request", filters={"reference_doctype": "Goods Receipt", "reference_name": ["in", refs or [""]]},
+                              fields=["name", "request_type", "product", "requested_quantity", "created_quantity", "source_hu", "destination_bin", "status"], order_by="creation asc")
+    tasks = frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", [r.name for r in requests] or [""]]},
+                           fields=["name", "task_type", "status", "product", "planned_quantity", "confirmed_quantity", "source_bin", "destination_bin", "source_hu", "warehouse_request"], order_by="creation asc")
+    return {"delivery": {"name": doc.name, "number": doc.inbound_delivery_number, "supplier": doc.supplier, "status": doc.status, "receipt_status": doc.receipt_status, "docstatus": doc.docstatus,
+                         "receiving_bin": doc.receiving_bin, "warehouse": doc.warehouse},
+            "items": items, "receipts": receipts, "handling_units": list(hus.values()), "requests": requests, "tasks": tasks,
+            "open_requests": [r.name for r in _open_requests(inbound_delivery) if r.request_type == "Putaway"]}
+
 
 def _production_supplier():
     # Inbound Delivery's supplier field is mandatory (it's normally an external-receiving

@@ -206,6 +206,11 @@ def cleanup_adjustments():
     frappe.set_user("Administrator")
     for dt in ("WMS Stock Adjustment", "WMS Posting Change"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabGoods Receipt Item` where parent in (select name from `tabGoods Receipt` where warehouse=%s)", WAREHOUSE)
+    for dt in ("Goods Receipt", "Warehouse Request", "Warehouse Order"):
+        frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabHandling Unit Event` where handling_unit in (select name from `tabHandling Unit` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabHandling Unit` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
 
 

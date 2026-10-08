@@ -43,8 +43,22 @@ def receiving_worklist(inbound_delivery):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_and_submit_goods_receipt(inbound_delivery, items, idempotency_key=None):
-    return run_once(idempotency_key, lambda: _create_and_submit_goods_receipt(inbound_delivery, parse_json(items, "items")))
+def create_and_submit_goods_receipt(inbound_delivery, items, idempotency_key=None, create_tasks=1):
+    return run_once(idempotency_key, lambda: _create_and_submit_goods_receipt(inbound_delivery, parse_json(items, "items"), bool(int(create_tasks))))
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def plan_open_putaway(inbound_delivery, destination_bin=None):
+    from frappe_wms.services.receipt import plan_open_putaway as _plan
+    return _plan(inbound_delivery, destination_bin or None)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def inbound_overview(inbound_delivery):
+    from frappe_wms.services.receipt import inbound_overview as _overview
+    return _overview(inbound_delivery)
 
 @frappe.whitelist()
 @retry_on_deadlock
