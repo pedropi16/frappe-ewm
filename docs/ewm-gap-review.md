@@ -47,3 +47,9 @@ Update: vehicle grouping done (WMS Vehicle groups transportation units; one appo
 Update: yard roles, recurring appointments, carrier capacity, return item types done. HU-based yard moves deliberately not built: receiving here creates the HUs at the receiving bin directly, so there is no HU-on-TU stage to move.
 
 Update: per-diem storage billing, slotting index (ABC), labor shifts + indirect labor done.
+
+## Not built, with the reason
+- HU-based yard moves: receiving creates the HUs at the receiving bin, so there is no HU-on-TU stage to move.
+- Fuller stock key (country of origin, special stock, PSA): changes the stock balance identity used by every posting, allocation and ERPNext mirror; needs its own migration plan.
+- TM freight orders, GTS/customs, MES/JIT/kanban, EDI and carrier APIs: need the external system to target; the OpenAPI description and webhooks are the integration surface for now.
+- Opportunistic / transportation cross-docking: cross-docking exists for planned demand only.
