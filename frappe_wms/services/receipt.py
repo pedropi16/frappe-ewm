@@ -82,6 +82,8 @@ def post_goods_receipt(doc):
         if doc.inbound_delivery and not (owner or party):
             owner, party = frappe.db.get_value("Inbound Delivery", doc.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
         if owner or party: entry.update({"stock_owner": owner, "entitled_party": party})
+        attrs = _row_attrs(row)
+        if any(attrs.values()): entry.update(attrs)
         if product and product.shelf_life_days:
             entry["shelf_life_expiry_date"] = add_days(getdate(doc.posting_datetime), product.shelf_life_days)
         entries.append(entry)
@@ -133,7 +135,8 @@ def create_putaway_requests(receipt_name):
         row_owner, row_party = row.get("stock_owner"), row.get("entitled_party")
         if receipt.inbound_delivery and not (row_owner or row_party):
             row_owner, row_party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
-        cross_dock_matches = [m for _plan, m in planned] + find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned), row_owner, row_party)
+        special = _row_attrs(row).get("special_stock_ref")  # reserved stock is never cross-docked to someone else's delivery
+        cross_dock_matches = [m for _plan, m in planned] + ([] if special else find_cross_dock_demand(receipt.warehouse, row.item, row.stock_type, remaining_qty - sum(m["quantity"] for _plan, m in planned), row_owner, row_party))
         planned_by_match = {id(m): plan for plan, m in planned}
         if cross_dock_matches:
             cross_dock_process_type = determine_process_type(receipt.warehouse, "Internal Move", item=row.item, stock_type=row.stock_type, default="INTERNAL_MOVE")
@@ -170,7 +173,7 @@ def create_putaway_requests(receipt_name):
         owner, party = row.get("stock_owner"), row.get("entitled_party")
         if receipt.inbound_delivery and not (owner or party):
             owner, party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
-        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
+        req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
         req.insert(ignore_permissions=True); names.append(req.name)
     return names
 
@@ -357,6 +360,15 @@ def _customer_returns_supplier():
     if not frappe.db.exists("Supplier", name):
         frappe.get_doc({"doctype": "Supplier", "supplier_name": name, "supplier_type": "Company"}).insert(ignore_permissions=True)
     return name
+
+def _row_attrs(row):
+    """Country of origin / special stock of a receipt row: its own, else the inbound delivery line's."""
+    keys = ("country_of_origin", "special_stock_type", "special_stock_ref")
+    out = {k: row.get(k) for k in keys}
+    if not any(out.values()) and row.get("inbound_delivery_item"):
+        out = dict(zip(keys, frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, list(keys)) or (None,) * 3))
+    return out
+
 
 def return_stock_type(item_type=None):
     """Stock type a customer return is expected in: its Return Item Type's, else QUALITY (always inspected)."""

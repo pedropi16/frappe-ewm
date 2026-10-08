@@ -27,7 +27,10 @@
     "purchase_order",
     "purchase_order_item",
     "status",
-    "return_item_type"
+    "return_item_type",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref"
   ],
   "fields": [
     {
@@ -169,6 +172,24 @@
       "fieldtype": "Link",
       "options": "Return Item Type",
       "read_only": 1
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country"
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject",
+      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it."
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data"
     }
   ],
   "sort_field": "modified",

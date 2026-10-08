@@ -28,7 +28,8 @@
     "source_document_type",
     "source_document_number",
     "source_document_line",
-    "status"
+    "status",
+    "required_country_of_origin"
   ],
   "fields": [
     {
@@ -175,6 +176,13 @@
       "default": "Open",
       "read_only": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "required_country_of_origin",
+      "label": "Required Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country",
+      "description": "Allocation only takes stock of this origin."
     }
   ],
   "sort_field": "modified",

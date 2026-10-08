@@ -148,7 +148,7 @@ def _source_lines(warehouse, product, psa, limit=5):
 def _raw_source_lines(warehouse, product, psa, limit):
     return frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.available_quantity from `tabWMS Stock Balance` b
         join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type
-        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin not in %s and ifnull(b.stock_owner, '') = '' and ifnull(b.entitled_party, '') = ''
+        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin not in %s and ifnull(b.stock_owner, '') = '' and ifnull(b.entitled_party, '') = '' and ifnull(b.special_stock_ref, '') = ''
         and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc limit %s""",
         (warehouse, product, tuple(psa_bins(psa) + _deco_locations(psa)) or ("",), limit), as_dict=True)
 
@@ -410,7 +410,7 @@ def _book_out(psa, product, quantity, reference_doctype, reference_name, key, di
     if direct:
         balances = frappe.db.sql("""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.stock_type, b.stock_uom, b.available_quantity as quantity from `tabWMS Stock Balance` b
             join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE'
-            and b.available_quantity>0 and b.storage_bin not in %s and ifnull(b.stock_owner, '') = '' and ifnull(b.entitled_party, '') = '' and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc for update""",
+            and b.available_quantity>0 and b.storage_bin not in %s and ifnull(b.stock_owner, '') = '' and ifnull(b.entitled_party, '') = '' and ifnull(b.special_stock_ref, '') = '' and sb.removal_blocked=0 and st.storage_role in ('Storage', '') order by b.first_receipt_date asc, b.name asc for update""",
             (warehouse, product, bins), as_dict=True)
     else:
         balances = frappe.db.sql("""select storage_bin, handling_unit, batch_no, serial_no, stock_type, stock_uom, quantity from `tabWMS Stock Balance` where storage_bin in %s and product=%s and quantity>0

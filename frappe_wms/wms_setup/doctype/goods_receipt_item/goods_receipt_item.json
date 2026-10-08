@@ -18,7 +18,10 @@
     "stock_type",
     "stock_owner",
     "entitled_party",
-    "discrepancy_code"
+    "discrepancy_code",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref"
   ],
   "fields": [
     {
@@ -96,6 +99,24 @@
       "options": "WMS Stock Owner",
       "in_standard_filter": 1,
       "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country"
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject",
+      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it."
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data"
     }
   ],
   "sort_field": "modified",

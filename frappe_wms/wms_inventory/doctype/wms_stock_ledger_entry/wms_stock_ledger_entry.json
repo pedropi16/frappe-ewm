@@ -28,7 +28,10 @@
     "reversal_of",
     "idempotency_key",
     "posting_user",
-    "posting_device"
+    "posting_device",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref"
   ],
   "fields": [
     {
@@ -182,6 +185,27 @@
       "options": "WMS Stock Owner",
       "in_standard_filter": 1,
       "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country",
+      "read_only": 1
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject",
+      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it.",
+      "read_only": 1
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data",
+      "read_only": 1
     }
   ],
   "autoname": "hash",

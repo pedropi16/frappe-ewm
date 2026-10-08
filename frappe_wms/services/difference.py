@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
-from frappe_wms.services.stock import post_entries, transfer_stock
+from frappe_wms.services.stock import OWNER_KEYS, dim_values, post_entries, transfer_stock
 from frappe_wms.utils import require_role
 
 # SAP EWM's Difference Analyzer, scoped to what this app's own Warehouse Task confirmation flow
@@ -34,7 +34,7 @@ def record_over_difference(task, excess_qty, idempotency_key):
         "handling_unit": None, "storage_bin": bin_name, "stock_type": stock_type,
         "quantity": excess_qty, "stock_uom": task.stock_uom, "movement_type": "701", "reference_line": task.name,
     }
-    if task.get("stock_owner") or task.get("entitled_party"): entry.update({"stock_owner": task.stock_owner, "entitled_party": task.entitled_party})  # the extra goods are the task's owner's
+    if any(task.get(k) for k in OWNER_KEYS): entry.update(dim_values(task))  # the extra goods are the task's owner's
     post_entries([entry], task.doctype, task.name, idempotency_key)
     doc = frappe.get_doc({
         "doctype": "WMS Task Difference", "warehouse": task.warehouse, "warehouse_task": task.name, "task_type": task.task_type,

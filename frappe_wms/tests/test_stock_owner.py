@@ -138,3 +138,71 @@ class TestStockOwner(IntegrationTestCase):
         delivery.submit()
         self.assertEqual(find_cross_dock_demand(self.wh, item, "AVAILABLE", 4), [], "owner-less goods do not serve OWN-A's delivery")
         self.assertEqual([m["delivery"] for m in find_cross_dock_demand(self.wh, item, "AVAILABLE", 4, "OWN-A")], [delivery.name])
+
+    # ------------------------------------------------------------------ country of origin / special stock
+
+    def _attr_item(self):
+        """A product of its own, so these tests never mix with stock the other tests leave behind."""
+        item = "TEST-ATTR-ITEM"
+        if not frappe.db.exists("Item", item):
+            frappe.get_doc({"doctype": "Item", "item_code": item, "item_name": item, "item_group": frappe.get_all("Item Group", limit=1, pluck="name")[0], "stock_uom": self.uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        frappe.db.delete("WMS Stock Balance", {"warehouse": self.wh, "product": item})
+        frappe.db.delete("WMS Stock Ledger Entry", {"warehouse": self.wh, "product": item})
+        return item
+
+    def _apost(self, item, qty, bin_name, **extra):
+        post_entries([{**self._entry(qty, bin_name, **extra), "product": item}], "Storage Bin", self.bins[bin_name], f"test-attr:{frappe.generate_hash(length=8)}")
+
+    def _qty_attrs(self, bin_name, **attrs):
+        return frappe.db.get_value("WMS Stock Balance", {"storage_bin": self.bins[bin_name], "product": self.attr, **attrs}, "quantity") or 0
+
+    def test_attribute_stock_is_kept_apart_moves_keep_it_and_rebuild_agrees(self):
+        values = {"warehouse": "W", "product": "P", "batch_no": None, "serial_no": None, "handling_unit": "H", "storage_bin": "B", "stock_type": "AVAILABLE"}
+        self.assertNotEqual(_balance_name({**values, "country_of_origin": "Spain"}), _balance_name(values))
+        self.attr = item = self._attr_item()
+        self._apost(item, 10, "B3")
+        self._apost(item, 6, "B3", country_of_origin="Spain")
+        self._apost(item, 2, "B3", special_stock_type="Sales Order", special_stock_ref="SO-X")
+        self.assertEqual((self._qty_attrs("B3", country_of_origin=["in", ["", None]], special_stock_ref=["in", ["", None]]), self._qty_attrs("B3", country_of_origin="Spain"), self._qty_attrs("B3", special_stock_ref="SO-X")), (10, 6, 2))
+        # a move naming only the country takes it from the Spanish stock; one naming nothing is ambiguous
+        src = {"warehouse": self.wh, "product": item, "storage_bin": self.bins["B3"], "stock_type": "AVAILABLE", "stock_uom": self.uom}
+        dst = {"storage_bin": self.bins["B1"], "stock_type": "AVAILABLE"}
+        kw = dict(movement_type="301", reference_doctype="Storage Bin", reference_name=self.bins["B3"])
+        transfer_stock(source={**src, "country_of_origin": "Spain"}, destination=dst, quantity=4, idempotency_key=f"test-attr:{frappe.generate_hash(length=6)}", **kw)
+        self.assertEqual((self._qty_attrs("B3", country_of_origin="Spain"), self._qty_attrs("B1", country_of_origin="Spain")), (2, 4), "the moved stock is still Spanish")
+        before = {(r.country_of_origin or None, r.special_stock_ref or None, r.storage_bin): r.quantity for r in frappe.get_all("WMS Stock Balance", filters={"product": item, "warehouse": self.wh, "quantity": [">", 0]}, fields=["country_of_origin", "special_stock_ref", "storage_bin", "quantity"])}
+        rebuild_balances(warehouse=self.wh, product=item)
+        after = {(r.country_of_origin or None, r.special_stock_ref or None, r.storage_bin): r.quantity for r in frappe.get_all("WMS Stock Balance", filters={"product": item, "warehouse": self.wh, "quantity": [">", 0]}, fields=["country_of_origin", "special_stock_ref", "storage_bin", "quantity"])}
+        self.assertEqual(before, after)
+
+    def test_special_stock_is_only_for_its_order_and_country_can_be_required(self):
+        from frappe_wms.services.allocation import allocate_delivery
+        item = self._attr_item()
+        self._apost(item, 5, "B2", special_stock_type="Sales Order", special_stock_ref="SO-RES")
+        self._apost(item, 5, "B2", country_of_origin="Spain")
+        def delivery(qty=4, **line):
+            d = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "customer": self.customer, "delivery_date": frappe.utils.nowdate(),
+                "staging_bin": self.bins["STAGE"], "items": [{"line_number": 1, "item": item, "requested_quantity": qty, "stock_uom": self.uom, "required_stock_type": "AVAILABLE", **line}]}).insert(ignore_permissions=True)
+            d.submit()
+            return d
+        taken = lambda d: {(a.special_stock_ref or None, a.country_of_origin or None): a.allocated_quantity for a in frappe.get_all("Stock Allocation", filters={"outbound_delivery": d.name}, fields=["special_stock_ref", "country_of_origin", "allocated_quantity"])}
+        plain = delivery(4)
+        allocate_delivery(plain.name)
+        self.assertNotIn("SO-RES", [k[0] for k in taken(plain)], "reserved stock is never given to someone else's delivery")
+        spanish = delivery(3, required_country_of_origin="Spain")
+        allocate_delivery(spanish.name)
+        self.assertTrue(all(k[1] == "Spain" for k in taken(spanish)), taken(spanish))
+        mine = delivery(5)
+        frappe.db.set_value("Outbound Delivery Item", mine.items[0].name, "sales_order", None)  # sales_order is a Link: the reservation matches on its name
+        frappe.db.sql("update `tabOutbound Delivery Item` set sales_order=%s where name=%s", ("SO-RES", mine.items[0].name))
+        allocate_delivery(mine.name)
+        self.assertEqual(taken(mine).get(("SO-RES", None)), 5, "the order's own reserved stock is taken first")
+
+    def test_a_receipt_row_takes_origin_and_reservation_from_its_inbound_line(self):
+        from frappe_wms.services.receipt import _row_attrs
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "supplier": self.supplier, "receiving_bin": self.bins["STAGE"],
+            "items": [{"line_number": 1, "item": self.item, "expected_quantity": 3, "stock_uom": self.uom, "expected_stock_type": "AVAILABLE", "country_of_origin": "Spain", "special_stock_type": "Project", "special_stock_ref": "PRJ-1"}]}).insert(ignore_permissions=True)
+        row = frappe._dict(inbound_delivery_item=ind.items[0].name, country_of_origin=None, special_stock_type=None, special_stock_ref=None)
+        self.assertEqual(_row_attrs(row), {"country_of_origin": "Spain", "special_stock_type": "Project", "special_stock_ref": "PRJ-1"})
+        row.country_of_origin = "France"
+        self.assertEqual(_row_attrs(row)["country_of_origin"], "France", "the receipt row's own value wins")

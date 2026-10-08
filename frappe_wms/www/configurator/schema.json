@@ -5080,6 +5080,10 @@
      "label": "Items \u2192 Return Item Type"
     },
     {
+     "target": "Country",
+     "label": "Items \u2192 Country of Origin"
+    },
+    {
      "target": "DocType",
      "label": "ERP Source Document Type"
     },
@@ -5163,6 +5167,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Items \u2192 Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Items \u2192 Country of Origin"
     },
     {
      "target": "Goods Receipt",
@@ -5452,6 +5460,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Country of Origin"
     }
    ]
   },
@@ -5594,6 +5606,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Country of Origin"
     }
    ]
   },
@@ -5776,6 +5792,10 @@
      "label": "Items \u2192 Sales Order"
     },
     {
+     "target": "Country",
+     "label": "Items \u2192 Required Country of Origin"
+    },
+    {
      "target": "Handling Unit Type",
      "label": "Planned Shipping HUs \u2192 Packaging"
     },
@@ -5851,6 +5871,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Country of Origin"
     }
    ]
   },
@@ -6131,6 +6155,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Country of Origin"
     }
    ]
   },
@@ -6196,6 +6224,10 @@
     {
      "target": "WMS Stock Owner",
      "label": "Party Entitled to Dispose"
+    },
+    {
+     "target": "Country",
+     "label": "Country of Origin"
     }
    ]
   },

@@ -15,6 +15,7 @@ def find_cross_dock_demand(warehouse, item, stock_type, quantity, owner=None, pa
             and di.required_stock_type=%(stock_type)s and di.requested_quantity > di.allocated_quantity
             and d.staging_bin is not null and d.staging_bin != ''
             and ifnull(d.stock_owner, '') = %(owner)s and ifnull(d.entitled_party, '') = %(party)s
+            and ifnull(di.required_country_of_origin, '') = ''
         order by d.delivery_date asc, d.creation asc
     """, {"warehouse": warehouse, "item": item, "stock_type": stock_type, "owner": owner or "", "party": party or ""}, as_dict=True)
     matched = []

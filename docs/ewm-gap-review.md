@@ -50,6 +50,7 @@ Update: per-diem storage billing, slotting index (ABC), labor shifts + indirect 
 
 ## Not built, with the reason
 - HU-based yard moves: receiving creates the HUs at the receiving bin, so there is no HU-on-TU stage to move.
-- Fuller stock key (country of origin, special stock, PSA): changes the stock balance identity used by every posting, allocation and ERPNext mirror; needs its own migration plan.
 - TM freight orders, GTS/customs, MES/JIT/kanban, EDI and carrier APIs: need the external system to target; the OpenAPI description and webhooks are the integration surface for now.
 - Opportunistic / transportation cross-docking: cross-docking exists for planned demand only.
+
+Update: stock key extended with country of origin and special stock (sales order / project), same pattern as owner/party (identity only when set). PSA stays a location concept (Production Supply Area bins), not a stock attribute.
