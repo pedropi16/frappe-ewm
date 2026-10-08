@@ -14,7 +14,9 @@
     "staging_bin",
     "minimum_quantity",
     "maximum_quantity",
-    "active"
+    "active",
+    "source_storage_type",
+    "kanban_rule"
   ],
   "fields": [
     {
@@ -38,7 +40,7 @@
       "fieldname": "staging_method",
       "label": "Staging Method",
       "fieldtype": "Select",
-      "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption",
+      "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption\nKanban",
       "default": "Pick Parts",
       "reqd": 1,
       "in_list_view": 1,
@@ -69,6 +71,23 @@
       "fieldtype": "Check",
       "default": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "source_storage_type",
+      "label": "Refill From Storage Type",
+      "fieldtype": "Link",
+      "options": "Storage Type",
+      "depends_on": "eval:doc.staging_method=='Kanban'",
+      "mandatory_depends_on": "eval:doc.staging_method=='Kanban'",
+      "description": "Kanban: the storage type the kanban bin is refilled from."
+    },
+    {
+      "fieldname": "kanban_rule",
+      "label": "Replenishment Rule",
+      "fieldtype": "Link",
+      "options": "Replenishment Rule",
+      "read_only": 1,
+      "depends_on": "eval:doc.staging_method=='Kanban'"
     }
   ],
   "sort_field": "modified",

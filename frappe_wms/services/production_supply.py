@@ -58,11 +58,14 @@ def create_pmr(wo):
         items.append({"work_order_item": row.name, "product": row.item_code, "stock_uom": frappe.db.get_value("Item", row.item_code, "stock_uom"),
             "operation": row.get("operation"), "psa": resolve_psa(row_warehouse, workstations.get(row.get("operation")) or default_ws), "required_quantity": flt(row.required_qty)})
         cycle = control_cycle(items[-1]["psa"], row.item_code) if items[-1]["psa"] else None
-        if cycle and cycle.staging_method in ("Crate Parts", "Direct Consumption"): items[-1]["tasked_quantity"] = items[-1]["required_quantity"]  # nothing to stage per order
+        items[-1]["staging_method"] = cycle.staging_method if cycle else None
+        if cycle and cycle.staging_method in ("Crate Parts", "Direct Consumption", "Kanban"): items[-1]["tasked_quantity"] = items[-1]["required_quantity"]  # nothing to stage per order: a kanban bin supplies it
     if not items or not frappe.db.exists("Production Supply Area", {"warehouse": warehouse, "active": 1}): return None  # no PSA: the Work Order is staged directly (events/work_order)
     pmr = frappe.get_doc({"doctype": "Production Material Request", "work_order": wo.name, "warehouse": warehouse, "production_item": wo.production_item,
         "qty": wo.qty, "planned_date": getdate(wo.planned_start_date) if wo.get("planned_start_date") else None, "status": "Open", "items": items})
     pmr.insert(ignore_permissions=True)
+    for i in items:
+        if i.get("staging_method") == "Kanban": check_kanban(i["psa"], i["product"])  # the kanban bins of this order's materials are full before production starts
     for psa in {i["psa"] for i in items if i["psa"] and frappe.db.get_value("Production Supply Area", i["psa"], "staging_mode") == "Automatic"}:
         auto_stage(psa)
     return pmr.name
@@ -87,7 +90,7 @@ def psa_bins(psa):
 
 def control_cycle(psa, product):
     return frappe.db.get_value("Production Supply Control Cycle", {"production_supply_area": psa, "product": product, "active": 1},
-        ["name", "staging_method", "staging_bin", "minimum_quantity", "maximum_quantity"], as_dict=True)
+        ["name", "staging_method", "staging_bin", "minimum_quantity", "maximum_quantity", "source_storage_type", "kanban_rule"], as_dict=True)
 
 
 def staging_bin(psa, product):
@@ -317,6 +320,71 @@ def check_crate_parts(psa=None, product=None):
     return created
 
 
+def sync_kanban_rule(cycle):
+    """The Replenishment Rule behind a kanban cycle: its bin is refilled to the maximum when the stock falls to the minimum. Kept in step with the cycle."""
+    warehouse = frappe.db.get_value("Production Supply Area", cycle.production_supply_area, "warehouse")
+    active = int(bool(cycle.active) and cycle.staging_method == "Kanban")
+    values = {"warehouse": warehouse, "product": cycle.product, "storage_bin": cycle.staging_bin, "stock_type": "AVAILABLE", "minimum_quantity": cycle.minimum_quantity or 0,
+              "target_quantity": cycle.maximum_quantity, "source_storage_type": cycle.source_storage_type, "priority": "High", "active": active}
+    rule = cycle.kanban_rule or frappe.db.get_value("Replenishment Rule", {k: values[k] for k in ("warehouse", "product", "storage_bin", "stock_type")})
+    if rule:
+        frappe.db.set_value("Replenishment Rule", rule, values)
+    elif active:
+        rule = frappe.get_doc({"doctype": "Replenishment Rule", **values}).insert(ignore_permissions=True).name
+    if rule and cycle.kanban_rule != rule: frappe.db.set_value("Production Supply Control Cycle", cycle.name, "kanban_rule", rule, update_modified=False)
+
+
+def _kanban_state(c):
+    held = flt(frappe.db.sql("select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where storage_bin=%s and product=%s and quantity>0", (c.staging_bin, c.product))[0][0])
+    coming = flt(frappe.db.sql("""select coalesce(sum(planned_quantity - confirmed_quantity), 0) from `tabWarehouse Task` where docstatus=0 and destination_bin=%s and product=%s
+        and status in ('Open', 'On Hold', 'Available', 'Assigned', 'In Process', 'Partially Confirmed')""", (c.staging_bin, c.product))[0][0])
+    return held, coming
+
+
+def check_kanban(psa=None, product=None):
+    """Kanban: every kanban bin at or below its minimum is refilled (through its replenishment rule). Runs after consumption, when a PMR is created and on the schedule."""
+    from frappe_wms.services.replenishment import _replenish_for_rule
+    filters = {"active": 1, "staging_method": "Kanban", "kanban_rule": ["is", "set"], **({"production_supply_area": psa} if psa else {}), **({"product": product} if product else {})}
+    created = []
+    for c in frappe.get_all("Production Supply Control Cycle", filters=filters, fields=["kanban_rule"]):
+        frappe.db.savepoint("wms_kanban")
+        try:
+            task = _replenish_for_rule(frappe.get_doc("Replenishment Rule", c.kanban_rule))
+        except frappe.ValidationError:
+            frappe.db.rollback(save_point="wms_kanban")
+            frappe.clear_messages()
+            continue
+        if task: created.append(task)
+    return created
+
+
+def kanban_overview(psa):
+    """The PSA's kanban bins with their fill level - the data behind the kanban section of the staging app."""
+    require_role(*STAGE_ROLES)
+    out = []
+    for c in frappe.get_all("Production Supply Control Cycle", filters={"production_supply_area": psa, "staging_method": "Kanban", "active": 1},
+                            fields=["name", "product", "staging_bin", "minimum_quantity", "maximum_quantity"], order_by="staging_bin asc"):
+        held, coming = _kanban_state(c)
+        c.update({"held": held, "coming": coming, "state": "Empty" if held <= 0 else "Refill" if held <= flt(c.minimum_quantity) else "Full" if held >= flt(c.maximum_quantity) else "OK"})
+        out.append(c)
+    return out
+
+
+def kanban_signal(psa, product):
+    """An empty (or nearly empty) kanban container: refill the bin to its maximum now, whatever its minimum says."""
+    require_role(*STAGE_ROLES)
+    from frappe_wms.services.replenishment import _create_replenishment_request, _pending_request_exists
+    c = control_cycle(psa, product)
+    if not c or c.staging_method != "Kanban": frappe.throw(_("{0} has no kanban control cycle in {1}").format(product, psa))
+    if c.kanban_rule and _pending_request_exists(c.kanban_rule): frappe.throw(_("A refill of {0} is already under way").format(c.staging_bin))
+    c.product, c.production_supply_area = product, psa
+    held, coming = _kanban_state(c)
+    quantity = flt(c.maximum_quantity) - held - coming
+    if quantity <= 0: frappe.throw(_("{0} is already full").format(c.staging_bin))
+    return _create_replenishment_request(frappe.db.get_value("Production Supply Area", psa, "warehouse"), product, c.staging_bin, "AVAILABLE", quantity, c.source_storage_type,
+                                         reference_doctype="Replenishment Rule", reference_name=c.kanban_rule, priority="High")
+
+
 def return_unused(pmr_item):
     """Material staged for an order and not consumed goes back to storage (tasks from the PSA bins, destination by the usual putaway
     determination); the reservation is released as each task is confirmed."""
@@ -349,6 +417,7 @@ def run_auto_staging():
     for psa in frappe.get_all("Production Supply Area", filters={"active": 1, "staging_mode": "Automatic"}, pluck="name"):
         auto_stage(psa)
     check_crate_parts()
+    check_kanban()
     frappe.db.commit()
 
 
@@ -402,14 +471,16 @@ def _consume_line(pmr_name, product, quantity, reference_doctype, reference_name
             pool = pool_available(i.psa, product, lock=True)
             if want > own + pool + 0.000001:
                 frappe.throw(_("Only {0} {1} is staged in {2} for {3}; consume less or stage more first").format(own + pool, product, i.psa, pmr_name))
-        _book_out(i.psa, product, want, reference_doctype, reference_name, f"{key}:{i.name}", direct=direct)
+        _book_out(i.psa, product, want, reference_doctype, reference_name, f"{key}:{i.name}", direct=direct, prefer_bin=cycle.staging_bin if cycle and cycle.staging_method == "Kanban" else None)
         frappe.db.sql("update `tabProduction Material Request Item` set consumed_quantity=consumed_quantity+%s where name=%s", (want, i.name))
         left -= want
     _refresh_status(pmr_name)
-    for psa in {i.psa for i in items}: check_crate_parts(psa, product)  # consumption may have emptied a crate-parts bin
+    for psa in {i.psa for i in items}:
+        check_crate_parts(psa, product)  # consumption may have emptied a crate-parts bin
+        check_kanban(psa, product)  # ... or a kanban bin
 
 
-def _book_out(psa, product, quantity, reference_doctype, reference_name, key, direct=False):
+def _book_out(psa, product, quantity, reference_doctype, reference_name, key, direct=False, prefer_bin=None):
     """Book quantity out of the PSA's bins - or, for Direct Consumption, out of the storage bins the material sits in (oldest first)."""
     warehouse = frappe.db.get_value("Production Supply Area", psa, "warehouse")
     bins = tuple(psa_bins(psa))
@@ -421,6 +492,7 @@ def _book_out(psa, product, quantity, reference_doctype, reference_name, key, di
     else:
         balances = frappe.db.sql("""select storage_bin, handling_unit, batch_no, serial_no, stock_type, stock_uom, quantity from `tabWMS Stock Balance` where storage_bin in %s and product=%s and quantity>0
             order by first_receipt_date asc, name asc for update""", (bins, product), as_dict=True)
+        balances.sort(key=lambda b: b.storage_bin != prefer_bin)  # a kanban material is taken from its kanban bin first (stable: oldest first within)
     left, entries = flt(quantity), []
     for b in balances:
         take = min(left, flt(b.quantity))

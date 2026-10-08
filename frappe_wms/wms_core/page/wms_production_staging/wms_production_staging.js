@@ -6,7 +6,7 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
   const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Production Staging"), single_column: true });
   const esc = frappe.utils.escape_html;
   const call = (method, args) => frappe.call({ method: `frappe_wms.api.production_supply.${method}`, args }).then((r) => r.message);
-  const state = { rows: [], status: [] };
+  const state = { rows: [], status: [], kanban: [] };
 
   const psaField = page.add_field({ fieldname: "psa", label: __("Production Supply Area"), fieldtype: "Link", options: "Production Supply Area", change: () => load() });
   const methodField = page.add_field({ fieldname: "method", label: __("Staging Method"), fieldtype: "Select", options: "Single Order\nCross Order", default: "Single Order", change: () => render() });
@@ -15,6 +15,11 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
   page.add_inner_button(__("Refresh"), () => load());
   const $body = $(`<div class="wms-staging"></div>`).appendTo(page.main);
   $body.on("change", "select.wms-src", function () { setQty($(this).closest("tr")); });
+  $body.on("click", "button.wms-kanban-signal", async function () {
+    await call("kanban_signal", { psa: psa(), product: $(this).data("product") });
+    frappe.show_alert({ message: __("Refill of the kanban bin created"), indicator: "green" });
+    load();
+  });
   $body.on("click", "button.wms-return", async function () {
     const out = await call("return_unused", { pmr_item: $(this).data("item") });
     frappe.show_alert({ message: __("{0} return task(s) created", [out.length]), indicator: "green" });
@@ -54,10 +59,16 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
     const status = state.status.map((r) => `<tr><td><a href="/app/production-material-request/${encodeURIComponent(r.pmr)}">${esc(r.pmr)}</a></td><td>${esc(r.work_order)}</td><td>${esc(__(r.status))}</td>
       <td>${esc(r.product)}</td><td class="text-right">${flt(r.required_quantity)}</td><td class="text-right">${flt(r.tasked_quantity)}</td><td class="text-right">${flt(r.staged_quantity)}</td><td class="text-right">${flt(r.consumed_quantity)}</td>
       <td>${flt(r.staged_quantity) > flt(r.consumed_quantity) ? `<button class="btn btn-xs btn-default wms-return" data-item="${esc(r.pmr_item)}">${__("Return unused")}</button>` : ""}</td></tr>`).join("");
+    const kanban = state.kanban.map((k) => `<tr><td>${esc(k.staging_bin)}</td><td>${esc(k.product)}</td><td class="text-right">${flt(k.held)}</td><td class="text-right">${flt(k.coming)}</td>
+      <td class="text-right">${flt(k.minimum_quantity)}</td><td class="text-right">${flt(k.maximum_quantity)}</td><td>${esc(__(k.state))}</td>
+      <td>${k.state === "Full" ? "" : `<button class="btn btn-xs btn-default wms-kanban-signal" data-product="${esc(k.product)}">${__("Container empty - refill")}</button>`}</td></tr>`).join("");
     $body.html(`<h5 style="margin-top:14px;">${__("Open for staging")}</h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th></th><th>${single ? __("PMR") : __("PMRs")}</th><th>${__("Work Order")}</th><th>${__("Date")}</th><th>${__("Product")}</th><th>${__("Operation")}</th>
         <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Open")}</th><th>${__("Take from")}</th><th>${__("Quantity")}</th></tr></thead>
         <tbody>${open || `<tr><td colspan="11" class="text-muted">${__("Nothing open for staging.")}</td></tr>`}</tbody></table></div>
+      ${state.kanban.length ? `<h5 style="margin-top:22px;">${__("Kanban bins")} <span class="text-muted" style="font-size:12px;">${__("materials taken from these bins need no staging")}</span></h5>
+      <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th>${__("Kanban Bin")}</th><th>${__("Product")}</th><th>${__("In Bin")}</th><th>${__("On the way")}</th><th>${__("Minimum")}</th><th>${__("Maximum")}</th><th>${__("State")}</th><th></th></tr></thead>
+        <tbody>${kanban}</tbody></table></div>` : ""}
       <h5 style="margin-top:22px;">${__("Production Material Requests")}</h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th>${__("PMR")}</th><th>${__("Work Order")}</th><th>${__("Status")}</th><th>${__("Product")}</th>
         <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Staged (reserved)")}</th><th>${__("Consumed")}</th><th></th></tr></thead><tbody>${status}</tbody></table></div>`);
@@ -66,7 +77,7 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
 
   async function load() {
     if (!psa()) { render(); return; }
-    [state.rows, state.status] = await Promise.all([call("staging_overview", { psa: psa() }), call("pmr_overview", { psa: psa() })]);
+    [state.rows, state.status, state.kanban] = await Promise.all([call("staging_overview", { psa: psa() }), call("pmr_overview", { psa: psa() }), call("kanban_overview", { psa: psa() })]);
     render();
   }
 

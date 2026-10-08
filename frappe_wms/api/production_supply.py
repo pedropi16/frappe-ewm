@@ -46,3 +46,15 @@ def stage_items(psa, method, lines):
 @retry_on_deadlock
 def close_pmr(pmr_name):
     return ps.close_pmr(pmr_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def kanban_overview(psa):
+    return ps.kanban_overview(psa)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def kanban_signal(psa, product):
+    return ps.kanban_signal(psa, product)

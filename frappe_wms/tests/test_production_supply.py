@@ -213,6 +213,41 @@ class TestProductionSupply(IntegrationTestCase):
         ps.consume_from_stock_entry(entry(5, 3))
         self.assertEqual(frappe.db.get_value("Production Material Request", pmr.name, "status"), "Consumed")
 
+    def test_kanban_material_is_taken_from_its_kanban_bin_which_refills_itself(self):
+        from frappe_wms.services import production_supply as ps
+        supply, kanban = f"{self.warehouse}-PSA-SUP", f"{self.warehouse}-KB1"
+        for name in (supply, kanban):
+            if not frappe.db.exists("Storage Bin", name):
+                frappe.get_doc({"doctype": "Storage Bin", "bin_code": name, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Kanban PSA", "supply_bin": supply,
+                              "bins": [{"storage_bin": kanban}]}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        cycle = frappe.get_doc({"doctype": "Production Supply Control Cycle", "production_supply_area": psa.name, "product": self.rm, "staging_method": "Kanban", "staging_bin": kanban,
+                                "minimum_quantity": 5, "maximum_quantity": 20, "source_storage_type": f"{self.warehouse}-SRC", "active": 1}).insert(ignore_permissions=True)
+        self.assertTrue(cycle.kanban_rule or frappe.db.get_value("Production Supply Control Cycle", cycle.name, "kanban_rule"), "the cycle keeps a replenishment rule for its bin")
+        self.addCleanup(lambda: frappe.db.set_value("Replenishment Rule", frappe.db.get_value("Production Supply Control Cycle", cycle.name, "kanban_rule"), "active", 0))
+        self._seed_rm_stock(50)
+
+        wo = self._submit_work_order(qty=10)  # 20 RM
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        self.assertEqual((item.staging_method, item.tasked_quantity, item.required_quantity), ("Kanban", 20, 20), "nothing to stage: the kanban bin supplies it")
+        refill = frappe.get_all("Warehouse Request", filters={"destination_bin": kanban, "product": self.rm, "status": ["not in", ["Completed", "Cancelled"]]}, fields=["name", "requested_quantity"])
+        self.assertEqual(sum(r.requested_quantity for r in refill), 20, "creating the order filled the empty kanban bin")
+        for task in frappe.get_all("Warehouse Task", filters={"warehouse_request": ["in", [r.name for r in refill]]}, pluck="name"):
+            pick_into_new_hu(task, confirmed_quantity=20)
+        self.assertEqual(ps._psa_stock(psa.name, self.rm), 20)
+        self.assertEqual([(k.staging_bin, k.state) for k in ps.kanban_overview(psa.name)], [(kanban, "Full")])
+        with self.assertRaisesRegex(frappe.ValidationError, "already full"):
+            ps.kanban_signal(psa.name, self.rm)
+
+        real_se = frappe.get_all("Stock Entry", limit=1, pluck="name")[0]
+        ps.consume_from_stock_entry(frappe._dict(purpose="Manufacture", work_order=wo.name, name=real_se, items=[frappe._dict(
+            s_warehouse=self.wh.erpnext_warehouse, item_code=self.rm, qty=17, transfer_qty=17, name="kb1", is_finished_item=0, is_scrap_item=0)]))
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"storage_bin": kanban, "product": self.rm}, "quantity"), 3, "taken from the kanban bin")
+        again = frappe.get_all("Warehouse Request", filters={"destination_bin": kanban, "product": self.rm, "status": ["not in", ["Completed", "Cancelled"]]}, fields=["requested_quantity"])
+        self.assertEqual(sum(r.requested_quantity for r in again), 17, "falling under the minimum raised the refill up to the maximum")
+        self.assertEqual(ps.kanban_overview(psa.name)[0].state, "Refill")
+
     def test_automatic_psa_stages_a_new_pmr_on_its_own(self):
         from frappe_wms.services import production_supply as ps
         supply = f"{self.warehouse}-PSA-SUP"
