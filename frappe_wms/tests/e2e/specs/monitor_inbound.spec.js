@@ -31,7 +31,7 @@ test("inbound: monitor links to the delivery screen, which receives, packs and c
   await dialog.getByRole("button", { name: "Receive", exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await page.getByRole("tab", { name: "HU" }).click();
+  await page.locator(".wms-dm-tab", { hasText: /^HU$/ }).click();
   await expect(page.locator("tr:visible", { hasText: "E2E-WH-RECV" }).first()).toBeVisible();
   await page.getByRole("button", { name: /Actions/ }).click();
   await page.locator("a:visible", { hasText: "Create Tasks…" }).first().click();

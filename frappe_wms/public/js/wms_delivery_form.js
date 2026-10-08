@@ -174,17 +174,40 @@ window.frappe_wms_delivery = (function () {
     }
   }
 
-  async function refresh(frm, side) {
-    if (window.frappe_wms) frappe_wms.set_warehouse_filters(frm);
-    if (frm.is_new() || frm.doc.docstatus >= 2) return;
+  // The items of the delivery as an ALV grid with each line's own statuses (the Items tab).
+  function renderItems(frm, side, $host) {
+    const out = side === "Outbound";
+    const cols = out
+      ? [["line_number", __("Line")], ["item", __("Product"), (r) => lnk("Item", r.item)], ["requested_quantity", __("Quantity")], ["allocated_quantity", __("Allocated")], ["picked_quantity", __("Picked")], ["packed_quantity", __("Packed")],
+         ["issued_quantity", __("Issued")], ["stock_uom", __("UoM")], ["required_stock_type", __("Stock Type")], ["required_batch", __("Batch")], ["status", __("Status")]]
+      : [["line_number", __("Line")], ["item", __("Product"), (r) => lnk("Item", r.item)], ["item_name", __("Description")], ["expected_quantity", __("Expected")], ["received_quantity", __("Received")], ["putaway_quantity", __("Put away")],
+         ["stock_uom", __("UoM")], ["expected_stock_type", __("Stock Type")], ["status", __("Status")]];
+    $host.empty().append(window.wms_grid.DataGrid
+      ? new window.wms_grid.DataGrid(frm.doc.items || [], cols, out ? "Outbound Delivery Item" : "Inbound Delivery Item", { noGroup: true, totals: true, exportName: frm.doc.name,
+        numeric: out ? ["requested_quantity", "allocated_quantity", "picked_quantity", "packed_quantity", "issued_quantity"] : ["expected_quantity", "received_quantity", "putaway_quantity"] }).$el
+      : table(cols, frm.doc.items));
+  }
+
+  // Fetches the delivery's tabs and draws everything the screen shows besides the header: indicators, items, tabs and the buttons.
+  async function render(frm, side) {
     const v = await frappe.call({ method: "frappe_wms.api.monitor.get_delivery_view", args: { doctype: frm.doctype, name: frm.doc.name } }).then((r) => r.message);
     const d = frm.doc;
     indicators(frm, side === "Outbound"
       ? [[__("Delivery"), d.status], [__("Allocation"), d.allocation_status], [__("Picking"), d.picking_status], [__("Packing"), d.packing_status], [__("Loading"), d.loading_status], [__("Goods Issue"), d.goods_issue_status]]
       : [[__("Delivery"), d.status], [__("Receipt"), d.receipt_status], [__("Process"), d.process_status], [__("Yard"), d.yard_status]]);
+    if (frm.fields_dict.items_html) renderItems(frm, side, frm.fields_dict.items_html.$wrapper);
     side === "Outbound" ? renderOutbound(frm, v) : renderInbound(frm, v);
     renderCommon(frm, v, side);
+    if (frm.render_header) frm.render_header(v);
     buttons(frm, side, v);
+    return v;
   }
-  return { refresh };
+
+  // The standard form is the data view; the delivery's screen is its own page (SAP: the monitor row opens the maintain-delivery transaction).
+  function refresh(frm, side) {
+    if (window.frappe_wms) frappe_wms.set_warehouse_filters(frm);
+    if (frm.is_new() || frappe.flags.wms_standard_form) { frappe.flags.wms_standard_form = false; return; }
+    frappe.set_route(side === "Outbound" ? "wms-outbound-delivery" : "wms-inbound-delivery", frm.doc.name);
+  }
+  return { refresh, render };
 })();

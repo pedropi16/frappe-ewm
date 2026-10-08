@@ -92,28 +92,32 @@
       "label": "UOM",
       "fieldtype": "Link",
       "options": "UOM",
-      "description": "Transactional unit (e.g. the purchasing UOM). Defaults to Stock UOM when left blank."
+      "description": "Transactional unit (e.g. the purchasing UOM). Defaults to Stock UOM when left blank.",
+      "in_list_view": 0
     },
     {
       "fieldname": "conversion_factor",
       "label": "Conversion Factor",
       "fieldtype": "Float",
       "default": 1.0,
-      "description": "How many Stock UOM per UOM. WMS ledger/balance quantities always stay in Stock UOM; this only affects how quantity is labeled on the mirrored ERPNext document."
+      "description": "How many Stock UOM per UOM. WMS ledger/balance quantities always stay in Stock UOM; this only affects how quantity is labeled on the mirrored ERPNext document.",
+      "in_list_view": 0
     },
     {
       "fieldname": "batch_required",
       "label": "Batch Required",
       "fieldtype": "Check",
       "default": 0,
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "serial_required",
       "label": "Serial Required",
       "fieldtype": "Check",
       "default": 0,
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "expected_stock_type",
@@ -127,23 +131,27 @@
       "fieldname": "preferred_storage_type",
       "label": "Preferred Storage Type",
       "fieldtype": "Link",
-      "options": "Storage Type"
+      "options": "Storage Type",
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_type",
       "label": "Source Document Type",
-      "fieldtype": "Data"
+      "fieldtype": "Data",
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_number",
       "label": "Source Document Number",
-      "fieldtype": "Data"
+      "fieldtype": "Data",
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_line",
       "label": "Source Document Line",
       "fieldtype": "Data",
-      "description": "The specific row on the source document this line traces back to - e.g. the original Delivery Note Item for a customer return, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone."
+      "description": "The specific row on the source document this line traces back to - e.g. the original Delivery Note Item for a customer return, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone.",
+      "in_list_view": 0
     },
     {
       "fieldname": "purchase_order",
@@ -151,13 +159,15 @@
       "fieldtype": "Link",
       "options": "Purchase Order",
       "read_only": 1,
-      "in_standard_filter": 1
+      "in_standard_filter": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "purchase_order_item",
       "label": "Purchase Order Item",
       "fieldtype": "Data",
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "status",
@@ -174,25 +184,29 @@
       "label": "Return Item Type",
       "fieldtype": "Link",
       "options": "Return Item Type",
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "country_of_origin",
       "label": "Country of Origin",
       "fieldtype": "Link",
-      "options": "Country"
+      "options": "Country",
+      "in_list_view": 0
     },
     {
       "fieldname": "special_stock_type",
       "label": "Special Stock",
       "fieldtype": "Select",
       "options": "\nSales Order\nProject",
-      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it."
+      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it.",
+      "in_list_view": 0
     },
     {
       "fieldname": "special_stock_ref",
       "label": "Special Stock Reference",
-      "fieldtype": "Data"
+      "fieldtype": "Data",
+      "in_list_view": 0
     }
   ],
   "sort_field": "modified",

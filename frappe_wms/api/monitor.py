@@ -480,3 +480,22 @@ def task_document(task_name):
         delivery = frappe.db.get_value("Goods Receipt", request.reference_name, "inbound_delivery")
         if delivery: return ["Inbound Delivery", delivery]
     return None
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def find_deliveries(doctype, by, value, warehouse=None):
+    """Quick search of the delivery screen: a delivery by its number, external reference, partner, source document or product (at most 50 hits)."""
+    require_wms_access()
+    if doctype not in ("Outbound Delivery", "Inbound Delivery"): frappe.throw(_("Unsupported document"))
+    out = doctype == "Outbound Delivery"
+    number, partner, date = ("outbound_delivery_number", "customer", "delivery_date") if out else ("inbound_delivery_number", "supplier", "posting_date")
+    like = f"%{(value or '').strip()}%"
+    item_table = f"tab{doctype} Item"
+    where = {"number": f"(d.name like %(v)s or d.{number} like %(v)s)", "external": "d.external_reference like %(v)s", "partner": f"d.{partner} like %(v)s",
+             "source": f"(d.erp_source_name like %(v)s or d.name in (select parent from `{item_table}` where {'sales_order' if out else 'purchase_order'} like %(v)s or source_document_number like %(v)s))",
+             "product": f"d.name in (select parent from `{item_table}` where item like %(v)s)"}.get(by)
+    if not where: frappe.throw(_("Unknown search"))
+    rows = frappe.db.sql(f"""select d.name, d.{number} as number, d.{partner} as partner, d.status, d.warehouse, d.{date} as date, d.docstatus, d.external_reference
+        from `tab{doctype}` d where {where} {"and d.warehouse=%(w)s" if warehouse else ""} and d.docstatus < 2 order by d.creation desc limit 50""", {"v": like, "w": warehouse}, as_dict=True)
+    return rows

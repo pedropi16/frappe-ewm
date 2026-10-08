@@ -99,26 +99,30 @@
       "label": "UOM",
       "fieldtype": "Link",
       "options": "UOM",
-      "description": "Transactional unit (e.g. the selling UOM). Defaults to Stock UOM when left blank."
+      "description": "Transactional unit (e.g. the selling UOM). Defaults to Stock UOM when left blank.",
+      "in_list_view": 0
     },
     {
       "fieldname": "conversion_factor",
       "label": "Conversion Factor",
       "fieldtype": "Float",
       "default": 1.0,
-      "description": "How many Stock UOM per UOM. WMS ledger/balance quantities always stay in Stock UOM; this only affects how quantity is labeled on the mirrored ERPNext document."
+      "description": "How many Stock UOM per UOM. WMS ledger/balance quantities always stay in Stock UOM; this only affects how quantity is labeled on the mirrored ERPNext document.",
+      "in_list_view": 0
     },
     {
       "fieldname": "required_batch",
       "label": "Required Batch",
       "fieldtype": "Link",
-      "options": "Batch"
+      "options": "Batch",
+      "in_list_view": 0
     },
     {
       "fieldname": "required_serial_no",
       "label": "Required Serial Number",
       "fieldtype": "Link",
-      "options": "Serial No"
+      "options": "Serial No",
+      "in_list_view": 0
     },
     {
       "fieldname": "required_stock_type",
@@ -132,13 +136,15 @@
       "fieldname": "required_characteristics",
       "label": "Required Batch Characteristics",
       "fieldtype": "Small Text",
-      "description": "SAP EWM batch determination: a JSON object of {characteristic: value} pairs, e.g. {\"Grade\": \"A\"} - only a batch whose own WMS Batch Characteristic Value rows satisfy every one of these (exact match) is eligible for allocation. Leave blank for no characteristic requirement (the normal case) - this narrows the removal-strategy-ordered candidate list further, it never replaces Required Batch/FEFO/Removal Rules. Not a Table field: Outbound Delivery Item is itself a child doctype, and Frappe does not reload a child row's own nested child table when its parent loads."
+      "description": "SAP EWM batch determination: a JSON object of {characteristic: value} pairs, e.g. {\"Grade\": \"A\"} - only a batch whose own WMS Batch Characteristic Value rows satisfy every one of these (exact match) is eligible for allocation. Leave blank for no characteristic requirement (the normal case) - this narrows the removal-strategy-ordered candidate list further, it never replaces Required Batch/FEFO/Removal Rules. Not a Table field: Outbound Delivery Item is itself a child doctype, and Frappe does not reload a child row's own nested child table when its parent loads.",
+      "in_list_view": 0
     },
     {
       "fieldname": "partial_delivery_allowed",
       "label": "Partial Delivery Allowed",
       "fieldtype": "Check",
-      "default": 1
+      "default": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "sales_order",
@@ -146,30 +152,35 @@
       "fieldtype": "Link",
       "options": "Sales Order",
       "read_only": 1,
-      "in_standard_filter": 1
+      "in_standard_filter": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "sales_order_item",
       "label": "Sales Order Item",
       "fieldtype": "Data",
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_type",
       "label": "Source Document Type",
       "fieldtype": "Data",
-      "description": "Set instead of Sales Order for a non-sales outbound movement, e.g. \"Purchase Receipt\" for a return to vendor."
+      "description": "Set instead of Sales Order for a non-sales outbound movement, e.g. \"Purchase Receipt\" for a return to vendor.",
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_number",
       "label": "Source Document Number",
-      "fieldtype": "Data"
+      "fieldtype": "Data",
+      "in_list_view": 0
     },
     {
       "fieldname": "source_document_line",
       "label": "Source Document Line",
       "fieldtype": "Data",
-      "description": "The specific row on the source document this line traces back to - e.g. the original Purchase Receipt Item for a return to vendor, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone."
+      "description": "The specific row on the source document this line traces back to - e.g. the original Purchase Receipt Item for a return to vendor, so the mirrored ERPNext return document can be built row-for-row instead of guessed by item code alone.",
+      "in_list_view": 0
     },
     {
       "fieldname": "status",
@@ -186,7 +197,8 @@
       "label": "Required Country of Origin",
       "fieldtype": "Link",
       "options": "Country",
-      "description": "Allocation only takes stock of this origin."
+      "description": "Allocation only takes stock of this origin.",
+      "in_list_view": 0
     }
   ],
   "sort_field": "modified",

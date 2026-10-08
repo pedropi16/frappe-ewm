@@ -1,0 +1,44 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "WMS Core",
+ "name": "wms-inbound-delivery",
+ "page_name": "wms-inbound-delivery",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Inventory Controller"
+  },
+  {
+   "role": "WMS Auditor"
+  },
+  {
+   "role": "WMS Operator"
+  },
+  {
+   "role": "WMS Receiver"
+  },
+  {
+   "role": "WMS Picker"
+  },
+  {
+   "role": "WMS Packer"
+  },
+  {
+   "role": "WMS Loader"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Maintain Inbound Delivery"
+}

@@ -8,62 +8,33 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "tab_items",
-    "sec_document",
     "inbound_delivery_number",
-    "document_type",
     "warehouse",
+    "yard_status",
+    "document_type",
+    "delivery_request",
     "supplier",
+    "stock_owner",
+    "entitled_party",
     "company",
-    "posting_date",
+    "external_reference",
     "expected_arrival",
-    "col_status",
+    "receiving_bin",
     "status",
     "receipt_status",
     "process_status",
-    "yard_status",
-    "closed_short",
-    "close_reason",
-    "col_execution",
-    "receiving_bin",
-    "stock_owner",
-    "entitled_party",
-    "external_reference",
+    "posting_date",
     "items",
     "cross_dock_plan",
-    "tab_status",
-    "status_html",
-    "tab_dates",
-    "dates_html",
-    "tab_locations",
-    "locations_html",
-    "tab_partner",
-    "partner_html",
-    "tab_references",
-    "sec_erp",
+    "remarks",
+    "erp_section",
     "erp_source_doctype",
     "erp_source_name",
-    "delivery_request",
     "column_break_erp",
-    "references_html",
-    "tab_hu",
-    "hu_html",
-    "tab_transport",
-    "transport_html",
-    "tab_texts",
-    "remarks"
+    "closed_short",
+    "close_reason"
   ],
   "fields": [
-    {
-      "fieldname": "tab_items",
-      "fieldtype": "Tab Break",
-      "label": "Items"
-    },
-    {
-      "fieldname": "sec_document",
-      "fieldtype": "Section Break",
-      "label": "Document"
-    },
     {
       "fieldname": "inbound_delivery_number",
       "label": "Inbound Delivery Number",
@@ -71,13 +42,6 @@
       "reqd": 1,
       "unique": 1,
       "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "document_type",
-      "label": "WMS Document Type",
-      "fieldtype": "Link",
-      "options": "WMS Document Type",
       "in_standard_filter": 1
     },
     {
@@ -105,11 +69,9 @@
       "reqd": 1
     },
     {
-      "fieldname": "posting_date",
-      "label": "Posting Date",
-      "fieldtype": "Date",
-      "reqd": 1,
-      "default": "Today"
+      "fieldname": "external_reference",
+      "label": "External Reference",
+      "fieldtype": "Data"
     },
     {
       "fieldname": "expected_arrival",
@@ -117,8 +79,11 @@
       "fieldtype": "Datetime"
     },
     {
-      "fieldname": "col_status",
-      "fieldtype": "Column Break"
+      "fieldname": "receiving_bin",
+      "label": "Receiving Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1
     },
     {
       "fieldname": "status",
@@ -150,59 +115,11 @@
       "read_only": 1
     },
     {
-      "fieldname": "yard_status",
-      "label": "Yard Status",
-      "fieldtype": "Select",
-      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
-      "read_only": 1,
-      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
-    },
-    {
-      "fieldname": "closed_short",
-      "label": "Completed Short",
-      "fieldtype": "Check",
-      "read_only": 1,
-      "allow_on_submit": 1,
-      "description": "Closed before the full quantity was received/issued; the open remainder was taken off the delivery."
-    },
-    {
-      "fieldname": "close_reason",
-      "label": "Completion Remarks",
-      "fieldtype": "Small Text",
-      "allow_on_submit": 1,
-      "read_only": 1
-    },
-    {
-      "fieldname": "col_execution",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "receiving_bin",
-      "label": "Receiving Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "reqd": 1
-    },
-    {
-      "fieldname": "stock_owner",
-      "label": "Owner",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
-    },
-    {
-      "fieldname": "entitled_party",
-      "label": "Party Entitled to Dispose",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
-    },
-    {
-      "fieldname": "external_reference",
-      "label": "External Reference",
-      "fieldtype": "Data"
+      "fieldname": "posting_date",
+      "label": "Posting Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "default": "Today"
     },
     {
       "fieldname": "items",
@@ -212,59 +129,15 @@
       "reqd": 1
     },
     {
-      "fieldname": "cross_dock_plan",
-      "label": "Planned Cross-Docking",
-      "fieldtype": "Table",
-      "options": "Inbound Cross Dock Plan",
-      "read_only": 1,
-      "allow_on_submit": 1,
-      "description": "Open outbound demand reserved for this delivery before it arrives; goods receipt sends the stock straight to the delivery's staging bin."
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Text Editor"
     },
     {
-      "fieldname": "tab_status",
-      "fieldtype": "Tab Break",
-      "label": "Status"
-    },
-    {
-      "fieldname": "status_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_dates",
-      "fieldtype": "Tab Break",
-      "label": "Dates / Times"
-    },
-    {
-      "fieldname": "dates_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_locations",
-      "fieldtype": "Tab Break",
-      "label": "Locations"
-    },
-    {
-      "fieldname": "locations_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_partner",
-      "fieldtype": "Tab Break",
-      "label": "Partner"
-    },
-    {
-      "fieldname": "partner_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_references",
-      "fieldtype": "Tab Break",
-      "label": "Reference Documents"
-    },
-    {
-      "fieldname": "sec_erp",
+      "fieldname": "erp_section",
+      "label": "ERP Origin & Completion",
       "fieldtype": "Section Break",
-      "label": "Reference"
+      "collapsible": 1
     },
     {
       "fieldname": "erp_source_doctype",
@@ -283,6 +156,42 @@
       "in_standard_filter": 1
     },
     {
+      "fieldname": "column_break_erp",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "closed_short",
+      "label": "Completed Short",
+      "fieldtype": "Check",
+      "read_only": 1,
+      "allow_on_submit": 1,
+      "description": "Closed before the full quantity was received/issued; the open remainder was taken off the delivery."
+    },
+    {
+      "fieldname": "close_reason",
+      "label": "Completion Remarks",
+      "fieldtype": "Small Text",
+      "allow_on_submit": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "cross_dock_plan",
+      "label": "Planned Cross-Docking",
+      "fieldtype": "Table",
+      "options": "Inbound Cross Dock Plan",
+      "read_only": 1,
+      "allow_on_submit": 1,
+      "description": "Open outbound demand reserved for this delivery before it arrives; goods receipt sends the stock straight to the delivery's staging bin."
+    },
+    {
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Link",
+      "options": "WMS Document Type",
+      "in_standard_filter": 1
+    },
+    {
       "fieldname": "delivery_request",
       "label": "Delivery Request",
       "fieldtype": "Link",
@@ -290,41 +199,28 @@
       "read_only": 1
     },
     {
-      "fieldname": "column_break_erp",
-      "label": "",
-      "fieldtype": "Column Break"
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
     },
     {
-      "fieldname": "references_html",
-      "fieldtype": "HTML"
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     },
     {
-      "fieldname": "tab_hu",
-      "fieldtype": "Tab Break",
-      "label": "HU"
-    },
-    {
-      "fieldname": "hu_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_transport",
-      "fieldtype": "Tab Break",
-      "label": "Transportation Unit"
-    },
-    {
-      "fieldname": "transport_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_texts",
-      "fieldtype": "Tab Break",
-      "label": "Texts"
-    },
-    {
-      "fieldname": "remarks",
-      "label": "Remarks",
-      "fieldtype": "Text Editor"
+      "fieldname": "yard_status",
+      "label": "Yard Status",
+      "fieldtype": "Select",
+      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
+      "read_only": 1,
+      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
     }
   ],
   "autoname": "IBD-.########",

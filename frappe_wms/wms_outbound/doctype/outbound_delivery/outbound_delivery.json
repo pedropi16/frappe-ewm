@@ -8,68 +8,39 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
-    "tab_items",
-    "sec_document",
     "outbound_delivery_number",
-    "document_type",
     "warehouse",
+    "document_type",
+    "delivery_request",
     "customer",
+    "stock_owner",
+    "entitled_party",
     "ship_to_party",
-    "priority",
     "delivery_date",
-    "col_status",
+    "priority",
+    "route",
+    "staging_bin",
+    "pick_pack_pass_hu",
+    "door",
     "status",
     "allocation_status",
     "picking_status",
     "packing_status",
     "loading_status",
     "goods_issue_status",
-    "col_execution",
-    "route",
-    "staging_bin",
-    "door",
-    "pick_pack_pass_hu",
-    "stock_owner",
-    "entitled_party",
     "external_reference",
+    "customer_instruction_reference",
     "items",
     "planned_hus",
-    "tab_status",
-    "status_html",
-    "tab_dates",
-    "dates_html",
-    "tab_locations",
-    "locations_html",
-    "tab_partner",
-    "partner_html",
-    "tab_references",
-    "sec_erp",
+    "remarks",
+    "erp_section",
     "erp_source_doctype",
     "erp_source_name",
-    "delivery_request",
-    "customer_instruction_reference",
     "column_break_erp",
     "closed_short",
-    "close_reason",
-    "references_html",
-    "tab_hu",
-    "hu_html",
-    "tab_transport",
-    "transport_html",
-    "tab_texts",
-    "remarks"
+    "close_reason"
   ],
   "fields": [
-    {
-      "fieldname": "tab_items",
-      "fieldtype": "Tab Break",
-      "label": "Items"
-    },
-    {
-      "fieldname": "sec_document",
-      "fieldtype": "Section Break",
-      "label": "Document"
-    },
     {
       "fieldname": "outbound_delivery_number",
       "label": "Outbound Delivery Number",
@@ -77,13 +48,6 @@
       "reqd": 1,
       "unique": 1,
       "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "document_type",
-      "label": "WMS Document Type",
-      "fieldtype": "Link",
-      "options": "WMS Document Type",
       "in_standard_filter": 1
     },
     {
@@ -109,6 +73,13 @@
       "fieldtype": "Data"
     },
     {
+      "fieldname": "delivery_date",
+      "label": "Delivery Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
       "fieldname": "priority",
       "label": "Priority",
       "fieldtype": "Select",
@@ -117,15 +88,30 @@
       "default": "Normal"
     },
     {
-      "fieldname": "delivery_date",
-      "label": "Delivery Date",
-      "fieldtype": "Date",
-      "reqd": 1,
-      "in_list_view": 1
+      "fieldname": "route",
+      "label": "Route",
+      "fieldtype": "Link",
+      "options": "WMS Route"
     },
     {
-      "fieldname": "col_status",
-      "fieldtype": "Column Break"
+      "fieldname": "staging_bin",
+      "label": "Staging Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
+    },
+    {
+      "fieldname": "pick_pack_pass_hu",
+      "label": "Pick-Pack-Pass HU",
+      "fieldtype": "Link",
+      "options": "Handling Unit",
+      "read_only": 1,
+      "description": "Auto-created once for this delivery under a Pick-Pack-Pass process type - every pick line for it lands directly in this one shared HU, skipping a separate packing step."
+    },
+    {
+      "fieldname": "door",
+      "label": "Door",
+      "fieldtype": "Link",
+      "options": "Storage Bin"
     },
     {
       "fieldname": "status",
@@ -184,54 +170,13 @@
       "read_only": 1
     },
     {
-      "fieldname": "col_execution",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "route",
-      "label": "Route",
-      "fieldtype": "Link",
-      "options": "WMS Route"
-    },
-    {
-      "fieldname": "staging_bin",
-      "label": "Staging Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
-    },
-    {
-      "fieldname": "door",
-      "label": "Door",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
-    },
-    {
-      "fieldname": "pick_pack_pass_hu",
-      "label": "Pick-Pack-Pass HU",
-      "fieldtype": "Link",
-      "options": "Handling Unit",
-      "read_only": 1,
-      "description": "Auto-created once for this delivery under a Pick-Pack-Pass process type - every pick line for it lands directly in this one shared HU, skipping a separate packing step."
-    },
-    {
-      "fieldname": "stock_owner",
-      "label": "Owner",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
-    },
-    {
-      "fieldname": "entitled_party",
-      "label": "Party Entitled to Dispose",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
-    },
-    {
       "fieldname": "external_reference",
       "label": "External Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "customer_instruction_reference",
+      "label": "Customer Instruction Reference",
       "fieldtype": "Data"
     },
     {
@@ -252,50 +197,15 @@
       "description": "Cartonization result: which packaging each item quantity goes into."
     },
     {
-      "fieldname": "tab_status",
-      "fieldtype": "Tab Break",
-      "label": "Status"
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Text Editor"
     },
     {
-      "fieldname": "status_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_dates",
-      "fieldtype": "Tab Break",
-      "label": "Dates / Times"
-    },
-    {
-      "fieldname": "dates_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_locations",
-      "fieldtype": "Tab Break",
-      "label": "Locations"
-    },
-    {
-      "fieldname": "locations_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_partner",
-      "fieldtype": "Tab Break",
-      "label": "Partner"
-    },
-    {
-      "fieldname": "partner_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_references",
-      "fieldtype": "Tab Break",
-      "label": "Reference Documents"
-    },
-    {
-      "fieldname": "sec_erp",
+      "fieldname": "erp_section",
+      "label": "ERP Origin & Completion",
       "fieldtype": "Section Break",
-      "label": "Reference"
+      "collapsible": 1
     },
     {
       "fieldname": "erp_source_doctype",
@@ -312,18 +222,6 @@
       "options": "erp_source_doctype",
       "read_only": 1,
       "in_standard_filter": 1
-    },
-    {
-      "fieldname": "delivery_request",
-      "label": "Delivery Request",
-      "fieldtype": "Link",
-      "options": "WMS Delivery Request",
-      "read_only": 1
-    },
-    {
-      "fieldname": "customer_instruction_reference",
-      "label": "Customer Instruction Reference",
-      "fieldtype": "Data"
     },
     {
       "fieldname": "column_break_erp",
@@ -346,36 +244,34 @@
       "read_only": 1
     },
     {
-      "fieldname": "references_html",
-      "fieldtype": "HTML"
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Link",
+      "options": "WMS Document Type",
+      "in_standard_filter": 1
     },
     {
-      "fieldname": "tab_hu",
-      "fieldtype": "Tab Break",
-      "label": "HU"
+      "fieldname": "delivery_request",
+      "label": "Delivery Request",
+      "fieldtype": "Link",
+      "options": "WMS Delivery Request",
+      "read_only": 1
     },
     {
-      "fieldname": "hu_html",
-      "fieldtype": "HTML"
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
     },
     {
-      "fieldname": "tab_transport",
-      "fieldtype": "Tab Break",
-      "label": "Transportation Unit"
-    },
-    {
-      "fieldname": "transport_html",
-      "fieldtype": "HTML"
-    },
-    {
-      "fieldname": "tab_texts",
-      "fieldtype": "Tab Break",
-      "label": "Texts"
-    },
-    {
-      "fieldname": "remarks",
-      "label": "Remarks",
-      "fieldtype": "Text Editor"
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "in_standard_filter": 1,
+      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     }
   ],
   "autoname": "OBD-.########",
