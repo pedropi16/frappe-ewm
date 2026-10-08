@@ -38,3 +38,4 @@ Still open: Vehicle grouping several TUs (Y2), HU-based yard moves (Y4), shippin
 Update: delivery split done and deployed (`services/delivery_split.py`, "Split Delivery" button on Outbound Delivery). Open quantity moves to a new `-S<n>` delivery; a delivery replicated from a draft Delivery Note gets a second draft Delivery Note, a Sales-Order-sourced one gets its Delivery Notes from its own goods issue.
 
 Update: cartonization (weight/volume, Planned Shipping HUs, packing station proposal) and dangerous goods storage control (hazard class, segregation, points limit) done. Not covered: DG on transport/shipping documents, 3D cartonization.
+Update: documented API (OpenAPI generated from code) and webhook catalogue done - docs/api.md. Not covered: TM/GTS/MES/kanban connectors, EDI/carrier APIs.
