@@ -39,3 +39,5 @@ Update: delivery split done and deployed (`services/delivery_split.py`, "Split D
 
 Update: cartonization (weight/volume, Planned Shipping HUs, packing station proposal) and dangerous goods storage control (hazard class, segregation, points limit) done. Not covered: DG on transport/shipping documents, 3D cartonization.
 Update: documented API (OpenAPI generated from code) and webhook catalogue done - docs/api.md. Not covered: TM/GTS/MES/kanban connectors, EDI/carrier APIs.
+
+Update: shipping & receiving cockpit with automatic TU creation done (one inbound delivery per truck; vehicle grouping still open).

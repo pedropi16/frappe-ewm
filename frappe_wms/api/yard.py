@@ -99,3 +99,19 @@ def start_transport_unit_work(unit, kind):
 def depart_transport_unit(unit, checkpoint=None):
     from frappe_wms.services import transport_unit as tu
     return tu.depart(unit, checkpoint)
+
+
+@frappe.whitelist()
+def cockpit(warehouse):
+    from frappe_wms.utils import require_wms_access
+    require_wms_access()
+    frappe.get_doc("WMS Warehouse", warehouse).check_permission("read")
+    return yard.cockpit(warehouse)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbound_deliveries=None, shipment=None, carrier=None, vehicle_registration=None,
+               trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None):
+    return yard.plan_truck(warehouse, direction, planned_start, inbound_delivery, frappe.parse_json(outbound_deliveries) if outbound_deliveries else None, shipment,
+                           carrier, vehicle_registration, trailer_number, driver_name, planned_end, door, means_of_transport, route)

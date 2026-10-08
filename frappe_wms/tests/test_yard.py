@@ -173,3 +173,22 @@ class TestYardAndDockAppointments(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError): tu.start_work(unit, "Loading")      # 1500 kg on a 1000 kg unit
         frappe.db.set_value("WMS Shipment", shipment.name, "total_weight", 900)
         tu.start_work(unit, "Loading")
+
+    def test_cockpit_plans_a_truck_for_a_delivery_and_tracks_it(self):
+        from frappe_wms.tests.bootstrap import TEST_ITEM, TEST_SUPPLIER
+        uom = frappe.db.get_value("Item", TEST_ITEM, "stock_uom")
+        if not frappe.db.exists("WMS Product", TEST_ITEM):
+            frappe.get_doc({"doctype": "WMS Product", "item": TEST_ITEM, "stock_uom": uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        ind = frappe.get_doc({"doctype": "Inbound Delivery", "inbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "supplier": TEST_SUPPLIER,
+                              "receiving_bin": self.spot, "items": [{"line_number": 1, "item": TEST_ITEM, "expected_quantity": 5, "stock_uom": uom, "expected_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+        ind.submit()
+        self.assertIn(ind.name, [d.name for d in yard.cockpit(self.wh)["inbound_without_truck"]])
+        r = yard.plan_truck(self.wh, "Inbound", self.t0, inbound_delivery=ind.name, vehicle_registration="PLAN-1", carrier="ACME")
+        self.assertEqual(frappe.db.get_value("WMS Transportation Unit", r["unit"], ["status", "activity_status", "inbound_delivery"]), ("Planned", "Planned", ind.name))
+        board = yard.cockpit(self.wh)
+        self.assertNotIn(ind.name, [d.name for d in board["inbound_without_truck"]])
+        [truck] = [t for t in board["trucks"] if t["name"] == r["appointment"]]
+        self.assertEqual((truck["unit"], truck["next_action"]), (r["unit"], "Check In"))
+        yard.check_in(self.wh, vehicle_registration="PLAN-1", yard_bin=self.spot)
+        self.assertEqual(frappe.db.count("WMS Transportation Unit", {"dock_appointment": r["appointment"]}), 1, "check-in uses the planned unit")
+        self.assertEqual([t["next_action"] for t in yard.cockpit(self.wh)["trucks"] if t["name"] == r["appointment"]], ["To Door"])

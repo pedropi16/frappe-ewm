@@ -30,6 +30,7 @@ const VIEWS = [
   { key: "inbound", label: __("Inbound Monitor") },
   { key: "outbound", label: __("Outbound Monitor") },
   { key: "yard", label: __("Yard & Doors") },
+  { key: "cockpit", label: __("Shipping & Receiving") },
   { key: "stock", label: __("Stock Overview") },
   { key: "tasks", label: __("Warehouse Tasks") },
   { key: "warehouse_orders", label: __("Warehouse Orders") },
@@ -984,6 +985,7 @@ class WMSMonitor {
       bin_assignment: () => this.load_bin_assignment(),
       kitting: () => this.load_kitting(),
       yard: () => this.load_yard(),
+      cockpit: () => this.search_cockpit(),
       billing: () => this.load_billing(),
       alerts: () => this.load_alerts(),
     };
@@ -2606,9 +2608,53 @@ class WMSMonitor {
     $table.find(".wms-mon-yard-act").on("click", (e) => this.yard_action(e.currentTarget.dataset.m, e.currentTarget.dataset.a));
   }
 
+  // ---------- Shipping & Receiving cockpit (services/yard.py cockpit/plan_truck) ----------
+  async search_cockpit() {
+    if (!this.warehouse) return;
+    const $wrap = this.body_for("cockpit");
+    const esc = frappe.utils.escape_html;
+    const [data, board] = await Promise.all([
+      frappe.call("frappe_wms.api.yard.cockpit", { warehouse: this.warehouse }).then((r) => r.message),
+      frappe.call("frappe_wms.api.yard.yard_board", { warehouse: this.warehouse }).then((r) => r.message)]);
+    this.yard = board;
+    const plan = (kind, name) => `<button type="button" class="btn btn-xs btn-primary wms-mon-cp-plan" data-k="${kind}" data-n="${esc(name)}">${__("Plan Truck")}</button>`;
+    const section = (title, rows, cols) => `<h6 style="margin:14px 0 6px;">${title} (${rows.length})</h6>` + (rows.length ? "" : `<div class="text-muted">${__("Nothing waiting")}</div>`);
+    $wrap.empty();
+    const add = (title, rows, columns, doctype) => {
+      $wrap.append(section(title, rows));
+      if (rows.length) $wrap.append(this.render_table(rows, columns, doctype));
+    };
+    add(__("Trucks"), data.trucks, [["name", __("Appointment")], ["direction", __("Direction")], ["status", __("Status")], ["unit", __("Transportation Unit")],
+      ["activity_status", __("Activity")], ["door", __("Door")], ["vehicle_registration", __("Vehicle")], ["ref", __("Carries"), (r) => esc(r.inbound_delivery || r.shipment || "")],
+      ["actions", "", (r) => r.next_action ? `<button type="button" class="btn btn-xs btn-default wms-mon-cp-act" data-a="${esc(r.name)}" data-m="${{ "Check In": "check_in", "To Door": "to_door", "Complete": "complete", "Check Out": "check_out" }[r.next_action]}">${__(r.next_action)}</button>` : ""]], "WMS Dock Appointment");
+    add(__("Inbound deliveries without a truck"), data.inbound_without_truck, [["name", __("Delivery")], ["supplier", __("Supplier")], ["expected_arrival", __("Expected")], ["status", __("Status")],
+      ["actions", "", (r) => plan("Inbound", r.name)]], "Inbound Delivery");
+    add(__("Shipments without a truck"), data.shipments_without_truck, [["name", __("Shipment")], ["carrier", __("Carrier")], ["route", __("Route")], ["status", __("Status")],
+      ["actions", "", (r) => plan("Shipment", r.name)]], "WMS Shipment");
+    add(__("Picked deliveries without a shipment"), data.deliveries_without_shipment, [["name", __("Delivery")], ["customer", __("Customer")], ["route", __("Route")], ["delivery_date", __("Delivery Date")],
+      ["actions", "", (r) => plan("Delivery", r.name)]], "Outbound Delivery");
+    $wrap.find(".wms-mon-cp-act").on("click", (e) => this.yard_action(e.currentTarget.dataset.m, e.currentTarget.dataset.a));
+    $wrap.find(".wms-mon-cp-plan").on("click", (e) => this.plan_truck_dialog(e.currentTarget.dataset.k, e.currentTarget.dataset.n));
+  }
+
+  plan_truck_dialog(kind, name) {
+    const d = new frappe.ui.Dialog({ title: __("Plan Truck for {0}", [name]), fields: [
+      { fieldname: "planned_start", fieldtype: "Datetime", label: __("Arrival"), reqd: 1, default: frappe.datetime.add_hours(frappe.datetime.now_datetime(), 1) },
+      { fieldname: "carrier", fieldtype: "Data", label: __("Carrier") }, { fieldname: "vehicle_registration", fieldtype: "Data", label: __("Vehicle Registration") },
+      { fieldname: "trailer_number", fieldtype: "Data", label: __("Trailer") }, { fieldname: "driver_name", fieldtype: "Data", label: __("Driver") },
+      { fieldname: "door", fieldtype: "Select", label: __("Door"), options: [""].concat((this.yard.doors || []).map((x) => x.door)), description: __("Empty: the first free door") },
+      { fieldname: "means_of_transport", fieldtype: "Link", options: "Means of Transport", label: __("Means of Transport") }],
+      primary_action_label: __("Plan"), primary_action: (v) => {
+        const args = Object.assign({ warehouse: this.warehouse, direction: kind === "Inbound" ? "Inbound" : "Outbound" }, v);
+        if (kind === "Inbound") args.inbound_delivery = name; else if (kind === "Shipment") args.shipment = name; else args.outbound_deliveries = [name];
+        frappe.call("frappe_wms.api.yard.plan_truck", args).then(() => { d.hide(); frappe.show_alert({ message: __("Truck planned"), indicator: "green" }); this.search_cockpit(); });
+      } });
+    d.show();
+  }
+
   async yard_action(method, appointment) {
     const call = (args) => frappe.call(`frappe_wms.api.yard.${method}`, Object.assign({ appointment }, args || {}))
-      .then(() => { frappe.show_alert({ message: __("Done"), indicator: "green" }); this.search_yard(); });
+      .then(() => { frappe.show_alert({ message: __("Done"), indicator: "green" }); this.search_yard(); this.search_cockpit(); });
     if (method === "check_in") {
       const d = new frappe.ui.Dialog({ title: __("Check in {0}", [appointment]), fields: [
         { fieldname: "yard_bin", fieldtype: "Select", label: __("Yard spot"), options: [""].concat(this.yard.yard_spots || []) },

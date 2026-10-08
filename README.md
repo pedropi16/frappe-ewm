@@ -1147,6 +1147,7 @@ or `No Show` / `Cancelled`.
 - **Door Determination Rule** (warehouse, priority, direction, route -> door): the
   rules' doors are tried first, then the other doors.
 - **Means of Transport** master (unit type, max payload) on the transportation unit;
+- **Shipping & Receiving cockpit** (Monitor > Shipping & Receiving): live trucks with their next step (check in / to door / complete / check out), and the work still without a truck - inbound deliveries, shipments, picked outbound deliveries. *Plan Truck* creates the shipment (outbound deliveries), the dock appointment and the transportation unit in one step. One inbound delivery per truck.
 - **Delivery split**: *Split Delivery* on an Outbound Delivery moves open quantity (not yet allocated/picked/issued) to a new `-S<n>` delivery; a delivery replicated from a draft Delivery Note gets a second draft Delivery Note.
 - **Cartonization**: flag Handling Unit Types *Use for Cartonization*, then *Plan Cartons* on a delivery fills its Planned Shipping HUs by weight/volume per unit (WMS Product); the packing station proposes them when it creates the HU.
 - **Dangerous goods**: Hazard Class master (with incompatible classes), hazard class / UN number / packing group / points on the WMS Product, allowed classes and a points limit per bin on the Storage Type; switch on *Dangerous Goods Check* on the warehouse and bin validation (putaway, bin determination, moves) enforces permission, segregation and points.

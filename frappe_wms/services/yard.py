@@ -277,3 +277,54 @@ def mark_no_shows():
         late = add_to_date(now_datetime(), minutes=-minutes)
         for name in frappe.get_all("WMS Dock Appointment", filters={"warehouse": w.name, "status": "Planned", "planned_start": ["<", late]}, pluck="name"):
             frappe.db.set_value("WMS Dock Appointment", name, "status", "No Show", update_modified=True)
+
+
+# ------------------------------------------------------------------ shipping & receiving cockpit
+
+NEXT_ACTION = {"Planned": "Check In", "Checked In": "To Door", "At Door": "Complete", "Completed": "Check Out"}
+
+
+def cockpit(warehouse):
+    """SAP shipping & receiving cockpit: what still needs a truck, and where every live truck stands."""
+    require_role(*YARD_ROLES)
+    booked = frappe.get_all("WMS Dock Appointment", filters={"warehouse": warehouse, "status": ["in", ["Planned", "Checked In", "At Door", "Completed"]]},
+                            fields=["name", "direction", "status", "planned_start", "door", "yard_bin", "carrier", "vehicle_registration", "inbound_delivery", "shipment", "checkpoint"],
+                            order_by="planned_start asc")
+    units = {u.dock_appointment: u for u in frappe.get_all("WMS Transportation Unit", filters={"warehouse": warehouse, "status": ["not in", ["Departed", "Cancelled"]]},
+                                                          fields=["name", "dock_appointment", "status", "activity_status", "seal_number"])}
+    trucks = [dict(a, unit=(units.get(a.name) or {}).get("name"), activity_status=(units.get(a.name) or {}).get("activity_status"),
+                   next_action=NEXT_ACTION.get(a.status)) for a in booked]
+    carried_in = {a.inbound_delivery for a in booked if a.inbound_delivery}
+    carried_out = {a.shipment for a in booked if a.shipment}
+    inbound = [d for d in frappe.get_all("Inbound Delivery", filters={"warehouse": warehouse, "docstatus": 1, "closed_short": 0, "status": ["not in", ["Completed", "Cancelled"]]},
+                                          fields=["name", "supplier", "expected_arrival", "status"], order_by="expected_arrival asc") if d.name not in carried_in]
+    open_shipments = frappe.get_all("WMS Shipment", filters={"warehouse": warehouse, "status": ["in", ["Planned", "Released", "Staging", "Ready to Load", "Loading"]]},
+                                    fields=["name", "carrier", "route", "status", "total_weight"], order_by="creation asc")
+    on_shipment = {r.outbound_delivery for r in frappe.get_all("Shipment Delivery", filters={"parenttype": "WMS Shipment", "parent": ["in", [s.name for s in open_shipments] or [""]]},
+                                                               fields=["outbound_delivery"])}
+    outbound = [d for d in frappe.get_all("Outbound Delivery", filters={"warehouse": warehouse, "docstatus": 1, "picking_status": "Picked", "closed_short": 0,
+                                                                         "status": ["not in", ["Goods Issued", "Completed", "Cancelled"]]},
+                                           fields=["name", "customer", "route", "delivery_date"], order_by="delivery_date asc") if d.name not in on_shipment]
+    return {"trucks": trucks, "inbound_without_truck": inbound, "shipments_without_truck": [s for s in open_shipments if s.name not in carried_out],
+            "deliveries_without_shipment": outbound}
+
+
+def plan_truck(warehouse, direction, planned_start, inbound_delivery=None, outbound_deliveries=None, shipment=None, carrier=None, vehicle_registration=None,
+               trailer_number=None, driver_name=None, planned_end=None, door=None, means_of_transport=None, route=None):
+    """Books a truck for deliveries in one step: shipment (outbound deliveries), appointment and transportation unit."""
+    require_role("WMS Supervisor", "WMS Receiver", "WMS Loader", "WMS Integration User")
+    if direction == "Inbound":
+        if not inbound_delivery: frappe.throw(_("Choose the inbound delivery the truck brings"))
+    elif not shipment:
+        if not outbound_deliveries: frappe.throw(_("Choose a shipment or the outbound deliveries to ship"))
+        from frappe_wms.services.shipping import create_shipment
+        shipment = create_shipment(warehouse, list(outbound_deliveries), carrier, route, vehicle_registration, driver_name)
+        shipment = shipment.get("name") if isinstance(shipment, dict) else shipment
+    appointment = create_appointment(warehouse, direction, planned_start, planned_end, door, carrier, vehicle_registration, trailer_number, driver_name,
+                                     inbound_delivery if direction == "Inbound" else None, shipment if direction == "Outbound" else None)
+    from frappe_wms.services.transport_unit import create_transport_unit
+    unit = create_transport_unit(warehouse, carrier=carrier, vehicle_registration=vehicle_registration, trailer_number=trailer_number, driver_name=driver_name,
+                                 dock_appointment=appointment, shipment=shipment if direction == "Outbound" else None, inbound_delivery=inbound_delivery if direction == "Inbound" else None)
+    if means_of_transport: frappe.db.set_value("WMS Transportation Unit", unit, "means_of_transport", means_of_transport)
+    frappe.db.set_value("Inbound Delivery" if direction == "Inbound" else "WMS Shipment", inbound_delivery if direction == "Inbound" else shipment, "yard_status", "Expected", update_modified=False)
+    return {"appointment": appointment, "unit": unit, "shipment": shipment if direction == "Outbound" else None}
