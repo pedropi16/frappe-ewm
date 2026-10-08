@@ -165,6 +165,14 @@ def _post_replicated_draft(doc, erpnext_warehouse, source_doctype, source_name, 
                 template = templates.get(source_line)
                 if not template:
                     frappe.throw(_("{0} line for {1} {2} was not found on {3}").format(doc.doctype, doc.name, source_line, source_name))
+                if source_doctype == "Stock Entry":
+                    # a goods movement: the row keeps its own warehouses; the stock type / owner dimensions go on the WMS side of it
+                    values = {k: v for k, v in template.as_dict().items() if k not in _DRAFT_ROW_SKIP | {"transfer_qty", "basic_amount", "valuation_rate", "additional_cost"}}
+                    values.update(qty=qty / flt(template.conversion_factor or 1), batch_no=batch_no, serial_no=serial_no, use_serial_batch_fields=1,
+                                  **_dims(stock_type, owner, party, target=bool(template.t_warehouse and not template.s_warehouse)))
+                    if template.t_warehouse and not flt(template.basic_rate): values["allow_zero_valuation_rate"] = 1
+                    kept.append(values)
+                    continue
                 values = {k: v for k, v in template.as_dict().items() if k not in _DRAFT_ROW_SKIP}
                 values.update(qty=qty / flt(template.conversion_factor or 1), stock_qty=qty, warehouse=erpnext_warehouse,
                               batch_no=batch_no, serial_no=serial_no, use_serial_batch_fields=1, **_dims(stock_type, owner, party))
@@ -204,6 +212,10 @@ def sync_goods_receipt(doc):
     source = _replicated_draft(doc.get("inbound_delivery"), "Inbound Delivery", "Purchase Receipt")
     if source:
         _post_replicated_draft(doc, erpnext_warehouse, "Purchase Receipt", source, "erpnext_purchase_receipt", "inbound_delivery_item", "Inbound Delivery Item")
+        return
+    source = _replicated_draft(doc.get("inbound_delivery"), "Inbound Delivery", "Stock Entry")
+    if source:
+        _post_replicated_draft(doc, erpnext_warehouse, "Stock Entry", source, "erpnext_stock_entry", "inbound_delivery_item", "Inbound Delivery Item")
         return
     po_links = [_po_link_for_gr_row(row) for row in doc.items]
     linked = [l for l in po_links if l[0]]
@@ -539,6 +551,10 @@ def sync_goods_issue(doc):
     source = _replicated_draft(doc.get("outbound_delivery"), "Outbound Delivery", "Delivery Note")
     if source:
         _post_replicated_draft(doc, erpnext_warehouse, "Delivery Note", source, "erpnext_delivery_note", "outbound_delivery_item", "Outbound Delivery Item")
+        return
+    source = _replicated_draft(doc.get("outbound_delivery"), "Outbound Delivery", "Stock Entry")
+    if source:
+        _post_replicated_draft(doc, erpnext_warehouse, "Stock Entry", source, "erpnext_stock_entry", "outbound_delivery_item", "Outbound Delivery Item")
         return
     so_links = [_so_link_for_gi_row(row) for row in doc.items]
     linked = [l for l in so_links if l[0]]

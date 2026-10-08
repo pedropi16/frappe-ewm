@@ -26,6 +26,15 @@ CUSTOM_FIELDS = {
          "description": "Whose stock is delivered (blank = the warehouse's own). The WMS outbound delivery only takes this owner's stock."},
         {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
     ],
+    # MB1A: a draft Stock Entry (receipt, issue, transfer out of / into a WMS warehouse) is the goods movement the warehouse executes.
+    "Stock Entry": [
+        {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "purpose", "print_hide": 1},
+        {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},
+        {"fieldname": "wms_inbound_delivery", "label": "WMS Inbound Delivery", "fieldtype": "Link", "options": "Inbound Delivery",
+         "insert_after": "purpose", "read_only": 1, "no_copy": 1, "allow_on_submit": 1, "print_hide": 1},
+        {"fieldname": "wms_outbound_delivery", "label": "WMS Outbound Delivery", "fieldtype": "Link", "options": "Outbound Delivery",
+         "insert_after": "wms_inbound_delivery", "read_only": 1, "no_copy": 1, "allow_on_submit": 1, "print_hide": 1},
+    ],
     "Purchase Receipt": [
         {"fieldname": "wms_stock_owner", "label": "WMS Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "supplier", "print_hide": 1},
         {"fieldname": "wms_entitled_party", "label": "WMS Party Entitled to Dispose", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_stock_owner", "print_hide": 1},

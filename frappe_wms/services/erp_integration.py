@@ -64,7 +64,7 @@ def _lines_by_wms_warehouse(doc, trigger_only=True):
 # ------------------------------------------------------------------ quantities
 
 def _stock_qty(row):
-    return flt(row.get("stock_qty")) or flt(row.qty) * flt(row.conversion_factor or 1)
+    return flt(row.get("stock_qty")) or flt(row.get("transfer_qty")) or flt(row.qty) * flt(row.conversion_factor or 1)
 
 
 def _done_stock_qty(row, doctype):
@@ -263,8 +263,8 @@ def _withdraw(delivery_name, doctype, reason):
 
 def _linked_deliveries(doc):
     """Open WMS deliveries carrying lines of this ERPNext document."""
-    side = SIDE[doc.doctype]
-    if doc.doctype in ("Purchase Receipt", "Delivery Note"):
+    side = SIDE.get(doc.doctype) or (INBOUND if doc.get("wms_inbound_delivery") else OUTBOUND)  # a Stock Entry's side is its purpose's
+    if doc.doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry"):
         names = frappe.get_all(side["doctype"], filters={"erp_source_doctype": doc.doctype, "erp_source_name": doc.name, "docstatus": ["<", 2]}, pluck="name")
     else:
         names = frappe.get_all(side["item"], filters={side["order_field"]: doc.name}, pluck="parent", distinct=True)
@@ -413,10 +413,95 @@ def _same_lines(delivery, rows):
 def before_draft_document_submit(doc, method=None):
     """A replicated draft PR / DN is posted by the warehouse (goods receipt / goods issue), never by hand."""
     if frappe.flags.get("wms_posting") or doc.flags.get("wms_managed_posting"): return
-    link = doc.get("wms_outbound_delivery" if doc.doctype == "Delivery Note" else "wms_inbound_delivery")
+    link = doc.get("wms_outbound_delivery") or doc.get("wms_inbound_delivery") if doc.doctype == "Stock Entry" else doc.get("wms_outbound_delivery" if doc.doctype == "Delivery Note" else "wms_inbound_delivery")
     if link:
         frappe.throw(_("{0} is being executed by the warehouse as {1}; it is submitted automatically by the {2}.").format(
-            doc.name, link, _("Goods Issue") if doc.doctype == "Delivery Note" else _("Goods Receipt")), title=_("Warehouse-Managed Document"))
+            doc.name, link, _("Goods Issue") if link == doc.get("wms_outbound_delivery") else _("Goods Receipt")), title=_("Warehouse-Managed Document"))
+
+
+# ------------------------------------------------------------------ draft Stock Entry (SAP MB1A: a goods movement the warehouse executes)
+
+def _internal_partner(doctype):
+    """The stand-in supplier / customer of a goods movement that has no business partner (like the production supplier of FG receipts)."""
+    name = "WMS Goods Movement"
+    if not frappe.db.exists(doctype, name):
+        values = {"doctype": doctype, f"{doctype.lower()}_name": name, f"{doctype.lower()}_type": "Company"}
+        if doctype == "Supplier": values["supplier_group"] = frappe.db.get_value("Supplier Group", {"is_group": 0}) or frappe.db.get_value("Supplier Group", {})
+        else: values.update(customer_group=frappe.db.get_value("Customer Group", {"is_group": 0}) or frappe.db.get_value("Customer Group", {}), territory=frappe.db.get_value("Territory", {"is_group": 0}) or frappe.db.get_value("Territory", {}))
+        frappe.get_doc(values).insert(ignore_permissions=True)
+    return name
+
+
+def _stock_entry_groups(doc, trigger_only=True):
+    """(side, {wms warehouse: (settings, rows)}) of a Stock Entry: issues and transfers out of a WMS warehouse go out through the warehouse's outbound
+    side, receipts and transfers into it come in through the inbound side. A transfer between two WMS warehouses is not a delivery (use a goods issue + receipt)."""
+    purpose = doc.get("purpose") or doc.get("stock_entry_type")
+    rows = doc.get("items") or []
+    if purpose == "Material Issue": side = OUTBOUND
+    elif purpose == "Material Receipt": side = INBOUND
+    elif purpose == "Material Transfer":
+        if any(wms_warehouse_for(r.s_warehouse) for r in rows) and any(wms_warehouse_for(r.t_warehouse) for r in rows): return None, {}
+        side = OUTBOUND if any(wms_warehouse_for(r.s_warehouse) for r in rows) else INBOUND
+    else:
+        return None, {}
+    field, wfield = ("inbound_replication", "t_warehouse") if side is INBOUND else ("outbound_replication", "s_warehouse")
+    out = {}
+    for row in rows:
+        wh = wms_warehouse_for(row.get(wfield))
+        if not wh or (trigger_only and wh.get(field) != "Stock Entry Draft"): continue
+        out.setdefault(wh.name, (wh, []))[1].append(row)
+    return side, out
+
+
+def stock_entry_is_replicated(doc):
+    """True when the draft Stock Entry is a warehouse delivery: every WMS-managed row belongs to a warehouse that uses Stock Entry drafts."""
+    side, groups = _stock_entry_groups(doc, trigger_only=False)
+    if not groups: return False
+    field = "inbound_replication" if side is INBOUND else "outbound_replication"
+    return all(wh.get(field) == "Stock Entry Draft" for wh, _rows in groups.values())
+
+
+def _stock_entry_line(row, wh, side, name):
+    qty = _stock_qty(row)
+    line = {"item": row.item_code, "stock_uom": row.stock_uom, "uom": row.uom, "conversion_factor": row.conversion_factor,
+            "source_document_type": "Stock Entry", "source_document_number": name, "source_document_line": row.name}
+    if side is INBOUND: line.update(expected_quantity=qty, expected_stock_type=wh.default_stock_type)
+    else:
+        line.update(requested_quantity=qty, required_stock_type=wh.default_stock_type)
+        if row.get("batch_no"): line["required_batch"] = row.batch_no
+    return line
+
+
+def on_stock_entry_update(doc, method=None):
+    """Draft Stock Entry saved: create or follow the WMS delivery that executes it."""
+    if doc.docstatus != 0 or frappe.flags.get("wms_posting"): return
+    side, groups = _stock_entry_groups(doc)
+    if not groups: return
+    if len(groups) > 1: frappe.throw(_("A Stock Entry replicated to the warehouse must use one WMS warehouse; split it per warehouse."))
+    wh, rows = next(iter(groups.values()))
+    link_field = "wms_inbound_delivery" if side is INBOUND else "wms_outbound_delivery"
+    existing = doc.get(link_field)
+    if existing and frappe.db.exists(side["doctype"], existing):
+        d = frappe.get_doc(side["doctype"], existing)
+        if d.docstatus < 2 and not _same_lines(d, rows):
+            if _is_started(d): _refuse_started(d, _("changing {0}").format(doc.name))
+            _withdraw(d.name, d.doctype, _("Replaced after {0} {1} changed").format(doc.doctype, doc.name))
+        elif d.docstatus < 2:
+            return
+    lines = [_stock_entry_line(r, wh, side, doc.name) for r in rows if _stock_qty(r) > EPS]
+    if not lines: return
+    number = f"{doc.name}-{wh.name}" if not frappe.db.count(side["doctype"], {"erp_source_name": doc.name}) else f"{doc.name}-{wh.name}-{frappe.generate_hash(length=4)}"
+    common = {"stock_owner": doc.get("wms_stock_owner"), "entitled_party": doc.get("wms_entitled_party"), "erp_source_doctype": "Stock Entry", "erp_source_name": doc.name,
+              "external_reference": doc.name, "company": doc.company}
+    if side is INBOUND:
+        header = {**common, "inbound_delivery_number": number, "supplier": _internal_partner("Supplier"), "receiving_bin": wh.default_receiving_bin, "posting_date": nowdate(), "expected_arrival": doc.get("posting_date")}
+    else:
+        header = {**common, "outbound_delivery_number": number, "customer": _internal_partner("Customer"), "delivery_date": doc.get("posting_date") or nowdate(),
+                  "staging_bin": wh.default_shipping_bin, "priority": "Normal"}
+    delivery = _delivery_doc(side, wh, header, lines)
+    _release(delivery, wh)
+    frappe.db.set_value("Stock Entry", doc.name, link_field, delivery.name, update_modified=False)
+    doc.set(link_field, delivery.name)
 
 
 # ------------------------------------------------------------------ completion & report back
@@ -457,7 +542,7 @@ def report_completion(delivery):
     remainder when the warehouse is configured to."""
     side = INBOUND if delivery.doctype == "Inbound Delivery" else OUTBOUND
     done = sum(flt(i.get(side["done"])) for i in delivery.items)
-    if delivery.erp_source_doctype in ("Purchase Receipt", "Delivery Note") and delivery.erp_source_name:
+    if delivery.erp_source_doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry") and delivery.erp_source_name:
         src = frappe.db.get_value(delivery.erp_source_doctype, delivery.erp_source_name, "docstatus")
         if src == 0 and done <= EPS:
             previous, frappe.flags.wms_posting = frappe.flags.get("wms_posting"), True
@@ -484,8 +569,10 @@ def report_completion(delivery):
 
 def wms_status(doctype, name):
     side = SIDE.get(doctype)
+    if doctype == "Stock Entry":
+        side = INBOUND if frappe.db.get_value("Stock Entry", name, "wms_inbound_delivery") else OUTBOUND if frappe.db.get_value("Stock Entry", name, "wms_outbound_delivery") else None
     if not side: return []
-    if doctype in ("Purchase Receipt", "Delivery Note"):
+    if doctype in ("Purchase Receipt", "Delivery Note", "Stock Entry"):
         names = frappe.get_all(side["doctype"], filters={"erp_source_doctype": doctype, "erp_source_name": name}, pluck="name")
     else:
         names = frappe.get_all(side["item"], filters={side["order_field"]: name}, pluck="parent", distinct=True)

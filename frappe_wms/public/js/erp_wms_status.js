@@ -9,7 +9,7 @@ window.frappe_wms_erp_status = function (frm) {
     const color = (d) => (d.docstatus === 2 || d.status === "Cancelled" ? "red" : d.closed_short ? "orange"
       : ["Completed", "Goods Issued", "Received"].includes(d.status) ? "green" : "blue");
     rows.forEach((d) => {
-      const target = frm.doctype === "Purchase Order" || frm.doctype === "Purchase Receipt" ? "Inbound Delivery" : "Outbound Delivery";
+      const target = frm.doctype === "Purchase Order" || frm.doctype === "Purchase Receipt" || (frm.doctype === "Stock Entry" && frm.doc.wms_inbound_delivery) ? "Inbound Delivery" : "Outbound Delivery";
       const detail = target === "Inbound Delivery" ? d.receipt_status : [d.picking_status, d.goods_issue_status].filter(Boolean).join(" · ");
       frm.dashboard.add_indicator(__("WMS {0}: {1}{2}", [d.name, __(d.status), d.closed_short ? " (" + __("short") + ")" : ""]) + (detail ? ` · ${detail}` : ""), color(d));
       frm.add_custom_button(d.name, () => frappe.set_route("Form", target, d.name), __("Warehouse"));
@@ -18,6 +18,7 @@ window.frappe_wms_erp_status = function (frm) {
 };
 frappe.ui.form.on("Delivery Note", { refresh: (frm) => frappe_wms_erp_status(frm) });
 frappe.ui.form.on("Purchase Receipt", { refresh: (frm) => frappe_wms_erp_status(frm) });
+frappe.ui.form.on("Stock Entry", { refresh: (frm) => { if (frm.doc.wms_inbound_delivery || frm.doc.wms_outbound_delivery) frappe_wms_erp_status(frm); } });
 
 // SAP "adjust delivery quantity": close a released WMS delivery at what was actually
 // received / shipped; the ERPNext order remainder is closed if the warehouse is set up to.

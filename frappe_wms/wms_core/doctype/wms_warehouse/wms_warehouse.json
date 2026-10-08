@@ -140,7 +140,7 @@
       "fieldname": "inbound_replication",
       "label": "Inbound Replication",
       "fieldtype": "Select",
-      "options": "Manual\nPurchase Order Submitted\nPurchase Receipt Draft",
+      "options": "Manual\nPurchase Order Submitted\nPurchase Receipt Draft\nStock Entry Draft",
       "default": "Manual",
       "description": "Manual: a user creates the Inbound Delivery (button on the Purchase Order). Purchase Order Submitted: every submitted PO line for this warehouse becomes an Inbound Delivery automatically. Purchase Receipt Draft: a draft Purchase Receipt (an ASN) becomes the Inbound Delivery and the Goods Receipt later submits that same Purchase Receipt."
     },
@@ -148,7 +148,7 @@
       "fieldname": "outbound_replication",
       "label": "Outbound Replication",
       "fieldtype": "Select",
-      "options": "Manual\nSales Order Submitted\nDelivery Note Draft",
+      "options": "Manual\nSales Order Submitted\nDelivery Note Draft\nStock Entry Draft",
       "default": "Manual",
       "description": "Manual: a user creates the Outbound Delivery (button on the Sales Order). Sales Order Submitted: every submitted SO line for this warehouse becomes an Outbound Delivery automatically. Delivery Note Draft: a draft Delivery Note (the ECC delivery) becomes the Outbound Delivery and the Goods Issue later submits that same Delivery Note."
     },

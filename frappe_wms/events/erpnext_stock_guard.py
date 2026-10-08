@@ -55,7 +55,11 @@ def validate(doc, method=None):
         from frappe_wms.services.erp_integration import draft_document_is_replicated
         if draft_document_is_replicated(doc):
             return
-    if doc.doctype in ("Delivery Note", "Purchase Receipt") and doc.docstatus == 1:
+    if doc.doctype == "Stock Entry" and doc.docstatus == 0:
+        from frappe_wms.services.erp_integration import stock_entry_is_replicated
+        if stock_entry_is_replicated(doc):
+            return
+    if doc.doctype in ("Delivery Note", "Purchase Receipt", "Stock Entry") and doc.docstatus == 1:
         from frappe_wms.services.erp_integration import before_draft_document_submit
         before_draft_document_submit(doc)
     if not _enforcement_enabled():

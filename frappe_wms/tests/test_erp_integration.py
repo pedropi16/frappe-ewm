@@ -168,6 +168,59 @@ class TestErpIntegration(IntegrationTestCase):
         with self.assertRaisesRegex(frappe.ValidationError, "posted by the warehouse"):
             dn.cancel()
 
+    def _stock_entry(self, purpose, qty, **row):
+        return frappe.get_doc({"doctype": "Stock Entry", "stock_entry_type": purpose, "company": self.company,
+                               "items": [{"item_code": TEST_ITEM, "qty": qty, "uom": self.uom, "stock_uom": self.uom, "conversion_factor": 1, "basic_rate": 5, **row}]}).insert(ignore_permissions=True)
+
+    def test_a_draft_material_issue_is_a_goods_movement_the_warehouse_executes(self):
+        """SAP MB1A: the ERP document asks for the movement, the warehouse picks and issues it, and the very document is posted."""
+        self.stock(10)
+        self.settings(outbound_replication="Stock Entry Draft", release_replicated_deliveries=1)
+        se = self._stock_entry("Material Issue", 4, s_warehouse=self.erp_wh)
+        se.reload()
+        self.assertTrue(se.wms_outbound_delivery)
+        od = frappe.get_doc("Outbound Delivery", se.wms_outbound_delivery)
+        self.assertEqual((od.erp_source_doctype, od.erp_source_name, od.items[0].requested_quantity, od.docstatus), ("Stock Entry", se.name, 4, 1))
+        with self.assertRaisesRegex(frappe.ValidationError, "submitted automatically"):
+            se.submit()
+        allocate_delivery(od.name)
+        [task] = create_pick_tasks(od.name)
+        _, hu = pick_into_new_hu(task, confirmed_quantity=4)
+        frappe.db.set_value("Storage Bin", self.bins["STAGE"], "storage_type", f"{self.wh}-DOOR")
+        frappe.db.set_value("Handling Unit", hu, "status", "Loaded")
+        gi = frappe.get_doc("Goods Issue", post_goods_issue_for_delivery(od.name)["goods_issue"])
+        se.reload()
+        self.assertEqual((se.docstatus, gi.erpnext_stock_entry, flt(se.items[0].qty)), (1, se.name, 4), "the same Stock Entry is posted, no second one")
+        self.assertEqual(frappe.db.get_value("Stock Entry", se.name, "purpose"), "Material Issue")
+
+    def test_a_draft_material_receipt_is_received_by_the_warehouse_and_posted(self):
+        self.settings(inbound_replication="Stock Entry Draft", release_replicated_deliveries=1)
+        se = self._stock_entry("Material Receipt", 6, t_warehouse=self.erp_wh)
+        se.reload()
+        ind = frappe.get_doc("Inbound Delivery", se.wms_inbound_delivery)
+        self.assertEqual((ind.erp_source_doctype, ind.items[0].expected_quantity, ind.docstatus), ("Stock Entry", 6, 1))
+        hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": "ERPI-PAL", "warehouse": self.wh,
+                             "current_bin": self.bins["RECV"], "status": "Open"}).insert(ignore_permissions=True)
+        gr = frappe.get_doc({"doctype": "Goods Receipt", "inbound_delivery": ind.name, "warehouse": self.wh, "receiving_bin": self.bins["RECV"],
+                             "items": [{"inbound_delivery_item": ind.items[0].name, "item": TEST_ITEM, "quantity": 6, "stock_uom": self.uom, "handling_unit": hu.name, "stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+        gr.submit()
+        se.reload()
+        self.assertEqual((se.docstatus, gr.erpnext_stock_entry, flt(se.items[0].qty)), (1, se.name, 6))
+
+    def test_a_draft_stock_entry_follows_changes_and_deletion_withdraws_its_delivery(self):
+        self.settings(inbound_replication="Stock Entry Draft", release_replicated_deliveries=1)
+        se = self._stock_entry("Material Receipt", 6, t_warehouse=self.erp_wh)
+        se.reload()
+        first = se.wms_inbound_delivery
+        se.items[0].qty = 9
+        se.save()
+        se.reload()
+        self.assertNotEqual(se.wms_inbound_delivery, first, "the delivery was replaced")
+        self.assertEqual(frappe.get_doc("Inbound Delivery", se.wms_inbound_delivery).items[0].expected_quantity, 9)
+        current = se.wms_inbound_delivery
+        frappe.delete_doc("Stock Entry", se.name, ignore_permissions=True)
+        self.assertEqual(frappe.db.get_value("Inbound Delivery", current, "docstatus"), 2)
+
     def test_draft_delivery_note_changes_follow_and_deletion_withdraws(self):
         from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
         self.settings(outbound_replication="Delivery Note Draft")

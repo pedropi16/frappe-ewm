@@ -63,3 +63,5 @@ Update: opportunistic cross-docking existed at receipt; it now has a per-warehou
 Update: the Monitor's Shipping & Receiving view is now exercised in a browser (Playwright, `specs/monitor_cockpit.spec.js`: plan truck, add delivery, check in; every view opens without a script error). It found and fixed a broken Plan Truck dialog (`frappe.datetime.add_hours` does not exist) and a cockpit that did not refresh after check-in. The cockpit also has an Add Delivery button.
 
 Update (second pass, from user review): scrapping, unplanned stock and a general posting change (Monitor actions), manufacturing receipt bins and putaway rules, kanban per PSA, choose-the-stock staging done. Operator-facing RF screens for these supervisor actions are not built (desktop only).
+
+Update (SAP business client experience): Inbound Monitor processing (receive & pack into HUs, direct placement, create tasks later) and ERP-initiated goods movements (draft Stock Entry -> delivery -> executed -> the same Stock Entry posted, MB1A style) done. A transfer between two WMS warehouses is not a single delivery yet (issue + receipt separately).
