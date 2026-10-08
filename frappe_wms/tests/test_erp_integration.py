@@ -186,6 +186,45 @@ class TestErpIntegration(IntegrationTestCase):
         frappe.delete_doc("Delivery Note", dn.name, ignore_permissions=True)
         self.assertEqual(frappe.db.get_value("Outbound Delivery", second, "docstatus"), 2)
 
+    def test_split_of_a_draft_delivery_note_creates_the_second_draft_note(self):
+        from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
+        from frappe_wms.api.erp_integration import split_delivery
+        self.stock(10)
+        self.settings(outbound_replication="Delivery Note Draft", release_replicated_deliveries=1)
+        so = self.sales_order(6)
+        dn = make_delivery_note(so.name)
+        for row in dn.items: row.warehouse = self.erp_wh
+        dn.insert(ignore_permissions=True)
+        dn.reload()
+        od = frappe.get_doc("Outbound Delivery", dn.wms_outbound_delivery)
+        res = split_delivery(od.name, [{"line": od.items[0].name, "quantity": 2}], "second truck")
+        dn.reload()
+        self.assertEqual(flt(dn.items[0].qty), 4)
+        new_dn = frappe.get_doc("Delivery Note", res["delivery_note"])
+        self.assertEqual((new_dn.docstatus, flt(new_dn.items[0].qty), new_dn.wms_outbound_delivery), (0, 2, res["new"]))
+        new_od = frappe.get_doc("Outbound Delivery", res["new"])
+        self.assertEqual((new_od.docstatus, new_od.erp_source_name, new_od.items[0].source_document_line), (1, new_dn.name, new_dn.items[0].name))
+        self.assertEqual(flt(frappe.db.get_value("Outbound Delivery Item", od.items[0].name, "requested_quantity")), 4)
+        # the replicated drafts stay in step: re-saving the original does not rebuild its delivery
+        dn.save(ignore_permissions=True)
+        self.assertEqual(frappe.db.get_value("Delivery Note", dn.name, "wms_outbound_delivery"), od.name)
+        with self.assertRaisesRegex(frappe.ValidationError, "only 4"):
+            split_delivery(od.name, [{"line": od.items[0].name, "quantity": 5}])
+        with self.assertRaisesRegex(frappe.ValidationError, "must leave"):
+            split_delivery(od.name, [{"line": od.items[0].name, "quantity": 4}])
+
+    def test_split_of_a_sales_order_delivery_leaves_the_notes_to_goods_issue(self):
+        from frappe_wms.api.erp_integration import split_delivery
+        self.settings(outbound_replication="Sales Order Submitted", release_replicated_deliveries=1)
+        so = self.sales_order(5)
+        [name] = self.deliveries("Outbound Delivery", so.name)
+        od = frappe.get_doc("Outbound Delivery", name)
+        res = split_delivery(name, [{"line": od.items[0].name, "quantity": 5 - 1}])
+        self.assertIsNone(res["delivery_note"])
+        new_od = frappe.get_doc("Outbound Delivery", res["new"])
+        self.assertEqual((flt(new_od.items[0].requested_quantity), new_od.items[0].sales_order_item), (4, od.items[0].sales_order_item))
+        self.assertEqual(flt(frappe.db.get_value("Outbound Delivery Item", od.items[0].name, "requested_quantity")), 1)
+
     # ------------------------------------------------------------------ Purchase Receipt draft = ASN
 
     def test_asn_purchase_receipt_is_posted_by_the_goods_receipt_and_short_completion_closes_the_order(self):

@@ -24,3 +24,10 @@ def wms_status(doctype, name):
 def retry_erp_posting(log_name):
     from frappe_wms.services.erp_sync_queue import retry_now
     return retry_now(log_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def split_delivery(delivery_name, lines, reason=None):
+    from frappe_wms.services.delivery_split import split_outbound_delivery
+    return split_outbound_delivery(delivery_name, frappe.parse_json(lines), reason)
