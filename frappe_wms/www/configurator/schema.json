@@ -415,6 +415,13 @@
      "default": "0",
      "depends_on": "opportunistic_cross_docking",
      "description": "Only deliveries due within this many days take received goods directly. 0 = no limit."
+    },
+    {
+     "fieldname": "production_receiving_bin",
+     "label": "Production Receiving Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Where goods received from manufacturing arrive first. Blank = the default receiving bin."
     }
    ],
    "key": {
@@ -1441,7 +1448,7 @@
      "fieldname": "movement_category",
      "label": "Movement Category",
      "fieldtype": "Select",
-     "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack\nArchive Carry-Forward",
+     "options": "Receipt\nReceipt Reversal\nPutaway\nInternal Movement\nPicking\nPick Reversal\nStock Type Change\nGoods Issue\nGoods Issue Reversal\nInventory Gain\nInventory Loss\nPack\nUnpack\nArchive Carry-Forward\nScrapping\nUnplanned Receipt",
      "reqd": 1
     },
     {
@@ -1725,6 +1732,21 @@
      "fieldtype": "Data",
      "depends_on": "eval:doc.strategy=='Custom'",
      "description": "Name registered by an app under hooks.py wms_putaway_strategies: a function (bins, context) -> bins, best first."
+    },
+    {
+     "fieldname": "receipt_origin",
+     "label": "Goods Receipt From",
+     "fieldtype": "Select",
+     "options": "\nProduction",
+     "description": "Only for goods received from manufacturing (a Work Order); blank = every receipt."
+    },
+    {
+     "fieldname": "production_supply_area",
+     "label": "Production Supply Area",
+     "fieldtype": "Link",
+     "options": "Production Supply Area",
+     "depends_on": "eval:doc.receipt_origin=='Production'",
+     "description": "Only for output of this PSA; blank = any."
     }
    ],
    "key": {
@@ -2180,6 +2202,13 @@
      "fieldtype": "Table",
      "options": "PSA Bin",
      "description": "More bins of this PSA (rack positions, line-side bins). The supply bin is the default; a control cycle can name another."
+    },
+    {
+     "fieldname": "output_bin",
+     "label": "Production Output Bin",
+     "fieldtype": "Link",
+     "options": "Storage Bin",
+     "description": "Where finished goods of this area are received first (then put away by the Putaway rules for production receipts). Blank = the warehouse's production receiving bin."
     }
    ],
    "key": {
@@ -2216,7 +2245,7 @@
      "fieldname": "staging_method",
      "label": "Staging Method",
      "fieldtype": "Select",
-     "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption",
+     "options": "Pick Parts\nRelease Order Parts\nCrate Parts\nDirect Consumption\nKanban",
      "reqd": 1,
      "default": "Pick Parts",
      "description": "Pick Parts: staged per order, reserved to it. Release Order Parts: demand of several orders staged together, pooled. Crate Parts: kept between a minimum and maximum in the PSA, independent of orders. Direct Consumption: not staged, consumed from where it is stored."
@@ -2245,6 +2274,22 @@
      "label": "Active",
      "fieldtype": "Check",
      "default": 1
+    },
+    {
+     "fieldname": "source_storage_type",
+     "label": "Refill From Storage Type",
+     "fieldtype": "Link",
+     "options": "Storage Type",
+     "depends_on": "eval:doc.staging_method=='Kanban'",
+     "description": "Kanban: the storage type the kanban bin is refilled from."
+    },
+    {
+     "fieldname": "kanban_rule",
+     "label": "Replenishment Rule",
+     "fieldtype": "Link",
+     "options": "Replenishment Rule",
+     "depends_on": "eval:doc.staging_method=='Kanban'",
+     "read_only": 1
     }
    ],
    "key": {
@@ -5479,6 +5524,10 @@
     {
      "target": "Country",
      "label": "Country of Origin"
+    },
+    {
+     "target": "Production Supply Area",
+     "label": "Production Supply Area"
     }
    ]
   },

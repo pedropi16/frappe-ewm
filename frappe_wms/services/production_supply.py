@@ -162,6 +162,22 @@ def _raw_source_lines(warehouse, product, psa, limit):
         (warehouse, product, tuple(psa_bins(psa) + _deco_locations(psa)) or ("",), limit), as_dict=True)
 
 
+def stock_for_staging(psa, product, storage_bin=None, batch_no=None, serial_no=None, handling_unit=None, limit=200):
+    """Every stock line the product could be staged from (not only the oldest few): to pick the very serial number / batch / HU / bin the order must use."""
+    require_role(*STAGE_ROLES)
+    warehouse = frappe.db.get_value("Production Supply Area", psa, "warehouse")
+    extra, args = "", [warehouse, product, tuple(psa_bins(psa) + _deco_locations(psa)) or ("",)]
+    for field, value in (("b.storage_bin", storage_bin), ("b.batch_no", batch_no), ("b.serial_no", serial_no), ("b.handling_unit", handling_unit)):
+        if value: extra += f" and {field} like %s"; args.append(f"%{value}%")
+    rows = frappe.db.sql(f"""select b.storage_bin, b.handling_unit, b.batch_no, b.serial_no, b.available_quantity, b.stock_uom, b.first_receipt_date from `tabWMS Stock Balance` b
+        join `tabStorage Bin` sb on sb.name = b.storage_bin join `tabStorage Type` st on st.name = sb.storage_type
+        where b.warehouse=%s and b.product=%s and b.stock_type='AVAILABLE' and b.available_quantity>0 and b.storage_bin not in %s and ifnull(b.stock_owner, '') = '' and ifnull(b.entitled_party, '') = ''
+        and ifnull(b.special_stock_ref, '') = '' and ifnull(b.consolidation_group, '') = '' and sb.removal_blocked=0 and st.storage_role in ('Storage', '') {extra}
+        order by b.first_receipt_date asc, b.name asc limit %s""", (*args, int(limit)), as_dict=True)
+    for r in rows: r["available_quantity"] = flt(r.available_quantity) - _planned_out(product, r.storage_bin, r.handling_unit)
+    return [r for r in rows if r.available_quantity > 0.000001]
+
+
 def staging_overview(psa):
     """Open PMR items of a PSA with source proposals - the data behind the staging app."""
     require_role(*STAGE_ROLES)
@@ -220,6 +236,15 @@ def _via_deconsolidation(psa, pmr, tasks):
         if final != location: frappe.db.set_value("Warehouse Task", task, {"destination_bin": location, "final_destination_bin": final})
 
 
+def _check_source_bin(psa, source_bin):
+    """A chosen source must be real storage of the PSA's warehouse that may be picked from - not the PSA itself."""
+    warehouse, removal_blocked, role = frappe.db.get_value("Storage Bin", source_bin, ["warehouse", "removal_blocked", "storage_type"]) or (None, 0, None)
+    role = frappe.db.get_value("Storage Type", role, "storage_role") if role else None
+    if warehouse != frappe.db.get_value("Production Supply Area", psa, "warehouse"): frappe.throw(_("{0} is not a bin of the PSA's warehouse").format(source_bin))
+    if removal_blocked: frappe.throw(_("Removal from {0} is blocked").format(source_bin))
+    if role not in ("Storage", "", None) or source_bin in psa_bins(psa): frappe.throw(_("{0} is not a storage bin the material can be staged from").format(source_bin))
+
+
 def stage_items(psa, method, lines):
     """Create the staging tasks. lines: [{source_bin, source_hu?, batch_no?, serial_no?, quantity, pmr_item}] for "Single Order"
     (the stock is reserved to that PMR item); [{..., product, pmr_items: [...]}] for "Cross Order" (pooled, any open PMR of the product)."""
@@ -229,6 +254,8 @@ def stage_items(psa, method, lines):
     for line in lines:
         quantity = flt(line["quantity"])
         if quantity <= 0: frappe.throw(_("Quantity must be greater than zero"))
+        if line.get("serial_no") and abs(quantity - 1) > 0.000001: frappe.throw(_("Serial number {0} is staged one unit at a time").format(line["serial_no"]))
+        _check_source_bin(psa, line["source_bin"])
         names = [line["pmr_item"]] if method == "Single Order" else list(line["pmr_items"])
         items = [frappe.db.get_value("Production Material Request Item", n, ["name", "parent", "product", "psa", "required_quantity", "tasked_quantity"], as_dict=True, for_update=True) for n in names]
         if not items or any(not i for i in items): frappe.throw(_("Production Material Request item not found"))

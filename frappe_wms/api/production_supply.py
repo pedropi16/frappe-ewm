@@ -58,3 +58,9 @@ def kanban_overview(psa):
 @retry_on_deadlock
 def kanban_signal(psa, product):
     return ps.kanban_signal(psa, product)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def stock_for_staging(psa, product, storage_bin=None, batch_no=None, serial_no=None, handling_unit=None):
+    return ps.stock_for_staging(psa, product, storage_bin, batch_no, serial_no, handling_unit)

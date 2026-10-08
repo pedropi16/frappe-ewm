@@ -248,6 +248,26 @@ class TestProductionSupply(IntegrationTestCase):
         self.assertEqual(sum(r.requested_quantity for r in again), 17, "falling under the minimum raised the refill up to the maximum")
         self.assertEqual(ps.kanban_overview(psa.name)[0].state, "Refill")
 
+    def test_staging_can_use_exactly_the_stock_the_planner_chooses(self):
+        from frappe_wms.services import production_supply as ps
+        supply = f"{self.warehouse}-PSA-SUP"
+        if not frappe.db.exists("Storage Bin", supply):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": supply, "warehouse": self.warehouse, "storage_type": f"{self.warehouse}-PSUP", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": self.warehouse, "psa_code": frappe.generate_hash(length=5), "psa_name": "Choose PSA", "supply_bin": supply}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: psa.db_set("active", 0))
+        self._seed_rm_stock(30)
+        lines = ps.stock_for_staging(psa.name, self.rm)
+        self.assertIn(self.source_bin, {l.storage_bin for l in lines}, "every stock line is offered, not only the oldest few")
+        self.assertEqual(ps.stock_for_staging(psa.name, self.rm, storage_bin="NO-SUCH-BIN"), [])
+        self.assertEqual({l.storage_bin for l in ps.stock_for_staging(psa.name, self.rm, storage_bin="SRC")}, {self.source_bin})
+        wo = self._submit_work_order(qty=4)
+        item = frappe.get_doc("Production Material Request", {"work_order": wo.name}).items[0]
+        chosen = max(lines, key=lambda l: l.available_quantity)
+        with self.assertRaisesRegex(frappe.ValidationError, "not a storage bin"):
+            ps.stage_items(psa.name, "Single Order", [{"source_bin": supply, "pmr_item": item.name, "quantity": 1}])
+        out = ps.stage_items(psa.name, "Single Order", [{"source_bin": chosen.storage_bin, "source_hu": chosen.handling_unit, "batch_no": chosen.batch_no, "pmr_item": item.name, "quantity": 3}])
+        self.assertEqual(frappe.db.get_value("Warehouse Request", out[0]["warehouse_request"], ["source_bin", "source_hu"]), (chosen.storage_bin, chosen.handling_unit))
+
     def test_automatic_psa_stages_a_new_pmr_on_its_own(self):
         from frappe_wms.services import production_supply as ps
         supply = f"{self.warehouse}-PSA-SUP"

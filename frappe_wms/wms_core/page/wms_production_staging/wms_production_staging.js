@@ -15,6 +15,7 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
   page.add_inner_button(__("Refresh"), () => load());
   const $body = $(`<div class="wms-staging"></div>`).appendTo(page.main);
   $body.on("change", "select.wms-src", function () { setQty($(this).closest("tr")); });
+  $body.on("click", "button.wms-choose", function () { chooseStock(state.groups[$(this).closest("tr").data("g")]); });
   $body.on("click", "button.wms-kanban-signal", async function () {
     await call("kanban_signal", { psa: psa(), product: $(this).data("product") });
     frappe.show_alert({ message: __("Refill of the kanban bin created"), indicator: "green" });
@@ -55,7 +56,8 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
       <td>${esc(g.label[0])}</td><td>${esc(g.label[1])}</td><td>${esc(g.label[2])}</td><td>${esc(g.product)}</td><td>${esc(single ? g.operation || "" : "")}</td>
       <td class="text-right">${flt(g.required_quantity)}</td><td class="text-right">${flt(g.tasked_quantity)}</td><td class="text-right"><b>${flt(g.open_quantity)}</b></td>
       <td><select class="form-control input-xs wms-src">${srcOptions(g.proposals)}</select></td>
-      <td><input type="number" step="any" class="form-control input-xs wms-qty" style="width:90px"></td></tr>`).join("");
+      <td><input type="number" step="any" class="form-control input-xs wms-qty" style="width:90px"></td>
+      <td><button class="btn btn-xs btn-default wms-choose">${__("Choose stock…")}</button></td></tr>`).join("");
     const status = state.status.map((r) => `<tr><td><a href="/app/production-material-request/${encodeURIComponent(r.pmr)}">${esc(r.pmr)}</a></td><td>${esc(r.work_order)}</td><td>${esc(__(r.status))}</td>
       <td>${esc(r.product)}</td><td class="text-right">${flt(r.required_quantity)}</td><td class="text-right">${flt(r.tasked_quantity)}</td><td class="text-right">${flt(r.staged_quantity)}</td><td class="text-right">${flt(r.consumed_quantity)}</td>
       <td>${flt(r.staged_quantity) > flt(r.consumed_quantity) ? `<button class="btn btn-xs btn-default wms-return" data-item="${esc(r.pmr_item)}">${__("Return unused")}</button>` : ""}</td></tr>`).join("");
@@ -64,8 +66,8 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
       <td>${k.state === "Full" ? "" : `<button class="btn btn-xs btn-default wms-kanban-signal" data-product="${esc(k.product)}">${__("Container empty - refill")}</button>`}</td></tr>`).join("");
     $body.html(`<h5 style="margin-top:14px;">${__("Open for staging")}</h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th></th><th>${single ? __("PMR") : __("PMRs")}</th><th>${__("Work Order")}</th><th>${__("Date")}</th><th>${__("Product")}</th><th>${__("Operation")}</th>
-        <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Open")}</th><th>${__("Take from")}</th><th>${__("Quantity")}</th></tr></thead>
-        <tbody>${open || `<tr><td colspan="11" class="text-muted">${__("Nothing open for staging.")}</td></tr>`}</tbody></table></div>
+        <th>${__("Required")}</th><th>${__("Tasked")}</th><th>${__("Open")}</th><th>${__("Take from")}</th><th>${__("Quantity")}</th><th></th></tr></thead>
+        <tbody>${open || `<tr><td colspan="12" class="text-muted">${__("Nothing open for staging.")}</td></tr>`}</tbody></table></div>
       ${state.kanban.length ? `<h5 style="margin-top:22px;">${__("Kanban bins")} <span class="text-muted" style="font-size:12px;">${__("materials taken from these bins need no staging")}</span></h5>
       <div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th>${__("Kanban Bin")}</th><th>${__("Product")}</th><th>${__("In Bin")}</th><th>${__("On the way")}</th><th>${__("Minimum")}</th><th>${__("Maximum")}</th><th>${__("State")}</th><th></th></tr></thead>
         <tbody>${kanban}</tbody></table></div>` : ""}
@@ -96,6 +98,38 @@ frappe.pages["wms-production-staging"].on_page_load = function (wrapper) {
     const out = await call("stage_items", { psa: psa(), method: methodField.get_value(), lines: JSON.stringify(lines) });
     frappe.show_alert({ message: __("{0} staging task(s) created", [out.length]), indicator: "green" });
     load();
+  }
+
+  // Pick exactly the stock an order must use: any bin, handling unit, batch or serial number of the product, several lines at once.
+  function chooseStock(g) {
+    const single = methodField.get_value() === "Single Order";
+    const d = new frappe.ui.Dialog({ title: __("Choose stock of {0} (open: {1})", [g.product, flt(g.open_quantity)]), size: "extra-large", fields: [
+      { fieldname: "storage_bin", fieldtype: "Data", label: __("Bin contains") }, { fieldname: "handling_unit", fieldtype: "Data", label: __("HU contains") },
+      { fieldname: "batch_no", fieldtype: "Data", label: __("Batch contains") }, { fieldname: "serial_no", fieldtype: "Data", label: __("Serial contains") },
+      { fieldname: "lines", fieldtype: "HTML" }],
+      primary_action_label: __("Create Staging Tasks"), primary_action: async () => {
+        const lines = [];
+        d.$wrapper.find("tr[data-i]").each(function () {
+          const $tr = $(this), l = d.rows[$tr.data("i")], quantity = flt($tr.find("input.wms-cq").val());
+          if (!$tr.find("input.wms-cpick").is(":checked") || !(quantity > 0)) return;
+          const line = { source_bin: l.storage_bin, source_hu: l.handling_unit, batch_no: l.batch_no, serial_no: l.serial_no, quantity };
+          lines.push(single ? { ...line, pmr_item: g.items[0] } : { ...line, product: g.product, pmr_items: g.items });
+        });
+        if (!lines.length) { frappe.show_alert({ message: __("Mark the stock to stage."), indicator: "orange" }); return; }
+        const out = await call("stage_items", { psa: psa(), method: methodField.get_value(), lines: JSON.stringify(lines) });
+        d.hide(); frappe.show_alert({ message: __("{0} staging task(s) created", [out.length]), indicator: "green" }); load();
+      } });
+    const search = async () => {
+      const v = d.get_values(true) || {};
+      d.rows = await call("stock_for_staging", { psa: psa(), product: g.product, storage_bin: v.storage_bin, handling_unit: v.handling_unit, batch_no: v.batch_no, serial_no: v.serial_no });
+      d.fields_dict.lines.$wrapper.html(`<div style="max-height:360px;overflow:auto;"><table class="table table-bordered table-sm"><thead><tr><th></th><th>${__("Bin")}</th><th>${__("HU")}</th><th>${__("Batch")}</th><th>${__("Serial No")}</th>
+        <th>${__("GR Date")}</th><th>${__("Available")}</th><th>${__("Quantity")}</th></tr></thead><tbody>${d.rows.map((r, i) => `<tr data-i="${i}"><td><input type="checkbox" class="wms-cpick"></td>
+        <td>${esc(r.storage_bin)}</td><td>${esc(r.handling_unit || "")}</td><td>${esc(r.batch_no || "")}</td><td>${esc(r.serial_no || "")}</td><td>${esc(String(r.first_receipt_date || "").slice(0, 10))}</td>
+        <td class="text-right">${flt(r.available_quantity)}</td><td><input type="number" step="any" class="form-control input-xs wms-cq" style="width:90px" value="${r.serial_no ? 1 : flt(r.available_quantity)}" ${r.serial_no ? "readonly" : ""}></td></tr>`).join("") || `<tr><td colspan="8" class="text-muted">${__("No stock")}</td></tr>`}</tbody></table></div>`);
+    };
+    d.set_secondary_action_label && d.set_secondary_action_label(__("Search"));
+    d.set_secondary_action(search);
+    d.show(); search();
   }
 
   async function autoStage() {

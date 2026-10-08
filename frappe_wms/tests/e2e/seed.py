@@ -207,3 +207,43 @@ def cleanup_adjustments():
     for dt in ("WMS Stock Adjustment", "WMS Posting Change"):
         frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
+
+
+def staging_demo():
+    """Production Staging fixture: a PSA (supply bin E2E-WH-STAGE), 12 units of the item in E2E-WH-A1 and an open PMR needing 5. cleanup_staging() removes them."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.stock import post_entries
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": "E2E-WH-A1", "stock_type": "AVAILABLE", "stock_uom": uom, "quantity": 12, "movement_type": "701"}],
+                 "Storage Bin", "E2E-WH-A1", f"e2e-stg:{frappe.generate_hash(length=8)}")
+    psa = frappe.get_doc({"doctype": "Production Supply Area", "warehouse": WAREHOUSE, "psa_code": "E2EPSA", "psa_name": "E2E PSA", "supply_bin": "E2E-WH-STAGE"}).insert(ignore_permissions=True)
+    other = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0, "name": ["!=", item]}, order_by="creation desc", limit=1, pluck="name")
+    if not other:
+        frappe.get_doc({"doctype": "Item", "item_code": "E2E-KANBAN-ITEM", "item_name": "E2E kanban item", "item_group": frappe.db.get_value("Item", item, "item_group"), "stock_uom": uom, "is_stock_item": 1}).insert(ignore_permissions=True)
+        other = ["E2E-KANBAN-ITEM"]
+    kanban_item = other[0]
+    if not frappe.db.exists("WMS Product", {"item": kanban_item}):
+        frappe.get_doc({"doctype": "WMS Product", "item": kanban_item, "stock_uom": uom, "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+    post_entries([{"warehouse": WAREHOUSE, "product": kanban_item, "storage_bin": "E2E-WH-A2", "stock_type": "AVAILABLE", "stock_uom": uom, "quantity": 30, "movement_type": "701"}],
+                 "Storage Bin", "E2E-WH-A2", f"e2e-stg:{frappe.generate_hash(length=8)}")
+    psa.append("bins", {"storage_bin": "E2E-WH-B1"}); psa.save(ignore_permissions=True)
+    frappe.get_doc({"doctype": "Production Supply Control Cycle", "production_supply_area": psa.name, "product": kanban_item, "staging_method": "Kanban", "staging_bin": "E2E-WH-B1",
+                    "minimum_quantity": 2, "maximum_quantity": 8, "source_storage_type": "E2E-WH-ST", "active": 1}).insert(ignore_permissions=True)
+    pmr = frappe.get_doc({"doctype": "Production Material Request", "work_order": "E2E-WO", "warehouse": WAREHOUSE, "production_item": item, "qty": 1, "status": "Open",
+                          "items": [{"product": item, "stock_uom": uom, "psa": psa.name, "required_quantity": 5}]})
+    pmr.insert(ignore_permissions=True, ignore_links=True)
+    frappe.db.commit()
+    print("E2E_STAGING " + json.dumps({"psa": psa.name, "pmr": pmr.name, "item": item, "kanban_item": kanban_item}))
+
+
+def cleanup_staging():
+    frappe.set_user("Administrator")
+    frappe.db.sql("delete from `tabProduction Material Request Item` where parent in (select name from `tabProduction Material Request` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabProduction Material Request` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabWarehouse Request` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabProduction Supply Control Cycle` where production_supply_area in (select name from `tabProduction Supply Area` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabReplenishment Rule` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabPSA Bin` where parent in (select name from `tabProduction Supply Area` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabProduction Supply Area` where warehouse=%s", WAREHOUSE)
+    frappe.db.commit()

@@ -61,3 +61,5 @@ Update: the consolidation group is now a stock attribute (set when a line joins 
 Update: opportunistic cross-docking existed at receipt; it now has a per-warehouse switch and a horizon (days). Opening-stock rows carry origin / special stock. A planned truck can take another delivery until it leaves (`add_to_truck`).
 
 Update: the Monitor's Shipping & Receiving view is now exercised in a browser (Playwright, `specs/monitor_cockpit.spec.js`: plan truck, add delivery, check in; every view opens without a script error). It found and fixed a broken Plan Truck dialog (`frappe.datetime.add_hours` does not exist) and a cockpit that did not refresh after check-in. The cockpit also has an Add Delivery button.
+
+Update (second pass, from user review): scrapping, unplanned stock and a general posting change (Monitor actions), manufacturing receipt bins and putaway rules, kanban per PSA, choose-the-stock staging done. Operator-facing RF screens for these supervisor actions are not built (desktop only).
