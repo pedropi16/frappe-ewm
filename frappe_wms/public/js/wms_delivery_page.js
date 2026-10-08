@@ -112,10 +112,11 @@ window.wms_delivery_page = (function () {
     }
 
     async function find() {
-      const value = $root.find(".wms-dm-value").val().trim();
-      if (!value) return;
+      const value = $root.find(".wms-dm-value").val().trim();  // empty = the latest deliveries
       const rows = await frappe.call({ method: "frappe_wms.api.monitor.find_deliveries", args: { doctype, by: $root.find(".wms-dm-by").val(), value, warehouse: $root.find(".wms-dm-wh").val() || undefined } }).then((r) => r.message || []);
-      if (rows.length === 1) { frappe.set_route(route, rows[0].name); return; }
+      if (rows.length === 1 && value) { frappe.set_route(route, rows[0].name); return; }
+      if (!rows.length && $root.find(".wms-dm-wh").val()) { $root.find(".wms-dm-hits").html(`<div class="text-muted">${__("No delivery found in {0}.", [$root.find(".wms-dm-wh").val()])} <a href="#" class="wms-dm-all">${__("Search all warehouses")}</a></div>`);
+        $root.find(".wms-dm-all").on("click", (e) => { e.preventDefault(); $root.find(".wms-dm-wh").val(""); find(); }); return; }
       $root.find(".wms-dm-hits").html(rows.length
         ? `<table class="table table-bordered table-sm" style="margin:0"><thead><tr><th>${__("Delivery")}</th><th>${out ? __("Customer") : __("Supplier")}</th><th>${__("Status")}</th><th>${__("Warehouse")}</th><th>${__("Date")}</th></tr></thead><tbody>${rows.map((r) =>
           `<tr><td><a href="/app/${route}/${encodeURIComponent(r.name)}">${esc(r.number || r.name)}</a> <span class="text-muted">${esc(r.name)}</span></td><td>${esc(r.partner)}</td><td>${esc(r.status)}</td><td>${esc(r.warehouse)}</td><td>${dt(r.date)}</td></tr>`).join("")}</tbody></table>`
@@ -124,6 +125,7 @@ window.wms_delivery_page = (function () {
 
     async function advanced() {
       $root.find(".wms-dm-adv").show();
+      if (!$root.find(".wms-dm-wh").val()) $root.find(".wms-dm-wh").val(state.warehouses[0] || "");  // the advanced selection works in one warehouse
       if (!state.selection) {
         state.selection = await new wms_selection.SelectionScreen({
           view: out ? "outbound" : "inbound", $mount: $root.find(".wms-dm-adv-sel"), $results: $root.find(".wms-dm-adv-res"), autoOpen: () => false,
@@ -144,10 +146,11 @@ window.wms_delivery_page = (function () {
     $root.find(".wms-dm-adv-btn").on("click", advanced);
     frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Warehouse", fields: ["name"], limit_page_length: 100 } }).then((r) => {
       state.warehouses = (r.message || []).map((w) => w.name);
-      $root.find(".wms-dm-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frm.doc ? frm.doc.warehouse : state.warehouses[0]);
+      // quick search covers every warehouse unless one is chosen
+      $root.find(".wms-dm-wh").html(`<option value="">${__("All warehouses")}</option>` + state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frm.doc ? frm.doc.warehouse : "");
     });
 
-    return { show(name) { if (name) return load(decodeURIComponent(name)); } };
+    return { show(name) { if (name) return load(decodeURIComponent(name)); if (!$root.find(".wms-dm-hits").children().length) { $root.find(".wms-dm-doc").hide(); $root.find(".wms-dm-empty").show(); find(); } } };
   }
   // Loads the shared grid / selection scripts (like the Monitor does), mounts the screen once, and shows the delivery named in the route each time the page is shown.
   const v = () => Math.floor(Date.now() / 600000);
@@ -165,7 +168,7 @@ window.wms_delivery_page = (function () {
   async function shown(wrapper) {
     await wrapper.__dm_ready;
     const name = frappe.get_route()[1];
-    if (wrapper.__dm && name) wrapper.__dm.show(name);
+    if (wrapper.__dm) wrapper.__dm.show(name);
   }
   return { mount, boot, shown };
 })();
