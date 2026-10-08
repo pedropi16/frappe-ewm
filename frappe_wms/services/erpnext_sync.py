@@ -466,21 +466,50 @@ def sync_quality_inspection(doc, passed, failed):
 # ERPNext's own stock ledger and reports don't keep showing stock under its old status forever.
 
 def sync_posting_change(doc):
+    """Stock type / owner / party changes are a same-warehouse Material Transfer; a changed product or batch is a Repack (one item / batch in, another out).
+    Changes only the warehouse knows about (country of origin, special stock) have nothing to mirror."""
+    from frappe_wms.services.posting_change import sides
     erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
     if not erpnext_warehouse: return None
+    before, after = sides(doc)
+    if all(before[k] == after[k] for k in ("product", "batch_no", "stock_type", "stock_owner", "entitled_party")): return None
     company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
-    se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Posting Change {doc.name}")
-    owner, party = _doc_owner(doc)
-    se.append("items", {
-        "item_code": doc.product, "qty": flt(doc.quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom,
-        "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no, "use_serial_batch_fields": 1,
-        "s_warehouse": erpnext_warehouse, "t_warehouse": erpnext_warehouse,
-        **_dims(doc.from_stock_type, owner, party), **_dims(doc.to_stock_type, owner, party, target=True),
-        "allow_zero_valuation_rate": 1,  # see sync_quality_inspection above for why
-    })
+    uom = doc.stock_uom
+    one = {"item_code": before["product"], "qty": flt(doc.quantity), "uom": uom, "stock_uom": uom, "conversion_factor": 1, "batch_no": before["batch_no"], "serial_no": doc.serial_no,
+           "use_serial_batch_fields": 1, "s_warehouse": erpnext_warehouse, **_dims(before["stock_type"], before["stock_owner"], before["entitled_party"])}
+    two = {**one, "item_code": after["product"], "batch_no": after["batch_no"], "t_warehouse": erpnext_warehouse, **_dims(after["stock_type"], after["stock_owner"], after["entitled_party"], target=True)}
+    if before["product"] != after["product"] or before["batch_no"] != after["batch_no"]:
+        se = _make_stock_entry(stock_entry_type="Repack", company=company, remarks=f"frappe_wms Posting Change {doc.name}")
+        two.pop("s_warehouse"); two.pop("serial_no"); two.update({"set_basic_rate_manually": 1, "allow_zero_valuation_rate": 1})
+        se.append("items", one); se.append("items", two)
+    else:
+        se = _make_stock_entry(stock_entry_type="Material Transfer", company=company, remarks=f"frappe_wms Posting Change {doc.name}")
+        # same-warehouse transfer: one row with both sides. A product with no ERPNext valuation yet has no rate to derive (see sync_quality_inspection).
+        se.append("items", {**one, "t_warehouse": erpnext_warehouse, **_dims(after["stock_type"], after["stock_owner"], after["entitled_party"], target=True), "allow_zero_valuation_rate": 1})
     se.flags.wms_managed_posting = True
     _insert_and_submit_as_system(se)
     return se.name
+
+def sync_stock_adjustment(doc):
+    """Scrapping -> Material Issue, unplanned receipt -> Material Receipt."""
+    erpnext_warehouse = _erpnext_warehouse(doc.warehouse)
+    if not erpnext_warehouse: return None
+    company = frappe.db.get_value("WMS Warehouse", doc.warehouse, "company")
+    receipt = doc.adjustment_type == "Unplanned Receipt"
+    se = _make_stock_entry(stock_entry_type="Material Receipt" if receipt else "Material Issue", company=company, remarks=f"frappe_wms {doc.adjustment_type} {doc.name}: {doc.reason}")
+    row = {"item_code": doc.product, "qty": flt(doc.quantity), "uom": doc.stock_uom, "stock_uom": doc.stock_uom, "conversion_factor": 1, "batch_no": doc.batch_no, "serial_no": doc.serial_no,
+           "use_serial_batch_fields": 1, ("t_warehouse" if receipt else "s_warehouse"): erpnext_warehouse, **_dims(doc.stock_type, doc.stock_owner, doc.entitled_party, target=receipt)}
+    if receipt:
+        rate = flt(doc.valuation_rate) or _resolve_rate(doc.product)
+        if rate: row["basic_rate"] = rate
+        else: row["allow_zero_valuation_rate"] = 1
+    se.append("items", row)
+    se.flags.wms_managed_posting = True
+    _insert_and_submit_as_system(se)
+    return se.name
+
+def reverse_stock_adjustment(doc):
+    _cancel_doc("Stock Entry", doc.get("erpnext_stock_entry"))
 
 def reverse_goods_receipt(doc):
     if doc.get("erpnext_purchase_receipt"):

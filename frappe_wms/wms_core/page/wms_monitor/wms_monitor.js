@@ -1267,11 +1267,13 @@ class WMSMonitor {
     const $wrap = this.body_for("stock");
     if (!$wrap.find(".wms-mon-stock-sel").length) {
       $wrap.html(`
+        <div style="margin-bottom:6px;"><button type="button" class="btn btn-default btn-xs wms-mon-unplanned">${__("Create Unplanned Stock")}</button></div>
         <div class="wms-mon-stock-summary"></div>
         <div class="wms-mon-stock-sel"></div>
         <div class="wms-mon-stock-table">${sap_unexecuted_html()}</div>
         <div class="wms-mon-stock-detail"></div>
       `);
+      $wrap.find(".wms-mon-unplanned").on("click", () => this.unplanned_stock_dialog());
       this.selection("stock", $wrap.find(".wms-mon-stock-sel"), $wrap.find(".wms-mon-stock-table"), this.stock_decorate());
     }
     const summary = await frappe.call("frappe_wms.api.monitor.stock_overview_summary", { warehouse: this.warehouse }).then((r) => r.message || []);
@@ -1338,9 +1340,72 @@ class WMSMonitor {
             const uniq = (f) => Array.from(new Set(lines.map((l) => l[f]).filter(Boolean)));
             return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin") });
           } },
+          { label: __("Posting Change"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.posting_change_dialog(lines) },
+          { label: __("Scrap"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.scrap_dialog(lines) },
         ],
       }),
     };
+  }
+
+  // Stock adjustments on the marked stock rows (services/posting_change.py, services/stock_adjustment.py). Allocated stock is left alone.
+  stock_lines_for_api(lines) { return JSON.stringify(lines.map((l) => ({ name: l.name, quantity: l.quantity }))); }
+
+  posting_change_dialog(lines) {
+    const total = lines.reduce((a, l) => a + flt(l.quantity), 0);
+    return new Promise((resolve) => {
+      const d = new frappe.ui.Dialog({ title: __("Posting Change of {0} row(s), {1} in all", [lines.length, total]), fields: [
+        { fieldname: "to_stock_type", fieldtype: "Link", options: "WMS Stock Type", label: __("New Stock Type") },
+        { fieldname: "to_stock_owner", fieldtype: "Link", options: "WMS Stock Owner", label: __("New Owner") },
+        { fieldname: "to_entitled_party", fieldtype: "Link", options: "WMS Entitled Party", label: __("New Party Entitled to Dispose") },
+        { fieldname: "to_product", fieldtype: "Link", options: "Item", label: __("New Product"), description: __("Not for serial numbers") },
+        { fieldname: "to_batch_no", fieldtype: "Link", options: "Batch", label: __("New Batch") },
+        { fieldname: "to_country_of_origin", fieldtype: "Link", options: "Country", label: __("New Country of Origin") },
+        { fieldname: "to_special_stock_type", fieldtype: "Select", options: "\nSales Order\nProject", label: __("New Special Stock Type") },
+        { fieldname: "to_special_stock_ref", fieldtype: "Data", label: __("New Special Stock Reference") },
+        { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
+        primary_action_label: __("Post"), primary_action: (v) => {
+          const { reason, to_stock_type, ...changes } = v;
+          frappe.call("frappe_wms.api.stock_adjustment.change_stock", { lines: this.stock_lines_for_api(lines), reason, to_stock_type, changes }).then((r) => {
+            d.hide(); frappe.show_alert({ message: __("{0} posting change(s) posted", [(r.message || []).length]), indicator: "green" }); this.load_stock_overview(); resolve();
+          });
+        } });
+      d.show();
+    });
+  }
+
+  scrap_dialog(lines) {
+    const total = lines.reduce((a, l) => a + flt(l.quantity), 0);
+    return new Promise((resolve) => {
+      const d = new frappe.ui.Dialog({ title: __("Scrap {0} in {1} row(s)", [total, lines.length]), fields: [
+        { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
+        primary_action_label: __("Scrap"), primary_action: (v) => {
+          frappe.call("frappe_wms.api.stock_adjustment.scrap_stock", { lines: this.stock_lines_for_api(lines), reason: v.reason }).then((r) => {
+            d.hide(); frappe.show_alert({ message: __("{0} scrapping(s) posted", [(r.message || []).length]), indicator: "green" }); this.load_stock_overview(); resolve();
+          });
+        } });
+      d.show();
+    });
+  }
+
+  unplanned_stock_dialog() {
+    const d = new frappe.ui.Dialog({ title: __("Create Unplanned Stock"), fields: [
+      { fieldname: "product", fieldtype: "Link", options: "Item", label: __("Product"), reqd: 1 },
+      { fieldname: "quantity", fieldtype: "Float", label: __("Quantity"), reqd: 1 },
+      { fieldname: "storage_bin", fieldtype: "Link", options: "Storage Bin", label: __("Storage Bin"), reqd: 1, get_query: () => ({ filters: { warehouse: this.warehouse } }) },
+      { fieldname: "stock_type", fieldtype: "Link", options: "WMS Stock Type", label: __("Stock Type"), default: "AVAILABLE" },
+      { fieldname: "handling_unit", fieldtype: "Link", options: "Handling Unit", label: __("Handling Unit") },
+      { fieldname: "batch_no", fieldtype: "Link", options: "Batch", label: __("Batch") },
+      { fieldname: "serial_no", fieldtype: "Link", options: "Serial No", label: __("Serial No") },
+      { fieldname: "stock_owner", fieldtype: "Link", options: "WMS Stock Owner", label: __("Owner") },
+      { fieldname: "country_of_origin", fieldtype: "Link", options: "Country", label: __("Country of Origin") },
+      { fieldname: "valuation_rate", fieldtype: "Currency", label: __("Valuation Rate"), description: __("Blank = the item's own rate") },
+      { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
+      primary_action_label: __("Create"), primary_action: (v) => {
+        frappe.call("frappe_wms.api.stock_adjustment.create_unplanned_stock", Object.assign({ warehouse: this.warehouse }, v)).then(() => {
+          d.hide(); frappe.show_alert({ message: __("Unplanned stock created"), indicator: "green" }); this.load_stock_overview();
+        });
+      } });
+    d.show();
   }
 
   // Step 2: the marked rows per handling unit - where it sits in the HU nesting and when it arrived.

@@ -16,6 +16,20 @@
     "storage_bin",
     "from_stock_type",
     "to_stock_type",
+    "source_attributes",
+    "stock_owner",
+    "entitled_party",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref",
+    "target_section",
+    "to_product",
+    "to_batch_no",
+    "to_stock_owner",
+    "to_entitled_party",
+    "to_country_of_origin",
+    "to_special_stock_type",
+    "to_special_stock_ref",
     "quantity",
     "stock_uom",
     "reason",
@@ -80,8 +94,8 @@
       "label": "To Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type",
-      "reqd": 1,
-      "in_list_view": 1
+      "in_list_view": 1,
+      "description": "Blank = unchanged."
     },
     {
       "fieldname": "quantity",
@@ -134,6 +148,91 @@
       "options": "Stock Entry",
       "read_only": 1,
       "description": "Same-warehouse Material Transfer posted to update the WMS Stock Type Inventory Dimension in ERPNext to match, if the warehouse is ERPNext-linked."
+    },
+    {
+      "fieldname": "source_attributes",
+      "label": "Stock Being Changed",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner",
+      "read_only": 1
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Entitled Party",
+      "read_only": 1
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country",
+      "read_only": 1
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock Type",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject",
+      "read_only": 1
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "target_section",
+      "label": "Change To (blank = unchanged)",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "to_product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item"
+    },
+    {
+      "fieldname": "to_batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "to_stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner"
+    },
+    {
+      "fieldname": "to_entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Entitled Party"
+    },
+    {
+      "fieldname": "to_country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country"
+    },
+    {
+      "fieldname": "to_special_stock_type",
+      "label": "Special Stock Type",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject"
+    },
+    {
+      "fieldname": "to_special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data"
     }
   ],
   "autoname": "PSC-.########",

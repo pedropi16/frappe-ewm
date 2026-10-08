@@ -42,6 +42,12 @@ def _posting_change(doc):
     if se: doc.db_set("erpnext_stock_entry", se, update_modified=False)
 
 
+def _stock_adjustment(doc):
+    if doc.get("erpnext_stock_entry"): return
+    se = erpnext_sync.sync_stock_adjustment(doc)
+    if se: doc.db_set("erpnext_stock_entry", se, update_modified=False)
+
+
 def _quality_inspection(doc):
     from frappe_wms.services.quality import _create_erpnext_quality_inspection
     if not doc.get("erpnext_quality_inspection"):
@@ -85,6 +91,8 @@ OPERATIONS = {
     "goods_issue": _goods_issue,
     "goods_issue_reversal": erpnext_sync.reverse_goods_issue,
     "posting_change": _posting_change,
+    "stock_adjustment": _stock_adjustment,
+    "stock_adjustment_reversal": erpnext_sync.reverse_stock_adjustment,
     "quality_inspection": _quality_inspection,
     "kitting_order": _kitting_order,
     "work_order_transfer": _work_order_transfer,
@@ -92,7 +100,7 @@ OPERATIONS = {
     "count_rows": _count_rows,
 }
 # A reversal whose forward posting never reached ERPNext has nothing to undo there.
-REVERSES = {"goods_receipt_reversal": "goods_receipt", "goods_issue_reversal": "goods_issue"}
+REVERSES = {"goods_receipt_reversal": "goods_receipt", "goods_issue_reversal": "goods_issue", "stock_adjustment_reversal": "stock_adjustment"}
 
 
 # ------------------------------------------------------------------ dispatch

@@ -1,0 +1,315 @@
+{
+  "name": "WMS Stock Adjustment",
+  "module": "WMS Inventory",
+  "custom": 0,
+  "is_submittable": 0,
+  "istable": 0,
+  "track_changes": 1,
+  "allow_rename": 0,
+  "engine": "InnoDB",
+  "doctype": "DocType",
+  "autoname": "SADJ-.########",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "WMS Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Supervisor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Inventory Controller",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Operator",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Receiver",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Picker",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Packer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Loader",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Process Engineer",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Master Data",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Integration User",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Auditor",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Yard Clerk",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    },
+    {
+      "role": "WMS Yard Planner",
+      "read": 1,
+      "report": 1,
+      "export": 1,
+      "print": 1
+    }
+  ],
+  "fields": [
+    {
+      "fieldname": "warehouse",
+      "label": "Warehouse",
+      "fieldtype": "Link",
+      "options": "WMS Warehouse",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "adjustment_type",
+      "label": "Type",
+      "fieldtype": "Select",
+      "options": "Scrapping\nUnplanned Receipt",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "Scrapping takes stock out of the warehouse; an unplanned receipt brings stock in that has no inbound delivery (found, produced elsewhere, ...)."
+    },
+    {
+      "fieldname": "product",
+      "label": "Product",
+      "fieldtype": "Link",
+      "options": "Item",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "batch_no",
+      "label": "Batch",
+      "fieldtype": "Link",
+      "options": "Batch"
+    },
+    {
+      "fieldname": "serial_no",
+      "label": "Serial No",
+      "fieldtype": "Link",
+      "options": "Serial No"
+    },
+    {
+      "fieldname": "handling_unit",
+      "label": "Handling Unit",
+      "fieldtype": "Link",
+      "options": "Handling Unit"
+    },
+    {
+      "fieldname": "storage_bin",
+      "label": "Storage Bin",
+      "fieldtype": "Link",
+      "options": "Storage Bin",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_type",
+      "label": "Stock Type",
+      "fieldtype": "Link",
+      "options": "WMS Stock Type",
+      "reqd": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "Quantity",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stock_uom",
+      "label": "UoM",
+      "fieldtype": "Link",
+      "options": "UOM",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reason",
+      "label": "Reason",
+      "fieldtype": "Small Text",
+      "reqd": 1
+    },
+    {
+      "fieldname": "owner_section",
+      "label": "Owner and Attributes",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "stock_owner",
+      "label": "Owner",
+      "fieldtype": "Link",
+      "options": "WMS Stock Owner"
+    },
+    {
+      "fieldname": "entitled_party",
+      "label": "Party Entitled to Dispose",
+      "fieldtype": "Link",
+      "options": "WMS Entitled Party"
+    },
+    {
+      "fieldname": "country_of_origin",
+      "label": "Country of Origin",
+      "fieldtype": "Link",
+      "options": "Country"
+    },
+    {
+      "fieldname": "special_stock_type",
+      "label": "Special Stock Type",
+      "fieldtype": "Select",
+      "options": "\nSales Order\nProject"
+    },
+    {
+      "fieldname": "special_stock_ref",
+      "label": "Special Stock Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "valuation_rate",
+      "label": "Valuation Rate",
+      "fieldtype": "Currency",
+      "depends_on": "eval:doc.adjustment_type=='Unplanned Receipt'",
+      "description": "Value of one unit for ERPNext; blank = the item's own rate."
+    },
+    {
+      "fieldname": "posting_section",
+      "label": "Posting",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "status",
+      "label": "Status",
+      "fieldtype": "Select",
+      "options": "Draft\nPosted\nCancelled",
+      "reqd": 1,
+      "default": "Draft",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "posted_by",
+      "label": "Posted By",
+      "fieldtype": "Link",
+      "options": "User",
+      "read_only": 1
+    },
+    {
+      "fieldname": "posted_at",
+      "label": "Posted At",
+      "fieldtype": "Datetime",
+      "read_only": 1
+    },
+    {
+      "fieldname": "erpnext_stock_entry",
+      "label": "ERPNext Stock Entry",
+      "fieldtype": "Link",
+      "options": "Stock Entry",
+      "read_only": 1
+    }
+  ],
+  "field_order": [
+    "warehouse",
+    "adjustment_type",
+    "product",
+    "batch_no",
+    "serial_no",
+    "handling_unit",
+    "storage_bin",
+    "stock_type",
+    "quantity",
+    "stock_uom",
+    "reason",
+    "owner_section",
+    "stock_owner",
+    "entitled_party",
+    "country_of_origin",
+    "special_stock_type",
+    "special_stock_ref",
+    "valuation_rate",
+    "posting_section",
+    "status",
+    "posted_by",
+    "posted_at",
+    "erpnext_stock_entry"
+  ]
+}

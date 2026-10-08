@@ -27,7 +27,7 @@ EXECUTION = [
     "Consolidation Group", "Kitting Order", "Warehouse Order", "Warehouse Queue", "Warehouse Request", "Warehouse Task",
     "WMS Exception Code", "WMS Print Spool", "WMS Resource", "WMS Resource Group", "WMS Task Difference",
     "Handling Unit", "Handling Unit Event", "Goods Receipt", "Inbound Delivery", "WMS Batch Characteristic Value",
-    "WMS Physical Inventory Count", "WMS Posting Change", "WMS Quality Inspection", "WMS Stock Balance", "WMS Stock Ledger Entry",
+    "WMS Physical Inventory Count", "WMS Posting Change", "WMS Stock Adjustment", "WMS Quality Inspection", "WMS Stock Balance", "WMS Stock Ledger Entry",
     "Goods Issue", "Production Material Request", "Outbound Delivery", "Packing Order", "Stock Allocation", "VAS Order", "WMS Wave", "WMS Shipment",
     "Storage Usage Day", "Indirect Labor Entry", "WMS Dock Appointment", "WMS Transportation Unit", "WMS Vehicle", "WMS Yard Task",
 ]

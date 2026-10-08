@@ -199,3 +199,11 @@ def yard_demo():
     frappe.db.commit()
     print("E2E_YARD " + json.dumps({"inbound": names}))
     return {"inbound": names}
+
+
+def cleanup_adjustments():
+    """Removes the stock adjustment / posting change documents and the stock they posted in the E2E warehouse (raw deletes - test data only)."""
+    frappe.set_user("Administrator")
+    for dt in ("WMS Stock Adjustment", "WMS Posting Change"):
+        frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
+    frappe.db.commit()
