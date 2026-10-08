@@ -1076,92 +1076,12 @@ class WMSMonitor {
   async load_inbound() {
     const $wrap = this.body_for("inbound");
     if (!$wrap.find(".wms-mon-ind-sel").length) {
-      $wrap.html(`<div class="wms-mon-ind-sel"></div><div class="wms-mon-ind-table">${sap_unexecuted_html()}</div><div class="wms-mon-ind-detail" style="margin:12px 0 24px;"></div>`);
+      $wrap.html(`<div class="wms-mon-ind-sel"></div><div class="wms-mon-ind-table">${sap_unexecuted_html()}</div>`);
       this.selection("inbound", $wrap.find(".wms-mon-ind-sel"), $wrap.find(".wms-mon-ind-table"), {
-        renderers: {
-          name: (row) => `<a href="/app/inbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>
-            <button type="button" class="btn btn-xs btn-default wms-mon-ind-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("Process")}</button>`,
-        },
-        afterRender: ($res) => $res.find(".wms-mon-ind-view").on("click", (e) => this.load_inbound_detail(e.currentTarget.dataset.delivery)),
+        renderers: { name: (row) => `<a href="/app/inbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>` },
       });
     }
   }
-
-  // The SAP inbound delivery monitor: one delivery's lines, receipts, handling units, putaway requests and tasks - with Receive & Pack (goods into handling units, putaway
-  // by the rules or straight into a chosen bin) and Create Tasks (for what was received without tasks).
-  async load_inbound_detail(name) {
-    const $d = this.body_for("inbound").find(".wms-mon-ind-detail");
-    $d.html(`<div class="text-muted">${__("Loading...")}</div>`);
-    const v = await frappe.call("frappe_wms.api.inbound.inbound_overview", { inbound_delivery: name }).then((r) => r.message);
-    const esc = frappe.utils.escape_html, d = v.delivery, open = v.items.reduce((a, i) => a + i.open, 0);
-    const $card = $(`<div class="wms-mon-detail-card" style="padding:14px;"></div>`);
-    $card.append(`<h5>${esc(d.name)} <small class="text-muted">${esc(d.supplier || "")} · ${esc(__(d.status))} · ${esc(d.receiving_bin || "")}</small></h5>`);
-    const $actions = $(`<div style="margin-bottom:10px;"></div>`).appendTo($card);
-    if (d.docstatus === 1 && open > 0) $(`<button class="btn btn-xs btn-primary">${__("Receive & Pack…")}</button>`).appendTo($actions).on("click", () => this.receive_dialog(name));
-    if (v.open_requests.length) $(`<button class="btn btn-xs btn-default" style="margin-left:6px;">${__("Create Tasks…")}</button>`).appendTo($actions).on("click", () => this.inbound_tasks_dialog(name, v.open_requests.length));
-    $(`<button class="btn btn-xs btn-default" style="margin-left:6px;">${__("Refresh")}</button>`).appendTo($actions).on("click", () => this.load_inbound_detail(name));
-    const table = (title, rows, cols, doctype) => { $card.append(`<h6 style="margin-top:10px;">${title} (${rows.length})</h6>`); if (rows.length) $card.append(this.render_table(rows, cols, doctype)); else $card.append(`<div class="text-muted">${__("None")}</div>`); };
-    table(__("Items"), v.items, [["line_number", __("Line")], ["item", __("Product")], ["expected", __("Expected")], ["received", __("Received")], ["open", __("Open")], ["stock_uom", __("UoM")], ["status", __("Status")]]);
-    table(__("Handling Units"), v.handling_units, [["handling_unit", __("Handling Unit")], ["hu_type", __("Type")], ["current_bin", __("Bin")], ["status", __("Status")],
-      ["contents", __("Contents"), (r) => esc(r.lines.map((l) => `${l.quantity} × ${l.item}${l.batch_no ? " " + l.batch_no : ""}${l.serial_no ? " " + l.serial_no : ""}`).join(", "))]], "Handling Unit");
-    table(__("Putaway Requests"), v.requests, [["name", __("Request")], ["request_type", __("Type")], ["product", __("Product")], ["requested_quantity", __("Quantity")], ["created_quantity", __("Tasked")], ["source_hu", __("HU")], ["destination_bin", __("To Bin")], ["status", __("Status")]], "Warehouse Request");
-    table(__("Warehouse Tasks"), v.tasks, [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")], ["source_bin", __("From")], ["destination_bin", __("To")], ["status", __("Status")]], "Warehouse Task");
-    $d.empty().append($card);
-  }
-
-  async receive_dialog(name) {
-    const wl = await frappe.call("frappe_wms.api.inbound.receiving_worklist", { inbound_delivery: name }).then((r) => r.message);
-    const esc = frappe.utils.escape_html;
-    const types = `<option value=""></option>` + (wl.hu_types || []).map((t) => `<option ${t.name === wl.default_hu_type ? "selected" : ""}>${esc(t.name)}</option>`).join("");
-    const row = (l) => `<tr data-line="${esc(l.inbound_delivery_item)}" data-item="${esc(l.item)}" data-uom="${esc(l.stock_uom)}">
-      <td>${esc(l.line_number)} ${esc(l.item)}<br><span class="text-muted">${esc(l.item_name || "")}</span></td><td class="text-right">${flt(l.remaining)}</td>
-      <td><input type="number" step="any" class="form-control input-xs r-qty" style="width:80px" value="${flt(l.remaining)}"></td>
-      <td><input class="form-control input-xs r-hu" style="width:110px" placeholder="${__("new")}"></td><td><select class="form-control input-xs r-hut" style="width:110px">${types}</select></td>
-      <td><input class="form-control input-xs r-batch" style="width:100px" ${l.batch_required ? "" : "disabled"} placeholder="${l.batch_required ? __("required") : ""}"></td>
-      <td><input class="form-control input-xs r-serial" style="width:100px" ${l.serial_required ? "" : "disabled"} placeholder="${l.serial_required ? __("required") : ""}"></td>
-      <td><input class="form-control input-xs r-bin" style="width:130px" placeholder="${__("by putaway rules")}"></td>
-      <td><button type="button" class="btn btn-xs btn-default r-split" title="${__("Split the line over another handling unit")}">+</button></td></tr>`;
-    const d = new frappe.ui.Dialog({ title: __("Receive & Pack {0}", [name]), size: "extra-large", fields: [
-      { fieldname: "lines", fieldtype: "HTML" },
-      { fieldname: "create_tasks", fieldtype: "Check", label: __("Create putaway tasks now"), default: 1, description: __("Untick to receive now and create the tasks later from the monitor.") }],
-      primary_action_label: __("Receive"), primary_action: async (v) => {
-        const items = [];
-        d.$wrapper.find("tr[data-line]").each(function () {
-          const $r = $(this), quantity = flt($r.find(".r-qty").val());
-          if (!(quantity > 0)) return;
-          items.push({ inbound_delivery_item: $r.data("line"), item: $r.data("item"), stock_uom: $r.data("uom"), quantity, handling_unit: $r.find(".r-hu").val().trim(), hu_type: $r.find(".r-hut").val() || undefined,
-            batch_no: $r.find(".r-batch").val().trim() || undefined, serial_no: $r.find(".r-serial").val().trim() || undefined, destination_bin: $r.find(".r-bin").val().trim() || undefined, stock_type: "AVAILABLE" });
-        });
-        if (!items.length) { frappe.show_alert({ message: __("Enter a quantity to receive."), indicator: "orange" }); return; }
-        const out = await frappe.call("frappe_wms.api.inbound.create_and_submit_goods_receipt", { inbound_delivery: name, items: JSON.stringify(items), create_tasks: v.create_tasks ? 1 : 0 }).then((r) => r.message);
-        d.hide();
-        frappe.show_alert({ message: __("Goods Receipt {0} posted, {1} task(s) created", [out.goods_receipt, out.warehouse_tasks.length]), indicator: "green" });
-        this.load_inbound_detail(name); this.search_inbound_deliveries();
-      } });
-    d.fields_dict.lines.$wrapper.html(`<div style="overflow-x:auto;"><table class="table table-bordered table-sm"><thead><tr><th>${__("Line")}</th><th>${__("Open")}</th><th>${__("Quantity")}</th>
-      <th>${__("Handling Unit")}<br><span class="text-muted" style="font-weight:normal">${__("blank = new, #1 = shared")}</span></th><th>${__("HU Type")}</th><th>${__("Batch")}</th><th>${__("Serial No")}</th>
-      <th>${__("Direct Placement Bin")}</th><th></th></tr></thead><tbody>${wl.lines.map(row).join("")}</tbody></table></div>`);
-    d.fields_dict.lines.$wrapper.on("click", ".r-split", (e) => {
-      const $r = $(e.currentTarget).closest("tr"), $c = $r.clone();
-      $c.find("input").not(".r-qty").val(""); $c.find(".r-qty").val(0); $c.find(".r-split").remove(); $r.after($c);
-    });
-    d.show();
-  }
-
-  inbound_tasks_dialog(name, count) {
-    const d = new frappe.ui.Dialog({ title: __("Create Tasks for {0}", [name]), fields: [
-      { fieldname: "info", fieldtype: "HTML", options: `<p>${__("{0} putaway request(s) are waiting for tasks.", [count])}</p>` },
-      { fieldname: "destination_bin", fieldtype: "Link", options: "Storage Bin", label: __("Direct Placement Bin"), description: __("Blank: the putaway rules choose the bins."), get_query: () => ({ filters: { warehouse: this.warehouse } }) }],
-      primary_action_label: __("Create Tasks"), primary_action: async (v) => {
-        const out = await frappe.call("frappe_wms.api.inbound.plan_open_putaway", { inbound_delivery: name, destination_bin: v.destination_bin }).then((r) => r.message);
-        d.hide();
-        frappe.show_alert({ message: __("{0} task(s) created", [out.warehouse_tasks.length]), indicator: out.unplanned_requests.length ? "orange" : "green" });
-        this.load_inbound_detail(name);
-      } });
-    d.show();
-  }
-
-  search_inbound_deliveries() { return this.execute_selection("inbound"); }
 
   // ---------- Outbound Monitor ----------
   async load_outbound() {
@@ -1170,37 +1090,13 @@ class WMSMonitor {
       $wrap.html(`
         <div class="wms-mon-obd-sel"></div>
         <div class="wms-mon-obd-table" style="margin-bottom:12px;">${sap_unexecuted_html()}</div>
-        <div class="wms-mon-obd-detail" style="margin-bottom:24px;"></div>
         <h5>${__("Waves")}</h5>
         <div class="wms-mon-wave-sel"></div>
         <div class="wms-mon-wave-table">${sap_unexecuted_html()}</div>
       `);
+      // The Outbound Monitor searches and displays; a delivery opens in its maintenance screen (the Outbound Delivery form), where it is worked on.
       this.selection("outbound", $wrap.find(".wms-mon-obd-sel"), $wrap.find(".wms-mon-obd-table"), {
-        renderers: {
-          name: (row) => `<a href="/app/outbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>
-            <button type="button" class="btn btn-xs btn-default wms-mon-obd-view" data-delivery="${frappe.utils.escape_html(row.name)}">${__("View")}</button>`,
-        },
-        // Nothing anywhere - not the RF app, not this page until now - could create a WMS
-        // Shipment at all: confirm_hu_loaded/depart_shipment only ever LIST and ACT ON one that
-        // already exists (#/load), and post_goods_issue itself requires the HU's status to be
-        // "Loaded" (only a Shipment ever sets that) - so a picked delivery had no reachable path
-        // to Goods Issue whatsoever without this. A desk/supervisor action, same spirit as the
-        // Waves "Release" button just below: pick the deliveries for one truck run, create the
-        // Shipment, then an RF Loader takes it from #/load.
-        actions: [{
-          label: __("Create Shipment"), kind: "primary",
-          appliesTo: (row) => row.picking_status === "Picked" && row.loading_status !== "Loaded" && row.goods_issue_status !== "Posted",
-          run: async (rows) => {
-            try {
-              const shipment = await frappe.call("frappe_wms.api.shipping.create_shipment", {
-                warehouse: this.warehouse, outbound_deliveries: JSON.stringify(rows.map((r) => r.name)),
-              }).then((r) => r.message);
-              frappe.show_alert({ message: __("Shipment {0} created for {1} delivery(ies)", [shipment, rows.length]), indicator: "green" });
-              this.search_outbound_deliveries();
-            } catch (e) { /* frappe already shows the server error */ }
-          },
-        }],
-        afterRender: ($res) => $res.find(".wms-mon-obd-view").on("click", (e) => this.load_delivery_detail(e.currentTarget.dataset.delivery)),
+        renderers: { name: (row) => `<a href="/app/outbound-delivery/${encodeURIComponent(row.name)}">${frappe.utils.escape_html(row.name)}</a>` },
       });
       this.selection("waves", $wrap.find(".wms-mon-wave-sel"), $wrap.find(".wms-mon-wave-table"), {
         extraColumns: [["_release", __("Release"), (row) => row.status === "Draft"
@@ -1220,126 +1116,6 @@ class WMSMonitor {
 
   search_outbound_deliveries() { return this.execute_selection("outbound"); }
 
-  async load_delivery_detail(delivery_name) {
-    const $detail = this.body_for("outbound").find(".wms-mon-obd-detail");
-    $detail.html(`<div class="text-muted">${__("Loading...")}</div>`);
-    const status = await frappe.call("frappe_wms.api.monitor.get_delivery_execution_status", { delivery_name }).then((r) => r.message);
-    const d = status.delivery;
-    const docstatusLabel = { 0: __("Draft"), 1: __("Submitted"), 2: __("Cancelled") }[d.docstatus];
-
-    const $wrap = $(`<div class="wms-mon-detail-card" style="padding:14px;"></div>`);
-    $wrap.append(`
-      <h5>${frappe.utils.escape_html(d.name)} <small class="text-muted">(${docstatusLabel})</small></h5>
-      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:10px;">
-        <div><b>${__("Allocation")}:</b> ${frappe.utils.escape_html(d.allocation_status || "-")}</div>
-        <div><b>${__("Picking")}:</b> ${frappe.utils.escape_html(d.picking_status || "-")}</div>
-        <div><b>${__("Packing")}:</b> ${frappe.utils.escape_html(d.packing_status || "-")}</div>
-        <div><b>${__("Loading")}:</b> ${frappe.utils.escape_html(d.loading_status || "-")}</div>
-        <div><b>${__("Goods Issue")}:</b> ${frappe.utils.escape_html(d.goods_issue_status || "-")}</div>
-      </div>
-    `);
-
-    const $actions = $(`<div style="margin-bottom:10px;"></div>`);
-    if (d.docstatus !== 1) {
-      $actions.append(`<span class="text-muted">${__("Submit the document before it can be allocated or picked.")}</span>`);
-    } else {
-      if (d.allocation_status !== "Fully Allocated") {
-        const btn = $(`<button class="btn btn-xs btn-primary">${__("Allocate Stock")}</button>`);
-        btn.on("click", () => frappe.call("frappe_wms.api.outbound.allocate_delivery", { delivery_name }).then(() => this.load_delivery_detail(delivery_name)));
-        $actions.append(btn);
-      } else if (d.picking_status !== "Picked") {
-        const btn = $(`<button class="btn btn-xs btn-primary">${__("Create Pick Tasks")}</button>`);
-        btn.on("click", () => frappe.call("frappe_wms.api.outbound.create_pick_tasks", { delivery_name }).then(() => this.load_delivery_detail(delivery_name)));
-        $actions.append(btn);
-      }
-      if (d.picking_status === "Picked" && d.goods_issue_status !== "Posted") {
-        if (d.loading_status === "Loaded") {
-          const btn = $(`<button class="btn btn-xs btn-success" style="margin-left:6px;">${__("Post Goods Issue")}</button>`);
-          btn.on("click", () => frappe.call("frappe_wms.api.outbound.post_goods_issue_for_delivery", { delivery_name })
-            .then(() => { frappe.show_alert({ message: __("Goods Issue posted"), indicator: "green" }); this.load_delivery_detail(delivery_name); this.search_outbound_deliveries(); })
-            .catch(() => {}));
-          $actions.append(btn);
-        } else {
-          $actions.append(`<span class="text-muted" style="margin-left:6px;">${__("Load the Handling Unit onto a Shipment before Goods Issue can be posted.")}</span>`);
-        }
-      }
-    }
-    $wrap.append($actions);
-
-    $wrap.append(`<h6>${__("Stock Allocations")}</h6>`);
-    if (!status.allocations.length) {
-      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
-    } else {
-      $wrap.append(this.render_table(status.allocations, [
-        ["name", __("Allocation")], ["product", __("Product")], ["storage_bin", __("Bin")], ["handling_unit", __("HU")],
-        ["batch_no", __("Batch")], ["serial_no", __("Serial")], ["allocated_quantity", __("Allocated")],
-        ["picked_quantity", __("Picked")], ["status", __("Status")],
-      ], "Stock Allocation"));
-    }
-
-    $wrap.append(`<h6 style="margin-top:10px;">${__("Pick Tasks")}</h6>`);
-    if (!status.tasks.length) {
-      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
-    } else {
-      $wrap.append(this.render_table(status.tasks, [
-        ["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
-        ["planned_quantity", __("Planned")], ["confirmed_quantity", __("Confirmed")], ["stock_uom", __("UOM")],
-        ["batch_no", __("Batch")], ["serial_no", __("Serial")],
-        ["source_bin", __("Source")], ["destination_bin", __("Destination")],
-        ["source_hu", __("Source HU")], ["destination_hu", __("Destination HU")],
-        ["priority", __("Priority")], ["assigned_resource", __("Resource")], ["sequence", __("Sequence")],
-      ], "Warehouse Task"));
-    }
-    if (status.warehouse_orders.length) {
-      $wrap.append(`<div><b>${__("Warehouse Orders")}:</b> ${status.warehouse_orders.map((wo) =>
-        `<a href="/app/warehouse-order/${encodeURIComponent(wo)}">${frappe.utils.escape_html(wo)}</a>`).join(", ")}</div>`);
-    }
-
-    // picking_status "Not Relevant" means exactly this: no Pick Task/Warehouse Order above ever
-    // existed for (some or all of) this delivery because it's being fulfilled straight off a
-    // receipt instead - this section is where that work actually lives, so "no Pick Tasks" above
-    // doesn't read as "nothing is happening".
-    if (status.cross_dock_requests.length) {
-      $wrap.append(`<h6 style="margin-top:10px;">${__("Cross Dock (fulfilled from receiving, not picked)")}</h6>`);
-      $wrap.append(this.render_table(status.cross_dock_requests, [
-        ["name", __("Request")], ["status", __("Status")], ["product", __("Product")],
-        ["requested_quantity", __("Quantity")], ["stock_uom", __("UOM")],
-        ["source_bin", __("Source")], ["destination_bin", __("Destination")],
-      ], "Warehouse Request"));
-      if (status.cross_dock_tasks.length) {
-        $wrap.append(this.render_table(status.cross_dock_tasks, [
-          ["name", __("Task")], ["status", __("Status")], ["planned_quantity", __("Planned")],
-          ["confirmed_quantity", __("Confirmed")], ["assigned_resource", __("Resource")],
-        ], "Warehouse Task"));
-        const crossDockWos = Array.from(new Set(status.cross_dock_tasks.map((t) => t.warehouse_order).filter(Boolean)));
-        if (crossDockWos.length) {
-          $wrap.append(`<div><b>${__("Cross Dock Warehouse Orders")}:</b> ${crossDockWos.map((wo) =>
-            `<a href="/app/warehouse-order/${encodeURIComponent(wo)}">${frappe.utils.escape_html(wo)}</a>`).join(", ")}</div>`);
-        }
-      }
-    }
-
-    $wrap.append(`<h6 style="margin-top:10px;">${__("Packing Orders")}</h6>`);
-    if (!status.packing_orders.length) {
-      $wrap.append(`<div class="text-muted">${__("None")}</div>`);
-    } else {
-      $wrap.append(this.render_table(status.packing_orders, [
-        ["name", __("Packing Order")], ["status", __("Status")], ["work_center_bin", __("Work Center Bin")],
-      ], "Packing Order"));
-    }
-
-    $wrap.append(`<h6 style="margin-top:10px;">${__("Goods Issues")}</h6>`);
-    if (!status.goods_issues.length) {
-      $wrap.append(`<div class="text-muted">${__("None yet")}</div>`);
-    } else {
-      $wrap.append(this.render_table(status.goods_issues, [
-        ["name", __("Goods Issue")], ["status", __("Status")], ["posting_datetime", __("Posted")], ["reversed", __("Reversed")],
-      ], "Goods Issue"));
-    }
-
-    $detail.empty().append($wrap);
-  }
-
   search_waves() { return this.execute_selection("waves"); }
 
   // ---------- Stock Overview ----------
@@ -1353,7 +1129,7 @@ class WMSMonitor {
         <div class="wms-mon-stock-table">${sap_unexecuted_html()}</div>
         <div class="wms-mon-stock-detail"></div>
       `);
-      $wrap.find(".wms-mon-unplanned").on("click", () => this.unplanned_stock_dialog());
+      $wrap.find(".wms-mon-unplanned").on("click", () => this.open_stock_document("WMS Stock Adjustment", null, { adjustment_type: "Unplanned Receipt" }));
       this.selection("stock", $wrap.find(".wms-mon-stock-sel"), $wrap.find(".wms-mon-stock-table"), this.stock_decorate());
     }
     const summary = await frappe.call("frappe_wms.api.monitor.stock_overview_summary", { warehouse: this.warehouse }).then((r) => r.message || []);
@@ -1420,72 +1196,22 @@ class WMSMonitor {
             const uniq = (f) => Array.from(new Set(lines.map((l) => l[f]).filter(Boolean)));
             return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin") });
           } },
-          { label: __("Posting Change"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.posting_change_dialog(lines) },
-          { label: __("Scrap"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.scrap_dialog(lines) },
+          { label: __("Posting Change"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.open_stock_document("WMS Posting Change", lines[0]) },
+          { label: __("Scrap"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.open_stock_document("WMS Stock Adjustment", lines[0], { adjustment_type: "Scrapping" }) },
         ],
       }),
     };
   }
 
-  // Stock adjustments on the marked stock rows (services/posting_change.py, services/stock_adjustment.py). Allocated stock is left alone.
-  stock_lines_for_api(lines) { return JSON.stringify(lines.map((l) => ({ name: l.name, quantity: l.quantity }))); }
-
-  posting_change_dialog(lines) {
-    const total = lines.reduce((a, l) => a + flt(l.quantity), 0);
-    return new Promise((resolve) => {
-      const d = new frappe.ui.Dialog({ title: __("Posting Change of {0} row(s), {1} in all", [lines.length, total]), fields: [
-        { fieldname: "to_stock_type", fieldtype: "Link", options: "WMS Stock Type", label: __("New Stock Type") },
-        { fieldname: "to_stock_owner", fieldtype: "Link", options: "WMS Stock Owner", label: __("New Owner") },
-        { fieldname: "to_entitled_party", fieldtype: "Link", options: "WMS Entitled Party", label: __("New Party Entitled to Dispose") },
-        { fieldname: "to_product", fieldtype: "Link", options: "Item", label: __("New Product"), description: __("Not for serial numbers") },
-        { fieldname: "to_batch_no", fieldtype: "Link", options: "Batch", label: __("New Batch") },
-        { fieldname: "to_country_of_origin", fieldtype: "Link", options: "Country", label: __("New Country of Origin") },
-        { fieldname: "to_special_stock_type", fieldtype: "Select", options: "\nSales Order\nProject", label: __("New Special Stock Type") },
-        { fieldname: "to_special_stock_ref", fieldtype: "Data", label: __("New Special Stock Reference") },
-        { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
-        primary_action_label: __("Post"), primary_action: (v) => {
-          const { reason, to_stock_type, ...changes } = v;
-          frappe.call("frappe_wms.api.stock_adjustment.change_stock", { lines: this.stock_lines_for_api(lines), reason, to_stock_type, changes }).then((r) => {
-            d.hide(); frappe.show_alert({ message: __("{0} posting change(s) posted", [(r.message || []).length]), indicator: "green" }); this.load_stock_overview(); resolve();
-          });
-        } });
-      d.show();
-    });
-  }
-
-  scrap_dialog(lines) {
-    const total = lines.reduce((a, l) => a + flt(l.quantity), 0);
-    return new Promise((resolve) => {
-      const d = new frappe.ui.Dialog({ title: __("Scrap {0} in {1} row(s)", [total, lines.length]), fields: [
-        { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
-        primary_action_label: __("Scrap"), primary_action: (v) => {
-          frappe.call("frappe_wms.api.stock_adjustment.scrap_stock", { lines: this.stock_lines_for_api(lines), reason: v.reason }).then((r) => {
-            d.hide(); frappe.show_alert({ message: __("{0} scrapping(s) posted", [(r.message || []).length]), indicator: "green" }); this.load_stock_overview(); resolve();
-          });
-        } });
-      d.show();
-    });
-  }
-
-  unplanned_stock_dialog() {
-    const d = new frappe.ui.Dialog({ title: __("Create Unplanned Stock"), fields: [
-      { fieldname: "product", fieldtype: "Link", options: "Item", label: __("Product"), reqd: 1 },
-      { fieldname: "quantity", fieldtype: "Float", label: __("Quantity"), reqd: 1 },
-      { fieldname: "storage_bin", fieldtype: "Link", options: "Storage Bin", label: __("Storage Bin"), reqd: 1, get_query: () => ({ filters: { warehouse: this.warehouse } }) },
-      { fieldname: "stock_type", fieldtype: "Link", options: "WMS Stock Type", label: __("Stock Type"), default: "AVAILABLE" },
-      { fieldname: "handling_unit", fieldtype: "Link", options: "Handling Unit", label: __("Handling Unit") },
-      { fieldname: "batch_no", fieldtype: "Link", options: "Batch", label: __("Batch") },
-      { fieldname: "serial_no", fieldtype: "Link", options: "Serial No", label: __("Serial No") },
-      { fieldname: "stock_owner", fieldtype: "Link", options: "WMS Stock Owner", label: __("Owner") },
-      { fieldname: "country_of_origin", fieldtype: "Link", options: "Country", label: __("Country of Origin") },
-      { fieldname: "valuation_rate", fieldtype: "Currency", label: __("Valuation Rate"), description: __("Blank = the item's own rate") },
-      { fieldname: "reason", fieldtype: "Small Text", label: __("Reason"), reqd: 1 }],
-      primary_action_label: __("Create"), primary_action: (v) => {
-        frappe.call("frappe_wms.api.stock_adjustment.create_unplanned_stock", Object.assign({ warehouse: this.warehouse }, v)).then(() => {
-          d.hide(); frappe.show_alert({ message: __("Unplanned stock created"), indicator: "green" }); this.load_stock_overview();
-        });
-      } });
-    d.show();
+  // Stock adjustments are documents with their own screen (WMS Posting Change / WMS Stock Adjustment); the Monitor only opens them, prefilled from the marked row.
+  open_stock_document(doctype, line, extra) {
+    const f = (k) => line && line[k] ? { [k]: line[k] } : {};
+    const values = { warehouse: this.warehouse, ...extra };
+    if (line) Object.assign(values, { product: line.product, batch_no: line.batch_no, serial_no: line.serial_no, handling_unit: line.handling_unit, storage_bin: line.storage_bin,
+      quantity: flt(line.available_quantity) || flt(line.quantity), stock_uom: line.stock_uom, ...f("stock_owner"), ...f("entitled_party"), ...f("country_of_origin"), ...f("special_stock_type"), ...f("special_stock_ref") });
+    if (doctype === "WMS Posting Change" && line) values.from_stock_type = line.stock_type;
+    if (doctype === "WMS Stock Adjustment" && line) values.stock_type = line.stock_type;
+    frappe.new_doc(doctype, values);
   }
 
   // Step 2: the marked rows per handling unit - where it sits in the HU nesting and when it arrived.

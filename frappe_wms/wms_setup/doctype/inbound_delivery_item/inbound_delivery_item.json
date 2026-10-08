@@ -76,14 +76,16 @@
       "label": "Putaway Quantity",
       "fieldtype": "Float",
       "default": 0,
-      "read_only": 1
+      "read_only": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "stock_uom",
       "label": "Stock UOM",
       "fieldtype": "Link",
       "options": "UOM",
-      "reqd": 1
+      "reqd": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "uom",
@@ -118,7 +120,8 @@
       "label": "Expected Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type",
-      "reqd": 1
+      "reqd": 1,
+      "in_list_view": 1
     },
     {
       "fieldname": "preferred_storage_type",

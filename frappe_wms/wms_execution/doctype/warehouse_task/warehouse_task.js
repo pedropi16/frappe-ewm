@@ -1,6 +1,9 @@
 frappe.ui.form.on("Warehouse Task", {
  refresh(frm) {
   frappe_wms.set_warehouse_filters(frm);
+  if (!frm.is_new()) frappe.call({ method: "frappe_wms.api.monitor.task_document", args: { task_name: frm.doc.name } }).then((r) => {
+   if (r.message) frm.add_custom_button(__("{0} {1}", [__(r.message[0]), r.message[1]]), () => frappe.set_route("Form", r.message[0], r.message[1]));
+  });
   if (!frm.is_new() && !["Confirmed","Cancelled","Exception"].includes(frm.doc.status)) {
    frm.add_custom_button(__("Confirm Task"), () => frappe_wms.scan_dialog(__("Confirm Warehouse Task"), [
     {fieldname:"scanned_source",label:__("Scan Source"),fieldtype:"Data",reqd:1,cssClass:"wms-scan-input"},

@@ -453,3 +453,30 @@ def search_waves(warehouse, status=None, route=None, released_by=None, from_date
     for wave in waves:
         wave["delivery_count"] = frappe.db.count("WMS Wave Delivery", {"parent": wave.name})
     return waves
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def get_delivery_view(doctype, name):
+    """Tabs of the delivery maintenance screen (the Outbound / Inbound Delivery form): tasks, handling units, transport, receipts / issues, references, dates."""
+    from frappe_wms.services.delivery_view import delivery_view
+    return delivery_view(doctype, name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def task_document(task_name):
+    """The delivery a warehouse task works for - [doctype, name] - so the task can open its maintenance screen (SAP: the task's document links to the delivery)."""
+    require_wms_access()
+    task = frappe.db.get_value("Warehouse Task", task_name, ["stock_allocation", "warehouse_request"], as_dict=True)
+    if not task: return None
+    allocations = [task.stock_allocation] if task.stock_allocation else frappe.get_all("Warehouse Task Allocation", filters={"parent": task_name}, pluck="stock_allocation")
+    for a in allocations:
+        delivery = frappe.db.get_value("Stock Allocation", a, "outbound_delivery")
+        if delivery: return ["Outbound Delivery", delivery]
+    request = frappe.db.get_value("Warehouse Request", task.warehouse_request, ["reference_doctype", "reference_name"], as_dict=True) if task.warehouse_request else None
+    if request and request.reference_doctype == "Outbound Delivery": return ["Outbound Delivery", request.reference_name]
+    if request and request.reference_doctype == "Goods Receipt":
+        delivery = frappe.db.get_value("Goods Receipt", request.reference_name, "inbound_delivery")
+        if delivery: return ["Inbound Delivery", delivery]
+    return None

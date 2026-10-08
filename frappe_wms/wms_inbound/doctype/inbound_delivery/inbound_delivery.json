@@ -8,33 +8,62 @@
   "allow_rename": 0,
   "engine": "InnoDB",
   "field_order": [
+    "tab_items",
+    "sec_document",
     "inbound_delivery_number",
-    "warehouse",
-    "yard_status",
     "document_type",
-    "delivery_request",
+    "warehouse",
     "supplier",
-    "stock_owner",
-    "entitled_party",
     "company",
-    "external_reference",
+    "posting_date",
     "expected_arrival",
-    "receiving_bin",
+    "col_status",
     "status",
     "receipt_status",
     "process_status",
-    "posting_date",
+    "yard_status",
+    "closed_short",
+    "close_reason",
+    "col_execution",
+    "receiving_bin",
+    "stock_owner",
+    "entitled_party",
+    "external_reference",
     "items",
     "cross_dock_plan",
-    "remarks",
-    "erp_section",
+    "tab_status",
+    "status_html",
+    "tab_dates",
+    "dates_html",
+    "tab_locations",
+    "locations_html",
+    "tab_partner",
+    "partner_html",
+    "tab_references",
+    "sec_erp",
     "erp_source_doctype",
     "erp_source_name",
+    "delivery_request",
     "column_break_erp",
-    "closed_short",
-    "close_reason"
+    "references_html",
+    "tab_hu",
+    "hu_html",
+    "tab_transport",
+    "transport_html",
+    "tab_texts",
+    "remarks"
   ],
   "fields": [
+    {
+      "fieldname": "tab_items",
+      "fieldtype": "Tab Break",
+      "label": "Items"
+    },
+    {
+      "fieldname": "sec_document",
+      "fieldtype": "Section Break",
+      "label": "Document"
+    },
     {
       "fieldname": "inbound_delivery_number",
       "label": "Inbound Delivery Number",
@@ -42,6 +71,13 @@
       "reqd": 1,
       "unique": 1,
       "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "document_type",
+      "label": "WMS Document Type",
+      "fieldtype": "Link",
+      "options": "WMS Document Type",
       "in_standard_filter": 1
     },
     {
@@ -69,9 +105,11 @@
       "reqd": 1
     },
     {
-      "fieldname": "external_reference",
-      "label": "External Reference",
-      "fieldtype": "Data"
+      "fieldname": "posting_date",
+      "label": "Posting Date",
+      "fieldtype": "Date",
+      "reqd": 1,
+      "default": "Today"
     },
     {
       "fieldname": "expected_arrival",
@@ -79,11 +117,8 @@
       "fieldtype": "Datetime"
     },
     {
-      "fieldname": "receiving_bin",
-      "label": "Receiving Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "reqd": 1
+      "fieldname": "col_status",
+      "fieldtype": "Column Break"
     },
     {
       "fieldname": "status",
@@ -115,50 +150,12 @@
       "read_only": 1
     },
     {
-      "fieldname": "posting_date",
-      "label": "Posting Date",
-      "fieldtype": "Date",
-      "reqd": 1,
-      "default": "Today"
-    },
-    {
-      "fieldname": "items",
-      "label": "Items",
-      "fieldtype": "Table",
-      "options": "Inbound Delivery Item",
-      "reqd": 1
-    },
-    {
-      "fieldname": "remarks",
-      "label": "Remarks",
-      "fieldtype": "Text Editor"
-    },
-    {
-      "fieldname": "erp_section",
-      "label": "ERP Origin & Completion",
-      "fieldtype": "Section Break",
-      "collapsible": 1
-    },
-    {
-      "fieldname": "erp_source_doctype",
-      "label": "ERP Source Document Type",
-      "fieldtype": "Link",
-      "options": "DocType",
+      "fieldname": "yard_status",
+      "label": "Yard Status",
+      "fieldtype": "Select",
+      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
       "read_only": 1,
-      "description": "The ERPNext document this delivery was replicated from (Purchase/Sales Order, or a draft Purchase Receipt/Delivery Note)."
-    },
-    {
-      "fieldname": "erp_source_name",
-      "label": "ERP Source Document",
-      "fieldtype": "Dynamic Link",
-      "options": "erp_source_doctype",
-      "read_only": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "column_break_erp",
-      "label": "",
-      "fieldtype": "Column Break"
+      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
     },
     {
       "fieldname": "closed_short",
@@ -176,27 +173,15 @@
       "read_only": 1
     },
     {
-      "fieldname": "cross_dock_plan",
-      "label": "Planned Cross-Docking",
-      "fieldtype": "Table",
-      "options": "Inbound Cross Dock Plan",
-      "read_only": 1,
-      "allow_on_submit": 1,
-      "description": "Open outbound demand reserved for this delivery before it arrives; goods receipt sends the stock straight to the delivery's staging bin."
+      "fieldname": "col_execution",
+      "fieldtype": "Column Break"
     },
     {
-      "fieldname": "document_type",
-      "label": "WMS Document Type",
+      "fieldname": "receiving_bin",
+      "label": "Receiving Bin",
       "fieldtype": "Link",
-      "options": "WMS Document Type",
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "delivery_request",
-      "label": "Delivery Request",
-      "fieldtype": "Link",
-      "options": "WMS Delivery Request",
-      "read_only": 1
+      "options": "Storage Bin",
+      "reqd": 1
     },
     {
       "fieldname": "stock_owner",
@@ -215,12 +200,131 @@
       "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
     },
     {
-      "fieldname": "yard_status",
-      "label": "Yard Status",
-      "fieldtype": "Select",
-      "options": "\nExpected\nIn Yard\nAt Door\nDeparted",
+      "fieldname": "external_reference",
+      "label": "External Reference",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "items",
+      "label": "Items",
+      "fieldtype": "Table",
+      "options": "Inbound Delivery Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "cross_dock_plan",
+      "label": "Planned Cross-Docking",
+      "fieldtype": "Table",
+      "options": "Inbound Cross Dock Plan",
       "read_only": 1,
-      "description": "Where the truck carrying this document is (dock appointment / transportation unit)."
+      "allow_on_submit": 1,
+      "description": "Open outbound demand reserved for this delivery before it arrives; goods receipt sends the stock straight to the delivery's staging bin."
+    },
+    {
+      "fieldname": "tab_status",
+      "fieldtype": "Tab Break",
+      "label": "Status"
+    },
+    {
+      "fieldname": "status_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_dates",
+      "fieldtype": "Tab Break",
+      "label": "Dates / Times"
+    },
+    {
+      "fieldname": "dates_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_locations",
+      "fieldtype": "Tab Break",
+      "label": "Locations"
+    },
+    {
+      "fieldname": "locations_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_partner",
+      "fieldtype": "Tab Break",
+      "label": "Partner"
+    },
+    {
+      "fieldname": "partner_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_references",
+      "fieldtype": "Tab Break",
+      "label": "Reference Documents"
+    },
+    {
+      "fieldname": "sec_erp",
+      "fieldtype": "Section Break",
+      "label": "Reference"
+    },
+    {
+      "fieldname": "erp_source_doctype",
+      "label": "ERP Source Document Type",
+      "fieldtype": "Link",
+      "options": "DocType",
+      "read_only": 1,
+      "description": "The ERPNext document this delivery was replicated from (Purchase/Sales Order, or a draft Purchase Receipt/Delivery Note)."
+    },
+    {
+      "fieldname": "erp_source_name",
+      "label": "ERP Source Document",
+      "fieldtype": "Dynamic Link",
+      "options": "erp_source_doctype",
+      "read_only": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "delivery_request",
+      "label": "Delivery Request",
+      "fieldtype": "Link",
+      "options": "WMS Delivery Request",
+      "read_only": 1
+    },
+    {
+      "fieldname": "column_break_erp",
+      "label": "",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "references_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_hu",
+      "fieldtype": "Tab Break",
+      "label": "HU"
+    },
+    {
+      "fieldname": "hu_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_transport",
+      "fieldtype": "Tab Break",
+      "label": "Transportation Unit"
+    },
+    {
+      "fieldname": "transport_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_texts",
+      "fieldtype": "Tab Break",
+      "label": "Texts"
+    },
+    {
+      "fieldname": "remarks",
+      "label": "Remarks",
+      "fieldtype": "Text Editor"
     }
   ],
   "autoname": "IBD-.########",

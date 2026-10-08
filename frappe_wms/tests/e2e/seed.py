@@ -252,3 +252,28 @@ def cleanup_staging():
     frappe.db.sql("delete from `tabPSA Bin` where parent in (select name from `tabProduction Supply Area` where warehouse=%s)", WAREHOUSE)
     frappe.db.sql("delete from `tabProduction Supply Area` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
+
+
+def outbound_demo():
+    """Outbound delivery screen fixture: 8 units in E2E-WH-A1 and a submitted delivery for 4. cleanup_outbound() removes them."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.stock import post_entries
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": "E2E-WH-A1", "stock_type": "AVAILABLE", "stock_uom": uom, "quantity": 8, "movement_type": "701"}],
+                 "Storage Bin", "E2E-WH-A1", f"e2e-obd:{frappe.generate_hash(length=8)}")
+    d = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": WAREHOUSE, "customer": frappe.get_all("Customer", limit=1, pluck="name")[0],
+                        "delivery_date": frappe.utils.nowdate(), "staging_bin": "E2E-WH-STAGE",
+                        "items": [{"line_number": 1, "item": item, "requested_quantity": 4, "stock_uom": uom, "required_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+    d.submit()
+    frappe.db.commit()
+    print("E2E_OUTBOUND " + json.dumps({"delivery": d.name, "item": item}))
+
+
+def cleanup_outbound():
+    frappe.set_user("Administrator")
+    frappe.db.sql("delete from `tabStock Allocation` where outbound_delivery in (select name from `tabOutbound Delivery` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabOutbound Delivery Item` where parent in (select name from `tabOutbound Delivery` where warehouse=%s)", WAREHOUSE)
+    frappe.db.sql("delete from `tabOutbound Delivery` where warehouse=%s", WAREHOUSE)
+    frappe.db.sql("delete from `tabWarehouse Request` where warehouse=%s", WAREHOUSE)
+    frappe.db.commit()

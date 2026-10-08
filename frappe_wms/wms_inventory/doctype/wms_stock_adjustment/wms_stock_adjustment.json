@@ -188,7 +188,8 @@
       "label": "Stock Type",
       "fieldtype": "Link",
       "options": "WMS Stock Type",
-      "reqd": 1
+      "reqd": 1,
+      "default": "AVAILABLE"
     },
     {
       "fieldname": "quantity",
@@ -202,7 +203,8 @@
       "label": "UoM",
       "fieldtype": "Link",
       "options": "UOM",
-      "reqd": 1
+      "reqd": 1,
+      "fetch_from": "product.stock_uom"
     },
     {
       "fieldname": "reason",

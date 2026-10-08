@@ -185,6 +185,9 @@ class TestErpIntegration(IntegrationTestCase):
             se.submit()
         allocate_delivery(od.name)
         [task] = create_pick_tasks(od.name)
+        from frappe_wms.api.monitor import get_delivery_view, task_document
+        self.assertEqual(task_document(task), ["Outbound Delivery", od.name], "a task opens its delivery's screen")
+        self.assertEqual([t.name for t in get_delivery_view("Outbound Delivery", od.name)["tasks"]], [task])
         _, hu = pick_into_new_hu(task, confirmed_quantity=4)
         frappe.db.set_value("Storage Bin", self.bins["STAGE"], "storage_type", f"{self.wh}-DOOR")
         frappe.db.set_value("Handling Unit", hu, "status", "Loaded")

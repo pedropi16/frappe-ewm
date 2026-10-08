@@ -65,3 +65,5 @@ Update: the Monitor's Shipping & Receiving view is now exercised in a browser (P
 Update (second pass, from user review): scrapping, unplanned stock and a general posting change (Monitor actions), manufacturing receipt bins and putaway rules, kanban per PSA, choose-the-stock staging done. Operator-facing RF screens for these supervisor actions are not built (desktop only).
 
 Update (SAP business client experience): Inbound Monitor processing (receive & pack into HUs, direct placement, create tasks later) and ERP-initiated goods movements (draft Stock Entry -> delivery -> executed -> the same Stock Entry posted, MB1A style) done. A transfer between two WMS warehouses is not a single delivery yet (issue + receipt separately).
+
+Correction (from user review): the Monitor should display and link, not process. Delivery processing moved out of it into the Outbound / Inbound Delivery forms (SAP maintain-delivery layout); the stock adjustment dialogs became shortcuts to their documents. Other Monitor actions (tasks, warehouse orders, HUs, waves, packing center, yard cockpit) still process from the Monitor and should move the same way.

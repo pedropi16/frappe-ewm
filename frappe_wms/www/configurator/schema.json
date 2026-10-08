@@ -5096,6 +5096,10 @@
    "module": "WMS Inbound",
    "links": [
     {
+     "target": "WMS Document Type",
+     "label": "WMS Document Type"
+    },
+    {
      "target": "WMS Warehouse",
      "label": "Warehouse"
     },
@@ -5110,6 +5114,14 @@
     {
      "target": "Storage Bin",
      "label": "Receiving Bin"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     },
     {
      "target": "Item",
@@ -5144,10 +5156,6 @@
      "label": "Items \u2192 Country of Origin"
     },
     {
-     "target": "DocType",
-     "label": "ERP Source Document Type"
-    },
-    {
      "target": "Item",
      "label": "Planned Cross-Docking \u2192 Item"
     },
@@ -5160,20 +5168,12 @@
      "label": "Planned Cross-Docking \u2192 Staging Bin"
     },
     {
-     "target": "WMS Document Type",
-     "label": "WMS Document Type"
+     "target": "DocType",
+     "label": "ERP Source Document Type"
     },
     {
      "target": "WMS Delivery Request",
      "label": "Delivery Request"
-    },
-    {
-     "target": "WMS Stock Owner",
-     "label": "Owner"
-    },
-    {
-     "target": "WMS Stock Owner",
-     "label": "Party Entitled to Dispose"
     }
    ]
   },
@@ -5812,6 +5812,10 @@
    "module": "WMS Outbound",
    "links": [
     {
+     "target": "WMS Document Type",
+     "label": "WMS Document Type"
+    },
+    {
      "target": "WMS Warehouse",
      "label": "Warehouse"
     },
@@ -5828,12 +5832,20 @@
      "label": "Staging Bin"
     },
     {
+     "target": "Storage Bin",
+     "label": "Door"
+    },
+    {
      "target": "Handling Unit",
      "label": "Pick-Pack-Pass HU"
     },
     {
-     "target": "Storage Bin",
-     "label": "Door"
+     "target": "WMS Stock Owner",
+     "label": "Owner"
+    },
+    {
+     "target": "WMS Stock Owner",
+     "label": "Party Entitled to Dispose"
     },
     {
      "target": "Item",
@@ -5884,20 +5896,8 @@
      "label": "ERP Source Document Type"
     },
     {
-     "target": "WMS Document Type",
-     "label": "WMS Document Type"
-    },
-    {
      "target": "WMS Delivery Request",
      "label": "Delivery Request"
-    },
-    {
-     "target": "WMS Stock Owner",
-     "label": "Owner"
-    },
-    {
-     "target": "WMS Stock Owner",
-     "label": "Party Entitled to Dispose"
     }
    ]
   },

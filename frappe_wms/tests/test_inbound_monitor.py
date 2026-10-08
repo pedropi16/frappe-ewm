@@ -54,6 +54,10 @@ class TestInboundMonitor(IntegrationTestCase):
         hus = {r.handling_unit for r in frappe.get_doc("Goods Receipt", out["goods_receipt"]).items}
         self.assertEqual(len(hus), 1, "both lines packed into the one new handling unit")
         self.assertEqual(len(out["warehouse_tasks"]), 2)
+        from frappe_wms.api.monitor import get_delivery_view, task_document
+        self.assertEqual(task_document(out["warehouse_tasks"][0]), ["Inbound Delivery", d.name], "a task opens its delivery's screen")
+        view = get_delivery_view("Inbound Delivery", d.name)
+        self.assertEqual((len(view["tasks"]), len(view["handling_units"]), len(view["receipts"])), (2, 1, 1))
         d2 = self._delivery()
         out = create_and_submit_goods_receipt(d2.name, self._rows(d2))  # blank: a new unit each
         self.assertEqual(len({r.handling_unit for r in frappe.get_doc("Goods Receipt", out["goods_receipt"]).items}), 2)
