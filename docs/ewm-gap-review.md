@@ -29,3 +29,8 @@ Note: README.md and app_gap.md still say yard is out of scope - the code has app
 
 ## Order of work
 1. Yard (Y1-Y11)  2. Docs fix  3. Delivery split + cartonization  4. ASN + returns  5. Four-eyes recount + Difference Analyzer  6. Dangerous goods  7. API + webhooks
+
+## Status (2026-10-08, deployed to production)
+Done: Y1 checkpoints (storage role + arrival/departure, optional-required), Y3 TU activity, Y5 door determination rules, Y7 receipt/loading gate (Off/Warn/Block), Y8 seal at departure, Y10 yard status on delivery/shipment, Y2 (Means of Transport master + payload check only), four-eyes recount.
+Corrections to the review: an expected-GR/ASN object is effectively the replicated Inbound Delivery; `analyze_differences` already exists as a variance report; partial goods issue already exists.
+Still open: Vehicle grouping several TUs (Y2), HU-based yard moves (Y4), shipping & receiving cockpit with auto TU creation (Y6), recurring appointments / carrier capacity (Y9), yard-specific roles (Y11); delivery splitting (changes ERPNext documents - needs a design call), cartonization, returns item types, dangerous goods, API/webhooks, TM/GTS/MES integrations.
