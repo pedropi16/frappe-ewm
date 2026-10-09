@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "WMS Core",
+ "name": "wms-slotting",
+ "page_name": "wms-slotting",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Inventory Controller"
+  },
+  {
+   "role": "WMS Operator"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Slotting"
+}

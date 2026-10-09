@@ -18,11 +18,11 @@ const VIEWS = [
   { key: "resources", label: __("Resources & Queues") },
   { key: "differences", label: __("Difference Analyzer") },
   { key: "kpis", label: __("KPIs") },
-  { key: "slotting", label: __("Slotting") },
-  { key: "bin_assignment", label: __("Bin Assignment") },
+  { key: "slotting", page: "wms-slotting", label: __("Slotting") },
+  { key: "bin_assignment", page: "wms-bin-assignment", label: __("Bin Assignment") },
   { key: "kitting", page: "wms-kitting", label: __("Kitting") },
   { key: "billing", page: "wms-billing", label: __("Billing") },
-  { key: "alerts", label: __("Alerts") },
+  { key: "alerts", page: "wms-alerts", label: __("Alerts") },
 ];
 
 let _monitor_styles_injected = false;

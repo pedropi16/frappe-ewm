@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "WMS Core",
+ "name": "wms-alerts",
+ "page_name": "wms-alerts",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  },
+  {
+   "role": "WMS Inventory Controller"
+  },
+  {
+   "role": "WMS Operator"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Alerts"
+}

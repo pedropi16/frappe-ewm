@@ -52,7 +52,7 @@ test("every Monitor view opens without a script error", async ({ page }) => {
   page.on("pageerror", (e) => errors.push(String(e)));
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
-  for (const route of ["wms-monitor", "wms-yard", "wms-packing-center", "wms-kitting", "wms-billing"]) {
+  for (const route of ["wms-monitor", "wms-yard", "wms-packing-center", "wms-kitting", "wms-billing", "wms-slotting", "wms-bin-assignment", "wms-alerts"]) {
     await page.goto(`/app/${route}`);
     await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
     await page.waitForTimeout(700);
