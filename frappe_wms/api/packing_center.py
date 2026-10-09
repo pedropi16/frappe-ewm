@@ -3,6 +3,7 @@ import frappe
 
 from frappe_wms.services import packing_center as pc
 from frappe_wms.services.concurrency import retry_on_deadlock
+from frappe_wms.services.locks import guard
 from frappe_wms.utils import parse_json, require_wms_access
 
 
@@ -28,6 +29,7 @@ def move_nodes(warehouse, items, destination_kind, destination, idempotency_key)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "parent_hu")
 def create_hus(warehouse, storage_bin=None, packaging_material=None, hu_type=None, hu_number=None, quantity=1, parent_hu=None):
     _check(warehouse)
     return pc.create_hus(warehouse, storage_bin, packaging_material, hu_type, hu_number, quantity, parent_hu)

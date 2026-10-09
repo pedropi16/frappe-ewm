@@ -55,20 +55,8 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
   }
   const prompt = (rows, fields, label, method, args) => new Promise((resolve) => frappe.prompt(fields, (v) => resolve(each(rows, method, (r) => args(r, v), label)), __("{0}: {1} line(s)", [label, rows.length])));
 
-  // SAP enqueue: the marked lines are locked for other users while the dialog is open (they can still display them); the lock is renewed every minute and released when the dialog closes.
-  const lockKey = (r) => r.handling_unit && !r.name ? ["Handling Unit", r.handling_unit] : ["WMS Stock Balance", r.name];
-  async function lockedDialog(objects, open) {
-    const arg = { objects: JSON.stringify(objects) };
-    try { await call("locks.acquire_locks", arg); } catch (e) { return; }  // frappe shows who holds it
-    const timer = setInterval(() => frappe.call({ method: "frappe_wms.api.locks.renew_locks", args: arg, silent: true }), 60000);
-    const d = open();
-    const onhide = d.onhide;
-    d.onhide = () => { clearInterval(timer); frappe.call({ method: "frappe_wms.api.locks.release_locks", args: arg, silent: true }); onhide && onhide.call(d); };
-  }
-
-  function taskDialog(warehouse, lines) {
-    return lockedDialog(lines.map(lockKey), () => taskDialogOpen(warehouse, lines));
-  }
+  // Like SAP: the dialog opens freely; creating checks the locks and says who holds a line (server side, services/locks.py).
+  const taskDialog = (warehouse, lines) => taskDialogOpen(warehouse, lines);
 
   function taskDialogOpen(warehouse, lines) {
     const d = new frappe.ui.Dialog({
@@ -88,7 +76,7 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     return d;
   }
 
-  function postingDialog(rows) { return lockedDialog(names(rows).map(lockKey), () => postingDialogOpen(rows)); }
+  const postingDialog = (rows) => postingDialogOpen(rows);
 
   function postingDialogOpen(rows) {
     const d = new frappe.ui.Dialog({
@@ -113,7 +101,7 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     return d;
   }
 
-  function scrapDialog(rows) { return lockedDialog(names(rows).map(lockKey), () => scrapDialogOpen(rows)); }
+  const scrapDialog = (rows) => scrapDialogOpen(rows);
 
   function scrapDialogOpen(rows) {
     return frappe.prompt([{ fieldname: "reason", label: __("Reason"), fieldtype: "Small Text", reqd: 1 }], async ({ reason }) => {

@@ -16,6 +16,12 @@ def acquire_locks(objects, purpose=None):
 
 
 @frappe.whitelist()
+def acquire_available_locks(objects, purpose=None):
+    """For screens that open in change mode but can show locked objects for display: {name: user} of the ones somebody else holds."""
+    return locks.acquire_available([tuple(o) for o in parse_json(objects, "objects")], purpose)
+
+
+@frappe.whitelist()
 def release_lock(object_type, object_name):
     locks.release(object_type, object_name)
 

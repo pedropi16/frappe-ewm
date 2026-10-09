@@ -1,5 +1,6 @@
 """Packing Station (SAP EWM packing work center) - see services/packing_station.py."""
 import frappe
+from frappe_wms.services.locks import guard
 
 from frappe_wms.services import packing_station as ps
 from frappe_wms.services.concurrency import retry_on_deadlock
@@ -19,6 +20,7 @@ def station_overview(work_center):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "destination_hu", "source_hu")
 def pack_product(work_center, product, quantity, destination_hu, source_hu=None, stock_type=None, batch_no=None, serial_no=None,
                  outbound_delivery=None, idempotency_key=None):
     return ps.pack_product(work_center, product, quantity, destination_hu, source_hu, stock_type, batch_no, serial_no,
@@ -27,18 +29,21 @@ def pack_product(work_center, product, quantity, destination_hu, source_hu=None,
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "source_hu", "destination_hu")
 def pack_all(work_center, source_hu, destination_hu, outbound_delivery=None, idempotency_key=None):
     return ps.pack_all(work_center, source_hu, destination_hu, outbound_delivery, idempotency_key)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name", "destination_hu")
 def pack_hu(work_center, hu_name, destination_hu, outbound_delivery=None):
     return ps.pack_hu(work_center, hu_name, destination_hu, outbound_delivery)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def unpack_hu(work_center, hu_name):
     return ps.unpack_hu(work_center, hu_name)
 
@@ -51,18 +56,21 @@ def create_hu(work_center, hu_type=None, hu_number=None, outbound_delivery=None)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def close_hu(work_center, hu_name, gross_weight=None, move_to_bin=None, confirm_incomplete=0):
     return ps.close_hu(work_center, hu_name, gross_weight, move_to_bin, confirm_incomplete)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def reopen_hu(work_center, hu_name):
     return ps.reopen_hu(work_center, hu_name)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "source_hu")
 def pack_by_instruction(work_center, product, source_hu=None, level_name=None, hu_type=None, quantity_per_hu=None, stock_type=None,
                         batch_no=None, serial_no=None, outbound_delivery=None, close=0, idempotency_key=None):
     return ps.pack_by_instruction(work_center, product, source_hu, level_name, hu_type, quantity_per_hu, stock_type, batch_no, serial_no,
@@ -71,12 +79,14 @@ def pack_by_instruction(work_center, product, source_hu=None, level_name=None, h
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def take_to_table(work_center, hu_name):
     return ps.take_to_table(work_center, hu_name)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def delete_empty_hu(work_center, hu_name):
     return ps.delete_empty_hu(work_center, hu_name)
 

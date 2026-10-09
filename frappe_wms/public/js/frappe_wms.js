@@ -28,7 +28,7 @@ $(document).on("toolbar_setup", function() {
 
 // Change mode (SAP): opening one of these documents locks it for everybody else, who can still display it. The lock is renewed
 // every minute and given back when the user leaves the form (the server drops it after 5 minutes anyway).
-frappe_wms.locked_forms = ["WMS Stock Adjustment", "WMS Posting Change", "WMS Physical Inventory Count", "WMS Wave", "Warehouse Order", "WMS Quality Inspection", "WMS Shipment", "VAS Order"];
+frappe_wms.locked_forms = ["WMS Stock Adjustment", "WMS Posting Change", "WMS Physical Inventory Count", "WMS Wave", "WMS Quality Inspection", "WMS Shipment", "VAS Order"];
 frappe_wms.form_lock = null;
 frappe_wms.drop_form_lock = function () {
     const l = frappe_wms.form_lock;

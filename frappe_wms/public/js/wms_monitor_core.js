@@ -621,7 +621,7 @@ class WMSMonitor {
       return;
     }
     const $body = dialog.get_field("body").$wrapper.empty();
-    $body.append(`<div style="margin-bottom:10px;"><a href="/app/handling-unit/${encodeURIComponent(hu_name)}" target="_blank">${__("Open in Desk")}</a></div>`);
+    $body.append(`<div style="margin-bottom:10px;"><span class="indicator-pill gray">${__("Display")}</span> <a href="/app/handling-unit/${encodeURIComponent(hu_name)}" target="_blank">${__("Open in Desk")}</a> &middot; <a href="/app/wms-packing-center">${__("Change in Packing Center")}</a></div>`);
     $body.append(this.render_hu_node(node, 0));
   }
 
@@ -786,7 +786,28 @@ class WMSMonitor {
       const all = r.rows.length <= 600; // a small result opens completely, a big one only to its bins
       this.pack.expanded = new Set(r.rows.filter((x) => x.has_kids && (all || x.kind === "bin" || x.kind === "section")).map((x) => x.id));
     }
+    await this.pack_lock(r.rows);
     this.pack_draw(fromRender);
+  }
+
+  // The Packing Center is the change mode of handling units (the Monitor's HU viewer is display only): every HU on screen is locked for
+  // other users, renewed every minute, given back on a new search or when the page is left. HUs somebody else has are shown for display and refused on any change.
+  async pack_lock(rows) {
+    const objects = rows.filter((x) => x.kind === "hu").map((x) => ["Handling Unit", x.name]);
+    const before = this.pack.held || [];
+    const keep = new Set(objects.map((o) => o[1]));
+    const gone = before.filter((o) => !keep.has(o[1]));
+    if (gone.length) frappe.call({ method: "frappe_wms.api.locks.release_locks", args: { objects: JSON.stringify(gone) }, silent: true });
+    this.pack.lockedBy = objects.length ? await frappe.call({ method: "frappe_wms.api.locks.acquire_available_locks", args: { objects: JSON.stringify(objects), purpose: "packing center" }, silent: true }).then((r) => r.message || {}) : {};
+    this.pack.held = objects.filter((o) => !this.pack.lockedBy[o[1]]);
+    const n = Object.keys(this.pack.lockedBy).length;
+    this.page.set_indicator(n ? __("{0} handling unit(s) locked by other users: display only", [n]) : __("Change mode"), n ? "orange" : "green");
+    if (!this.pack.lockTimer) {
+      this.pack.lockTimer = setInterval(() => this.pack.held && this.pack.held.length && frappe.call({ method: "frappe_wms.api.locks.renew_locks", args: { objects: JSON.stringify(this.pack.held) }, silent: true }), 60000);
+      const drop = () => { clearInterval(this.pack.lockTimer); this.pack.lockTimer = null; if (this.pack.held && this.pack.held.length) navigator.sendBeacon("/api/method/frappe_wms.api.locks.release_locks?csrf_token=" + encodeURIComponent(frappe.csrf_token) + "&objects=" + encodeURIComponent(JSON.stringify(this.pack.held))); this.pack.held = []; };
+      $(window).on("beforeunload", drop);
+      frappe.router.on("change", () => { if (frappe.get_route()[0] !== "wms-packing-center" && this.pack.lockTimer) { const h = this.pack.held || []; clearInterval(this.pack.lockTimer); this.pack.lockTimer = null; this.pack.held = []; if (h.length) frappe.call({ method: "frappe_wms.api.locks.release_locks", args: { objects: JSON.stringify(h) }, silent: true }); } });
+    }
   }
 
   pack_renderers() {

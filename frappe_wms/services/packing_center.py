@@ -186,6 +186,8 @@ def move_nodes(warehouse, items, destination_kind, destination, idempotency_key)
         savepoint = f"pc_move_{n}"
         frappe.db.savepoint(savepoint)
         try:
+            from frappe_wms.services.locks import require_free_many
+            require_free_many([("Handling Unit", h) for h in {item.get("name") if item["kind"] == "hu" else None, dest_hu, *[l.get("handling_unit") for l in item.get("lines", [])]} if h])
             if item["kind"] == "hu":
                 _move_hu(item["name"], dest_hu, dest_bin)
             else:

@@ -60,6 +60,17 @@ def acquire_many(objects, purpose=None):
         raise
 
 
+def acquire_available(objects, purpose=None):
+    """Takes every free object; the ones somebody else holds are not an error (a screen loads them for display only). -> {name: holder}."""
+    held_by = {}
+    for doctype, name in objects:
+        try: acquire(doctype, name, purpose)
+        except frappe.ValidationError:
+            frappe.clear_messages()
+            held_by[name] = holder(doctype, name)["user"]
+    return held_by
+
+
 def renew(doctype, name):
     h = holder(doctype, name)
     if h and h["user"] == frappe.session.user: frappe.cache.expire(_key(doctype, name), TTL)
@@ -93,7 +104,7 @@ def all_locks():
 
 # Documents the Desk opens in change mode (public/js/frappe_wms.js locks them on open). A save from the form is refused when
 # somebody else holds the lock; saves by services (RF confirmation, ERP sync, jobs) are not.
-LOCKED_FORMS = ("WMS Stock Adjustment", "WMS Posting Change", "WMS Physical Inventory Count", "WMS Wave", "Warehouse Order",
+LOCKED_FORMS = ("WMS Stock Adjustment", "WMS Posting Change", "WMS Physical Inventory Count", "WMS Wave",
                 "WMS Quality Inspection", "WMS Shipment", "VAS Order")
 
 
@@ -102,14 +113,15 @@ def on_validate(doc, method=None):
         require_free(doc.doctype, doc.name)
 
 
-def guard(doctype, param):
-    """Decorator for an API method that changes the document named by `param`; doctype "$x" reads it from the parameter x."""
+def guard(doctype, *params):
+    """Decorator for an API method that changes the documents named by `params` (blank ones are skipped); doctype "$x" reads it from the parameter x."""
     def deco(fn):
         sig = inspect.signature(fn)
         @functools.wraps(fn)
         def wrapper(*a, **k):
             args = sig.bind(*a, **k).arguments
-            require_free(args[doctype[1:]] if doctype.startswith("$") else doctype, args[param])
+            for param in params:
+                if args.get(param): require_free(args[doctype[1:]] if doctype.startswith("$") else doctype, args[param])
             return fn(*a, **k)
         return wrapper
     return deco

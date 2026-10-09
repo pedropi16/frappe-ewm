@@ -533,6 +533,9 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     # before the first one committed (status, confirmed_quantity and all). Same idiom at every
     # lock site in services/.
     task = frappe.get_doc("Warehouse Task", task_name, for_update=True)
+    if task.status != "Confirmed":  # a lock is a lock: the RF and the desk both stop at what somebody else has open for change
+        from frappe_wms.services.locks import require_free_many
+        require_free_many([o for o in [("Warehouse Task", task.name), ("Warehouse Order", task.warehouse_order), ("Handling Unit", task.source_hu), ("Handling Unit", task.destination_hu)] if o[1]])
     if task.status == "Confirmed": return {"task": task.name, "status": task.status, "already_confirmed": True}
     if task.docstatus == 2 or task.status in {"Cancelled", "Exception"}: frappe.throw(_("Task is not confirmable"))
     if task.status == "On Hold": frappe.throw(task.blocking_reason or _("Task is on hold behind an earlier task in its Warehouse Order"))
