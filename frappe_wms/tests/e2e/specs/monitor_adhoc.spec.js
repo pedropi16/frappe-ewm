@@ -23,8 +23,11 @@ test("ad hoc tasks for several marked stock lines", async ({ page, request }) =>
   await expect(page.locator(".wms-grid-selcount")).toContainText("2 selected");
   await page.locator(".wms-grid-actionbar").getByRole("button", { name: /Create Tasks/ }).click();
   await page.locator(".modal.show input[data-fieldname='destination_bin']").fill(s.bins[1]);
+  await expect(page.locator(".modal.show input[data-fieldname='process_type']")).toBeVisible();
+  await expect(page.locator(".modal.show input[data-fieldname='confirm']")).toBeVisible();
+  await page.locator(".modal.show textarea[data-fieldname='reason']").fill("e2e re-slotting");
   await page.locator(".modal.show .btn-primary", { hasText: "Create Tasks" }).click();
-  await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]]]))}&fields=["name"]`)).data.length).toBe(2);
+  await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]], ["reason", "=", "e2e re-slotting"]]))}&fields=["name"]`)).data.length).toBe(2);
   expect(errors).toEqual([]);
 });
 

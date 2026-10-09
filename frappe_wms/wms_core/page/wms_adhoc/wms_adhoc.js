@@ -63,12 +63,16 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
       title: __("Create Tasks for {0} line(s)", [lines.length]),
       fields: [
         { fieldname: "destination_bin", label: __("Destination Bin"), fieldtype: "Link", options: "Storage Bin", reqd: 1, get_query: () => ({ filters: { warehouse } }) },
+        { fieldname: "process_type", label: __("Warehouse Process Type"), fieldtype: "Link", options: "Warehouse Process Type", get_query: () => ({ filters: { activity: ["in", ["Internal Move", "Putaway"]], active: 1 } }),
+          description: __("Blank: determined by the product and stock type") },
         { fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nNormal\nHigh\nUrgent", default: "Normal" },
+        { fieldname: "reason", label: __("Reason"), fieldtype: "Small Text" },
+        { fieldname: "confirm", label: __("Confirm Immediately"), fieldtype: "Check" },
       ],
       primary_action_label: __("Create Tasks"),
       primary_action: async (values) => {
-        const tasks = await call("adhoc.create_adhoc_tasks", { lines: JSON.stringify(lines), destination_bin: values.destination_bin, priority: values.priority });
-        d.hide(); done(__("{0} task(s) created", [tasks.length]));
+        const tasks = await call("adhoc.create_adhoc_tasks", { lines: JSON.stringify(lines), destination_bin: values.destination_bin, priority: values.priority, process_type: values.process_type || undefined, reason: values.reason || undefined, confirm: values.confirm ? 1 : 0 });
+        d.hide(); done(values.confirm ? __("{0} task(s) created and confirmed", [tasks.length]) : __("{0} task(s) created", [tasks.length]));
         frappe.set_route("List", "Warehouse Task", { name: ["in", tasks] });
       },
     });

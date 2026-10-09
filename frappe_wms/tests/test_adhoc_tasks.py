@@ -55,3 +55,12 @@ class TestAdhocTasks(_base.TestStockAdjustments):
         self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bin2)
         self.assertEqual(self._qty(item=self.item2, handling_unit=hu), 0)
         self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"warehouse": self.wh, "storage_bin": self.bin2, "handling_unit": hu, "quantity": [">", 0]}, "name") is not None, True)
+
+    def test_process_type_reason_and_immediate_confirmation(self):
+        self._seed(10)
+        tasks = create_adhoc_tasks([{"name": self._line().name, "quantity": 6}], self.bin2, "High", "INTERNAL_MOVE", "re-slotting", 1)
+        row = frappe.db.get_value("Warehouse Task", tasks[0], ["status", "reason", "priority", "movement_type"], as_dict=True)
+        self.assertEqual((row.status, row.reason, row.priority), ("Confirmed", "re-slotting", "High"))
+        self.assertEqual(self._qty(), 4)
+        with self.assertRaisesRegex(frappe.ValidationError, "not an ad hoc movement"):
+            create_adhoc_tasks([{"name": self._line().name}], self.bin2, "Normal", "OB_PICK")

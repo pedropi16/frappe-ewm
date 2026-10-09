@@ -5,7 +5,7 @@ HU content line / stock line, all in one batch, so they form one warehouse order
 """
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 from frappe_wms.services.bin_rules import incoming_load, validate_destination_bin
 from frappe_wms.services.determination import determine_process_type
@@ -13,6 +13,7 @@ from frappe_wms.services.stock import dim_values
 from frappe_wms.services.warehouse_order import attach_task
 from frappe_wms.utils import require_role
 
+TASK_TYPES = {"Internal Move": "Internal Move", "Putaway": "Putaway"}  # activity of the chosen process type -> task type
 BALANCE_FIELDS = ["name", "warehouse", "product", "batch_no", "serial_no", "storage_bin", "handling_unit", "stock_type", "quantity", "available_quantity", "stock_uom"]
 
 
@@ -30,10 +31,12 @@ def _balances(line):
     return [(bal, qty, False)]
 
 
-def create_adhoc_tasks(lines, destination_bin, priority="Normal"):
+def create_adhoc_tasks(lines, destination_bin, priority="Normal", process_type=None, reason=None, confirm=0):
     require_role("WMS Operator", "WMS Supervisor")
     if not lines: frappe.throw(_("Select at least one line"))
     if not destination_bin: frappe.throw(_("Enter the destination bin"))
+    chosen = frappe.get_cached_doc("Warehouse Process Type", process_type) if process_type else None
+    if chosen and chosen.activity not in TASK_TYPES: frappe.throw(_("Process type {0} is not an ad hoc movement").format(process_type))
     destination = frappe.get_doc("Storage Bin", destination_bin)
     batch_key = frappe.generate_hash(length=10)
     created, checked = [], set()  # checked: HUs already cleared of open tasks (an HU holding several products gets several tasks)
@@ -52,13 +55,16 @@ def create_adhoc_tasks(lines, destination_bin, priority="Normal"):
             iw, iv = incoming_load(bal.product, qty)
             validate_destination_bin(destination_bin, item=bal.product, incoming_quantity=qty, stock_type=bal.stock_type, hu_type=hu_type,
                                      batch_no=bal.batch_no, destination_hu=hu if moves_hu else None, incoming_weight=iw, incoming_volume=iv)
-            process_type = frappe.get_cached_doc("Warehouse Process Type", determine_process_type(bal.warehouse, "Internal Move", item=bal.product, stock_type=bal.stock_type, default="INTERNAL_MOVE"))
+            pt = chosen or frappe.get_cached_doc("Warehouse Process Type", determine_process_type(bal.warehouse, "Internal Move", item=bal.product, stock_type=bal.stock_type, default="INTERNAL_MOVE"))
             task = frappe.get_doc({
-                "doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": bal.warehouse, "product": bal.product, "planned_quantity": qty,
+                "doctype": "Warehouse Task", "task_type": TASK_TYPES[pt.activity], "warehouse": bal.warehouse, "product": bal.product, "planned_quantity": qty,
                 "stock_uom": bal.stock_uom, "batch_no": bal.batch_no, "serial_no": bal.serial_no, "source_bin": bal.storage_bin, "source_hu": hu,
                 "destination_bin": destination_bin, "unpack_at_destination": 1 if hu and not moves_hu else 0, "stock_type_from": bal.stock_type, "stock_type_to": bal.stock_type,
-                **dim_values(bal), "movement_type": process_type.movement_type, "priority": priority or "Normal", "status": "Open"})
-            attach_task(task, batch_key, default_queue=process_type.default_queue)
+                **dim_values(bal), "movement_type": pt.movement_type, "priority": priority or "Normal", "reason": reason, "status": "Open"})
+            attach_task(task, batch_key, default_queue=pt.default_queue)
             task.insert(ignore_permissions=True)
             created.append(task.name)
+    if cint(confirm):  # immediate confirmation: the stock moves now, the tasks are done
+        from frappe_wms.services.task import confirm_task
+        for name in created: confirm_task(name, verify=False)
     return created

@@ -1,496 +1,502 @@
 {
-  "name": "Warehouse Task",
-  "module": "WMS Execution",
-  "custom": 0,
-  "is_submittable": 1,
-  "istable": 0,
-  "track_changes": 1,
-  "allow_rename": 0,
-  "engine": "InnoDB",
-  "field_order": [
-    "warehouse_request",
-    "stock_allocation",
-    "stock_allocations",
-    "consolidation_group_line",
-    "wave",
-    "task_type",
-    "warehouse",
-    "product",
-    "planned_quantity",
-    "confirmed_quantity",
-    "stock_uom",
-    "batch_no",
-    "serial_no",
-    "source_bin",
-    "destination_bin",
-    "final_destination_bin",
-    "source_hu",
-    "destination_hu",
-    "move_top_hu",
-    "stock_type_from",
-    "stock_type_to",
-    "stock_owner",
-    "entitled_party",
-    "movement_type",
-    "warehouse_order",
-    "queue",
-    "assigned_resource",
-    "priority",
-    "sequence",
-    "status",
-    "started_at",
-    "confirmed_at",
-    "confirmed_by",
-    "confirmation_device",
-    "exception_code",
-    "idempotency_key",
-    "blocking_reason",
-    "reversal_of",
-    "predecessor_task",
-    "country_of_origin",
-    "special_stock_type",
-    "special_stock_ref",
-    "consolidation_group"
-  ],
-  "fields": [
-    {
-      "fieldname": "warehouse_request",
-      "label": "Warehouse Request",
-      "fieldtype": "Link",
-      "options": "Warehouse Request",
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "stock_allocation",
-      "label": "Stock Allocation",
-      "fieldtype": "Link",
-      "options": "Stock Allocation",
-      "read_only": 1,
-      "in_standard_filter": 1,
-      "description": "Primary allocation for quick reference. For a cluster pick task combining several orders, see Stock Allocations below."
-    },
-    {
-      "fieldname": "stock_allocations",
-      "label": "Stock Allocations",
-      "fieldtype": "Table",
-      "options": "Warehouse Task Allocation"
-    },
-    {
-      "fieldname": "consolidation_group_line",
-      "label": "Consolidation Group Line",
-      "fieldtype": "Link",
-      "options": "Consolidation Group Line",
-      "read_only": 1,
-      "in_standard_filter": 1,
-      "description": "Set on a Consolidation or Deconsolidation task that's part of a Consolidation Group's gather/split plan, so its progress can be tracked back to that plan."
-    },
-    {
-      "fieldname": "wave",
-      "label": "Wave",
-      "fieldtype": "Link",
-      "options": "WMS Wave",
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "task_type",
-      "label": "Task Type",
-      "fieldtype": "Select",
-      "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nRepack\nSort",
-      "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "warehouse",
-      "label": "Warehouse",
-      "fieldtype": "Link",
-      "options": "WMS Warehouse",
-      "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "product",
-      "label": "Product",
-      "fieldtype": "Link",
-      "options": "Item"
-    },
-    {
-      "fieldname": "planned_quantity",
-      "label": "Planned Quantity",
-      "fieldtype": "Float"
-    },
-    {
-      "fieldname": "confirmed_quantity",
-      "label": "Confirmed Quantity",
-      "fieldtype": "Float",
-      "default": 0,
-      "read_only": 1
-    },
-    {
-      "fieldname": "stock_uom",
-      "label": "Stock UOM",
-      "fieldtype": "Link",
-      "options": "UOM"
-    },
-    {
-      "fieldname": "batch_no",
-      "label": "Batch",
-      "fieldtype": "Link",
-      "options": "Batch"
-    },
-    {
-      "fieldname": "serial_no",
-      "label": "Serial Number",
-      "fieldtype": "Link",
-      "options": "Serial No"
-    },
-    {
-      "fieldname": "source_bin",
-      "label": "Source Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
-    },
-    {
-      "fieldname": "destination_bin",
-      "label": "Destination Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin"
-    },
-    {
-      "fieldname": "source_hu",
-      "label": "Source HU",
-      "fieldtype": "Link",
-      "options": "Handling Unit"
-    },
-    {
-      "fieldname": "destination_hu",
-      "label": "Destination HU",
-      "fieldtype": "Link",
-      "options": "Handling Unit"
-    },
-    {
-      "fieldname": "unpack_at_destination",
-      "label": "Unpack At Destination",
-      "fieldtype": "Check",
-      "default": 0,
-      "description": "This task's destination is deliberately no Handling Unit (e.g. a deconsolidation line splitting stock loose into a bin), not merely undecided - confirming it must not fall back to the source HU."
-    },
-    {
-      "fieldname": "move_top_hu",
-      "label": "Move Top HU",
-      "fieldtype": "Check",
-      "default": 0
-    },
-    {
-      "fieldname": "requires_sort_after_pick",
-      "label": "Requires Sort After Pick",
-      "fieldtype": "Check",
-      "default": 0,
-      "description": "Set when this Pick task was created under a Two-Step Picking process type - it lands in the warehouse's shared picking staging area, not the delivery's own staging bin, and confirming it fully auto-creates a follow-up Sort task to move the picked quantity on to the actual delivery."
-    },
-    {
-      "fieldname": "stock_type_from",
-      "label": "Stock Type From",
-      "fieldtype": "Link",
-      "options": "WMS Stock Type"
-    },
-    {
-      "fieldname": "stock_type_to",
-      "label": "Stock Type To",
-      "fieldtype": "Link",
-      "options": "WMS Stock Type"
-    },
-    {
-      "fieldname": "movement_type",
-      "label": "Movement Type",
-      "fieldtype": "Link",
-      "options": "WMS Movement Type",
-      "reqd": 1
-    },
-    {
-      "fieldname": "warehouse_order",
-      "label": "Warehouse Order",
-      "fieldtype": "Link",
-      "options": "Warehouse Order",
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "queue",
-      "label": "Queue",
-      "fieldtype": "Link",
-      "options": "Warehouse Queue"
-    },
-    {
-      "fieldname": "assigned_resource",
-      "label": "Assigned Resource",
-      "fieldtype": "Link",
-      "options": "WMS Resource"
-    },
-    {
-      "fieldname": "priority",
-      "label": "Priority",
-      "fieldtype": "Select",
-      "options": "Low\nNormal\nHigh\nUrgent",
-      "reqd": 1,
-      "default": "Normal",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "sequence",
-      "label": "Sequence",
-      "fieldtype": "Int"
-    },
-    {
-      "fieldname": "status",
-      "label": "Status",
-      "fieldtype": "Select",
-      "options": "Open\nOn Hold\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
-      "reqd": 1,
-      "default": "Open",
-      "read_only": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "started_at",
-      "label": "Started At",
-      "fieldtype": "Datetime",
-      "read_only": 1
-    },
-    {
-      "fieldname": "confirmed_at",
-      "label": "Confirmed At",
-      "fieldtype": "Datetime",
-      "read_only": 1
-    },
-    {
-      "fieldname": "confirmed_by",
-      "label": "Confirmed By",
-      "fieldtype": "Link",
-      "options": "User"
-    },
-    {
-      "fieldname": "confirmation_device",
-      "label": "Confirmation Device",
-      "fieldtype": "Data",
-      "read_only": 1
-    },
-    {
-      "fieldname": "exception_code",
-      "label": "Exception Code",
-      "fieldtype": "Link",
-      "options": "WMS Exception Code"
-    },
-    {
-      "fieldname": "idempotency_key",
-      "label": "Idempotency Key",
-      "fieldtype": "Data",
-      "read_only": 1,
-      "unique": 1
-    },
-    {
-      "fieldname": "blocking_reason",
-      "label": "Blocking Reason",
-      "fieldtype": "Small Text",
-      "read_only": 1
-    },
-    {
-      "fieldname": "reversal_of",
-      "label": "Reversal Of",
-      "fieldtype": "Link",
-      "options": "Warehouse Task",
-      "read_only": 1,
-      "unique": 1,
-      "in_standard_filter": 1
-    },
-    {
-      "fieldname": "predecessor_task",
-      "label": "Predecessor Task",
-      "fieldtype": "Link",
-      "options": "Warehouse Task",
-      "read_only": 1,
-      "in_standard_filter": 1,
-      "description": "Set for a chained Storage Process step - this task starts On Hold until the predecessor is fully confirmed, independent of any Warehouse Order sequencing."
-    },
-    {
-      "fieldname": "final_destination_bin",
-      "label": "Final Destination Bin",
-      "fieldtype": "Link",
-      "options": "Storage Bin",
-      "read_only": 1,
-      "description": "Layout-oriented storage control: this task goes to an intermediate bin first; a follow-up task takes the goods on to this bin."
-    },
-    {
-      "fieldname": "stock_owner",
-      "label": "Owner",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
-    },
-    {
-      "fieldname": "entitled_party",
-      "label": "Party Entitled to Dispose",
-      "fieldtype": "Link",
-      "options": "WMS Stock Owner",
-      "in_standard_filter": 1,
-      "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
-    },
-    {
-      "fieldname": "country_of_origin",
-      "label": "Country of Origin",
-      "fieldtype": "Link",
-      "options": "Country",
-      "read_only": 1
-    },
-    {
-      "fieldname": "special_stock_type",
-      "label": "Special Stock",
-      "fieldtype": "Select",
-      "options": "\nSales Order\nProject",
-      "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it.",
-      "read_only": 1
-    },
-    {
-      "fieldname": "special_stock_ref",
-      "label": "Special Stock Reference",
-      "fieldtype": "Data",
-      "read_only": 1
-    },
-    {
-      "fieldname": "consolidation_group",
-      "label": "Consolidation Group",
-      "fieldtype": "Link",
-      "options": "Consolidation Group",
-      "read_only": 1
-    }
-  ],
-  "autoname": "WT-.##########",
-  "sort_field": "modified",
-  "sort_order": "DESC",
-  "doctype": "DocType",
-  "permissions": [
-    {
-      "role": "System Manager",
-      "read": 1,
-      "write": 1,
-      "create": 1,
-      "delete": 1,
-      "submit": 1,
-      "cancel": 1,
-      "amend": 1
-    },
-    {
-      "role": "WMS Administrator",
-      "read": 1,
-      "write": 1,
-      "create": 1,
-      "delete": 1,
-      "submit": 1,
-      "cancel": 1,
-      "amend": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Operator",
-      "read": 1,
-      "write": 0,
-      "create": 0,
-      "delete": 0,
-      "submit": 0,
-      "cancel": 0,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Receiver",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Picker",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Packer",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Loader",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Inventory Controller",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Supervisor",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Process Engineer",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Master Data",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Integration User",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Auditor",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Yard Clerk",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    },
-    {
-      "role": "WMS Yard Planner",
-      "read": 1,
-      "report": 1,
-      "export": 1,
-      "print": 1
-    }
-  ]
+ "name": "Warehouse Task",
+ "module": "WMS Execution",
+ "custom": 0,
+ "is_submittable": 1,
+ "istable": 0,
+ "track_changes": 1,
+ "allow_rename": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "warehouse_request",
+  "stock_allocation",
+  "stock_allocations",
+  "consolidation_group_line",
+  "wave",
+  "task_type",
+  "warehouse",
+  "product",
+  "planned_quantity",
+  "confirmed_quantity",
+  "stock_uom",
+  "batch_no",
+  "serial_no",
+  "source_bin",
+  "destination_bin",
+  "final_destination_bin",
+  "source_hu",
+  "destination_hu",
+  "move_top_hu",
+  "stock_type_from",
+  "stock_type_to",
+  "stock_owner",
+  "entitled_party",
+  "movement_type",
+  "warehouse_order",
+  "queue",
+  "assigned_resource",
+  "priority",
+  "reason",
+  "sequence",
+  "status",
+  "started_at",
+  "confirmed_at",
+  "confirmed_by",
+  "confirmation_device",
+  "exception_code",
+  "idempotency_key",
+  "blocking_reason",
+  "reversal_of",
+  "predecessor_task",
+  "country_of_origin",
+  "special_stock_type",
+  "special_stock_ref",
+  "consolidation_group"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse_request",
+   "label": "Warehouse Request",
+   "fieldtype": "Link",
+   "options": "Warehouse Request",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "stock_allocation",
+   "label": "Stock Allocation",
+   "fieldtype": "Link",
+   "options": "Stock Allocation",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Primary allocation for quick reference. For a cluster pick task combining several orders, see Stock Allocations below."
+  },
+  {
+   "fieldname": "stock_allocations",
+   "label": "Stock Allocations",
+   "fieldtype": "Table",
+   "options": "Warehouse Task Allocation"
+  },
+  {
+   "fieldname": "consolidation_group_line",
+   "label": "Consolidation Group Line",
+   "fieldtype": "Link",
+   "options": "Consolidation Group Line",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set on a Consolidation or Deconsolidation task that's part of a Consolidation Group's gather/split plan, so its progress can be tracked back to that plan."
+  },
+  {
+   "fieldname": "wave",
+   "label": "Wave",
+   "fieldtype": "Link",
+   "options": "WMS Wave",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "task_type",
+   "label": "Task Type",
+   "fieldtype": "Select",
+   "options": "Unload\nPutaway\nPick\nInternal Move\nDeconsolidation\nConsolidation\nStage\nLoad\nPosting Change\nInventory Count\nCross Dock\nRepack\nSort",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "label": "Warehouse",
+   "fieldtype": "Link",
+   "options": "WMS Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "product",
+   "label": "Product",
+   "fieldtype": "Link",
+   "options": "Item"
+  },
+  {
+   "fieldname": "planned_quantity",
+   "label": "Planned Quantity",
+   "fieldtype": "Float"
+  },
+  {
+   "fieldname": "confirmed_quantity",
+   "label": "Confirmed Quantity",
+   "fieldtype": "Float",
+   "default": 0,
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "label": "Stock UOM",
+   "fieldtype": "Link",
+   "options": "UOM"
+  },
+  {
+   "fieldname": "batch_no",
+   "label": "Batch",
+   "fieldtype": "Link",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "serial_no",
+   "label": "Serial Number",
+   "fieldtype": "Link",
+   "options": "Serial No"
+  },
+  {
+   "fieldname": "source_bin",
+   "label": "Source Bin",
+   "fieldtype": "Link",
+   "options": "Storage Bin"
+  },
+  {
+   "fieldname": "destination_bin",
+   "label": "Destination Bin",
+   "fieldtype": "Link",
+   "options": "Storage Bin"
+  },
+  {
+   "fieldname": "source_hu",
+   "label": "Source HU",
+   "fieldtype": "Link",
+   "options": "Handling Unit"
+  },
+  {
+   "fieldname": "destination_hu",
+   "label": "Destination HU",
+   "fieldtype": "Link",
+   "options": "Handling Unit"
+  },
+  {
+   "fieldname": "unpack_at_destination",
+   "label": "Unpack At Destination",
+   "fieldtype": "Check",
+   "default": 0,
+   "description": "This task's destination is deliberately no Handling Unit (e.g. a deconsolidation line splitting stock loose into a bin), not merely undecided - confirming it must not fall back to the source HU."
+  },
+  {
+   "fieldname": "move_top_hu",
+   "label": "Move Top HU",
+   "fieldtype": "Check",
+   "default": 0
+  },
+  {
+   "fieldname": "requires_sort_after_pick",
+   "label": "Requires Sort After Pick",
+   "fieldtype": "Check",
+   "default": 0,
+   "description": "Set when this Pick task was created under a Two-Step Picking process type - it lands in the warehouse's shared picking staging area, not the delivery's own staging bin, and confirming it fully auto-creates a follow-up Sort task to move the picked quantity on to the actual delivery."
+  },
+  {
+   "fieldname": "stock_type_from",
+   "label": "Stock Type From",
+   "fieldtype": "Link",
+   "options": "WMS Stock Type"
+  },
+  {
+   "fieldname": "stock_type_to",
+   "label": "Stock Type To",
+   "fieldtype": "Link",
+   "options": "WMS Stock Type"
+  },
+  {
+   "fieldname": "movement_type",
+   "label": "Movement Type",
+   "fieldtype": "Link",
+   "options": "WMS Movement Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse_order",
+   "label": "Warehouse Order",
+   "fieldtype": "Link",
+   "options": "Warehouse Order",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "queue",
+   "label": "Queue",
+   "fieldtype": "Link",
+   "options": "Warehouse Queue"
+  },
+  {
+   "fieldname": "assigned_resource",
+   "label": "Assigned Resource",
+   "fieldtype": "Link",
+   "options": "WMS Resource"
+  },
+  {
+   "fieldname": "priority",
+   "label": "Priority",
+   "fieldtype": "Select",
+   "options": "Low\nNormal\nHigh\nUrgent",
+   "reqd": 1,
+   "default": "Normal",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "sequence",
+   "label": "Sequence",
+   "fieldtype": "Int"
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "Open\nOn Hold\nAvailable\nAssigned\nIn Process\nPartially Confirmed\nConfirmed\nCancelled\nException",
+   "reqd": 1,
+   "default": "Open",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "started_at",
+   "label": "Started At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirmed_at",
+   "label": "Confirmed At",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirmed_by",
+   "label": "Confirmed By",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "confirmation_device",
+   "label": "Confirmation Device",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exception_code",
+   "label": "Exception Code",
+   "fieldtype": "Link",
+   "options": "WMS Exception Code"
+  },
+  {
+   "fieldname": "idempotency_key",
+   "label": "Idempotency Key",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "blocking_reason",
+   "label": "Blocking Reason",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reversal_of",
+   "label": "Reversal Of",
+   "fieldtype": "Link",
+   "options": "Warehouse Task",
+   "read_only": 1,
+   "unique": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "predecessor_task",
+   "label": "Predecessor Task",
+   "fieldtype": "Link",
+   "options": "Warehouse Task",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set for a chained Storage Process step - this task starts On Hold until the predecessor is fully confirmed, independent of any Warehouse Order sequencing."
+  },
+  {
+   "fieldname": "final_destination_bin",
+   "label": "Final Destination Bin",
+   "fieldtype": "Link",
+   "options": "Storage Bin",
+   "read_only": 1,
+   "description": "Layout-oriented storage control: this task goes to an intermediate bin first; a follow-up task takes the goods on to this bin."
+  },
+  {
+   "fieldname": "stock_owner",
+   "label": "Owner",
+   "fieldtype": "Link",
+   "options": "WMS Stock Owner",
+   "in_standard_filter": 1,
+   "description": "Who owns the stock (legal owner; blank = the warehouse's own stock)."
+  },
+  {
+   "fieldname": "entitled_party",
+   "label": "Party Entitled to Dispose",
+   "fieldtype": "Link",
+   "options": "WMS Stock Owner",
+   "in_standard_filter": 1,
+   "description": "Who may dispose of the stock (the ERP plant / company side); blank = same as the warehouse's company."
+  },
+  {
+   "fieldname": "country_of_origin",
+   "label": "Country of Origin",
+   "fieldtype": "Link",
+   "options": "Country",
+   "read_only": 1
+  },
+  {
+   "fieldname": "special_stock_type",
+   "label": "Special Stock",
+   "fieldtype": "Select",
+   "options": "\nSales Order\nProject",
+   "description": "Stock reserved to a sales order or project: only that order/project's deliveries may take it.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "special_stock_ref",
+   "label": "Special Stock Reference",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "consolidation_group",
+   "label": "Consolidation Group",
+   "fieldtype": "Link",
+   "options": "Consolidation Group",
+   "read_only": 1
+  }
+ ],
+ "autoname": "WT-.##########",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "doctype": "DocType",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "WMS Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Operator",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0,
+   "submit": 0,
+   "cancel": 0,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Receiver",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Picker",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Packer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Loader",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Inventory Controller",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Supervisor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Process Engineer",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Master Data",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Integration User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Clerk",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "WMS Yard Planner",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ]
 }
