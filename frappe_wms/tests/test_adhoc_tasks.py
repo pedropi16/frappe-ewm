@@ -41,3 +41,17 @@ class TestAdhocTasks(_base.TestStockAdjustments):
         other = frappe.get_all("Storage Bin", filters={"warehouse": ["!=", self.wh]}, limit=1, pluck="name")[0]
         with self.assertRaisesRegex(frappe.ValidationError, "not in warehouse"):
             create_adhoc_tasks([{"name": self._line().name}], other)
+
+    def test_mixed_handling_unit_moves_with_all_its_stock(self):
+        from frappe_wms.services.handling_unit import create_handling_unit
+        hu_type = frappe.get_all("Handling Unit Type", limit=1, pluck="name")[0]
+        hu = create_handling_unit(f"ADHOC-{frappe.generate_hash(length=6)}", hu_type, self.bin, warehouse=self.wh)
+        hu = hu.name if hasattr(hu, "name") else hu
+        self._seed(7, handling_unit=hu)
+        self._seed(2, item=self.item2, handling_unit=hu)
+        tasks = create_adhoc_tasks([{"handling_unit": hu}], self.bin2)
+        self.assertEqual(len(tasks), 2)
+        for t in tasks: confirm_task(t, verify=False)
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bin2)
+        self.assertEqual(self._qty(item=self.item2, handling_unit=hu), 0)
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"warehouse": self.wh, "storage_bin": self.bin2, "handling_unit": hu, "quantity": [">", 0]}, "name") is not None, True)

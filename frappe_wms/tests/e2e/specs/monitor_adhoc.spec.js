@@ -27,3 +27,15 @@ test("ad hoc tasks for several marked stock lines", async ({ page, request }) =>
   await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]]]))}&fields=["name"]`)).data.length).toBe(2);
   expect(errors).toEqual([]);
 });
+
+test("every ad hoc transaction opens its selection without a script error", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  for (const [tx, title] of [["adhu", "Handling Units"], ["posting", "Stock Overview"], ["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"]]) {
+    await page.goto(`/app/wms-adhoc/${tx}`);
+    await expect(page.locator(".modal.show", { hasText: `Selection - ${title}` })).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});

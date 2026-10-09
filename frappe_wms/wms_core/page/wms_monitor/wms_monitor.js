@@ -587,62 +587,13 @@ class WMSMonitor {
       $wrap.html(`<div class="wms-mon-task-sel"></div><div class="wms-mon-task-table">${sap_unexecuted_html()}</div>`);
       this.selection("tasks", $wrap.find(".wms-mon-task-sel"), $wrap.find(".wms-mon-task-table"), {
         renderers: { source_hu: this.hu_link_cell("source_hu"), destination_hu: this.hu_link_cell("destination_hu") },
-        actions: this.task_quick_actions(),
+        actions: this.process_actions("tasks"),
       });
     }
   }
 
   search_tasks() { return this.execute_selection("tasks"); }
 
-  // Quick actions for the Warehouse Tasks grid - SAP EWM Monitor-style: act on whatever is
-  // currently selected without opening each task. Each server call runs one row at a time
-  // (never Promise.all) so one failure doesn't silently swallow the rest, and the final tally
-  // reflects exactly how many actually succeeded.
-  task_quick_actions() {
-    const TERMINAL = ["Confirmed", "Cancelled"];
-    return [
-      {
-        label: __("Raise Exception"), kind: "danger",
-        appliesTo: (row) => !TERMINAL.includes(row.status) && row.status !== "Exception",
-        run: async (rows) => {
-          const codes = await frappe.call("frappe_wms.api.scanner.list_exception_codes", {}).then((r) => r.message || []);
-          if (!codes.length) { frappe.show_alert({ message: __("No active Exception Codes configured"), indicator: "orange" }); return; }
-          const values = await new Promise((resolve) => frappe.prompt([
-            { fieldname: "exception_code", label: __("Exception Code"), fieldtype: "Select", reqd: 1,
-              options: codes.map((c) => ({ value: c.name, label: c.exception_name })) },
-            { fieldname: "remarks", label: __("Remarks"), fieldtype: "Small Text" },
-          ], (v) => resolve(v), __("Raise Exception on {0} task(s)", [rows.length])));
-          if (!values) return;
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.scanner.raise_exception", { task_name: row.name, exception_code: values.exception_code, remarks: values.remarks || undefined }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Raised exception on {0} of {1} task(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_tasks();
-        },
-      },
-      {
-        label: __("Reverse"), kind: "danger",
-        appliesTo: (row) => row.status === "Confirmed",
-        confirm: (rows) => __("Reverse {0} confirmed task(s)? This posts a compensating move back to source for each.", [rows.length]),
-        run: async (rows) => {
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.scanner.reverse_task", { task_name: row.name }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Reversed {0} of {1} task(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_tasks();
-        },
-      },
-      // Deliberately no "Unassign" here: a task's assigned_resource is driven by its parent
-      // Warehouse Order (attach_task), and there is no service function that unassigns one
-      // while keeping the Warehouse Order and its other tasks consistent - a raw field write
-      // from here would silently desync them. Add a real service function first if this is
-      // needed.
-    ];
-  }
 
   // ---------- Warehouse Orders ----------
   async load_warehouse_orders() {
@@ -650,52 +601,13 @@ class WMSMonitor {
     if (!$wrap.find(".wms-mon-wo-sel").length) {
       $wrap.html(`<div class="wms-mon-wo-sel"></div><div class="wms-mon-wo-table">${sap_unexecuted_html()}</div>`);
       this.selection("warehouse_orders", $wrap.find(".wms-mon-wo-sel"), $wrap.find(".wms-mon-wo-table"), {
-        actions: this.wo_quick_actions(),
+        actions: this.process_actions("wo"),
       });
     }
   }
 
   search_warehouse_orders() { return this.execute_selection("warehouse_orders"); }
 
-  // Hold/Resume for the Warehouse Order Monitor - same bulk idiom as task_quick_actions. No
-  // separate drill-down into one WO's tasks here: filter the Warehouse Tasks tab by Warehouse
-  // Order instead, which is already a selectable field there.
-  wo_quick_actions() {
-    const TERMINAL = ["Completed", "Cancelled"];
-    return [
-      {
-        label: __("Put On Hold"), kind: "danger",
-        appliesTo: (row) => !TERMINAL.includes(row.status) && row.status !== "On Hold",
-        run: async (rows) => {
-          const values = await new Promise((resolve) => frappe.prompt(
-            [{ fieldname: "reason", label: __("Reason"), fieldtype: "Data" }],
-            (v) => resolve(v), __("Put {0} Warehouse Order(s) On Hold", [rows.length]),
-          ));
-          if (!values) return;
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.warehouse_order.block_warehouse_order", { wo_name: row.name, reason: values.reason || undefined }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Put {0} of {1} on hold", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_warehouse_orders();
-        },
-      },
-      {
-        label: __("Resume"),
-        appliesTo: (row) => row.status === "On Hold",
-        run: async (rows) => {
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.warehouse_order.resume_warehouse_order", { wo_name: row.name }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Resumed {0} of {1}", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_warehouse_orders();
-        },
-      },
-    ];
-  }
 
   // ---------- Handling Units ----------
   async load_handling_units() {
@@ -711,62 +623,16 @@ class WMSMonitor {
           name: (row) => `<a href="#" class="wms-hu-open" data-hu="${frappe.utils.escape_html(row.name)}">${frappe.utils.escape_html(row.name)}</a>`,
           parent_hu: this.hu_link_cell("parent_hu"), top_hu: this.hu_link_cell("top_hu"),
         },
-        actions: this.hu_quick_actions(),
+        actions: this.process_actions("hublock"),
       });
     }
   }
 
+  // The Monitor only finds and links: changing tasks, warehouse orders and handling units happens on the Ad Hoc Processing page.
+  process_actions(tx) { return [{ label: __("Process in Ad Hoc Processing"), kind: "primary", run: () => frappe.set_route("wms-adhoc", tx) }]; }
+
   search_handling_units() { return this.execute_selection("hu"); }
 
-  hu_quick_actions() {
-    return [
-      {
-        label: __("Block"), kind: "danger",
-        appliesTo: (row) => row.status !== "Blocked",
-        run: async (rows) => {
-          const values = await new Promise((resolve) => frappe.prompt(
-            [{ fieldname: "remarks", label: __("Reason"), fieldtype: "Small Text" }],
-            (v) => resolve(v), __("Block {0} Handling Unit(s)", [rows.length]),
-          ));
-          if (!values) return;
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.handling_unit.block_handling_unit", { hu_name: row.name, remarks: values.remarks || undefined }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Blocked {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_handling_units();
-        },
-      },
-      {
-        label: __("Unblock"),
-        appliesTo: (row) => row.status === "Blocked",
-        run: async (rows) => {
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.handling_unit.unblock_handling_unit", { hu_name: row.name }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Unblocked {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_handling_units();
-        },
-      },
-      {
-        label: __("Recycle"), kind: "danger",
-        appliesTo: (row) => row.stock_status === "Empty" && !row.parent_hu,
-        confirm: (rows) => __("Recycle {0} Handling Unit(s)? Frees their numbers for reuse; cannot be undone.", [rows.length]),
-        run: async (rows) => {
-          let ok = 0;
-          for (const row of rows) {
-            try { await frappe.call("frappe_wms.api.handling_unit.recycle_handling_unit", { hu_name: row.name }); ok++; }
-            catch (e) { /* frappe already shows the server error */ }
-          }
-          frappe.show_alert({ message: __("Recycled {0} of {1} Handling Unit(s)", [ok, rows.length]), indicator: ok === rows.length ? "green" : "orange" });
-          this.search_handling_units();
-        },
-      },
-    ];
-  }
 
   // ---------- Repack Center: full recursive HU detail ----------
   async open_hu_detail(hu_name) {
@@ -2074,11 +1940,11 @@ class WMSMonitor {
       [["name", __("Task")], ["task_type", __("Type")], ["product", __("Product")], ["source_bin", __("Source Bin")],
        ["destination_bin", __("Destination Bin")], ["assigned_resource", __("Resource")],
        ["exception_code", __("Exception")], ["blocking_reason", __("Reason")], ["modified", __("Since")]],
-      "Warehouse Task", __("No aged exceptions"), { actions: this.task_quick_actions() });
+      "Warehouse Task", __("No aged exceptions"), { actions: this.process_actions("tasks") });
     this.render_alert_table($wrap.find(".wms-mon-alert-aged-tasks"), alerts.aged_open_tasks || [],
       [["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")],
        ["assigned_resource", __("Resource")], ["warehouse_order", __("Warehouse Order")], ["modified", __("Since")]],
-      "Warehouse Task", __("No aged open tasks"), { actions: this.task_quick_actions() });
+      "Warehouse Task", __("No aged open tasks"), { actions: this.process_actions("tasks") });
     this.render_alert_table($wrap.find(".wms-mon-alert-interim"), alerts.stock_in_interim_bins || [],
       [["product", __("Product")], ["storage_bin", __("Bin")], ["stock_type", __("Stock Type")],
        ["handling_unit", __("HU"), this.hu_link_cell("handling_unit")], ["quantity", __("Quantity")], ["last_movement_date", __("Since")]],

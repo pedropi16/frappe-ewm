@@ -22,12 +22,12 @@ def _balances(line):
         rows = frappe.get_all("WMS Stock Balance", filters={"handling_unit": line["handling_unit"], "quantity": [">", 0]}, fields=BALANCE_FIELDS)
         if not rows:
             frappe.throw(_("Handling Unit {0} holds no stock - a task needs something to move").format(line["handling_unit"]))
-        return [(r, flt(r.quantity)) for r in rows]
+        return [(r, flt(r.quantity), True) for r in rows]
     bal = frappe.get_doc("WMS Stock Balance", line["name"]).as_dict()
     qty = flt(line.get("quantity")) or flt(bal.available_quantity)
     if qty <= 0 or qty > flt(bal.available_quantity) + 1e-6:
         frappe.throw(_("{0} in {1}: only {2} is free to move").format(bal.product, bal.storage_bin, flt(bal.available_quantity)))
-    return [(bal, qty)]
+    return [(bal, qty, False)]
 
 
 def create_adhoc_tasks(lines, destination_bin, priority="Normal"):
@@ -36,17 +36,18 @@ def create_adhoc_tasks(lines, destination_bin, priority="Normal"):
     if not destination_bin: frappe.throw(_("Enter the destination bin"))
     destination = frappe.get_doc("Storage Bin", destination_bin)
     batch_key = frappe.generate_hash(length=10)
-    created = []
+    created, checked = [], set()  # checked: HUs already cleared of open tasks (an HU holding several products gets several tasks)
     for line in lines:
-        for bal, qty in _balances(line):
+        for bal, qty, whole_hu in _balances(line):
             if destination.warehouse != bal.warehouse: frappe.throw(_("Destination bin {0} is not in warehouse {1}").format(destination_bin, bal.warehouse))
             if not bal.storage_bin: frappe.throw(_("{0} is not in a bin").format(bal.product))
             hu = bal.handling_unit
-            if hu and frappe.db.exists("Warehouse Task", {"source_hu": hu, "docstatus": 0, "status": ["not in", ["Cancelled", "Confirmed"]]}):
+            if hu and hu not in checked and frappe.db.exists("Warehouse Task", {"source_hu": hu, "docstatus": 0, "status": ["not in", ["Cancelled", "Confirmed"]]}):
                 frappe.throw(_("{0} already has an open warehouse task").format(hu))
+            checked.add(hu)
             # moving all an HU holds moves the HU; part of it lands loose (same rule as create_and_confirm_move)
-            whole = hu and frappe.db.sql("select count(*), sum(quantity) from `tabWMS Stock Balance` where handling_unit=%s and quantity>0", hu)[0]
-            moves_hu = bool(hu) and whole[0] == 1 and qty >= flt(whole[1]) - 1e-6
+            whole = hu and not whole_hu and frappe.db.sql("select count(*), sum(quantity) from `tabWMS Stock Balance` where handling_unit=%s and quantity>0", hu)[0]
+            moves_hu = bool(hu) and (whole_hu or (whole[0] == 1 and qty >= flt(whole[1]) - 1e-6))
             hu_type = frappe.db.get_value("Handling Unit", hu, "hu_type") if hu else None
             iw, iv = incoming_load(bal.product, qty)
             validate_destination_bin(destination_bin, item=bal.product, incoming_quantity=qty, stock_type=bal.stock_type, hu_type=hu_type,
