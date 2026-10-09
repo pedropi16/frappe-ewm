@@ -19,7 +19,7 @@ window.wms_workbench = (function () {
     },
   };
   MODES.posting = {
-    title: (wh) => __("Posting Change in Warehouse Number {0}", [wh]), view: "stock", finds: MODES.stock.finds, post: true,
+    title: (wh) => __("Posting Change in Warehouse Number {0}", [wh]), view: "stock", finds: MODES.stock.finds, doc: true,
     cols: [["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["storage_type", __("Source Storage Type")], ["source_bin", __("Source Bin")], ["available", __("Available")]],
     edit: [["quantity", __("Quantity"), 70], ["to_stock_type", __("New Stock Type"), 140], ["to_stock_owner", __("New Owner"), 110], ["to_entitled_party", __("New Party"), 110], ["to_country_of_origin", __("New Country"), 80], ["to_batch_no", __("New Batch"), 100], ["reason", __("Reason"), 170]],
     mass: [["to_stock_type", __("New Stock Type"), "Link", "WMS Stock Type"], ["to_stock_owner", __("New Owner"), "Link", "WMS Stock Owner"], ["to_entitled_party", __("New Party Entitled to Dispose"), "Link", "WMS Entitled Party"],
@@ -32,6 +32,11 @@ window.wms_workbench = (function () {
   [MODES.hu.mass, MODES.stock.mass].forEach((m) => m.splice(1, 0, ["destination_storage_type", __("Destination Storage Type"), "Link", "Storage Type"], ["destination_section", __("Destination Storage Section"), "Link", "Storage Section"]));
   MODES.hu.edit = [["process_type", __("Whse Proc. Type"), 90], ["destination_hu", __("Destination HU"), 120], ["destination_storage_type", __("Dest. Storage Type"), 100], ["destination_section", __("DstStorSec"), 80], ["destination_bin", __("Destination Bin"), 130]];
   MODES.stock.edit = [["quantity", __("Quantity"), 70], ...MODES.hu.edit];
+  MODES.scrap = {
+    ...MODES.posting, title: (wh) => __("Scrapping in Warehouse Number {0}", [wh]), verb: __("Scrap"), api: "stock_adjustment.process_scrap_lines", doctype: "WMS Stock Adjustment", posted: __("{0} scrapping document(s) posted"),
+    edit: [["quantity", __("Quantity"), 70], ["reason", __("Reason"), 220]], mass: [["reason", __("Reason"), "Small Text"]], tabs: [["created", __("Scrapped")], ["content", __("Stock in Source Bin")]],
+  };
+  Object.assign(MODES.posting, { verb: __("Post"), api: "posting_change.process_lines", doctype: "WMS Posting Change", posted: __("{0} posting change(s) posted") });
   const CSS = `.wms-wb .wb-bar select.form-control,.wms-wb .wb-bar input.wb-value{width:auto;display:inline-block}.wms-wb .wb-title{margin:4px 0 10px}.wms-wb .wb-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.wms-wb .wb-bar label{margin:0;color:var(--text-muted);font-size:12px}
     .wms-wb .wb-strip{border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:6px 0}.wms-wb .wb-table{margin:8px 0}.wms-wb .wb-table .wms-grid-scroll{max-height:340px}
     .wms-wb table{margin:0;font-size:12px}.wms-wb th{background:var(--control-bg);white-space:nowrap}.wms-wb tr.sel td{background:var(--highlight-color,#eef)}.wms-wb input.wb-cell{width:110px;height:24px;font-size:12px}
@@ -61,10 +66,10 @@ window.wms_workbench = (function () {
         <button class="btn btn-default btn-xs wb-toggle">${__("Detail")}</button>
         <button class="btn btn-default btn-xs wb-del">${__("Delete Row")}</button>
         <button class="btn btn-default btn-xs wb-refresh">${__("Refresh")}</button>
-        ${M.post ? "" : `<button class="btn btn-default btn-xs wb-check" title="${__("Determine process type and destination for the marked rows (all rows if none is marked) without creating anything")}">&#10003; ${__("Check (Enter)")}</button>`}
+        ${M.doc ? "" : `<button class="btn btn-default btn-xs wb-check" title="${__("Determine process type and destination for the marked rows (all rows if none is marked) without creating anything")}">&#10003; ${__("Check (Enter)")}</button>`}
         <button class="btn btn-default btn-xs wb-mass" title="${__("Enter values once and put them into all marked rows")}">&#9998; ${__("Mass Change")}</button>
-        <button class="btn btn-primary btn-xs wb-create">${M.post ? __("Post") : __("Create")}</button>
-        ${M.post ? "" : `<button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>`}
+        <button class="btn btn-primary btn-xs wb-create">${M.doc ? M.verb : __("Create")}</button>
+        ${M.doc ? "" : `<button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>`}
       </div>
       <div class="wb-table"></div>
       <div class="wb-detail"></div>
@@ -99,7 +104,7 @@ window.wms_workbench = (function () {
     function draw() {
       const rows = shown();
       const cols = [...M.cols, ...M.edit.map(([f, l, w]) => [f, l, inp(f, w)]),
-        ...(M.post ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
+        ...(M.doc ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
         ["result", __("Result"), (r) => `<span class="wb-res ${(r.result || "").startsWith("\u2714") ? "text-success" : "text-danger"}" data-k="${esc(r.key)}" title="${esc(r.result || "")}">${esc((r.result || "").slice(0, 90))}</span>`]];
       state.picked = [];
       const grid = new window.wms_grid.DataGrid(rows, cols, null, { numeric: ["quantity", "available", "open_wt"],
@@ -118,7 +123,7 @@ window.wms_workbench = (function () {
       const f = ([k, l]) => `<div class="f"><span class="l">${esc(l)}</span><span class="v">${esc(r[k] ?? "")}</span></div>`;
       const inpf = (k, l, w = 200) => `<div class="f"><span class="l">${esc(l)}</span><input class="form-control input-sm d-in" data-f="${k}" value="${esc(r[k] || "")}" style="width:${w}px;display:inline-block"></div>`;
       const chk = (k, l, on, ro) => `<div class="f"><span class="l">${esc(l)}</span><input type="checkbox" class="${ro ? "" : "d-chk"}" data-f="${k}" ${on ? "checked" : ""} ${ro ? "disabled" : ""}></div>`;
-      if (M.post) {
+      if (M.doc) {
         $root.find(".wb-detail").html(`<div class="col">${[["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["source_bin", __("Source Bin")], ["available", __("Available")]].map(f).join("")}${inpf("quantity", __("Quantity"), 90)}</div>
           <div class="col">${M.edit.slice(1).map(([k, l]) => inpf(k, l, k === "reason" ? 260 : 200)).join("")}<div class="text-muted" style="text-align:right">${state.cur + 1} / ${n}</div></div>`);
         return;
@@ -139,9 +144,9 @@ window.wms_workbench = (function () {
       $root.find(".wb-tab").removeClass("active").filter(`[data-tab="${state.tab}"]`).addClass("active");
       const table = (cols, rows) => `<table class="table table-bordered table-sm"><thead><tr>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join("")}</tr></thead><tbody>${rows.map((x) => `<tr>${cols.map(([k]) => `<td>${esc(x[k] ?? "")}</td>`).join("")}</tr>`).join("") || `<tr><td class="text-muted">${__("Nothing to show")}</td></tr>`}</tbody></table>`;
       if (state.tab === "created") {
-        const rows = state.created.length ? (M.post ? await frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Posting Change", filters: [["name", "in", state.created]], fields: ["name", "status", "product", "quantity", "from_stock_type", "to_stock_type", "storage_bin", "reason"], limit_page_length: 200 } }).then((r) => r.message || [])
+        const rows = state.created.length ? (M.doc ? await frappe.call({ method: "frappe.client.get_list", args: { doctype: M.doctype, filters: [["name", "in", state.created]], fields: M.doctype === "WMS Posting Change" ? ["name", "status", "product", "quantity", "from_stock_type", "to_stock_type", "storage_bin", "reason"] : ["name", "status", "product", "quantity", "stock_type", "storage_bin", "reason"], limit_page_length: 200 } }).then((r) => r.message || [])
           : await call("adhoc.task_status", { names: JSON.stringify(state.created) })) : [];
-        if (M.post) { $p.html(table([["name", __("Document")], ["status", __("Status")], ["product", __("Product")], ["quantity", __("Quantity")], ["from_stock_type", __("From")], ["to_stock_type", __("To")], ["storage_bin", __("Bin")], ["reason", __("Reason")]], rows)); return; }
+        if (M.doc) { $p.html(table(M.doctype === "WMS Posting Change" ? [["name", __("Document")], ["status", __("Status")], ["product", __("Product")], ["quantity", __("Quantity")], ["from_stock_type", __("From")], ["to_stock_type", __("To")], ["storage_bin", __("Bin")], ["reason", __("Reason")]] : [["name", __("Document")], ["status", __("Status")], ["product", __("Product")], ["quantity", __("Quantity")], ["stock_type", __("Stock Type")], ["storage_bin", __("Bin")], ["reason", __("Reason")]], rows)); return; }
         $p.html(table([["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")], ["planned_quantity", __("Quantity")], ["source_bin", __("Source Bin")], ["destination_bin", __("Destination Bin")], ["source_hu", __("Source HU")], ["warehouse_order", __("Warehouse Order")], ["reason", __("Reason")]], rows));
       } else if (!r) { $p.empty(); }
       else if (state.tab === "content") {
@@ -182,7 +187,7 @@ window.wms_workbench = (function () {
       state.selection.openDialog();
     }
 
-    const lineOf = (r, confirmNow) => M.post ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
+    const lineOf = (r, confirmNow) => M.doc ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
       : { ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu,
           destination_storage_type: r.destination_storage_type, destination_section: r.destination_section, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 };
     // what a result fills into a row: the process type and the destination bin with its storage type and section (Enter in SAP)
@@ -197,7 +202,7 @@ window.wms_workbench = (function () {
     const where = (x) => `${x.destination_bin} (${x.destination_storage_type || "-"} / ${x.destination_section || "-"})`;
     // Enter: resolve the marked rows (or the one being edited) without creating anything - the destination the process type would give, or why it is refused
     async function check(rows) {
-      if (M.post || !rows.length) return;
+      if (M.doc || !rows.length) return;
       const res = await call("adhoc.check_lines", { lines: JSON.stringify(rows.map((r) => lineOf(r))) });
       let bad = 0;
       res.forEach((x) => { const r = rows[x.line]; if (x.ok) { fill(r, x); showResult(r, `\u2714 ${x.process_type_name || x.process_type} \u2192 ${where(x)}${x.destinations > 1 ? " ..." : ""}`); } else { bad++; showResult(r, `\u2718 ${x.error}`); } });
@@ -210,12 +215,12 @@ window.wms_workbench = (function () {
       const picked = state.picked.length ? state.picked : (state.detail && current() ? [current()] : []);
       if (!picked.length) { status(__("Select at least one row (click its row number)."), "warn"); return; }
       const lines = picked.map((r) => lineOf(r, confirmNow));
-      const res = await call(M.post ? "posting_change.process_lines" : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.post ? undefined : "{}" }, { freeze: true });
+      const res = await call(M.doc ? M.api : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.doc ? undefined : "{}" }, { freeze: true });
       res.created.forEach((c) => { const r = picked[c.line], made = c.tasks || c.documents; state.created.push(...made); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       draw();
       const n = res.created.reduce((a, c) => a + (c.tasks || c.documents).length, 0);
-      status(res.errors.length ? (M.post ? __("{0} posting change(s) posted, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.post ? __("{0} posting change(s) posted", [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
+      status(res.errors.length ? (M.doc ? __(M.posted + ", {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }
 
     const CHECKED = ["destination_bin", "destination_hu", "destination_storage_type", "destination_section", "process_type"];

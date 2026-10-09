@@ -77,7 +77,7 @@ test("every ad hoc transaction opens its selection without a script error", asyn
   page.on("pageerror", (e) => errors.push(String(e)));
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
-  for (const [tx, title] of [["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"], ["wave", "Waves"]]) {
+  for (const [tx, title] of [["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"], ["wave", "Waves"]]) {
     await page.goto(`/app/wms-adhoc/${tx}`);
     await expect(page.locator(".modal.show", { hasText: `Selection - ${title}` })).toBeVisible();
   }
@@ -119,5 +119,28 @@ test("posting change worklist: mass change fills the marked rows", async ({ page
   await page.locator(".modal.show").getByRole("button", { name: /Apply to marked rows/ }).click();
   await expect(rows.nth(0).locator("input[data-f='to_stock_type']")).toHaveValue("WAREHOUSE_BLOCKED");
   await expect(rows.nth(1).locator("input[data-f='to_stock_type']")).toHaveValue("");     // only the marked row
+  expect(errors).toEqual([]);
+});
+
+test("scrapping worklist: mass change of the reason", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  await page.goto("/app/wms-scrapping");
+  await page.locator(".wb-wh").selectOption(s.warehouse);
+  await expect(page.locator(".wb-title")).toContainText("Scrapping in Warehouse Number");
+  await page.locator(".wb-by").selectOption("storage_bin");
+  await page.locator(".wb-value").fill(s.bins[0]);
+  await page.locator(".wb-go").click();
+  const rows = page.locator(".wb-table tbody tr");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).locator("th.wms-grid-rowhead").click();
+  await rows.nth(1).locator("th.wms-grid-rowhead").click({ modifiers: ["Control"] });
+  await page.locator(".wb-mass").click();
+  await page.locator(".modal.show textarea[data-fieldname='reason']").fill("e2e broken");
+  await page.locator(".modal.show").getByRole("button", { name: /Apply to marked rows/ }).click();
+  await expect(rows.nth(1).locator("input[data-f='reason']")).toHaveValue("e2e broken");
+  await expect(page.getByRole("button", { name: "Scrap", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });

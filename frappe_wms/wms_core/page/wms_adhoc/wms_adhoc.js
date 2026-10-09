@@ -40,7 +40,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
       { label: __("Release"), kind: "primary", appliesTo: (r) => r.status === "Draft", confirm: (rows) => __("Release {0} wave(s)? This allocates and creates pick tasks for every delivery in them.", [rows.length]),
         run: (rows) => each(rows, "outbound.release_wave", (r) => ({ wave_name: r.name }), __("Released")) },
     ] },
-    scrap: { label: __("Scrapping"), view: "stock", actions: () => [{ label: __("Scrap…"), kind: "danger", appliesTo: free, run: (rows) => scrapDialog(rows) }] },
   };
 
   // one server call per marked row (never in parallel), so one failure does not hide the rest; the tally says how many went through
@@ -51,15 +50,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     state.sel && state.sel.execute();
   }
   const prompt = (rows, fields, label, method, args) => new Promise((resolve) => frappe.prompt(fields, (v) => resolve(each(rows, method, (r) => args(r, v), label)), __("{0}: {1} line(s)", [label, rows.length])));
-
-  const scrapDialog = (rows) => scrapDialogOpen(rows);
-
-  function scrapDialogOpen(rows) {
-    return frappe.prompt([{ fieldname: "reason", label: __("Reason"), fieldtype: "Small Text", reqd: 1 }], async ({ reason }) => {
-      const out = await call("stock_adjustment.scrap_stock", { lines: JSON.stringify(names(rows)), reason });
-      done(__("{0} scrapping document(s) posted", [out.length])); state.sel && state.sel.execute();
-    }, __("Scrap {0} line(s)", [rows.length]), __("Scrap"));
-  }
 
   const state = { sel: null, warehouses: [] };
   const $root = $(`<div class="wms-adhoc">
@@ -92,6 +82,7 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     $root.find(".wms-ah-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(state.warehouses.includes(mine) ? mine : state.warehouses[0]);
     const tx = frappe.get_route()[1];
     if (tx === "adhu" || tx === "adprod" || tx === "posting") { frappe.set_route(`wms-${tx}`); return; }
+    if (tx === "scrap") { frappe.set_route("wms-scrapping"); return; }
     if (TX[tx]) $root.find(".wms-ah-tx").val(tx);
     open();
   });

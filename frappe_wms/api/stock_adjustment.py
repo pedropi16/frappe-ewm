@@ -52,3 +52,10 @@ def change_stock(lines, reason, to_stock_type=None, changes=None):
         pc.post_posting_change(name)
         out.append(name)
     return out
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def process_scrap_lines(lines):
+    """Scrapping of the worklist lines: each {name: WMS Stock Balance, quantity?, reason}."""
+    return sa.process_scrap_lines(parse_json(lines, "lines"))

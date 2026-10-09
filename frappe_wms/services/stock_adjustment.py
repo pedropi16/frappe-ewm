@@ -63,6 +63,24 @@ def cancel_stock_adjustment(name):
     return {"stock_adjustment": doc.name, "status": "Cancelled"}
 
 
+def process_scrap_lines(lines):
+    """The scrapping worklist's Post: each line {name: WMS Stock Balance, quantity?, reason} goes through on its own (a locked or refused line does not stop the rest).
+    -> {"created": [{"line": i, "documents": [name]}], "errors": [{"line": i, "error": text}]}"""
+    from frappe_wms.services.locks import require_free_many
+    from frappe_wms.services.packing_center import _fail_text
+    out = {"created": [], "errors": []}
+    for i, line in enumerate(lines):
+        savepoint = f"scrap_{i}"
+        frappe.db.savepoint(savepoint)
+        try:
+            require_free_many([("WMS Stock Balance", line["name"])])
+            out["created"].append({"line": i, "documents": [create_stock_adjustment("Scrapping", line.get("reason"), line, line.get("quantity"))]})
+        except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
+            frappe.db.rollback(save_point=savepoint)
+            out["errors"].append({"line": i, "error": _fail_text(e)})
+    return out
+
+
 def create_stock_adjustment(adjustment_type, reason, line, quantity=None, post=True, **fields):
     """Scrapping of existing stock (line = a WMS Stock Balance row) or an unplanned receipt (line = where it goes: warehouse, product, storage_bin, ...)."""
     require_role(*ADJUSTMENT_ROLES)

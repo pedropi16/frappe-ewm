@@ -120,3 +120,15 @@ class TestStockAdjustments(IntegrationTestCase):
         self.assertEqual([e["line"] for e in res["errors"]], [1])
         self.assertEqual(self._qty(stock_type="WAREHOUSE_BLOCKED"), 3)
         self.assertEqual(self._qty(item=self.item2), 4)
+
+    def test_scrap_worklist_goes_line_by_line(self):
+        from frappe_wms.api.stock_adjustment import process_scrap_lines
+        self._seed(10)
+        self._seed(4, item=self.item2)
+        a, b = self._line(), self._line(item=self.item2)
+        res = process_scrap_lines([{"name": a.name, "quantity": 3, "reason": "broken"}, {"name": b.name, "quantity": 2, "reason": " "}])
+        self.assertEqual([c["line"] for c in res["created"]], [0])
+        self.assertEqual([e["line"] for e in res["errors"]], [1])
+        self.assertIn("reason", res["errors"][0]["error"])
+        self.assertEqual(self._qty(), 7)
+        self.assertEqual(self._qty(item=self.item2), 4)
