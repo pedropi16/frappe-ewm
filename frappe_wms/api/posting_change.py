@@ -19,3 +19,12 @@ def post_posting_change(name):
 @guard("WMS Posting Change", "name")
 def cancel_posting_change(name):
     return _cancel_posting_change(name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def process_lines(lines):
+    """Posting changes of the worklist lines: each {name: WMS Stock Balance, quantity?, to_stock_type, to_stock_owner, ..., reason}."""
+    from frappe_wms.services.posting_change import process_lines as _process
+    from frappe_wms.utils import parse_json
+    return _process(parse_json(lines, "lines"))

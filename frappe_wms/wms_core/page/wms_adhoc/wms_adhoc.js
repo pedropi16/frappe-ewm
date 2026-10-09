@@ -17,7 +17,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
 
   // transaction -> the monitor view that finds its lines, and what the action bar does with the marked ones
   const TX = {
-    posting: { label: __("Posting Change"), view: "stock", actions: () => [{ label: __("Posting Change…"), kind: "primary", appliesTo: free, run: (rows) => postingDialog(rows) }] },
     hublock: { label: __("Handling Units: Block / Unblock / Recycle"), view: "hu", actions: () => [
       { label: __("Block"), kind: "danger", appliesTo: (r) => r.status !== "Blocked", run: (rows) => prompt(rows, [{ fieldname: "remarks", label: __("Reason"), fieldtype: "Small Text" }], __("Block"), "handling_unit.block_handling_unit", (r, v) => ({ hu_name: r.name, remarks: v.remarks || undefined })) },
       { label: __("Unblock"), appliesTo: (r) => r.status === "Blocked", run: (rows) => each(rows, "handling_unit.unblock_handling_unit", (r) => ({ hu_name: r.name }), __("Unblocked")) },
@@ -52,31 +51,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     state.sel && state.sel.execute();
   }
   const prompt = (rows, fields, label, method, args) => new Promise((resolve) => frappe.prompt(fields, (v) => resolve(each(rows, method, (r) => args(r, v), label)), __("{0}: {1} line(s)", [label, rows.length])));
-
-  const postingDialog = (rows) => postingDialogOpen(rows);
-
-  function postingDialogOpen(rows) {
-    const d = new frappe.ui.Dialog({
-      title: __("Posting Change for {0} line(s)", [rows.length]),
-      fields: [
-        { fieldname: "to_stock_type", label: __("New Stock Type"), fieldtype: "Link", options: "WMS Stock Type" },
-        { fieldname: "to_stock_owner", label: __("New Owner"), fieldtype: "Link", options: "WMS Stock Owner" },
-        { fieldname: "to_entitled_party", label: __("New Party Entitled to Dispose"), fieldtype: "Link", options: "WMS Entitled Party" },
-        { fieldname: "to_country_of_origin", label: __("New Country of Origin"), fieldtype: "Link", options: "Country" },
-        { fieldname: "to_batch_no", label: __("New Batch"), fieldtype: "Link", options: "Batch" },
-        { fieldname: "reason", label: __("Reason"), fieldtype: "Small Text", reqd: 1 },
-      ],
-      primary_action_label: __("Post"),
-      primary_action: async (values) => {
-        const { reason, to_stock_type, ...changes } = values;
-        Object.keys(changes).forEach((k) => { if (!changes[k]) delete changes[k]; });
-        const out = await call("stock_adjustment.change_stock", { lines: JSON.stringify(names(rows)), reason, to_stock_type, changes: JSON.stringify(changes) });
-        d.hide(); done(__("{0} posting change(s) posted", [out.length])); state.sel && state.sel.execute();
-      },
-    });
-    d.show();
-    return d;
-  }
 
   const scrapDialog = (rows) => scrapDialogOpen(rows);
 
@@ -117,7 +91,7 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     const mine = frappe.defaults.get_user_default("WMS Warehouse");
     $root.find(".wms-ah-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(state.warehouses.includes(mine) ? mine : state.warehouses[0]);
     const tx = frappe.get_route()[1];
-    if (tx === "adhu" || tx === "adprod") { frappe.set_route(`wms-${tx}`); return; }
+    if (tx === "adhu" || tx === "adprod" || tx === "posting") { frappe.set_route(`wms-${tx}`); return; }
     if (TX[tx]) $root.find(".wms-ah-tx").val(tx);
     open();
   });

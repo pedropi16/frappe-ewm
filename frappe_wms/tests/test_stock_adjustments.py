@@ -109,3 +109,14 @@ class TestStockAdjustments(IntegrationTestCase):
         from frappe_wms.services.posting_change import cancel_posting_change
         cancel_posting_change(name)
         self.assertEqual((self._qty(), self._qty(stock_type="WAREHOUSE_BLOCKED")), (5, 0))
+
+    def test_posting_change_worklist_goes_line_by_line(self):
+        from frappe_wms.api.posting_change import process_lines
+        self._seed(10)
+        self._seed(4, item=self.item2)
+        a, b = self._line(), self._line(item=self.item2)
+        res = process_lines([{"name": a.name, "quantity": 3, "to_stock_type": "WAREHOUSE_BLOCKED", "reason": "hold"}, {"name": b.name, "reason": "nothing changes"}])
+        self.assertEqual([c["line"] for c in res["created"]], [0])
+        self.assertEqual([e["line"] for e in res["errors"]], [1])
+        self.assertEqual(self._qty(stock_type="WAREHOUSE_BLOCKED"), 3)
+        self.assertEqual(self._qty(item=self.item2), 4)

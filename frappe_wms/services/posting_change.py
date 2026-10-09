@@ -105,3 +105,24 @@ def create_posting_change(line, reason, to_stock_type=None, changes=None):
         **{k: balance.get(k) for k in OWNER_KEYS if k != "consolidation_group"}, **changes})
     doc.insert(ignore_permissions=True)
     return doc.name
+
+
+def process_lines(lines):
+    """The posting change worklist's Create: every line carries its own new values and reason, goes through on its own (a locked or refused line does not stop the rest).
+    -> {"created": [{"line": i, "documents": [name]}], "errors": [{"line": i, "error": text}]}"""
+    from frappe_wms.services.locks import require_free_many
+    from frappe_wms.services.packing_center import _fail_text
+    out = {"created": [], "errors": []}
+    for i, line in enumerate(lines):
+        savepoint = f"pcw_{i}"
+        frappe.db.savepoint(savepoint)
+        try:
+            require_free_many([("WMS Stock Balance", line["name"])])
+            changes = {k: line.get(k) for k in ("to_product", "to_batch_no", "to_stock_owner", "to_entitled_party", "to_country_of_origin", "to_special_stock_type", "to_special_stock_ref")}
+            name = create_posting_change(line, line.get("reason"), line.get("to_stock_type"), changes)
+            post_posting_change(name)
+            out["created"].append({"line": i, "documents": [name]})
+        except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
+            frappe.db.rollback(save_point=savepoint)
+            out["errors"].append({"line": i, "error": _fail_text(e)})
+    return out

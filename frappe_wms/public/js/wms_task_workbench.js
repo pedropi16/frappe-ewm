@@ -18,6 +18,19 @@ window.wms_workbench = (function () {
       detail: [[["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["source_bin", __("Source Bin")]], []],
     },
   };
+  MODES.posting = {
+    title: (wh) => __("Posting Change in Warehouse Number {0}", [wh]), view: "stock", finds: MODES.stock.finds, post: true,
+    cols: [["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["storage_type", __("Source Storage Type")], ["source_bin", __("Source Bin")], ["available", __("Available")]],
+    edit: [["quantity", __("Quantity"), 70], ["to_stock_type", __("New Stock Type"), 140], ["to_stock_owner", __("New Owner"), 110], ["to_entitled_party", __("New Party"), 110], ["to_country_of_origin", __("New Country"), 80], ["to_batch_no", __("New Batch"), 100], ["reason", __("Reason"), 170]],
+    mass: [["to_stock_type", __("New Stock Type"), "Link", "WMS Stock Type"], ["to_stock_owner", __("New Owner"), "Link", "WMS Stock Owner"], ["to_entitled_party", __("New Party Entitled to Dispose"), "Link", "WMS Entitled Party"],
+           ["to_country_of_origin", __("New Country of Origin"), "Link", "Country"], ["to_batch_no", __("New Batch"), "Link", "Batch"], ["reason", __("Reason"), "Small Text"]],
+    tabs: [["created", __("Posted Changes")], ["content", __("Stock in Source Bin")]],
+  };
+  MODES.hu.mass = MODES.stock.mass = [["process_type", __("Whse Proc. Type"), "Link", "Warehouse Process Type"], ["destination_bin", __("Destination Bin"), "Link", "Storage Bin"], ["destination_hu", __("Destination HU"), "Link", "Handling Unit"],
+    ["priority", __("Priority"), "Select", "Low\nNormal\nHigh\nUrgent"], ["reason", __("Reason"), "Small Text"], ["confirm", __("Confirmation"), "Check"]];
+  MODES.hu.mass = [...MODES.hu.mass, ["unpack", __("No HU WT"), "Check"]];
+  MODES.hu.edit = [["process_type", __("Whse Proc. Type"), 90], ["destination_hu", __("Destination HU"), 120], ["destination_bin", __("Destination Bin"), 130]];
+  MODES.stock.edit = [["quantity", __("Quantity"), 70], ...MODES.hu.edit];
   const CSS = `.wms-wb .wb-bar select.form-control,.wms-wb .wb-bar input.wb-value{width:auto;display:inline-block}.wms-wb .wb-title{margin:4px 0 10px}.wms-wb .wb-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.wms-wb .wb-bar label{margin:0;color:var(--text-muted);font-size:12px}
     .wms-wb .wb-strip{border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:6px 0}.wms-wb .wb-table{margin:8px 0}.wms-wb .wb-table .wms-grid-scroll{max-height:340px}
     .wms-wb table{margin:0;font-size:12px}.wms-wb th{background:var(--control-bg);white-space:nowrap}.wms-wb tr.sel td{background:var(--highlight-color,#eef)}.wms-wb input.wb-cell{width:110px;height:24px;font-size:12px}
@@ -47,9 +60,9 @@ window.wms_workbench = (function () {
         <button class="btn btn-default btn-xs wb-toggle">${__("Detail")}</button>
         <button class="btn btn-default btn-xs wb-del">${__("Delete Row")}</button>
         <button class="btn btn-default btn-xs wb-refresh">${__("Refresh")}</button>
-        <span class="wb-defaults"></span>
-        <button class="btn btn-primary btn-xs wb-create">${__("Create")}</button>
-        <button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>
+        <button class="btn btn-default btn-xs wb-mass" title="${__("Enter values once and put them into all marked rows")}">&#9998; ${__("Mass Change")}</button>
+        <button class="btn btn-primary btn-xs wb-create">${M.post ? __("Post") : __("Create")}</button>
+        ${M.post ? "" : `<button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>`}
       </div>
       <div class="wb-table"></div>
       <div class="wb-detail"></div>
@@ -62,19 +75,29 @@ window.wms_workbench = (function () {
     const status = (text, kind) => $root.find(".wb-status").attr("class", `wb-status ${kind || ""}`).text(text);
     const shown = () => { const f = $root.find(".wb-show").val(); return state.rows.filter((r) => !f || (f === "open" ? flt(r.open_wt) > 0 : !flt(r.open_wt))); };
 
-    // defaults for rows that leave destination / process type blank
-    const def = {};
-    const mk = (name, label, doctype, query) => { const c = frappe.ui.form.make_control({ df: { fieldtype: "Link", fieldname: name, label, options: doctype, get_query: query }, parent: $root.find(".wb-defaults"), render_input: true, only_input: false }); c.$wrapper.css({ display: "inline-block", width: "190px", margin: "0 6px 0 0" }); def[name] = c; return c; };
-    mk("process_type", __("Whse Proc. Type"), "Warehouse Process Type", () => ({ filters: { activity: ["in", ["Internal Move", "Putaway"]], active: 1 } }));
-    mk("destination_bin", __("Destination Bin"), "Storage Bin", () => ({ filters: { warehouse: wh() } }));
+    // Mass Change: the values entered here go into every marked row, so nothing has to be typed row by row.
+    function massChange() {
+      const rows = state.picked.length ? state.picked : (state.detail && current() ? [current()] : []);
+      if (!rows.length) { status(__("Mark the rows to change first (click their row numbers)."), "warn"); return; }
+      const d = new frappe.ui.Dialog({
+        title: __("Mass Change for {0} marked row(s)", [rows.length]),
+        fields: M.mass.map(([fieldname, label, fieldtype, options]) => ({ fieldname, label, fieldtype, options,
+          get_query: fieldname === "destination_bin" ? () => ({ filters: { warehouse: wh() } }) : fieldname === "process_type" ? () => ({ filters: { activity: ["in", ["Internal Move", "Putaway"]], active: 1 } }) : undefined })),
+        primary_action_label: __("Apply to marked rows"),
+        primary_action: (values) => {
+          Object.entries(values).forEach(([f, v]) => { if (!v) return; rows.forEach((r) => { r[f] = v === 1 ? true : v; $root.find(`.wb-in[data-k="${window.CSS.escape(r.key)}"][data-f="${f}"]`).each((_, el) => { el.type === "checkbox" ? (el.checked = true) : (el.value = v); }); }); });
+          d.hide(); drawDetail(); status(__("Values placed into {0} row(s)", [rows.length]), "ok");
+        },
+      });
+      d.show();
+    }
 
     // The list is the Monitor's grid: cells and rows can be marked and copied like in Excel; the cells that need input are real input fields.
     const inp = (f, w) => (r) => `<input class="form-control wb-cell wb-in" data-k="${esc(r.key)}" data-f="${f}" value="${esc(r[f] ?? "")}" style="width:${w}px">`;
     function draw() {
       const rows = shown();
-      const cols = [...M.cols, ...(mode === "stock" ? [["quantity", __("Quantity"), inp("quantity", 70)]] : []),
-        ["process_type", __("Whse Proc. Type"), inp("process_type", 90)], ["destination_hu", __("Destination HU"), inp("destination_hu", 120)], ["destination_bin", __("Destination Bin"), inp("destination_bin", 130)],
-        ["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`],
+      const cols = [...M.cols, ...M.edit.map(([f, l, w]) => [f, l, inp(f, w)]),
+        ...(M.post ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
         ["result", __("Result"), (r) => r.result ? `<span class="${r.result.startsWith("\u2714") ? "text-success" : "text-danger"}" title="${esc(r.result)}">${esc(r.result.slice(0, 70))}</span>` : ""]];
       state.picked = [];
       const grid = new window.wms_grid.DataGrid(rows, cols, null, { numeric: ["quantity", "available", "open_wt"],
@@ -93,6 +116,11 @@ window.wms_workbench = (function () {
       const f = ([k, l]) => `<div class="f"><span class="l">${esc(l)}</span><span class="v">${esc(r[k] ?? "")}</span></div>`;
       const inpf = (k, l, w = 200) => `<div class="f"><span class="l">${esc(l)}</span><input class="form-control input-sm d-in" data-f="${k}" value="${esc(r[k] || "")}" style="width:${w}px;display:inline-block"></div>`;
       const chk = (k, l, on, ro) => `<div class="f"><span class="l">${esc(l)}</span><input type="checkbox" class="${ro ? "" : "d-chk"}" data-f="${k}" ${on ? "checked" : ""} ${ro ? "disabled" : ""}></div>`;
+      if (M.post) {
+        $root.find(".wb-detail").html(`<div class="col">${[["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["source_bin", __("Source Bin")], ["available", __("Available")]].map(f).join("")}${inpf("quantity", __("Quantity"), 90)}</div>
+          <div class="col">${M.edit.slice(1).map(([k, l]) => inpf(k, l, k === "reason" ? 260 : 200)).join("")}<div class="text-muted" style="text-align:right">${state.cur + 1} / ${n}</div></div>`);
+        return;
+      }
       $root.find(".wb-detail").html(`<div class="col">${M.detail[0].map(f).join("")}${f(["storage_type", __("Source Storage Type")])}${f(["storage_section", __("Source Storage Section")])}
           ${mode === "stock" ? inpf("quantity", __("Quantity"), 90) : ""}${inpf("destination_hu", __("Destination HU"))}${inpf("destination_bin", __("Destination Storage Bin"))}</div>
         <div class="col">${chk("open", __("Open HU WT"), flt(r.open_wt) > 0, true)}${chk("step", __("HU Step Completed"), r.step_done, true)}${chk("confirm", __("Confirmation"), r.confirm)}
@@ -108,7 +136,9 @@ window.wms_workbench = (function () {
       $root.find(".wb-tab").removeClass("active").filter(`[data-tab="${state.tab}"]`).addClass("active");
       const table = (cols, rows) => `<table class="table table-bordered table-sm"><thead><tr>${cols.map(([, l]) => `<th>${esc(l)}</th>`).join("")}</tr></thead><tbody>${rows.map((x) => `<tr>${cols.map(([k]) => `<td>${esc(x[k] ?? "")}</td>`).join("")}</tr>`).join("") || `<tr><td class="text-muted">${__("Nothing to show")}</td></tr>`}</tbody></table>`;
       if (state.tab === "created") {
-        const rows = state.created.length ? await call("adhoc.task_status", { names: JSON.stringify(state.created) }) : [];
+        const rows = state.created.length ? (M.post ? await frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Posting Change", filters: [["name", "in", state.created]], fields: ["name", "status", "product", "quantity", "from_stock_type", "to_stock_type", "storage_bin", "reason"], limit_page_length: 200 } }).then((r) => r.message || [])
+          : await call("adhoc.task_status", { names: JSON.stringify(state.created) })) : [];
+        if (M.post) { $p.html(table([["name", __("Document")], ["status", __("Status")], ["product", __("Product")], ["quantity", __("Quantity")], ["from_stock_type", __("From")], ["to_stock_type", __("To")], ["storage_bin", __("Bin")], ["reason", __("Reason")]], rows)); return; }
         $p.html(table([["name", __("Task")], ["task_type", __("Type")], ["status", __("Status")], ["product", __("Product")], ["planned_quantity", __("Quantity")], ["source_bin", __("Source Bin")], ["destination_bin", __("Destination Bin")], ["source_hu", __("Source HU")], ["warehouse_order", __("Warehouse Order")], ["reason", __("Reason")]], rows));
       } else if (!r) { $p.empty(); }
       else if (state.tab === "content") {
@@ -153,13 +183,14 @@ window.wms_workbench = (function () {
       const rows = shown();
       const picked = state.picked.length ? state.picked : (state.detail && current() ? [current()] : []);
       if (!picked.length) { status(__("Select at least one row (click its row number)."), "warn"); return; }
-      const lines = picked.map((r) => ({ ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 }));
-      const res = await call("adhoc.process_lines", { lines: JSON.stringify(lines), defaults: JSON.stringify({ destination_bin: def.destination_bin.get_value(), process_type: def.process_type.get_value() }) }, { freeze: true });
-      res.created.forEach((c) => { const r = picked[c.line]; state.created.push(...c.tasks); r.open_wt = flt(r.open_wt) + c.tasks.length; r.created_n = flt(r.created_n) + c.tasks.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + c.tasks.join(", "); });
+      const lines = picked.map((r) => M.post ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
+        : { ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 });
+      const res = await call(M.post ? "posting_change.process_lines" : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.post ? undefined : "{}" }, { freeze: true });
+      res.created.forEach((c) => { const r = picked[c.line], made = c.tasks || c.documents; state.created.push(...made); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", "); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       draw();
-      const n = res.created.reduce((a, c) => a + c.tasks.length, 0);
-      status(res.errors.length ? __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created", [n]), res.errors.length ? "err" : "ok");
+      const n = res.created.reduce((a, c) => a + (c.tasks || c.documents).length, 0);
+      status(res.errors.length ? (M.post ? __("{0} posting change(s) posted, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.post ? __("{0} posting change(s) posted", [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }
 
     $root.on("change", ".wb-in", (e) => { const $i = $(e.currentTarget), r = rowOf($i.data("k")); if (r) r[$i.data("f")] = $i.is(":checkbox") ? $i.prop("checked") : $i.val(); });
@@ -176,6 +207,7 @@ window.wms_workbench = (function () {
     $root.on("keydown", ".wb-value", (e) => { if (e.key === "Enter") find(); });
     $root.on("click", ".wb-adv", advanced);
     $root.on("click", ".wb-create", () => create(false));
+    $root.on("click", ".wb-mass", massChange);
     $root.on("click", ".wb-create-confirm", () => create(true));
     $root.on("show.bs.dropdown", () => $root.find(".wb-hist").html(hist().map((h, i) => `<li><a href="#" data-i="${i}">${esc(h.value)} <span class="text-muted">(${esc(h.by)})</span></a></li>`).join("") || `<li class="disabled"><a>${__("No searches yet")}</a></li>`));
     $root.on("click", ".wb-hist a", (e) => { e.preventDefault(); const h = hist()[$(e.currentTarget).data("i")]; $root.find(".wb-by").val(h.by); $root.find(".wb-value").val(h.value); find(); });
