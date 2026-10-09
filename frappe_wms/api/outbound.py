@@ -34,11 +34,13 @@ def create_pick_tasks(delivery_name, strategy="Single Order"):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("WMS Wave", "wave_name")
 def release_wave(wave_name):
     return _release_wave(wave_name)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("WMS Wave", "wave_name")
 def split_wave(wave_name, deliveries):
     from frappe_wms.services.wave import split_wave as _split_wave
     return _split_wave(wave_name, parse_json(deliveries, "deliveries"))

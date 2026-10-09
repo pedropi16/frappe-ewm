@@ -2,18 +2,20 @@ import frappe
 from frappe_wms.services import posting_change as pc
 from frappe_wms.services import stock_adjustment as sa
 from frappe_wms.services.concurrency import retry_on_deadlock
-from frappe_wms.services.locks import require_free_many
+from frappe_wms.services.locks import guard, require_free_many
 from frappe_wms.utils import parse_json
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("WMS Stock Adjustment", "name")
 def post_stock_adjustment(name):
     return sa.post_stock_adjustment(name)
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("WMS Stock Adjustment", "name")
 def cancel_stock_adjustment(name):
     return sa.cancel_stock_adjustment(name)
 

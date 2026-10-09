@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.locks import guard
 from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.warehouse_order import (
     list_queues as _list_queues,
@@ -36,10 +37,12 @@ def warehouse_order_detail(wo_name):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Warehouse Order", "wo_name")
 def block_warehouse_order(wo_name, reason=None):
     return _block_warehouse_order(wo_name, reason)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Warehouse Order", "wo_name")
 def resume_warehouse_order(wo_name):
     return _resume_warehouse_order(wo_name)

@@ -39,6 +39,7 @@ _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 
 doc_events = {
     "*": {
+        "validate": "frappe_wms.services.locks.on_validate",
         "after_insert": "frappe_wms.services.ppf.on_event",
         "on_update": "frappe_wms.services.ppf.on_event",
         "on_submit": "frappe_wms.services.ppf.on_event",

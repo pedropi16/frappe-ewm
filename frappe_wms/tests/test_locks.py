@@ -72,3 +72,17 @@ class TestLocks(_base.TestStockAdjustments):
         with self.assertRaisesRegex(frappe.ValidationError, "being changed by"):
             allocate_delivery("LOCK-OBD")
         frappe.set_user(a); locks.release("Outbound Delivery", "LOCK-OBD")
+
+    def test_form_saves_are_refused_but_service_saves_are_not(self):
+        self._seed(5)
+        doc = frappe.get_doc({"doctype": "WMS Stock Adjustment", "warehouse": self.wh, "adjustment_type": "Scrapping", "product": self.item, "storage_bin": self.bin, "quantity": 1, "reason": "lock test"}).insert(ignore_permissions=True)
+        a, b = self.users
+        frappe.set_user(a); locks.acquire("WMS Stock Adjustment", doc.name)
+        frappe.set_user(b)
+        doc.reload(); doc.reason = "changed"
+        doc.save(ignore_permissions=True)  # a service-style save is not blocked
+        frappe.local.form_dict["cmd"] = "frappe.desk.form.save.savedocs"
+        self.addCleanup(lambda: frappe.local.form_dict.pop("cmd", None))
+        with self.assertRaisesRegex(frappe.ValidationError, "being changed by"):
+            doc.save(ignore_permissions=True)
+        frappe.set_user(a); locks.release("WMS Stock Adjustment", doc.name)

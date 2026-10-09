@@ -91,6 +91,17 @@ def all_locks():
     return sorted(out, key=lambda l: l["since"])
 
 
+# Documents the Desk opens in change mode (public/js/frappe_wms.js locks them on open). A save from the form is refused when
+# somebody else holds the lock; saves by services (RF confirmation, ERP sync, jobs) are not.
+LOCKED_FORMS = ("WMS Stock Adjustment", "WMS Posting Change", "WMS Physical Inventory Count", "WMS Wave", "Warehouse Order",
+                "WMS Quality Inspection", "WMS Shipment", "VAS Order")
+
+
+def on_validate(doc, method=None):
+    if doc.doctype in LOCKED_FORMS and not doc.is_new() and frappe.local.form_dict.get("cmd") == "frappe.desk.form.save.savedocs":
+        require_free(doc.doctype, doc.name)
+
+
 def guard(doctype, param):
     """Decorator for an API method that changes the document named by `param`; doctype "$x" reads it from the parameter x."""
     def deco(fn):
