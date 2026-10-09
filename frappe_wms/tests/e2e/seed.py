@@ -277,3 +277,22 @@ def cleanup_outbound():
     frappe.db.sql("delete from `tabOutbound Delivery` where warehouse=%s", WAREHOUSE)
     frappe.db.sql("delete from `tabWarehouse Request` where warehouse=%s", WAREHOUSE)
     frappe.db.commit()
+
+
+def cleanup_adhoc():
+    """Removes the tasks and warehouse orders the ad hoc spec created in the E2E warehouse (raw deletes - test data only)."""
+    frappe.set_user("Administrator")
+    for dt in ("Warehouse Task", "Warehouse Order"):
+        frappe.db.sql(f"delete from `tab{dt}` where warehouse=%s", WAREHOUSE)
+    frappe.db.commit()
+
+
+def adhoc_stock():
+    """Two plain balance rows (two stock types) of one product in the first E2E bin, for the ad hoc spec. cleanup() removes them."""
+    frappe.set_user("Administrator")
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    for i, stock_type in enumerate(("AVAILABLE", "WAREHOUSE_BLOCKED")):
+        frappe.get_doc({"doctype": "WMS Stock Balance", "name": f"E2EMON{i}", "warehouse": WAREHOUSE, "product": item, "storage_bin": BINS[0], "stock_type": stock_type,
+                        "quantity": 3, "available_quantity": 3, "stock_uom": uom}).insert(ignore_permissions=True, ignore_links=True)
+    frappe.db.commit()

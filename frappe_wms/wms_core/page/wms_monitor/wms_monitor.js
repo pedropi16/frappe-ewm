@@ -522,6 +522,7 @@ class WMSMonitor {
             const uniq = (f) => Array.from(new Set(lines.map((l) => l[f]).filter(Boolean)));
             return this.jump("movements", { product: uniq("product"), storage_bin: uniq("storage_bin") });
           } },
+          { label: __("Ad Hoc Processing"), run: () => frappe.set_route("wms-adhoc", "adprod") },
           { label: __("Posting Change"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.open_stock_document("WMS Posting Change", lines[0]) },
           { label: __("Scrap"), appliesTo: (l) => !flt(l.allocated_quantity), run: (lines) => this.open_stock_document("WMS Stock Adjustment", lines[0], { adjustment_type: "Scrapping" }) },
         ],
@@ -702,7 +703,7 @@ class WMSMonitor {
     if (!$wrap.find(".wms-mon-hu-sel").length) {
       $wrap.html(`
         <div class="wms-mon-hu-sel"></div>
-        <div class="wms-mon-hu-hint text-muted" style="margin-bottom:6px;font-size:12px;">${__("Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons.")}</div>
+        <div class="wms-mon-hu-hint text-muted" style="margin-bottom:6px;font-size:12px;">${__("Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons.")} <a href="/app/wms-adhoc/adhu">${__("Create ad hoc tasks for many HUs")}</a></div>
         <div class="wms-mon-hu-table">${sap_unexecuted_html()}</div>
       `);
       this.selection("hu", $wrap.find(".wms-mon-hu-sel"), $wrap.find(".wms-mon-hu-table"), {
