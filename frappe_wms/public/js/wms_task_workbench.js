@@ -13,7 +13,7 @@ window.wms_workbench = (function () {
     },
     stock: {
       title: (wh) => __("Create Product Warehouse Task in Warehouse Number {0}", [wh]), view: "stock", finds: [["product", __("Product")], ["storage_bin", __("Storage Bin")], ["handling_unit", __("Handling Unit")]],
-      cols: [["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["storage_type", __("Source Storage Type")], ["source_bin", __("Source Bin")], ["available", __("Available")]],
+      cols: [["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["storage_type", __("Source Storage Type")], ["storage_section", __("SrcStorSec")], ["source_bin", __("Source Bin")], ["available", __("Available")]],
       tabs: [["created", __("Created Product WTs")], ["content", __("Stock in Source Bin")]],
       detail: [[["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["source_bin", __("Source Bin")]], []],
     },
@@ -29,7 +29,8 @@ window.wms_workbench = (function () {
   MODES.hu.mass = MODES.stock.mass = [["process_type", __("Whse Proc. Type"), "Link", "Warehouse Process Type"], ["destination_bin", __("Destination Bin"), "Link", "Storage Bin"], ["destination_hu", __("Destination HU"), "Link", "Handling Unit"],
     ["priority", __("Priority"), "Select", "Low\nNormal\nHigh\nUrgent"], ["reason", __("Reason"), "Small Text"], ["confirm", __("Confirmation"), "Check"]];
   MODES.hu.mass = [...MODES.hu.mass, ["unpack", __("No HU WT"), "Check"]];
-  MODES.hu.edit = [["process_type", __("Whse Proc. Type"), 90], ["destination_hu", __("Destination HU"), 120], ["destination_bin", __("Destination Bin"), 130]];
+  [MODES.hu.mass, MODES.stock.mass].forEach((m) => m.splice(1, 0, ["destination_storage_type", __("Destination Storage Type"), "Link", "Storage Type"], ["destination_section", __("Destination Storage Section"), "Link", "Storage Section"]));
+  MODES.hu.edit = [["process_type", __("Whse Proc. Type"), 90], ["destination_hu", __("Destination HU"), 120], ["destination_storage_type", __("Dest. Storage Type"), 100], ["destination_section", __("DstStorSec"), 80], ["destination_bin", __("Destination Bin"), 130]];
   MODES.stock.edit = [["quantity", __("Quantity"), 70], ...MODES.hu.edit];
   const CSS = `.wms-wb .wb-bar select.form-control,.wms-wb .wb-bar input.wb-value{width:auto;display:inline-block}.wms-wb .wb-title{margin:4px 0 10px}.wms-wb .wb-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.wms-wb .wb-bar label{margin:0;color:var(--text-muted);font-size:12px}
     .wms-wb .wb-strip{border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:6px 0}.wms-wb .wb-table{margin:8px 0}.wms-wb .wb-table .wms-grid-scroll{max-height:340px}
@@ -60,6 +61,7 @@ window.wms_workbench = (function () {
         <button class="btn btn-default btn-xs wb-toggle">${__("Detail")}</button>
         <button class="btn btn-default btn-xs wb-del">${__("Delete Row")}</button>
         <button class="btn btn-default btn-xs wb-refresh">${__("Refresh")}</button>
+        ${M.post ? "" : `<button class="btn btn-default btn-xs wb-check" title="${__("Determine process type and destination for the marked rows (all rows if none is marked) without creating anything")}">&#10003; ${__("Check (Enter)")}</button>`}
         <button class="btn btn-default btn-xs wb-mass" title="${__("Enter values once and put them into all marked rows")}">&#9998; ${__("Mass Change")}</button>
         <button class="btn btn-primary btn-xs wb-create">${M.post ? __("Post") : __("Create")}</button>
         ${M.post ? "" : `<button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>`}
@@ -98,7 +100,7 @@ window.wms_workbench = (function () {
       const rows = shown();
       const cols = [...M.cols, ...M.edit.map(([f, l, w]) => [f, l, inp(f, w)]),
         ...(M.post ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
-        ["result", __("Result"), (r) => r.result ? `<span class="${r.result.startsWith("\u2714") ? "text-success" : "text-danger"}" title="${esc(r.result)}">${esc(r.result.slice(0, 70))}</span>` : ""]];
+        ["result", __("Result"), (r) => `<span class="wb-res ${(r.result || "").startsWith("\u2714") ? "text-success" : "text-danger"}" data-k="${esc(r.key)}" title="${esc(r.result || "")}">${esc((r.result || "").slice(0, 90))}</span>`]];
       state.picked = [];
       const grid = new window.wms_grid.DataGrid(rows, cols, null, { numeric: ["quantity", "available", "open_wt"],
         onSelect: (sel) => { state.picked = sel; if (sel.length && state.cur !== rows.indexOf(sel[0])) { state.cur = rows.indexOf(sel[0]); drawDetail(); drawPane(); } } });
@@ -122,7 +124,8 @@ window.wms_workbench = (function () {
         return;
       }
       $root.find(".wb-detail").html(`<div class="col">${M.detail[0].map(f).join("")}${f(["storage_type", __("Source Storage Type")])}${f(["storage_section", __("Source Storage Section")])}
-          ${mode === "stock" ? inpf("quantity", __("Quantity"), 90) : ""}${inpf("destination_hu", __("Destination HU"))}${inpf("destination_bin", __("Destination Storage Bin"))}</div>
+          ${mode === "stock" ? inpf("quantity", __("Quantity"), 90) : ""}${inpf("destination_hu", __("Destination HU"))}${inpf("destination_storage_type", __("Destination Storage Type"), 120)}${inpf("destination_section", __("Destination Storage Section"), 120)}${inpf("destination_bin", __("Destination Storage Bin"))}
+          <div class="f"><span class="l">${__("Result")}</span><span class="${(r.result || "").startsWith("\u2714") ? "text-success" : "text-danger"}">${esc(r.result || "")}</span></div></div>
         <div class="col">${chk("open", __("Open HU WT"), flt(r.open_wt) > 0, true)}${chk("step", __("HU Step Completed"), r.step_done, true)}${chk("confirm", __("Confirmation"), r.confirm)}
           ${mode === "hu" ? chk("unpack", __("No HU WT"), r.unpack) : ""}${chk("added", __("Add.WTs Creatd"), flt(r.created_n) > 0, true)}
           <div class="f"><span class="l">${__("Whse Proc. Type")}</span><input class="form-control input-sm d-in" data-f="process_type" value="${esc(r.process_type || "")}" style="width:90px;display:inline-block"> <span class="text-muted pt-name">${esc(ptName[r.process_type] || "")}</span></div>
@@ -179,22 +182,48 @@ window.wms_workbench = (function () {
       state.selection.openDialog();
     }
 
+    const lineOf = (r, confirmNow) => M.post ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
+      : { ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu,
+          destination_storage_type: r.destination_storage_type, destination_section: r.destination_section, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 };
+    // what a result fills into a row: the process type and the destination bin with its storage type and section (Enter in SAP)
+    function fill(r, res) {
+      ["process_type", "destination_bin", "destination_storage_type", "destination_section"].forEach((f) => {
+        if (res[f] === undefined) return;
+        r[f] = res[f] || "";
+        $root.find(`.wb-in[data-k="${window.CSS.escape(r.key)}"][data-f="${f}"]`).val(r[f]);
+      });
+    }
+    const showResult = (r, text) => { r.result = text; $root.find(`.wb-res[data-k="${window.CSS.escape(r.key)}"]`).text(text.slice(0, 90)).attr("title", text).attr("class", `wb-res ${text.startsWith("\u2714") ? "text-success" : "text-danger"}`); };
+    const where = (x) => `${x.destination_bin} (${x.destination_storage_type || "-"} / ${x.destination_section || "-"})`;
+    // Enter: resolve the marked rows (or the one being edited) without creating anything - the destination the process type would give, or why it is refused
+    async function check(rows) {
+      if (M.post || !rows.length) return;
+      const res = await call("adhoc.check_lines", { lines: JSON.stringify(rows.map((r) => lineOf(r))) });
+      let bad = 0;
+      res.forEach((x) => { const r = rows[x.line]; if (x.ok) { fill(r, x); showResult(r, `\u2714 ${x.process_type_name || x.process_type} \u2192 ${where(x)}${x.destinations > 1 ? " ..." : ""}`); } else { bad++; showResult(r, `\u2718 ${x.error}`); } });
+      status(bad ? __("{0} row(s) cannot be created: {1}", [bad, res.find((x) => !x.ok).error]) : __("{0} row(s) checked: destinations determined", [rows.length]), bad ? "err" : "ok");
+      drawDetail();
+    }
+
     async function create(confirmNow) {
       const rows = shown();
       const picked = state.picked.length ? state.picked : (state.detail && current() ? [current()] : []);
       if (!picked.length) { status(__("Select at least one row (click its row number)."), "warn"); return; }
-      const lines = picked.map((r) => M.post ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
-        : { ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 });
+      const lines = picked.map((r) => lineOf(r, confirmNow));
       const res = await call(M.post ? "posting_change.process_lines" : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.post ? undefined : "{}" }, { freeze: true });
-      res.created.forEach((c) => { const r = picked[c.line], made = c.tasks || c.documents; state.created.push(...made); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", "); });
+      res.created.forEach((c) => { const r = picked[c.line], made = c.tasks || c.documents; state.created.push(...made); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       draw();
       const n = res.created.reduce((a, c) => a + (c.tasks || c.documents).length, 0);
       status(res.errors.length ? (M.post ? __("{0} posting change(s) posted, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.post ? __("{0} posting change(s) posted", [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }
 
-    $root.on("change", ".wb-in", (e) => { const $i = $(e.currentTarget), r = rowOf($i.data("k")); if (r) r[$i.data("f")] = $i.is(":checkbox") ? $i.prop("checked") : $i.val(); });
-    $root.on("change", ".d-in", (e) => { const r = current(); if (r) { r[$(e.currentTarget).data("f")] = e.currentTarget.value; if ($(e.currentTarget).data("f") === "process_type") drawDetail(); } });
+    const CHECKED = ["destination_bin", "destination_hu", "destination_storage_type", "destination_section", "process_type"];
+    $root.on("change", ".wb-in", (e) => { const $i = $(e.currentTarget), r = rowOf($i.data("k")); if (!r) return; r[$i.data("f")] = $i.is(":checkbox") ? $i.prop("checked") : $i.val(); if (CHECKED.includes($i.data("f")) && $i.val()) check([r]); });
+    $root.on("keydown", ".wb-in", (e) => { if (e.key !== "Enter") return; const r = rowOf($(e.currentTarget).data("k")); if (r) { r[$(e.currentTarget).data("f")] = e.currentTarget.value; check([r]); } });
+    $root.on("click", ".wb-check", () => check(state.picked.length ? state.picked : shown()));
+    $root.on("change", ".d-in", (e) => { const r = current(); if (!r) return; r[$(e.currentTarget).data("f")] = e.currentTarget.value; if (CHECKED.includes($(e.currentTarget).data("f")) && e.currentTarget.value) check([r]); else if ($(e.currentTarget).data("f") === "process_type") drawDetail(); });
+    $root.on("keydown", ".d-in", (e) => { if (e.key === "Enter") { const r = current(); if (r) { r[$(e.currentTarget).data("f")] = e.currentTarget.value; check([r]); } } });
     $root.on("change", ".d-chk", (e) => { const r = current(); if (r) r[$(e.currentTarget).data("f")] = e.currentTarget.checked; });
     $root.on("click", ".wb-tab", (e) => { state.tab = $(e.currentTarget).data("tab"); drawPane(); });
     $root.on("click", ".wb-prev", () => { state.cur = Math.max(state.cur - 1, 0); drawDetail(); drawPane(); });

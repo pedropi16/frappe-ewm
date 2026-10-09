@@ -105,3 +105,35 @@ class TestAdhocTasks(_base.TestStockAdjustments):
         self.assertEqual(res["errors"], [])
         self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bin)  # the HU stays, its stock went loose
         self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"warehouse": self.wh, "storage_bin": self.bin2, "handling_unit": ["in", ["", None]], "quantity": [">", 0]}, "quantity"), 6)
+
+    def test_enter_resolves_destination_type_section_and_refuses_mismatches(self):
+        from frappe_wms.api.adhoc import check_lines, process_lines
+        self._seed(10)
+        line = {"name": self._line().name, "quantity": 2}
+        r = check_lines([{**line, "destination_bin": self.bin2}])[0]
+        self.assertEqual((r["ok"], r["destination_bin"], r["destination_storage_type"]), (1, self.bin2, f"{self.wh}-ST"))
+        self.assertTrue(r["process_type"])
+        bad = check_lines([{**line, "destination_bin": self.bin2, "destination_storage_type": "NOT-THIS-TYPE"}])[0]
+        self.assertEqual(bad["ok"], 0)
+        self.assertIn("storage type", bad["error"])
+        before = frappe.db.count("Warehouse Task", {"warehouse": self.wh})
+        none = check_lines([line])[0]  # no rule, no indicators: nothing can be determined
+        self.assertEqual(none["ok"], 0)
+        self.assertIn("destination", none["error"])
+        self.assertEqual(frappe.db.count("Warehouse Task", {"warehouse": self.wh}), before)  # a check creates nothing
+
+    def test_a_bin_determination_rule_picks_the_destination_when_none_is_entered(self):
+        from frappe_wms.api.adhoc import check_lines, process_lines
+        rule = frappe.get_doc({"doctype": "Bin Determination Rule", "warehouse": self.wh, "activity": "Internal Move", "priority": 1, "active": 1, "strategy": "Bin Sequence",
+                               "destination_storage_type": f"{self.wh}-ST"}).insert(ignore_permissions=True)
+        self.addCleanup(lambda: frappe.delete_doc("Bin Determination Rule", rule.name, force=1, ignore_permissions=True))
+        self._seed(10)
+        line = {"name": self._line().name, "quantity": 2}
+        before = frappe.db.count("Warehouse Task", {"warehouse": self.wh})
+        r = check_lines([line])[0]
+        self.assertEqual(r["ok"], 1, r)
+        self.assertEqual(frappe.db.count("Warehouse Task", {"warehouse": self.wh}), before)
+        res = process_lines([line])
+        self.assertEqual(res["errors"], [])
+        self.assertEqual(res["created"][0]["destination_bin"], r["destination_bin"])
+        self.assertEqual(frappe.db.get_value("Warehouse Task", res["created"][0]["tasks"][0], "destination_bin"), r["destination_bin"])

@@ -96,6 +96,7 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context, 
     bins=frappe.get_all("Storage Bin",filters=filters,
         fields=["name","maximum_hus","maximum_weight","sequence","aisle","storage_section"],order_by="sequence asc")
     bins=_filter_by_section_indicator(bins, storage_type, context.get("section_indicator"))
+    if context.get("exclude_bin"): bins=[b for b in bins if b.name != context["exclude_bin"]]  # a movement never goes to the bin it starts in
     # reserved_hu_counts: a same-call, not-yet-posted count of HUs already assigned to a bin by
     # an earlier chunk of the same oversized request (task.py's full-pallet task splitting).
     # live_hu_count only sees what's actually posted, so without this, splitting a large
@@ -115,6 +116,7 @@ def _candidate_bins_for_storage_type(warehouse, storage_type, section, context, 
 def _putaway_storage_types(context, rule=None):
     """Storage types to search, strongest source first: the rule's own type or sequence, the process type's default, the product's
     putaway control indicator (its Storage Type Search Sequence), then the product's preferred storage type."""
+    if context.get("user_storage_type"): return [context["user_storage_type"]]  # entered on a worklist: the user's storage type wins over the rule
     if rule and rule.destination_storage_type: return [rule.destination_storage_type]
     if rule and rule.search_sequence: return _search_sequence_storage_types(rule.search_sequence, context.get("stock_type"))
     if context.get("forced_storage_type"): return [context["forced_storage_type"]]
@@ -145,7 +147,7 @@ def determine_destination_bin(context):
             # A search sequence tries each storage type in turn, moving to the next only if
             # the current one has zero usable bins - a single destination_storage_type or the
             # preferred_storage_type fallback are just one-element sequences of this same loop.
-            bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, rule.destination_section, context, rule.destination_storage_group)
+            bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, context.get("user_section") or rule.destination_section, context, rule.destination_storage_group)
             if not bins: continue
             context["_custom_strategy"] = rule.get("custom_strategy")
             bin_name=_apply_bin_strategy(rule.strategy,bins,context)
@@ -154,7 +156,7 @@ def determine_destination_bin(context):
     for storage_type in _putaway_storage_types(context):
         strategy = frappe.db.get_value("Storage Type", storage_type, "putaway_strategy")
         if not strategy: continue
-        bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, None, context)
+        bins = _candidate_bins_for_storage_type(context["warehouse"], storage_type, context.get("user_section"), context)
         if bins and (bin_name := _apply_bin_strategy(strategy, bins, context)): return bin_name
     frappe.throw(_("No destination bin could be determined"))
 

@@ -32,6 +32,18 @@ test("ad hoc product tasks: find, fill the destination per row, create", async (
   await mass.getByRole("button", { name: /Apply to marked rows/ }).click();
   await expect(rows.nth(0).locator("input[data-f='destination_bin']")).toHaveValue(s.bins[1]);
   await expect(rows.nth(1).locator("input[data-f='destination_bin']")).toHaveValue(s.bins[1]);
+  await rows.nth(0).locator("input[data-f='destination_bin']").press("Enter");   // Enter fills the storage type and section of the bin entered
+  await expect(rows.nth(0).locator("input[data-f='destination_storage_type']")).not.toHaveValue("");
+  await expect(page.locator(".wb-res").first()).toContainText("\u2192");
+  await rows.nth(0).locator("input[data-f='destination_bin']").fill("");        // nothing entered and nothing to determine it: Check says why
+  await rows.nth(0).locator("input[data-f='destination_bin']").dispatchEvent("change");
+  await rows.nth(0).locator("input[data-f='destination_storage_type']").fill("");
+  await rows.nth(0).locator("th.wms-grid-rowhead").click();
+  await page.locator(".wb-check").click();
+  await expect(page.locator(".wb-status")).toContainText("cannot be created");
+  await rows.nth(0).locator("input[data-f='destination_bin']").fill(s.bins[1]);
+  await rows.nth(0).locator("input[data-f='destination_bin']").press("Enter");
+  await expect(rows.nth(0).locator("input[data-f='destination_storage_type']")).not.toHaveValue("");
   await rows.nth(0).locator("th.wms-grid-rowhead").click();                  // switch the marked row to the form view: n / N
   await page.locator(".wb-toggle").click();
   await expect(page.locator(".wb-detail")).toContainText("1 / 2");
