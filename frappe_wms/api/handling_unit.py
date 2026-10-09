@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.locks import guard
 from frappe_wms.services.concurrency import retry_on_deadlock
 from frappe_wms.services.handling_unit import (
     list_handling_units as _list_handling_units,
@@ -33,16 +34,19 @@ def unnest_handling_unit(hu_name):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def relocate_handling_unit(hu_name, destination_bin):
     return _relocate_handling_unit(hu_name, destination_bin)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def block_handling_unit(hu_name, reason_code=None, remarks=None):
     return _set_handling_unit_blocked(hu_name, True, reason_code, remarks)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def unblock_handling_unit(hu_name):
     return _set_handling_unit_blocked(hu_name, False)
 
@@ -53,5 +57,6 @@ def handling_unit_detail(hu_name):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Handling Unit", "hu_name")
 def recycle_handling_unit(hu_name):
     return _recycle_handling_unit(hu_name)

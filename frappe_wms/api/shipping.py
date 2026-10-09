@@ -8,12 +8,15 @@ from frappe_wms.services.shipping import (
     depart_shipment as _depart_shipment,
     complete_shipment as _complete_shipment,
 )
+from frappe_wms.services.locks import require_free_many
 from frappe_wms.utils import parse_json
 
 @frappe.whitelist()
 @retry_on_deadlock
 def create_shipment(warehouse, outbound_deliveries, carrier=None, route=None, vehicle_registration=None, driver_name=None):
-    return _create_shipment(warehouse, parse_json(outbound_deliveries), carrier, route, vehicle_registration, driver_name)
+    deliveries = parse_json(outbound_deliveries)
+    require_free_many([("Outbound Delivery", d) for d in deliveries])
+    return _create_shipment(warehouse, deliveries, carrier, route, vehicle_registration, driver_name)
 
 @frappe.whitelist()
 @retry_on_deadlock

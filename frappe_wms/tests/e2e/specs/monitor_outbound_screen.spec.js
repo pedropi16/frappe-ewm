@@ -21,6 +21,7 @@ test("outbound delivery screen: allocate, create pick tasks, read the tabs", asy
   await expect(page.locator(".wms-dm-find")).toBeVisible();   // top: search
   await expect(page.locator(".wms-dm-head")).toContainText("Customer");   // middle: the header data
 
+  await page.getByRole("button", { name: "Change", exact: true }).click();   // display mode until the delivery is opened for change
   await page.getByRole("button", { name: "Allocate Stock" }).click();
   await expect(page.locator(".indicator-pill", { hasText: "Allocation: Fully Allocated" })).toBeVisible();
   await page.getByRole("button", { name: "Create Pick Tasks" }).click();

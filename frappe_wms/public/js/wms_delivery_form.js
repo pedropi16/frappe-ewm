@@ -152,10 +152,33 @@ window.frappe_wms_delivery = (function () {
     d.show();
   }
 
+  // The lock the open screen holds is renewed every minute and given back when the user leaves; the server drops it by itself after 5 minutes of silence.
+  let held = null;
+  function startHolding(doctype, name) {
+    if (held && held.doctype === doctype && held.name === name) return;
+    stopHolding(true);
+    held = { doctype, name, timer: setInterval(() => frappe.call({ method: "frappe_wms.api.locks.renew_locks", args: { objects: JSON.stringify([[doctype, name]]) }, silent: true }), 60000) };
+  }
+  function stopHolding(release) {
+    if (!held) return;
+    clearInterval(held.timer);
+    if (release) frappe.call({ method: "frappe_wms.api.locks.release_lock", args: { object_type: held.doctype, object_name: held.name }, silent: true });
+    held = null;
+  }
+  const DELIVERY_PAGES = ["wms-outbound-delivery", "wms-inbound-delivery"];
+  $(window).on("beforeunload", () => { if (held) navigator.sendBeacon(`/api/method/frappe_wms.api.locks.release_lock?object_type=${encodeURIComponent(held.doctype)}&object_name=${encodeURIComponent(held.name)}&csrf_token=${encodeURIComponent(frappe.csrf_token)}`); });
+  frappe.router.on("change", () => { if (!DELIVERY_PAGES.includes(frappe.get_route()[0])) stopHolding(true); });
+
   function buttons(frm, side, v) {
     const d = frm.doc, released = d.docstatus === 1 && !d.closed_short && !["Completed", "Cancelled"].includes(d.status);
     if (d.delivery_request) frm.add_custom_button(__("Delivery Request"), () => frappe.set_route("Form", "WMS Delivery Request", d.delivery_request));
     if (!released) return;
+    // Display / change mode (SAP): the delivery opens for display; Change locks it for everyone else, who can still display it.
+    const lock = v.lock;
+    if (lock && !lock.mine) { frm.add_custom_button(__("Display only: being changed by {0}", [lock.user]), () => frm.reload_doc()); stopHolding(true); return; }
+    if (!lock) { frm.add_custom_button(__("Change"), () => call("locks.acquire_lock", { object_type: frm.doctype, object_name: d.name, purpose: "delivery" }).then(() => frm.reload_doc())).addClass("btn-primary"); stopHolding(true); return; }
+    startHolding(frm.doctype, d.name);
+    frm.add_custom_button(__("Display"), () => call("locks.release_lock", { object_type: frm.doctype, object_name: d.name }).then(() => frm.reload_doc()));
     const A = __("Actions");
     if (side === "Inbound") {
       const open = (v.items || []).reduce((a, i) => a + i.open, 0);
@@ -209,5 +232,5 @@ window.frappe_wms_delivery = (function () {
     if (frm.is_new() || frappe.flags.wms_standard_form) { frappe.flags.wms_standard_form = false; return; }
     frappe.set_route(side === "Outbound" ? "wms-outbound-delivery" : "wms-inbound-delivery", frm.doc.name);
   }
-  return { refresh, render };
+  return { refresh, render, release: () => stopHolding(true) };
 })();

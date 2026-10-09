@@ -5,6 +5,7 @@ from frappe_wms.services.task import create_tasks_for_request
 from frappe_wms.services.procurement import create_inbound_delivery_from_purchase_order as _create_inbound_delivery_from_purchase_order
 from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.idempotency import run_once
+from frappe_wms.services.locks import guard
 
 RECEIVING_ROLES = ("WMS Operator", "WMS Receiver", "WMS Supervisor")
 
@@ -43,12 +44,14 @@ def receiving_worklist(inbound_delivery):
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Inbound Delivery", "inbound_delivery")
 def create_and_submit_goods_receipt(inbound_delivery, items, idempotency_key=None, create_tasks=1):
     return run_once(idempotency_key, lambda: _create_and_submit_goods_receipt(inbound_delivery, parse_json(items, "items"), bool(int(create_tasks))))
 
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Inbound Delivery", "inbound_delivery")
 def plan_open_putaway(inbound_delivery, destination_bin=None):
     from frappe_wms.services.receipt import plan_open_putaway as _plan
     return _plan(inbound_delivery, destination_bin or None)

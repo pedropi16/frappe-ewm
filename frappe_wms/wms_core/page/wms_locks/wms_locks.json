@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "doctype": "Page",
+ "module": "WMS Core",
+ "name": "wms-locks",
+ "page_name": "wms-locks",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WMS Administrator"
+  },
+  {
+   "role": "WMS Supervisor"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Lock Entries"
+}

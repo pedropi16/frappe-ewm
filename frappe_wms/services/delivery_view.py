@@ -33,9 +33,9 @@ def delivery_view(doctype, name):
     require_wms_access()
     doc = frappe.get_doc(doctype, name)
     doc.check_permission("read")
-    if doctype == "Outbound Delivery": return _outbound(doc)
-    if doctype == "Inbound Delivery": return _inbound(doc)
-    frappe.throw("Unsupported document")
+    if doctype not in ("Outbound Delivery", "Inbound Delivery"): frappe.throw("Unsupported document")
+    from frappe_wms.services.locks import status
+    return {**(_outbound(doc) if doctype == "Outbound Delivery" else _inbound(doc)), "lock": status(doctype, name)}
 
 
 def _outbound(doc):

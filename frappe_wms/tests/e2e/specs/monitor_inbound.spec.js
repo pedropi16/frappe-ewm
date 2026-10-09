@@ -22,6 +22,7 @@ test("inbound: monitor links to the delivery screen, which receives, packs and c
   await expect(page.getByRole("button", { name: "Process" })).toHaveCount(0);  // the monitor displays; it has no processing buttons
   await page.locator("tr a", { hasText: deliveries[0] }).first().click();       // ... it links to the delivery's own screen
 
+  await page.getByRole("button", { name: "Change", exact: true }).click();   // display mode until the delivery is opened for change
   await expect(page.getByRole("button", { name: /Receive & Pack/ })).toBeVisible();
   await page.getByRole("button", { name: /Receive & Pack/ }).click();
   const dialog = page.locator(".modal.show", { hasText: "Receive & Pack" });

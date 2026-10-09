@@ -16,16 +16,19 @@ from frappe_wms.services.issue import (
 )
 from frappe_wms.utils import parse_json, require_role
 from frappe_wms.services.idempotency import run_once
+from frappe_wms.services.locks import guard
 
 OUTBOUND_ROLES = ("WMS Operator", "WMS Picker", "WMS Loader", "WMS Supervisor")
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "delivery_name")
 def allocate_delivery(delivery_name):
     return _allocate_delivery(delivery_name)
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "delivery_name")
 def create_pick_tasks(delivery_name, strategy="Single Order"):
     return _create_pick_tasks(delivery_name, strategy)
 
@@ -47,6 +50,7 @@ def list_awaiting_release():
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "delivery_name")
 def release_delivery_for_picking(delivery_name, strategy="Single Order"):
     return _release_delivery_for_picking(delivery_name, strategy)
 
@@ -69,11 +73,13 @@ def list_ready_to_ship():
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "outbound_delivery")
 def create_and_submit_goods_issue(outbound_delivery, items, idempotency_key=None):
     return run_once(idempotency_key, lambda: _create_and_submit_goods_issue(outbound_delivery, parse_json(items, "items")))
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "delivery_name")
 def post_goods_issue_for_delivery(delivery_name):
     return _post_goods_issue_for_delivery(delivery_name)
 
@@ -86,6 +92,7 @@ def create_return_outbound_delivery(purchase_receipt, warehouse, stock_type="DAM
 
 @frappe.whitelist()
 @retry_on_deadlock
+@guard("Outbound Delivery", "delivery_name")
 def plan_cartons(delivery_name):
     from frappe_wms.services.cartonization import plan_cartons as _plan
     return _plan(delivery_name)
