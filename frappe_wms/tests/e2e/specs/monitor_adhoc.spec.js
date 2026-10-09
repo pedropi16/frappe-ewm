@@ -9,26 +9,46 @@ const bench = (fn) => execFileSync("bench", ["--site", process.env.SITE || "wms.
 test.beforeAll(() => { bench("cleanup"); bench("adhoc_stock"); });
 test.afterAll(() => { bench("cleanup"); bench("cleanup_adhoc"); });
 
-test("ad hoc tasks for several marked stock lines", async ({ page, request }) => {
+test("ad hoc product tasks: find, fill the destination per row, create", async ({ page, request }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
-  await page.goto("/app/wms-adhoc/adprod");
-  await page.locator(".wms-ah-wh").selectOption(s.warehouse);
-  await page.locator(".modal.show", { hasText: "Selection - Stock Overview" }).getByRole("button", { name: /Execute/ }).click();
-  const row = (sn) => page.locator(".wms-ah-res tbody tr", { hasText: sn }).first();
-  await row("WAREHOUSE_BLOCKED").locator("th.wms-grid-rowhead").click();
-  await row("AVAILABLE").locator("th.wms-grid-rowhead").click({ modifiers: ["Control"] });
-  await expect(page.locator(".wms-grid-selcount")).toContainText("2 selected");
-  await page.locator(".wms-grid-actionbar").getByRole("button", { name: /Create Tasks/ }).click();
-  await page.locator(".modal.show input[data-fieldname='destination_bin']").fill(s.bins[1]);
-  await expect(page.locator(".modal.show input[data-fieldname='process_type']")).toBeVisible();
-  await expect(page.locator(".modal.show input[data-fieldname='confirm']")).toBeVisible();
-  await page.locator(".modal.show textarea[data-fieldname='reason']").fill("e2e re-slotting");
-  await page.locator(".modal.show .btn-primary", { hasText: "Create Tasks" }).click();
-  await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]], ["reason", "=", "e2e re-slotting"]]))}&fields=["name"]`)).data.length).toBe(2);
+  await page.goto("/app/wms-adprod");
+  await page.locator(".wb-wh").selectOption(s.warehouse);
+  await expect(page.locator(".wb-title")).toContainText(`Warehouse Number ${s.warehouse}`);
+  await page.locator(".wb-by").selectOption("storage_bin");
+  await page.locator(".wb-value").fill(s.bins[0]);
+  await page.locator(".wb-go").click();
+  await expect(page.locator(".wb-status")).toContainText("Selection resulted in 2 hit(s)");
+  const rows = page.locator(".wb-table tbody tr");
+  await expect(rows).toHaveCount(2);
+  for (let i = 0; i < 2; i++) {
+    await rows.nth(i).locator(".wb-pick").check();
+    await rows.nth(i).locator("input[data-f='destination_bin']").fill(s.bins[1]);
+    await rows.nth(i).locator("input[data-f='destination_bin']").blur();
+  }
+  await page.locator(".wb-toggle").click();                                   // detail form of one row: n / N
+  await expect(page.locator(".wb-detail")).toContainText("1 / 2");
+  await page.locator(".wb-toggle").click();
+  await page.locator(".wb-create").click();
+  await expect(page.locator(".wb-status")).toContainText("2 task(s) created");
+  await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]]]))}&fields=["name"]`)).data.length).toBe(2);
+  await expect(page.locator(".wb-pane")).toContainText("Open");                  // Created WTs tab lists them
+  await page.locator(".wb-create").click();                                      // nothing selected any more
+  await expect(page.locator(".wb-status")).toContainText("Select at least one row");
   expect(errors).toEqual([]);
+});
+
+test("advanced search fills the worklist", async ({ page }) => {
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  await page.goto("/app/wms-adprod");
+  await page.locator(".wb-wh").selectOption(s.warehouse);
+  await page.locator(".wb-adv").click();
+  await page.locator(".modal.show", { hasText: "Selection - Stock Overview" }).getByRole("button", { name: /Execute/ }).click();
+  await expect(page.locator(".wb-status")).toContainText("Selection resulted in");
+  await expect(page.locator(".wb-table tbody tr").first()).toBeVisible();
 });
 
 test("every ad hoc transaction opens its selection without a script error", async ({ page }) => {
@@ -36,9 +56,24 @@ test("every ad hoc transaction opens its selection without a script error", asyn
   page.on("pageerror", (e) => errors.push(String(e)));
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
-  for (const [tx, title] of [["adhu", "Handling Units"], ["posting", "Stock Overview"], ["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"], ["wave", "Waves"]]) {
+  for (const [tx, title] of [["posting", "Stock Overview"], ["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"], ["wave", "Waves"]]) {
     await page.goto(`/app/wms-adhoc/${tx}`);
     await expect(page.locator(".modal.show", { hasText: `Selection - ${title}` })).toBeVisible();
   }
+  expect(errors).toEqual([]);
+});
+
+test("the HU worklist page opens", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  await page.goto("/app/wms-adhu");
+  await page.locator(".wb-wh").selectOption(s.warehouse);
+  await expect(page.locator(".wb-title")).toContainText("Create HU Warehouse Task in Warehouse Number");
+  await page.locator(".wb-value").fill("*");
+  await page.locator(".wb-go").click();
+  await expect(page.locator(".wb-status")).toContainText("Selection resulted in");
+  await page.locator(".wb-tab", { hasText: "Master Data/Status" }).click();
   expect(errors).toEqual([]);
 });

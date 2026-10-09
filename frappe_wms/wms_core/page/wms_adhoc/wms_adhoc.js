@@ -17,8 +17,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
 
   // transaction -> the monitor view that finds its lines, and what the action bar does with the marked ones
   const TX = {
-    adhu: { label: __("Ad Hoc Task: Handling Units"), view: "hu", actions: (wh) => [{ label: __("Create Tasks…"), kind: "primary", run: (rows) => taskDialog(wh(), rows.map((r) => ({ handling_unit: r.name }))) }] },
-    adprod: { label: __("Ad Hoc Task: Stock"), view: "stock", actions: (wh) => [{ label: __("Create Tasks…"), kind: "primary", appliesTo: free, run: (rows) => taskDialog(wh(), names(rows)) }] },
     posting: { label: __("Posting Change"), view: "stock", actions: () => [{ label: __("Posting Change…"), kind: "primary", appliesTo: free, run: (rows) => postingDialog(rows) }] },
     hublock: { label: __("Handling Units: Block / Unblock / Recycle"), view: "hu", actions: () => [
       { label: __("Block"), kind: "danger", appliesTo: (r) => r.status !== "Blocked", run: (rows) => prompt(rows, [{ fieldname: "remarks", label: __("Reason"), fieldtype: "Small Text" }], __("Block"), "handling_unit.block_handling_unit", (r, v) => ({ hu_name: r.name, remarks: v.remarks || undefined })) },
@@ -54,31 +52,6 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     state.sel && state.sel.execute();
   }
   const prompt = (rows, fields, label, method, args) => new Promise((resolve) => frappe.prompt(fields, (v) => resolve(each(rows, method, (r) => args(r, v), label)), __("{0}: {1} line(s)", [label, rows.length])));
-
-  // Like SAP: the dialog opens freely; creating checks the locks and says who holds a line (server side, services/locks.py).
-  const taskDialog = (warehouse, lines) => taskDialogOpen(warehouse, lines);
-
-  function taskDialogOpen(warehouse, lines) {
-    const d = new frappe.ui.Dialog({
-      title: __("Create Tasks for {0} line(s)", [lines.length]),
-      fields: [
-        { fieldname: "destination_bin", label: __("Destination Bin"), fieldtype: "Link", options: "Storage Bin", reqd: 1, get_query: () => ({ filters: { warehouse } }) },
-        { fieldname: "process_type", label: __("Warehouse Process Type"), fieldtype: "Link", options: "Warehouse Process Type", get_query: () => ({ filters: { activity: ["in", ["Internal Move", "Putaway"]], active: 1 } }),
-          description: __("Blank: determined by the product and stock type") },
-        { fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nNormal\nHigh\nUrgent", default: "Normal" },
-        { fieldname: "reason", label: __("Reason"), fieldtype: "Small Text" },
-        { fieldname: "confirm", label: __("Confirm Immediately"), fieldtype: "Check" },
-      ],
-      primary_action_label: __("Create Tasks"),
-      primary_action: async (values) => {
-        const tasks = await call("adhoc.create_adhoc_tasks", { lines: JSON.stringify(lines), destination_bin: values.destination_bin, priority: values.priority, process_type: values.process_type || undefined, reason: values.reason || undefined, confirm: values.confirm ? 1 : 0 });
-        d.hide(); done(values.confirm ? __("{0} task(s) created and confirmed", [tasks.length]) : __("{0} task(s) created", [tasks.length]));
-        frappe.set_route("List", "Warehouse Task", { name: ["in", tasks] });
-      },
-    });
-    d.show();
-    return d;
-  }
 
   const postingDialog = (rows) => postingDialogOpen(rows);
 
@@ -143,7 +116,9 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
     state.warehouses = (r.message || []).map((w) => w.name);
     const mine = frappe.defaults.get_user_default("WMS Warehouse");
     $root.find(".wms-ah-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(state.warehouses.includes(mine) ? mine : state.warehouses[0]);
-    const tx = frappe.get_route()[1]; if (TX[tx]) $root.find(".wms-ah-tx").val(tx);
+    const tx = frappe.get_route()[1];
+    if (tx === "adhu" || tx === "adprod") { frappe.set_route(`wms-${tx}`); return; }
+    if (TX[tx]) $root.find(".wms-ah-tx").val(tx);
     open();
   });
 };

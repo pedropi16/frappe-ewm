@@ -64,3 +64,32 @@ class TestAdhocTasks(_base.TestStockAdjustments):
         self.assertEqual(self._qty(), 4)
         with self.assertRaisesRegex(frappe.ValidationError, "not an ad hoc movement"):
             create_adhoc_tasks([{"name": self._line().name}], self.bin2, "Normal", "OB_PICK")
+
+    def test_worklist_find_and_per_line_create(self):
+        from frappe_wms.api.adhoc import find_rows, process_lines, task_status
+        self._seed(10)
+        self._seed(5, item=self.item2)
+        rows = find_rows(self.wh, "stock", "storage_bin", self.bin)
+        self.assertEqual({r["product"] for r in rows}, {self.item, self.item2})
+        self.assertEqual(find_rows(self.wh, "stock", "product", self.item2)[0]["source_bin"], self.bin)
+        lines = [{"name": r["name"], "quantity": 3, "destination_bin": self.bin2} for r in rows] + [{"name": rows[0]["name"], "quantity": 1}]  # the last has no destination
+        res = process_lines(lines, {"reason": "worklist"})
+        self.assertEqual([c["line"] for c in res["created"]], [0, 1])
+        self.assertEqual([e["line"] for e in res["errors"]], [2])
+        self.assertIn("destination", res["errors"][0]["error"])
+        self.assertEqual({t["reason"] for t in task_status([n for c in res["created"] for n in c["tasks"]])}, {"worklist"})
+        self.assertEqual(len({frappe.db.get_value("Warehouse Task", n, "warehouse_order") for c in res["created"] for n in c["tasks"]}), 1)
+
+    def test_worklist_hu_rows_show_bin_open_tasks_and_content(self):
+        from frappe_wms.api.adhoc import find_rows, hu_content, hu_master
+        from frappe_wms.services.handling_unit import create_handling_unit
+        hu_type = frappe.get_all("Handling Unit Type", limit=1, pluck="name")[0]
+        hu = create_handling_unit(f"WL-{frappe.generate_hash(length=6)}", hu_type, self.bin, warehouse=self.wh)
+        hu = hu.name if hasattr(hu, "name") else hu
+        self._seed(7, handling_unit=hu)
+        row = find_rows(self.wh, "hu", "handling_unit", hu)[0]
+        self.assertEqual((row["source_bin"], row["open_wt"], row["top_hu"]), (self.bin, 0, hu))
+        create_adhoc_tasks([{"handling_unit": hu}], self.bin2)
+        self.assertEqual(find_rows(self.wh, "hu", "storage_bin", self.bin)[0]["open_wt"], 1)
+        self.assertEqual(hu_content(hu)[0]["quantity"], 7)
+        self.assertEqual(hu_master(hu)["current_bin"], self.bin)

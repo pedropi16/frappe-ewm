@@ -20,7 +20,7 @@ add_to_apps_screen = [
     }
 ]
 
-app_include_js = ["/assets/frappe_wms/js/frappe_wms.js", "/assets/frappe_wms/js/erp_wms_status.js", "/assets/frappe_wms/js/wms_document_type.js", "/assets/frappe_wms/js/wms_delivery_form.js", "/assets/frappe_wms/js/wms_delivery_page.js"]
+app_include_js = ["/assets/frappe_wms/js/frappe_wms.js", "/assets/frappe_wms/js/erp_wms_status.js", "/assets/frappe_wms/js/wms_document_type.js", "/assets/frappe_wms/js/wms_delivery_form.js", "/assets/frappe_wms/js/wms_delivery_page.js", "/assets/frappe_wms/js/wms_task_workbench.js"]
 app_include_css = ["/assets/frappe_wms/css/frappe_wms.css"]
 
 doctype_js = {
