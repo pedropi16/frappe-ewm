@@ -1,4 +1,8 @@
 frappe.ui.form.on("WMS Stock Adjustment", {
+    onload(frm) {
+        const type = frappe.defaults.get_user_default("wms_adjustment_type");
+        if (frm.is_new() && type && !frm.doc.adjustment_type) frm.set_value("adjustment_type", type);
+    },
     refresh(frm) {
         if (window.frappe_wms) frappe_wms.set_warehouse_filters(frm);
         if (frm.is_new()) return;

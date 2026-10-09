@@ -41,6 +41,18 @@ CUSTOM_FIELDS = {
         {"fieldname": "wms_inbound_delivery", "label": "WMS Inbound Delivery", "fieldtype": "Link", "options": "Inbound Delivery",
          "insert_after": "supplier", "read_only": 1, "no_copy": 1, "allow_on_submit": 1, "print_hide": 1},
     ],
+    # SU01-style user parameters: copied to Frappe's per-user defaults on save (events/user_defaults.py),
+    # so every Link to the warehouse / stock type / owner pre-fills and the Monitor opens on the user's view.
+    "User": [
+        {"fieldname": "wms_defaults_section", "label": "WMS Defaults", "fieldtype": "Section Break", "insert_after": "user_emails", "collapsible": 1},
+        {"fieldname": "wms_default_warehouse", "label": "Default Warehouse", "fieldtype": "Link", "options": "WMS Warehouse", "insert_after": "wms_defaults_section"},
+        {"fieldname": "wms_default_monitor_view", "label": "Default Monitor View", "fieldtype": "Select", "insert_after": "wms_default_warehouse",
+         "options": "\nOverview\nInbound Monitor\nOutbound Monitor\nYard & Doors\nShipping & Receiving\nStock Overview\nWarehouse Tasks\nWarehouse Orders\nHandling Units\nPacking Center\nStock Movements\nResources & Queues\nDifference Analyzer\nKPIs\nSlotting\nBin Assignment\nKitting\nBilling\nAlerts"},
+        {"fieldname": "wms_defaults_col", "fieldtype": "Column Break", "insert_after": "wms_default_monitor_view"},
+        {"fieldname": "wms_default_stock_type", "label": "Default Stock Type", "fieldtype": "Link", "options": "WMS Stock Type", "insert_after": "wms_defaults_col"},
+        {"fieldname": "wms_default_stock_owner", "label": "Default Owner", "fieldtype": "Link", "options": "WMS Stock Owner", "insert_after": "wms_default_stock_type"},
+        {"fieldname": "wms_default_adjustment_type", "label": "Default Stock Adjustment", "fieldtype": "Select", "options": "\nScrapping\nUnplanned Receipt", "insert_after": "wms_default_stock_owner"},
+    ],
 }
 
 

@@ -44,6 +44,7 @@ doc_events = {
         "on_submit": "frappe_wms.services.ppf.on_event",
         "on_cancel": "frappe_wms.services.ppf.on_event",
     },
+    "User": {"on_update": "frappe_wms.events.user_defaults.sync"},
     "Handling Unit": {
         "validate": "frappe_wms.events.handling_unit.validate_hu",
         "on_update": "frappe_wms.events.handling_unit.on_hu_update",

@@ -270,10 +270,13 @@ class WMSMonitor {
       this.reset_unexecuted_searches();
       if (this.warehouse) this.load_view(this.view);
     });
+    // user parameters (User > WMS Defaults): the view the Monitor opens on and the warehouse it starts in
+    const wantedView = VIEWS.find((v) => v.label === frappe.defaults.get_user_default("wms_monitor_view"));
+    if (wantedView) this.view = wantedView.key;
     this.show_view(this.view);
-    if (warehouses.length === 1) {
-      $filters.find(".wms-mon-warehouse").val(warehouses[0].name).trigger("change");
-    }
+    const defaultWh = frappe.defaults.get_user_default("WMS Warehouse");
+    const start = warehouses.length === 1 ? warehouses[0].name : (warehouses.some((w) => w.name === defaultWh) ? defaultWh : null);
+    if (start) $filters.find(".wms-mon-warehouse").val(start).trigger("change");
   }
 
   // The warehouse changed - any already-executed results belong to the OLD warehouse and would

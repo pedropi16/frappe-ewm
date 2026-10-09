@@ -147,7 +147,7 @@ window.wms_delivery_page = (function () {
     frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Warehouse", fields: ["name"], limit_page_length: 100 } }).then((r) => {
       state.warehouses = (r.message || []).map((w) => w.name);
       // quick search covers every warehouse unless one is chosen
-      $root.find(".wms-dm-wh").html(`<option value="">${__("All warehouses")}</option>` + state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frm.doc ? frm.doc.warehouse : "");
+      $root.find(".wms-dm-wh").html(`<option value="">${__("All warehouses")}</option>` + state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frm.doc ? frm.doc.warehouse : (frappe.defaults.get_user_default("WMS Warehouse") || ""));
     });
 
     return { show(name) { if (name) return load(decodeURIComponent(name)); if (!$root.find(".wms-dm-hits").children().length) { $root.find(".wms-dm-doc").hide(); $root.find(".wms-dm-empty").show(); find(); } } };
