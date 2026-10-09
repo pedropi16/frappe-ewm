@@ -1,7 +1,7 @@
-frappe.pages["wms-monitor"].on_page_load = function (wrapper) {
+frappe.pages["wms-billing"].on_page_load = function (wrapper) {
   const page = frappe.ui.make_app_page({
     parent: wrapper,
-    title: __("WMS Monitor"),
+    title: __("Billing"),
     single_column: true,
   });
   // The assets are served with a long max-age, so a browser kept running an old wms_selection.js next to
@@ -19,7 +19,7 @@ frappe.pages["wms-monitor"].on_page_load = function (wrapper) {
     .then(() => load("/assets/frappe_wms/js/wms_selection.js"))
     .then(() => load("/assets/frappe_wms/js/wms_packing_station.js"))
     .then(() => load("/assets/frappe_wms/js/wms_monitor_core.js"))
-    .then(() => new WMSMonitor(page))
-    .catch((e) => frappe.msgprint({ title: __("WMS Monitor"), indicator: "red", message: frappe.utils.escape_html(e.message) }));
+    .then(() => new WMSMonitor(page, { views: ["billing"] }))
+    .catch((e) => frappe.msgprint({ title: __("Billing"), indicator: "red", message: frappe.utils.escape_html(e.message) }));
 };
 

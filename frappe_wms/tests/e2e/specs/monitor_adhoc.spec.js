@@ -33,7 +33,7 @@ test("every ad hoc transaction opens its selection without a script error", asyn
   page.on("pageerror", (e) => errors.push(String(e)));
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
-  for (const [tx, title] of [["adhu", "Handling Units"], ["posting", "Stock Overview"], ["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"]]) {
+  for (const [tx, title] of [["adhu", "Handling Units"], ["posting", "Stock Overview"], ["scrap", "Stock Overview"], ["hublock", "Handling Units"], ["tasks", "Warehouse Tasks"], ["wo", "Warehouse Orders"], ["wave", "Waves"]]) {
     await page.goto(`/app/wms-adhoc/${tx}`);
     await expect(page.locator(".modal.show", { hasText: `Selection - ${title}` })).toBeVisible();
   }

@@ -78,9 +78,8 @@ test("packing center: tree, drag to repack, create HUs", async ({ page }) => {
   const s = seed();
   bench("cleanup"); bench("packing_stock");
   await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
-  await page.goto("/app/wms-monitor");
+  await page.goto("/app/wms-packing-center");
   await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
-  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
   const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
   await expect(dialog).toBeVisible();
   await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC1;E2EPC2");
@@ -139,9 +138,8 @@ test("packing center: an HU search shows only that HU", async ({ page }) => {
   const s = seed();
   bench("cleanup"); bench("packing_stock");
   await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
-  await page.goto("/app/wms-monitor");
+  await page.goto("/app/wms-packing-center");
   await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
-  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
   const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
   await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC1");
   await dialog.getByRole("button", { name: /Execute/ }).click();
@@ -156,9 +154,8 @@ test("packing center: serial numbers are repacked by serial, and nothing runs of
   bench("cleanup"); bench("packing_stock");
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } });
-  await page.goto("/app/wms-monitor");
+  await page.goto("/app/wms-packing-center");
   await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
-  await page.locator(".wms-mon-nav-item", { hasText: "Packing Center" }).click();
   const dialog = page.locator(".modal.show", { hasText: "Selection - Packing Center" });
   await dialog.locator(".wms-sel-row[data-field='handling_unit'] .wms-sel-from").fill("E2EPC3;E2EPC2");
   await dialog.getByRole("button", { name: /Execute/ }).click();

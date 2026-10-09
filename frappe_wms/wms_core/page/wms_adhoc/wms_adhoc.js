@@ -39,6 +39,10 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
       { label: __("Put On Hold"), kind: "danger", appliesTo: (r) => !["Completed", "Cancelled", "On Hold"].includes(r.status), run: (rows) => prompt(rows, [{ fieldname: "reason", label: __("Reason"), fieldtype: "Data" }], __("Put On Hold"), "warehouse_order.block_warehouse_order", (r, v) => ({ wo_name: r.name, reason: v.reason || undefined })) },
       { label: __("Resume"), appliesTo: (r) => r.status === "On Hold", run: (rows) => each(rows, "warehouse_order.resume_warehouse_order", (r) => ({ wo_name: r.name }), __("Resumed")) },
     ] },
+    wave: { label: __("Waves: Release"), view: "waves", actions: () => [
+      { label: __("Release"), kind: "primary", appliesTo: (r) => r.status === "Draft", confirm: (rows) => __("Release {0} wave(s)? This allocates and creates pick tasks for every delivery in them.", [rows.length]),
+        run: (rows) => each(rows, "outbound.release_wave", (r) => ({ wave_name: r.name }), __("Released")) },
+    ] },
     scrap: { label: __("Scrapping"), view: "stock", actions: () => [{ label: __("Scrap…"), kind: "danger", appliesTo: free, run: (rows) => scrapDialog(rows) }] },
   };
 
