@@ -23,18 +23,25 @@ test("ad hoc product tasks: find, fill the destination per row, create", async (
   await expect(page.locator(".wb-status")).toContainText("Selection resulted in 2 hit(s)");
   const rows = page.locator(".wb-table tbody tr");
   await expect(rows).toHaveCount(2);
-  for (let i = 0; i < 2; i++) {
-    await rows.nth(i).locator(".wb-pick").check();
-    await rows.nth(i).locator("input[data-f='destination_bin']").fill(s.bins[1]);
-    await rows.nth(i).locator("input[data-f='destination_bin']").blur();
-  }
-  await page.locator(".wb-toggle").click();                                   // detail form of one row: n / N
-  await expect(page.locator(".wb-detail")).toContainText("1 / 2");
+  await rows.nth(0).locator("input[data-f='destination_bin']").fill(s.bins[1]);
+  await rows.nth(0).locator("input[data-f='destination_bin']").blur();
+  await rows.nth(0).locator("th.wms-grid-rowhead").click();                  // mark a row, switch to the form view: n / N
   await page.locator(".wb-toggle").click();
+  await expect(page.locator(".wb-detail")).toContainText("1 / 2");
+  await page.locator(".wb-detail input[data-f='destination_bin']").fill(s.bins[1]);
+  await page.locator(".wb-detail input[data-f='destination_bin']").blur();
+  await page.locator(".wb-next").click();
+  await expect(page.locator(".wb-detail")).toContainText("2 / 2");
+  await page.locator(".wb-detail input[data-f='destination_bin']").fill(s.bins[1]);
+  await page.locator(".wb-detail input[data-f='destination_bin']").blur();
+  await page.locator(".wb-toggle").click();                                    // back to the list
+  await rows.nth(0).locator("th.wms-grid-rowhead").click();
+  await rows.nth(1).locator("th.wms-grid-rowhead").click({ modifiers: ["Control"] });
+  await expect(page.locator(".wms-grid-selcount, .wb-table")).toBeVisible();
   await page.locator(".wb-create").click();
   await expect(page.locator(".wb-status")).toContainText("2 task(s) created");
   await expect.poll(async () => (await admin(request).get(`/api/resource/Warehouse Task?filters=${encodeURIComponent(JSON.stringify([["warehouse", "=", s.warehouse], ["stock_type_from", "in", ["WAREHOUSE_BLOCKED", "AVAILABLE"]], ["destination_bin", "=", s.bins[1]]]))}&fields=["name"]`)).data.length).toBe(2);
-  await expect(page.locator(".wb-pane")).toContainText("Open");                  // Created WTs tab lists them
+  await expect(page.locator(".wb-pane")).toContainText("WT-");                   // the Created WTs tab lists them
   await page.locator(".wb-create").click();                                      // nothing selected any more
   await expect(page.locator(".wb-status")).toContainText("Select at least one row");
   expect(errors).toEqual([]);

@@ -93,3 +93,15 @@ class TestAdhocTasks(_base.TestStockAdjustments):
         self.assertEqual(find_rows(self.wh, "hu", "storage_bin", self.bin)[0]["open_wt"], 1)
         self.assertEqual(hu_content(hu)[0]["quantity"], 7)
         self.assertEqual(hu_master(hu)["current_bin"], self.bin)
+
+    def test_no_hu_wt_unpacks_the_content_loose(self):
+        from frappe_wms.api.adhoc import process_lines
+        from frappe_wms.services.handling_unit import create_handling_unit
+        hu_type = frappe.get_all("Handling Unit Type", limit=1, pluck="name")[0]
+        hu = create_handling_unit(f"UNP-{frappe.generate_hash(length=6)}", hu_type, self.bin, warehouse=self.wh)
+        hu = hu.name if hasattr(hu, "name") else hu
+        self._seed(6, handling_unit=hu)
+        res = process_lines([{"handling_unit": hu, "destination_bin": self.bin2, "unpack": 1, "confirm": 1}])
+        self.assertEqual(res["errors"], [])
+        self.assertEqual(frappe.db.get_value("Handling Unit", hu, "current_bin"), self.bin)  # the HU stays, its stock went loose
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"warehouse": self.wh, "storage_bin": self.bin2, "handling_unit": ["in", ["", None]], "quantity": [">", 0]}, "quantity"), 6)

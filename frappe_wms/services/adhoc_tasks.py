@@ -17,13 +17,13 @@ TASK_TYPES = {"Internal Move": "Internal Move", "Putaway": "Putaway"}  # activit
 BALANCE_FIELDS = ["name", "warehouse", "product", "batch_no", "serial_no", "storage_bin", "handling_unit", "stock_type", "quantity", "available_quantity", "stock_uom"]
 
 
-def _balances(line):
+def _balances(line, unpack=False):
     """(balance row, quantity) pairs a line stands for: an HU = everything in it, a stock line = its (free) quantity."""
     if line.get("handling_unit") and not line.get("name"):
         rows = frappe.get_all("WMS Stock Balance", filters={"handling_unit": line["handling_unit"], "quantity": [">", 0]}, fields=BALANCE_FIELDS)
         if not rows:
             frappe.throw(_("Handling Unit {0} holds no stock - a task needs something to move").format(line["handling_unit"]))
-        return [(r, flt(r.quantity), True) for r in rows]
+        return [(r, flt(r.quantity), not unpack) for r in rows]  # unpack: the stock lands loose ("No HU WT": product tasks out of the HU)
     bal = frappe.get_doc("WMS Stock Balance", line["name"]).as_dict()
     qty = flt(line.get("quantity")) or flt(bal.available_quantity)
     if qty <= 0 or qty > flt(bal.available_quantity) + 1e-6:
@@ -31,7 +31,7 @@ def _balances(line):
     return [(bal, qty, False)]
 
 
-def create_adhoc_tasks(lines, destination_bin, priority="Normal", process_type=None, reason=None, confirm=0, batch_key=None):
+def create_adhoc_tasks(lines, destination_bin, priority="Normal", process_type=None, reason=None, confirm=0, batch_key=None, destination_hu=None, unpack=0):
     require_role("WMS Operator", "WMS Supervisor")
     if not lines: frappe.throw(_("Select at least one line"))
     if not destination_bin: frappe.throw(_("Enter the destination bin"))
@@ -41,7 +41,7 @@ def create_adhoc_tasks(lines, destination_bin, priority="Normal", process_type=N
     batch_key = batch_key or frappe.generate_hash(length=10)
     created, checked = [], set()  # checked: HUs already cleared of open tasks (an HU holding several products gets several tasks)
     for line in lines:
-        for bal, qty, whole_hu in _balances(line):
+        for bal, qty, whole_hu in _balances(line, cint(unpack)):
             if destination.warehouse != bal.warehouse: frappe.throw(_("Destination bin {0} is not in warehouse {1}").format(destination_bin, bal.warehouse))
             if not bal.storage_bin: frappe.throw(_("{0} is not in a bin").format(bal.product))
             hu = bal.handling_unit
@@ -50,23 +50,23 @@ def create_adhoc_tasks(lines, destination_bin, priority="Normal", process_type=N
             checked.add(hu)
             # moving all an HU holds moves the HU; part of it lands loose (same rule as create_and_confirm_move)
             whole = hu and not whole_hu and frappe.db.sql("select count(*), sum(quantity) from `tabWMS Stock Balance` where handling_unit=%s and quantity>0", hu)[0]
-            moves_hu = bool(hu) and (whole_hu or (whole[0] == 1 and qty >= flt(whole[1]) - 1e-6))
+            moves_hu = bool(hu) and not cint(unpack) and (whole_hu or (whole[0] == 1 and qty >= flt(whole[1]) - 1e-6))
             hu_type = frappe.db.get_value("Handling Unit", hu, "hu_type") if hu else None
             iw, iv = incoming_load(bal.product, qty)
             validate_destination_bin(destination_bin, item=bal.product, incoming_quantity=qty, stock_type=bal.stock_type, hu_type=hu_type,
-                                     batch_no=bal.batch_no, destination_hu=hu if moves_hu else None, incoming_weight=iw, incoming_volume=iv)
+                                     batch_no=bal.batch_no, destination_hu=destination_hu or (hu if moves_hu else None), incoming_weight=iw, incoming_volume=iv)
             pt = chosen or frappe.get_cached_doc("Warehouse Process Type", determine_process_type(bal.warehouse, "Internal Move", item=bal.product, stock_type=bal.stock_type, default="INTERNAL_MOVE"))
             task = frappe.get_doc({
                 "doctype": "Warehouse Task", "task_type": TASK_TYPES[pt.activity], "warehouse": bal.warehouse, "product": bal.product, "planned_quantity": qty,
                 "stock_uom": bal.stock_uom, "batch_no": bal.batch_no, "serial_no": bal.serial_no, "source_bin": bal.storage_bin, "source_hu": hu,
-                "destination_bin": destination_bin, "unpack_at_destination": 1 if hu and not moves_hu else 0, "stock_type_from": bal.stock_type, "stock_type_to": bal.stock_type,
+                "destination_bin": destination_bin, "destination_hu": destination_hu, "unpack_at_destination": 1 if hu and not moves_hu and not destination_hu else 0, "stock_type_from": bal.stock_type, "stock_type_to": bal.stock_type,
                 **dim_values(bal), "movement_type": pt.movement_type, "priority": priority or "Normal", "reason": reason, "status": "Open"})
             attach_task(task, batch_key, default_queue=pt.default_queue)
             task.insert(ignore_permissions=True)
             created.append(task.name)
     if cint(confirm):  # immediate confirmation: the stock moves now, the tasks are done
-        from frappe_wms.services.task import confirm_task
-        for name in created: confirm_task(name, verify=False)
+        from frappe_wms.services.task import _UNPACK, confirm_task
+        for name in created: confirm_task(name, verify=False, destination_hu=_UNPACK if frappe.db.get_value("Warehouse Task", name, "unpack_at_destination") else None)
     return created
 
 
@@ -82,7 +82,7 @@ def process_lines(lines, defaults=None):
             core = {"handling_unit": line["handling_unit"]} if line.get("handling_unit") and not line.get("name") else {"name": line["name"], "quantity": line.get("quantity")}
             require_free_many([("Handling Unit", core["handling_unit"]) if "handling_unit" in core else ("WMS Stock Balance", core["name"])])
             pick = lambda k, fallback=None: line.get(k) or defaults.get(k) or fallback
-            tasks = create_adhoc_tasks([core], pick("destination_bin"), pick("priority", "Normal"), pick("process_type"), pick("reason"), line.get("confirm", defaults.get("confirm", 0)), batch_key)
+            tasks = create_adhoc_tasks([core], pick("destination_bin"), pick("priority", "Normal"), pick("process_type"), pick("reason"), line.get("confirm", defaults.get("confirm", 0)), batch_key, line.get("destination_hu"), line.get("unpack"))
             out["created"].append({"line": i, "tasks": tasks})
         except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
             frappe.db.rollback(save_point=savepoint)
