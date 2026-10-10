@@ -64,3 +64,26 @@ test("confirm in the background: a task, then a whole warehouse order", async ({
   await page.keyboard.press("Enter");
   await expect(popup).toBeHidden();
 });
+
+test("auto refresh runs the executed selection again, but not while rows are marked", async ({ page }) => {
+  await page.clock.install();
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  await page.goto("/app/wms-monitor");
+  await page.locator(".wms-mon-warehouse").selectOption(s.warehouse);
+  await page.locator(".wms-mon-nav-item", { hasText: "Warehouse Tasks" }).click();
+  await page.locator(".modal.show", { hasText: "Selection - Warehouse Tasks" }).getByRole("button", { name: /Execute/ }).click();
+  const rows = page.locator(".wms-mon-task-table tbody tr");
+  await expect(rows.first()).toBeVisible();
+  const before = await rows.count();
+  await page.locator(".wms-mon-auto").selectOption("30");
+  const more = out(bench("plain_task"), "E2E_TASKS");     // two more tasks appear while the screen is open
+  await page.clock.fastForward(31000);
+  await expect.poll(() => rows.count()).toBe(before + more.length);
+  // with a row marked the refresh waits
+  await rows.first().locator("th.wms-grid-rowhead").click();
+  bench("plain_task");
+  await page.clock.fastForward(31000);
+  await page.waitForTimeout(800);
+  expect(await rows.count()).toBe(before + more.length);
+});

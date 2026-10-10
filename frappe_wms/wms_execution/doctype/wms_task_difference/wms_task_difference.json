@@ -26,6 +26,7 @@
     "stock_type",
     "storage_bin",
     "exception_code",
+    "difference_category",
     "erpnext_stock_entry",
     "clearance_section",
     "cleared_by",
@@ -190,6 +191,13 @@
       "fieldname": "clearance_remarks",
       "label": "Clearance Remarks",
       "fieldtype": "Small Text"
+    },
+    {
+      "fieldname": "difference_category",
+      "fieldtype": "Select",
+      "label": "Difference Category",
+      "options": "\nMissing\nDamaged\nWrong Product\nExpired\nSurplus\nOther",
+      "read_only": 1
     }
   ],
   "autoname": "TDIFF-.#####",

@@ -80,3 +80,48 @@ def split_wave(wave_name, deliveries):
     wave.set("deliveries", [r for r in wave.deliveries if r.outbound_delivery not in move])
     wave.save(ignore_permissions=True)
     return new.name
+
+
+def merge_waves(wave_names):
+    """SAP wave merge: the deliveries of several Draft waves of one warehouse go into the first of them; the others are removed."""
+    require_role("WMS Operator", "WMS Supervisor")
+    from frappe_wms.services.locks import require_free_many
+    names = sorted(set(wave_names or []))
+    if len(names) < 2: frappe.throw(_("Choose at least two waves to merge"))
+    require_free_many([("WMS Wave", n) for n in names])
+    waves = [frappe.get_doc("WMS Wave", n, for_update=True) for n in names]
+    if any(w.status != "Draft" for w in waves): frappe.throw(_("Only Draft waves can be merged"))
+    if len({w.warehouse for w in waves}) > 1: frappe.throw(_("The waves belong to different warehouses"))
+    if any(_locked(w) for w in waves): frappe.throw(_("A wave is locked before its cutoff"))
+    target, rest = waves[0], waves[1:]
+    have = {r.outbound_delivery for r in target.deliveries}
+    for w in rest:
+        for r in w.deliveries:
+            if r.outbound_delivery not in have: target.append("deliveries", {"outbound_delivery": r.outbound_delivery}); have.add(r.outbound_delivery)
+    if len({w.route for w in waves}) > 1: target.route = None  # the merged wave is no longer one route's
+    target.save(ignore_permissions=True)
+    for w in rest:
+        frappe.delete_doc("WMS Wave", w.name, ignore_permissions=True)
+    return {"wave": target.name, "deliveries": len(have), "merged": [w.name for w in rest]}
+
+
+def simulate_wave(wave_name):
+    """SAP wave simulation: what releasing the Draft wave would allocate, delivery by delivery in the wave's order - done for real inside a savepoint and rolled back,
+    so nothing stays reserved. -> [{delivery, allocation_status, lines: [{item, requested, allocated}]}]"""
+    require_role("WMS Operator", "WMS Supervisor")
+    from frappe_wms.services.allocation import allocate_delivery
+    wave = frappe.get_doc("WMS Wave", wave_name)
+    if wave.status != "Draft": frappe.throw(_("Only a Draft wave can be simulated"))
+    out = []
+    savepoint = f"sim_{frappe.generate_hash(length=6)}"
+    frappe.db.savepoint(savepoint)
+    try:
+        for row in wave.deliveries:
+            delivery = frappe.get_doc("Outbound Delivery", row.outbound_delivery)
+            if delivery.allocation_status != "Fully Allocated": allocate_delivery(delivery.name)
+            lines = frappe.get_all("Outbound Delivery Item", filters={"parent": delivery.name}, fields=["item", "requested_quantity", "allocated_quantity"], order_by="idx")
+            out.append({"delivery": delivery.name, "allocation_status": frappe.db.get_value("Outbound Delivery", delivery.name, "allocation_status"),
+                        "lines": [{"item": l.item, "requested": l.requested_quantity, "allocated": l.allocated_quantity} for l in lines]})
+    finally:
+        frappe.db.rollback(save_point=savepoint)
+    return out

@@ -127,7 +127,7 @@ VIEWS = {
     "warehouse_orders": {
         "doctype": "Warehouse Order", "title": "Warehouse Orders",
         "selection": ["name", "activity", "queue", "status", "assigned_resource", "priority", "wave", "reference_doctype", "reference_name"],
-        "columns": ["name", "activity", "queue", "priority", "status", "assigned_resource", "task_count", "confirmed_count",
+        "columns": ["name", "activity", "queue", "priority", "latest_start", "status", "assigned_resource", "task_count", "confirmed_count",
                     "wave", "batch_key", "reference_doctype", "reference_name", "started_at", "completed_at", "blocking_reason", "modified"],
         "virtual": {},
     },

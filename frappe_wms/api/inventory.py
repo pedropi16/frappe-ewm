@@ -66,6 +66,12 @@ def analyze_differences(warehouse, from_date=None, to_date=None, product=None):
     return _analyze_differences(warehouse, from_date, to_date, product)
 
 @frappe.whitelist()
+def difference_summary(warehouse, from_date=None, to_date=None, product=None):
+    from frappe_wms.services.difference import difference_summary as _summary
+    return _summary(warehouse, from_date, to_date, product)
+
+
+@frappe.whitelist()
 @retry_on_deadlock
 def complete_inspection(inspection_name, passed_quantity=None, failed_quantity=None, decisions=None):
     return _complete_inspection(inspection_name, passed_quantity, failed_quantity, parse_json(decisions, "decisions") if decisions else None)

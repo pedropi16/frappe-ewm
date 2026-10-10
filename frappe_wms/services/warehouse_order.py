@@ -1,7 +1,7 @@
 import frappe
 from frappe_wms.services.concurrency import insert_hot
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import flt, get_datetime, now_datetime
 from frappe_wms.utils import require_role
 
 RESOURCE_ROLES = ("WMS Operator", "WMS Receiver", "WMS Picker", "WMS Packer", "WMS Loader", "WMS Supervisor")
@@ -9,7 +9,16 @@ OPEN_WO_STATUSES = ("Open", "Assigned", "In Process")
 PRIORITY_RANK = {"Urgent": 0, "High": 1, "Normal": 2, "Low": 3}
 
 def _by_priority_then_age(rows):
-    return sorted(rows, key=lambda r: (PRIORITY_RANK.get(r.priority, 2), r.creation))
+    """Priority first, then the latest start date (an order with none comes after the ones with one), then age."""
+    return sorted(rows, key=lambda r: (PRIORITY_RANK.get(r.get("priority"), 2), r.get("latest_start") is None, r.get("latest_start") or 0, r.creation))
+
+
+def _latest_start(wave, reference_doctype, reference_name):
+    """When work on an order has to start: the delivery date of its delivery, else the ship date of its wave."""
+    date = None
+    if reference_doctype == "Outbound Delivery" and reference_name: date = frappe.db.get_value("Outbound Delivery", reference_name, "delivery_date")
+    if not date and wave: date = frappe.db.get_value("WMS Wave", wave, "ship_date")
+    return get_datetime(date) if date else None
 
 def determine_queue(warehouse, activity, storage_type=None, activity_area=None, door=None):
     # Narrowest match wins, same idiom as every other rule table in this app: a queue scoped
@@ -116,7 +125,7 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
     wo = frappe.get_doc({
         "doctype": "Warehouse Order", "warehouse": warehouse, "activity": activity, "queue": queue,
         "batch_key": batch_key, "wave": wave, "priority": priority,
-        "assigned_resource": None, "status": "Open",
+        "assigned_resource": None, "status": "Open", "latest_start": _latest_start(wave, reference_doctype, reference_name),
         "reference_doctype": reference_doctype, "reference_name": reference_name,
     })
     insert_hot(wo)
@@ -371,8 +380,8 @@ def pull_next_warehouse_order(user=None):
     if not queues: frappe.throw(_("Join a queue, or ask a supervisor to add your Resource Group to one, before pulling work"))
     candidates = frappe.get_all("Warehouse Order",
         filters={"status": "Open", "warehouse": resource.warehouse, "queue": ["in", queues], "assigned_resource": ["in", ["", None]]},
-        fields=["name", "priority", "creation"], order_by="creation asc")
-    for candidate in _by_priority_then_age(candidates):
+        fields=["name", "priority", "creation", "latest_start", "skipped_by"], order_by="creation asc")
+    for candidate in _by_priority_then_age([c for c in candidates if resource.name not in (c.skipped_by or "").split("\n")]):
         # Atomic compare-and-set: two resources pulling at the same instant must never both walk
         # away believing they own the same Warehouse Order - the read above is just a candidate
         # list, not a reservation. A 0-row UPDATE means someone else claimed this one between
@@ -406,6 +415,23 @@ def pull_next_warehouse_order(user=None):
             frappe.db.set_value("Warehouse Task", {"warehouse_order": candidate.name}, "assigned_resource", resource.name)
             return candidate.name
     return None
+
+def skip_warehouse_order(wo_name):
+    """SAP "Skip Warehouse Order": the resource gives the order back untouched (a blocked aisle, a missing tool) and is not offered it again; it returns to the queue for the others.
+    Used by the resource itself (RF) or by a supervisor for the resource that holds it."""
+    require_role(*RESOURCE_ROLES)
+    wo = frappe.get_doc("Warehouse Order", wo_name, for_update=True)
+    if wo.status not in ("Open", "Assigned"): frappe.throw(_("Only an order nobody has started can be skipped (status is {0})").format(_(wo.status)))
+    if wo.confirmed_count: frappe.throw(_("{0} already has confirmed tasks: finish it, or report an exception on its task").format(wo.name))
+    mine = _my_resource()
+    resource = wo.assigned_resource or (mine and mine.name)
+    if not resource: frappe.throw(_("No resource holds this order: there is nothing to skip"))
+    skipped = set((wo.skipped_by or "").split("\n")) | {resource}
+    wo.db_set({"status": "Open", "assigned_resource": None, "skipped_by": "\n".join(sorted(skipped))})
+    frappe.db.set_value("Warehouse Task", {"warehouse_order": wo.name, "status": ["not in", ["Confirmed", "Cancelled", "Exception"]]}, "assigned_resource", None)
+    wo.add_comment("Comment", _("Skipped by {0}").format(resource))
+    return {"warehouse_order": wo.name, "skipped_by": resource}
+
 
 def warehouse_order_detail(wo_name):
     require_role(*RESOURCE_ROLES)

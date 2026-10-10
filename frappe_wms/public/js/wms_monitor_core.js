@@ -242,7 +242,10 @@ class WMSMonitor {
       <button type="button" class="btn btn-default btn-sm wms-mon-navtoggle" title="${__("Show / hide the menu")}">&#9776;</button>
       <label>${__("Warehouse")}</label>
       <select class="form-control input-sm wms-mon-warehouse"><option value="">${__("Select a warehouse")}</option>${options}</select>
+      <label style="margin-left:12px;" title="${__("Run the view's selection again at this interval (not while rows are marked or a dialog is open)")}">${__("Auto refresh")}</label>
+      <select class="form-control input-sm wms-mon-auto" style="width:90px;"><option value="0">${__("Off")}</option><option value="30">30 s</option><option value="60">1 min</option><option value="300">5 min</option></select>
     `);
+    this.start_auto_refresh($filters.find(".wms-mon-auto"));
     $filters.find(".wms-mon-navtoggle").on("click", () => {
       const hidden = this.$body.find(".wms-monitor-nav").toggle().is(":hidden");
       try { localStorage.setItem("wms_monitor_nav_hidden", hidden ? "1" : ""); } catch (e) { /* storage blocked: the menu just reopens next time */ }
@@ -260,6 +263,29 @@ class WMSMonitor {
     this.show_view(this.view);
     const start = frappe_wms.my_warehouse(warehouses.map((w) => w.name));
     if (start) $filters.find(".wms-mon-warehouse").val(start).trigger("change");
+  }
+
+  // SAP Monitor "Automatic Refresh": the current view's executed selection is run again every N seconds. A refresh would drop the marked rows and a dialog's inputs, so it waits.
+  start_auto_refresh($select) {
+    try { $select.val(localStorage.getItem("wms_monitor_auto") || "0"); } catch (e) { /* storage blocked: off */ }
+    let timer = null;
+    const arm = () => {
+      clearInterval(timer);
+      const secs = parseInt($select.val(), 10) || 0;
+      try { localStorage.setItem("wms_monitor_auto", String(secs)); } catch (e) { /* not remembered */ }
+      if (secs) timer = setInterval(() => this.auto_refresh(), secs * 1000);
+    };
+    $select.on("change", arm); arm();
+  }
+
+  async auto_refresh() {
+    if (document.hidden || !this.warehouse || $(".modal.show").length || !this.$body.is(":visible")) return;
+    const $view = this.$body.find(`.wms-mon-view[data-view="${this.view}"]`);
+    if ($view.find(".wms-grid-actionbar .btn").length) return;   // rows are marked: someone is working on them
+    const p = this.selections && this.selections[this.view];
+    if (!p) { if (this.view === "overview") this.load_view("overview"); return; }
+    const sel = await p;
+    if (sel.lastRows) await sel.execute();
   }
 
   // The warehouse changed - any already-executed results belong to the OLD warehouse and would
@@ -633,8 +659,20 @@ class WMSMonitor {
   process_actions(tx) {
     const actions = [{ label: __("Process in Ad Hoc Processing"), kind: "primary", run: () => frappe.set_route("wms-adhoc", tx) }];
     const doctype = { tasks: "Warehouse Task", wo: "Warehouse Order" }[tx];
+    if (tx === "wo") actions.push({ label: __("Skip Warehouse Order"), confirm: (rows) => __("Give {0} order(s) back to the queue? The resource that holds one is not offered it again.", [rows.length]),
+      run: (rows) => this.skip_orders(rows) });
     if (doctype) actions.unshift({ label: __("Confirm in Background"), kind: "primary", run: (rows) => this.confirm_in_background(doctype, rows, tx === "wo" ? "warehouse_orders" : "tasks") });
     return actions;
+  }
+
+  async skip_orders(rows) {
+    let done = 0; const errors = [];
+    for (const r of rows) {
+      try { await frappe.xcall("frappe_wms.api.warehouse_order.skip_warehouse_order", { wo_name: r.name }); done++; }
+      catch (e) { errors.push([r.name, (e.message || e._server_messages || __("Failed")).toString().replace(/<[^>]+>/g, "")]); }
+    }
+    window.wms_grid.report(done ? __("{0} of {1} skipped", [done, rows.length]) : "", errors);
+    await this.execute_selection("warehouse_orders");
   }
 
   // SAP "Confirm Warehouse Task / Order in Background": the full planned quantity at once; a task that needs details (serial numbers, batch) is confirmed in the foreground.
@@ -1421,10 +1459,14 @@ class WMSMonitor {
       from_date: $wrap.find(".wms-mon-diff-from").val() || undefined,
       to_date: $wrap.find(".wms-mon-diff-to").val() || undefined,
     };
-    const rows = await frappe.call("frappe_wms.api.inventory.analyze_differences", args).then((r) => r.message || []);
+    const [rows, taskDiffs] = await Promise.all([frappe.call("frappe_wms.api.inventory.analyze_differences", args).then((r) => r.message || []),
+      frappe.call("frappe_wms.api.inventory.difference_summary", args).then((r) => r.message || [])]);
     const $table = $wrap.find(".wms-mon-diff-table");
-    if (!rows.length) { $table.html(`<div class="text-muted">${__("No posted count variances found")}</div>`); return; }
-    $table.empty().append(this.render_table(rows, [
+    $table.empty();
+    if (taskDiffs.length) $table.append(`<h6 style="margin:4px 0;">${__("Task differences by category")}</h6>`, this.render_table(taskDiffs.map((r) => ({ ...r, difference_category: r.difference_category ? __(r.difference_category) : "" })), [
+      ["difference_category", __("Category")], ["direction", __("Direction")], ["differences", __("Differences")], ["quantity", __("Quantity")], ["open_differences", __("Open")]], "WMS Task Difference"));
+    if (!rows.length) { $table.append(`<div class="text-muted" style="margin-top:8px;">${__("No posted count variances found")}</div>`); return; }
+    $table.append(`<h6 style="margin:12px 0 4px;">${__("Count variances by product")}</h6>`, this.render_table(rows, [
       ["product", __("Product")], ["total_gain", __("Total Gain")], ["total_loss", __("Total Loss")],
       ["net_variance", __("Net Variance")], ["over_tolerance_events", __("Over-Tolerance Events")], ["line_count", __("Lines")],
     ], "WMS Physical Inventory Count"));

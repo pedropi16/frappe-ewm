@@ -36,9 +36,20 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
       { label: __("Put On Hold"), kind: "danger", appliesTo: (r) => !["Completed", "Cancelled", "On Hold"].includes(r.status), run: (rows) => prompt(rows, [{ fieldname: "reason", label: __("Reason"), fieldtype: "Data" }], __("Put On Hold"), "warehouse_order.block_warehouse_order", (r, v) => ({ wo_name: r.name, reason: v.reason || undefined })) },
       { label: __("Resume"), appliesTo: (r) => r.status === "On Hold", run: (rows) => each(rows, "warehouse_order.resume_warehouse_order", (r) => ({ wo_name: r.name }), __("Resumed")) },
     ] },
-    wave: { label: __("Waves: Release"), view: "waves", actions: () => [
+    wave: { label: __("Waves: Release / Simulate / Merge"), view: "waves", actions: () => [
       { label: __("Release"), kind: "primary", appliesTo: (r) => r.status === "Draft", confirm: (rows) => __("Release {0} wave(s)? This allocates and creates pick tasks for every delivery in them.", [rows.length]),
         run: (rows) => each(rows, "outbound.release_wave", (r) => ({ wave_name: r.name }), __("Released")) },
+      { label: __("Simulate"), appliesTo: (r) => r.status === "Draft", run: async (rows) => {
+        const res = await call("outbound.simulate_wave", { wave_name: rows[0].name }) || [];
+        const body = res.map((d) => `<div style="margin-bottom:8px"><b>${esc(d.delivery)}</b> - ${esc(__(d.allocation_status))}<table class="table table-sm" style="margin:2px 0">${d.lines.map((l) => `<tr><td>${esc(l.item)}</td><td>${l.allocated} / ${l.requested}</td></tr>`).join("")}</table></div>`).join("");
+        frappe.msgprint({ title: __("Simulation of {0}: nothing was reserved", [rows[0].name]), message: body || __("The wave has no deliveries"), wide: true });
+      } },
+      { label: __("Merge"), appliesTo: (r) => r.status === "Draft", confirm: (rows) => __("Merge {0} waves into {1}?", [rows.length, rows[0].name]), run: async (rows) => {
+        if (rows.length < 2) { frappe.show_alert({ message: __("Mark at least two Draft waves"), indicator: "orange" }); return; }
+        const r = await call("outbound.merge_waves", { wave_names: JSON.stringify(rows.map((x) => x.name)) });
+        frappe.show_alert({ message: __("{0} now holds {1} deliveries", [r.wave, r.deliveries]), indicator: "green" });
+        state.sel && state.sel.execute();
+      } },
     ] },
   };
 

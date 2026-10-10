@@ -40,7 +40,8 @@ class TestDifferenceHandling(IntegrationTestCase):
             wh.save(ignore_permissions=True)
         if not frappe.db.exists("WMS Exception Code", "TEST-DIFF-SHORT"):
             frappe.get_doc({"doctype": "WMS Exception Code", "exception_code": "TEST-DIFF-SHORT", "exception_name": "Test Difference Short",
-                "category": "Stock", "allows_quantity_change": 1, "active": 1}).insert(ignore_permissions=True)
+                "category": "Stock", "allows_quantity_change": 1, "active": 1, "difference_category": "Damaged"}).insert(ignore_permissions=True)
+        frappe.db.set_value("WMS Exception Code", "TEST-DIFF-SHORT", "difference_category", "Damaged")
 
     def _make_item(self, item_code):
         if not frappe.db.exists("Item", item_code):
@@ -83,6 +84,7 @@ class TestDifferenceHandling(IntegrationTestCase):
 
         diff = frappe.get_doc("WMS Task Difference", result["difference"])
         self.assertEqual(diff.direction, "Over")
+        self.assertEqual(diff.difference_category, "Surplus")
         self.assertEqual(diff.difference_quantity, 5)
         self.assertEqual(diff.storage_bin, self.diff_bin)
         self.assertEqual(diff.status, "Open")
@@ -167,6 +169,10 @@ class TestDifferenceHandling(IntegrationTestCase):
         self.assertEqual(diff.planned_quantity, 10, "must record the ORIGINAL planned_quantity, not the revised one")
         self.assertEqual(diff.exception_code, "TEST-DIFF-SHORT")
         self.assertEqual(diff.status, "Open")
+        self.assertEqual(diff.difference_category, "Damaged")  # from the exception code
+        from frappe_wms.services.difference import difference_summary
+        rows = [r for r in difference_summary(diff.warehouse) if r.difference_category == "Damaged" and r.direction == "Short"]
+        self.assertEqual(rows[0].open_differences, 1)
 
         clear_result = clear_short_difference(diff.name, remarks="acknowledged")
         self.assertEqual(clear_result["status"], "Cleared")

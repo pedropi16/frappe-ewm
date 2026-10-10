@@ -6644,3 +6644,1526 @@ msgstr "{0} {1} no está configurado como ubicación de tipo {2}"
 msgid "{0}/{1} confirmed"
 msgstr "{0}/{1} confirmado(s)"
 
+
+# Added with the monitor / worklist / pick HU / audit work (2026-10)
+
+msgid "(blank)"
+msgstr "(vacío)"
+
+msgid "(no stock type)"
+msgstr "(sin tipo de existencias)"
+
+msgid "(none)"
+msgstr "(ninguno)"
+
+msgid ", {0} need details: confirm in the foreground"
+msgstr ", {0} necesitan detalles: confirmar en primer plano"
+
+msgid "A Handling Unit cannot be packed into itself"
+msgstr "Una unidad de manipulación no puede empaquetarse dentro de sí misma"
+
+msgid "A Handling Unit is always created in a bin."
+msgstr "Una unidad de manipulación se crea siempre en una ubicación."
+
+msgid "A given number creates exactly one Handling Unit."
+msgstr "Un número dado crea exactamente una unidad de manipulación."
+
+msgid "A partial move needs a new Handling Unit for what is moved, but no Handling Unit Type is set: choose a default in WMS Settings (or on the product)"
+msgstr "Un movimiento parcial necesita una nueva unidad de manipulación para lo movido, pero no hay tipo de UM definido: elija uno por defecto en Ajustes WMS (o en el producto)"
+
+msgid "A wave is locked before its cutoff"
+msgstr "Una oleada está bloqueada antes de su hora de corte"
+
+msgid "Activity Area"
+msgstr "Área de actividad"
+
+msgid "Activity Area (blank to clear)"
+msgstr "Área de actividad (vacío para borrar)"
+
+msgid "Ad Hoc Processing"
+msgstr "Procesamiento ad hoc"
+
+msgid "Add"
+msgstr "Añadir"
+
+msgid "Add Delivery"
+msgstr "Añadir entrega"
+
+msgid "Add a delivery to {0}"
+msgstr "Añadir una entrega a {0}"
+
+msgid "Add.WTs Creatd"
+msgstr "Tareas adic. creadas"
+
+msgid "Added to the truck"
+msgstr "Añadida al camión"
+
+msgid "Aged Exceptions"
+msgstr "Excepciones antiguas"
+
+msgid "Aged Open Tasks"
+msgstr "Tareas abiertas antiguas"
+
+msgid "Alerts"
+msgstr "Alertas"
+
+msgid "All"
+msgstr "Todos"
+
+msgid "All remaining ({0})"
+msgstr "Todo lo restante ({0})"
+
+msgid "All warehouses"
+msgstr "Todos los almacenes"
+
+msgid "All {0} serial numbers are scanned."
+msgstr "Se han escaneado los {0} números de serie."
+
+msgid "Apply to marked deliveries"
+msgstr "Aplicar a las entregas marcadas"
+
+msgid "Apply to marked rows"
+msgstr "Aplicar a las filas marcadas"
+
+msgid "Appointment"
+msgstr "Cita"
+
+msgid "Approve Selected"
+msgstr "Aprobar seleccionados"
+
+msgid "Approve {0} selected count(s)? Their held variances will post to the stock ledger."
+msgstr "¿Aprobar {0} recuento(s) seleccionado(s)? Sus diferencias retenidas se contabilizarán en el libro de existencias."
+
+msgid "Approved {0} of {1} count(s)"
+msgstr "Aprobados {0} de {1} recuento(s)"
+
+msgid "Arrival"
+msgstr "Llegada"
+
+msgid "Assign Activity Area to Selected"
+msgstr "Asignar área de actividad a la selección"
+
+msgid "Assign {0} to {1} selected bin(s)?"
+msgstr "¿Asignar {0} a {1} ubicación(es) seleccionada(s)?"
+
+msgid "Attempts"
+msgstr "Intentos"
+
+msgid "Auto refresh"
+msgstr "Actualización automática"
+
+msgid "Avg Cycle Time"
+msgstr "Tiempo de ciclo medio"
+
+msgid "Avg Task Cycle Time"
+msgstr "Tiempo de ciclo medio de tarea"
+
+msgid "Avg Warehouse Order Cycle Time"
+msgstr "Tiempo de ciclo medio de orden de almacén"
+
+msgid "BOM"
+msgstr "Lista de materiales"
+
+msgid "Back to the list"
+msgstr "Volver a la lista"
+
+msgid "Basis"
+msgstr "Base"
+
+msgid "Batch needed"
+msgstr "Falta el lote"
+
+msgid "Batch {0} is not in {1}"
+msgstr "El lote {0} no está en {1}"
+
+msgid "Billed Qty"
+msgstr "Cant. facturada"
+
+msgid "Billing"
+msgstr "Facturación"
+
+msgid "Bin Assignment"
+msgstr "Asignación de ubicaciones"
+
+msgid "Bin Type"
+msgstr "Tipo de ubicación"
+
+msgid "Blank: a new HU is created when only part of the stock moves."
+msgstr "Vacío: se crea una nueva UM cuando solo se mueve parte de las existencias."
+
+msgid "Book"
+msgstr "Contabilizar"
+
+msgid "Booked {0}"
+msgstr "Contabilizado {0}"
+
+msgid "Build your search, then click Execute. Use * as a wildcard in text fields (e.g. AB*, *AB, *AB*) - without it, text fields match exactly."
+msgstr "Defina su búsqueda y pulse Ejecutar. Use * como comodín en los campos de texto (p. ej. AB*, *AB, *AB*); sin él, los campos de texto coinciden exactamente."
+
+msgid "Cancel appointment {0}?"
+msgstr "¿Cancelar la cita {0}?"
+
+msgid "Carries"
+msgstr "Contiene"
+
+msgid "Change"
+msgstr "Cambiar"
+
+msgid "Change in Packing Center"
+msgstr "Cambiar en el centro de embalaje"
+
+msgid "Change mode"
+msgstr "Modo de cambio"
+
+msgid "Changed by mass change: {0}"
+msgstr "Cambiado por cambio masivo: {0}"
+
+msgid "Charge"
+msgstr "Cargo"
+
+msgid "Check (Enter)"
+msgstr "Comprobar (Intro)"
+
+msgid "Check in"
+msgstr "Registrar entrada"
+
+msgid "Check in {0}"
+msgstr "Registrar entrada de {0}"
+
+msgid "Check out"
+msgstr "Registrar salida"
+
+msgid "Check out {0}"
+msgstr "Registrar salida de {0}"
+
+msgid "Checked in"
+msgstr "Entrada registrada"
+
+msgid "Checked in as {0}"
+msgstr "Entrada registrada como {0}"
+
+msgid "Choose at least two waves to merge"
+msgstr "Elija al menos dos oleadas para fusionar"
+
+msgid "Choose the HU type"
+msgstr "Elija el tipo de UM"
+
+msgid "Choose the batch of {0} for this confirmation ({1}) - confirm it in the foreground"
+msgstr "Elija el lote de {0} para esta confirmación ({1}) - confírmela en primer plano"
+
+msgid "Choose the destination"
+msgstr "Elija el destino"
+
+msgid "Choose the serial numbers to repack"
+msgstr "Elija los números de serie a reembalar"
+
+msgid "Choose the storage bin"
+msgstr "Elija la ubicación de almacenamiento"
+
+msgid "Choose {0} of: {1}"
+msgstr "Elija {0} de: {1}"
+
+msgid "Choose {0} serial number(s) of {1} for this confirmation ({2} given) - confirm it in the foreground"
+msgstr "Elija {0} número(s) de serie de {1} para esta confirmación ({2} indicados) - confírmela en primer plano"
+
+msgid "Choose…"
+msgstr "Elegir…"
+
+msgid "Clear (Over)"
+msgstr "Liquidar (exceso)"
+
+msgid "Clear (Short)"
+msgstr "Liquidar (defecto)"
+
+msgid "Clear serial numbers"
+msgstr "Borrar números de serie"
+
+msgid "Clear {0} Over difference(s) to a bin"
+msgstr "¿Liquidar {0} diferencia(s) por exceso en una ubicación?"
+
+msgid "Cleared {0} of {1} difference(s)"
+msgstr "Liquidadas {0} de {1} diferencia(s)"
+
+msgid "Click an HU to open its full repack detail: nesting, contents and serials, with copy buttons."
+msgstr "Pulse una UM para abrir su detalle completo de reembalaje: anidamiento, contenido y números de serie, con botones de copia."
+
+msgid "Code"
+msgstr "Código"
+
+msgid "Complete Kitting Order {0}? This consumes/produces stock immediately."
+msgstr "¿Completar la orden de kitting {0}? Esto consume/produce existencias de inmediato."
+
+msgid "Confirm in Background"
+msgstr "Confirmar en segundo plano"
+
+msgid "Confirm {0} (foreground)"
+msgstr "Confirmar {0} (primer plano)"
+
+msgid "Confirmation"
+msgstr "Confirmación"
+
+msgid "Consumed"
+msgstr "Consumido"
+
+msgid "Content"
+msgstr "Contenido"
+
+msgid "Copied {0}"
+msgstr "Copiado {0}"
+
+msgid "Copy"
+msgstr "Copiar"
+
+msgid "Count"
+msgstr "Recuento"
+
+msgid "Count Accuracy"
+msgstr "Exactitud de recuento"
+
+msgid "Count variances by product"
+msgstr "Diferencias de recuento por producto"
+
+msgid "Country of Origin"
+msgstr "País de origen"
+
+msgid "Counts Awaiting Approval"
+msgstr "Recuentos pendientes de aprobación"
+
+msgid "Create + Confirm"
+msgstr "Crear + confirmar"
+
+msgid "Create HU"
+msgstr "Crear UM"
+
+msgid "Create HU Warehouse Task in Warehouse Number {0}"
+msgstr "Crear tarea de almacén de UM en número de almacén {0}"
+
+msgid "Create Product Warehouse Task in Warehouse Number {0}"
+msgstr "Crear tarea de almacén de producto en número de almacén {0}"
+
+msgid "Create Putaway Tasks"
+msgstr "Crear tareas de colocación"
+
+msgid "Create Sales Invoice"
+msgstr "Crear factura de venta"
+
+msgid "Create Unplanned Stock"
+msgstr "Crear existencias no planificadas"
+
+msgid "Create Warehouse Task"
+msgstr "Crear tarea de almacén"
+
+msgid "Create a Draft Sales Invoice for {0} covering {1} to {2}?"
+msgstr "¿Crear una factura de venta en borrador para {0} que cubra del {1} al {2}?"
+
+msgid "Create a Handling Unit in the default storage bin"
+msgstr "Crear una unidad de manipulación en la ubicación de almacenamiento por defecto"
+
+msgid "Create ad hoc tasks for many HUs"
+msgstr "Crear tareas ad hoc para varias UM"
+
+msgid "Create tasks"
+msgstr "Crear tareas"
+
+msgid "Created At"
+msgstr "Creado el"
+
+msgid "Created By"
+msgstr "Creado por"
+
+msgid "Created Draft Sales Invoice {0}"
+msgstr "Factura de venta en borrador {0} creada"
+
+msgid "Created HU WTs"
+msgstr "Tareas de UM creadas"
+
+msgid "Created On"
+msgstr "Creado el"
+
+msgid "Created Product WTs"
+msgstr "Tareas de producto creadas"
+
+msgid "Created {0} task(s)"
+msgstr "{0} tarea(s) creada(s)"
+
+msgid "Current HUs"
+msgstr "UM actuales"
+
+msgid "Current Storage Type"
+msgstr "Tipo de almacenamiento actual"
+
+msgid "Default Storage Bin"
+msgstr "Ubicación por defecto"
+
+msgid "Defaults to {0} if left as is. A fresh tote/carton barcode registers it automatically. If only part of the stock moves and you scan nothing, a new HU is created for it."
+msgstr "Si se deja así, se usa {0}. Un código de caja/contenedor nuevo lo registra automáticamente. Si solo se mueve parte de las existencias y no escanea nada, se crea una nueva UM para ello."
+
+msgid "Delete (recycle) {0} Handling Unit(s)? Each must be empty, unnested and without nested HUs. Frees their numbers for reuse; cannot be undone."
+msgstr "¿Eliminar (reciclar) {0} unidad(es) de manipulación? Cada una debe estar vacía, sin anidar y sin UM anidadas. Libera sus números para reutilizarlos; no se puede deshacer."
+
+msgid "Delete HU"
+msgstr "Eliminar UM"
+
+msgid "Delete Lock"
+msgstr "Eliminar bloqueo"
+
+msgid "Delete Row"
+msgstr "Eliminar fila"
+
+msgid "Delete the lock on {0} {1}? {2} may lose what they are doing."
+msgstr "¿Eliminar el bloqueo de {0} {1}? {2} puede perder lo que está haciendo."
+
+msgid "Description Stock Type"
+msgstr "Descripción del tipo de existencias"
+
+msgid "Dest. Storage Type"
+msgstr "Tipo almac. destino"
+
+msgid "Destination Storage Bin"
+msgstr "Ubicación de almacenamiento de destino"
+
+msgid "Destination Storage Section"
+msgstr "Sección de almacenamiento de destino"
+
+msgid "Destination bin {0} is not in warehouse {1}"
+msgstr "La ubicación de destino {0} no pertenece al almacén {1}"
+
+msgid "Detail"
+msgstr "Detalle"
+
+msgid "Details"
+msgstr "Detalles"
+
+msgid "Determine process type and destination for the marked rows (all rows if none is marked) without creating anything"
+msgstr "Determinar tipo de proceso y destino de las filas marcadas (todas si no hay ninguna marcada) sin crear nada"
+
+msgid "Difference Analyzer"
+msgstr "Analizador de diferencias"
+
+msgid "Difference Bin"
+msgstr "Ubicación de diferencias"
+
+msgid "Differences"
+msgstr "Diferencias"
+
+msgid "Direction"
+msgstr "Dirección"
+
+msgid "Disassemble"
+msgstr "Desmontar"
+
+msgid "Display"
+msgstr "Visualizar"
+
+msgid "Display only: being changed by {0}"
+msgstr "Solo visualización: está siendo modificado por {0}"
+
+msgid "Document"
+msgstr "Documento"
+
+msgid "Drag to resize the side panel (double-click to hide it)"
+msgstr "Arrastre para cambiar el tamaño del panel lateral (doble clic para ocultarlo)"
+
+msgid "Driver"
+msgstr "Conductor"
+
+msgid "DstStorSec"
+msgstr "SecAlmDst"
+
+msgid "ERPNext Postings Not Yet Done"
+msgstr "Contabilizaciones en ERPNext pendientes"
+
+msgid "Efficiency"
+msgstr "Eficiencia"
+
+msgid "Empty HU"
+msgstr "UM vacía"
+
+msgid "Empty: its booked door, or the first free one"
+msgstr "Vacío: su puerta reservada, o la primera libre"
+
+msgid "Empty: the first free door"
+msgstr "Vacío: la primera puerta libre"
+
+msgid "Empty: the warehouse's default slot length"
+msgstr "Vacío: la duración de franja por defecto del almacén"
+
+msgid "End"
+msgstr "Fin"
+
+msgid "Enter a quantity above 0, at most what is there"
+msgstr "Introduzca una cantidad mayor que 0, como máximo la existente"
+
+msgid "Enter a quantity above 0, at most what is there - and choose at least one serial number for serial-numbered lines"
+msgstr "Introduzca una cantidad mayor que 0, como máximo la existente, y elija al menos un número de serie en las líneas con números de serie"
+
+msgid "Enter a search and press Go, or open the advanced search."
+msgstr "Introduzca una búsqueda y pulse Ir, o abra la búsqueda avanzada."
+
+msgid "Enter the missing quantity of at least one line"
+msgstr "Introduzca la cantidad faltante de al menos una línea"
+
+msgid "Enter values once and put them into all marked deliveries"
+msgstr "Introduzca los valores una vez y se aplican a todas las entregas marcadas"
+
+msgid "Enter values once and put them into all marked rows"
+msgstr "Introduzca los valores una vez y se aplican a todas las filas marcadas"
+
+msgid "Enter what to find, or * for everything."
+msgstr "Introduzca qué buscar, o * para todo."
+
+msgid "Every request has its tasks"
+msgstr "Cada solicitud tiene sus tareas"
+
+msgid "Exception Rate"
+msgstr "Tasa de excepciones"
+
+msgid "Expand"
+msgstr "Expandir"
+
+msgid "Expanded"
+msgstr "Expandido"
+
+msgid "Expiry"
+msgstr "Caducidad"
+
+msgid "Expiry {0} (from the label)"
+msgstr "Caducidad {0} (de la etiqueta)"
+
+msgid "Failed to approve {0}"
+msgstr "No se pudo aprobar {0}"
+
+msgid "Failed to complete"
+msgstr "No se pudo completar"
+
+msgid "Failed to create Kitting Order"
+msgstr "No se pudo crear la orden de kitting"
+
+msgid "Failed to create Sales Invoice"
+msgstr "No se pudo crear la factura de venta"
+
+msgid "Fill in customer, from date and to date"
+msgstr "Indique cliente, fecha desde y fecha hasta"
+
+msgid "Fill in kit item, BOM, work center bin and quantity"
+msgstr "Indique artículo del kit, lista de materiales, ubicación del centro de trabajo y cantidad"
+
+msgid "Filter serial numbers"
+msgstr "Filtrar números de serie"
+
+msgid "Find"
+msgstr "Buscar"
+
+msgid "Free"
+msgstr "Libre"
+
+msgid "GR Date"
+msgstr "Fecha de EM"
+
+msgid "GR Date / Time"
+msgstr "Fecha / hora de EM"
+
+msgid "GR Time"
+msgstr "Hora de EM"
+
+msgid "Generate Rearrangement Tasks"
+msgstr "Generar tareas de reorganización"
+
+msgid "Generate {0} rearrangement task(s)?"
+msgstr "¿Generar {0} tarea(s) de reorganización?"
+
+msgid "Give this work back to the queue? You will not be offered it again."
+msgstr "¿Devolver este trabajo a la cola? No se le volverá a ofrecer."
+
+msgid "Give {0} order(s) back to the queue? The resource that holds one is not offered it again."
+msgstr "¿Devolver {0} orden(es) a la cola? El recurso que tiene una no vuelve a recibirla."
+
+msgid "Go"
+msgstr "Ir"
+
+msgid "Group by"
+msgstr "Agrupar por"
+
+msgid "Group the rows by one to three columns"
+msgstr "Agrupar las filas por una a tres columnas"
+
+msgid "HU / Storage Bin"
+msgstr "UM / ubicación de almacenamiento"
+
+msgid "HU Content"
+msgstr "Contenido de la UM"
+
+msgid "HU Level"
+msgstr "Nivel de UM"
+
+msgid "HU Status"
+msgstr "Estado de la UM"
+
+msgid "HU Step Completed"
+msgstr "Paso de UM completado"
+
+msgid "HUs in Bin"
+msgstr "UM en la ubicación"
+
+msgid "Handling Unit Category"
+msgstr "Categoría de unidad de manipulación"
+
+msgid "Handling Unit {0}"
+msgstr "Unidad de manipulación {0}"
+
+msgid "Handling Units: Block / Unblock / Recycle"
+msgstr "Unidades de manipulación: bloquear / desbloquear / reciclar"
+
+msgid "Higher HU"
+msgstr "UM superior"
+
+msgid "Highest HU"
+msgstr "UM más alta"
+
+msgid "In"
+msgstr "Entrada"
+
+msgid "Inbound deliveries without a truck"
+msgstr "Entregas entrantes sin camión"
+
+msgid "Inside HU (optional)"
+msgstr "Dentro de UM (opcional)"
+
+msgid "Item {0} · {1}"
+msgstr "Artículo {0} · {1}"
+
+msgid "KPIs"
+msgstr "KPI"
+
+msgid "Kit Item"
+msgstr "Artículo del kit"
+
+msgid "Kitting"
+msgstr "Kitting"
+
+msgid "Kitting Order completed"
+msgstr "Orden de kitting completada"
+
+msgid "Labor Performance"
+msgstr "Rendimiento laboral"
+
+msgid "Last Error"
+msgstr "Último error"
+
+msgid "Last Modified"
+msgstr "Última modificación"
+
+msgid "Last Movement"
+msgstr "Último movimiento"
+
+msgid "Leave empty to create a new HU when only part of the stock moves."
+msgstr "Déjelo vacío para crear una nueva UM cuando solo se mueve parte de las existencias."
+
+msgid "Leave empty to generate a new number"
+msgstr "Déjelo vacío para generar un número nuevo"
+
+msgid "Lines"
+msgstr "Líneas"
+
+msgid "List"
+msgstr "Lista"
+
+msgid "Loading selection screen…"
+msgstr "Cargando pantalla de selección…"
+
+msgid "Loading…"
+msgstr "Cargando…"
+
+msgid "Lock Entries"
+msgstr "Entradas de bloqueo"
+
+msgid "Locked"
+msgstr "Bloqueado"
+
+msgid "Log"
+msgstr "Registro"
+
+msgid "Maintain Inbound Delivery"
+msgstr "Mantener entrega de entrada"
+
+msgid "Maintain Outbound Delivery Order"
+msgstr "Mantener orden de entrega de salida"
+
+msgid "Mark Handling Units or product lines to move"
+msgstr "Marque unidades de manipulación o líneas de producto para mover"
+
+msgid "Mark a delivery first (click its row number)."
+msgstr "Marque primero una entrega (pulse el número de su fila)."
+
+msgid "Mark a line first (click its row number)."
+msgstr "Marque primero una línea (pulse el número de su fila)."
+
+msgid "Mark a row in the tree to see its details here."
+msgstr "Marque una fila del árbol para ver aquí sus detalles."
+
+msgid "Mark at least two Draft waves"
+msgstr "Marque al menos dos oleadas en borrador"
+
+msgid "Mark product lines in the tree."
+msgstr "Marque líneas de producto en el árbol."
+
+msgid "Mark rows in the tree to list their serial numbers."
+msgstr "Marque filas del árbol para listar sus números de serie."
+
+msgid "Mark serial numbers, then drag them by ⋮⋮ onto a Handling Unit in the tree, or use Move to…"
+msgstr "Marque números de serie y arrástrelos por ⋮⋮ sobre una unidad de manipulación del árbol, o use Mover a…"
+
+msgid "Mark the Handling Units to repack"
+msgstr "Marque las unidades de manipulación a reembalar"
+
+msgid "Mark the Handling Units to repack in the tree."
+msgstr "Marque en el árbol las unidades de manipulación a reembalar."
+
+msgid "Mark the deliveries first (click their row numbers)."
+msgstr "Marque primero las entregas (pulse los números de sus filas)."
+
+msgid "Mark the product lines to repack"
+msgstr "Marque las líneas de producto a reembalar"
+
+msgid "Mark the rows to change first (click their row numbers)."
+msgstr "Marque primero las filas a cambiar (pulse los números de sus filas)."
+
+msgid "Marked Handling Units"
+msgstr "Unidades de manipulación marcadas"
+
+msgid "Mass Change"
+msgstr "Cambio masivo"
+
+msgid "Mass Change for {0} marked delivery(ies)"
+msgstr "Cambio masivo de {0} entrega(s) marcada(s)"
+
+msgid "Mass Change for {0} marked row(s)"
+msgstr "Cambio masivo de {0} fila(s) marcada(s)"
+
+msgid "Master Data/Status"
+msgstr "Datos maestros/estado"
+
+msgid "Material"
+msgstr "Material"
+
+msgid "Max HUs"
+msgstr "Máx. UM"
+
+msgid "Means of Transport"
+msgstr "Medio de transporte"
+
+msgid "Merge"
+msgstr "Fusionar"
+
+msgid "Merge {0} waves into {1}?"
+msgstr "¿Fusionar {0} oleadas en {1}?"
+
+msgid "Min Picks"
+msgstr "Mín. picks"
+
+msgid "Missing"
+msgstr "Faltante"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "More inbound deliveries on this vehicle"
+msgstr "Más entregas entrantes en este vehículo"
+
+msgid "More shipments on this vehicle"
+msgstr "Más envíos en este vehículo"
+
+msgid "Move the missing quantity of {0} line(s) to the difference bin?"
+msgstr "¿Mover la cantidad faltante de {0} línea(s) a la ubicación de diferencias?"
+
+msgid "Move to…"
+msgstr "Mover a…"
+
+msgid "Move {0} missing serial number(s) to the difference bin?"
+msgstr "¿Mover {0} número(s) de serie faltante(s) a la ubicación de diferencias?"
+
+msgid "Move {0} row(s) to…"
+msgstr "Mover {0} fila(s) a…"
+
+msgid "Move {0} serial number(s) to…"
+msgstr "Mover {0} número(s) de serie a…"
+
+msgid "Moved {0} of {1}"
+msgstr "Movidos {0} de {1}"
+
+msgid "Movements"
+msgstr "Movimientos"
+
+msgid "Negative Quants"
+msgstr "Quants negativos"
+
+msgid "Net Variance"
+msgstr "Diferencia neta"
+
+msgid "New Appointment"
+msgstr "Nueva cita"
+
+msgid "New Batch"
+msgstr "Lote nuevo"
+
+msgid "New Country"
+msgstr "País nuevo"
+
+msgid "New Country of Origin"
+msgstr "País de origen nuevo"
+
+msgid "New Kitting Order"
+msgstr "Nueva orden de kitting"
+
+msgid "New Owner"
+msgstr "Propietario nuevo"
+
+msgid "New Party"
+msgstr "Interlocutor nuevo"
+
+msgid "New Party Entitled to Dispose"
+msgstr "Nuevo interlocutor autorizado a disponer"
+
+msgid "New Stock Type"
+msgstr "Tipo de existencias nuevo"
+
+msgid "New dock appointment"
+msgstr "Nueva cita de muelle"
+
+msgid "Next Retry"
+msgstr "Próximo reintento"
+
+msgid "Next row"
+msgstr "Fila siguiente"
+
+msgid "No HU WT"
+msgstr "Tarea sin UM"
+
+msgid "No active Exception Codes configured"
+msgstr "No hay códigos de excepción activos configurados"
+
+msgid "No aged exceptions"
+msgstr "No hay excepciones antiguas"
+
+msgid "No aged open tasks"
+msgstr "No hay tareas abiertas antiguas"
+
+msgid "No appointments for this day"
+msgstr "No hay citas para este día"
+
+msgid "No billable activity found for this period"
+msgstr "No se encontró actividad facturable en este periodo"
+
+msgid "No bins match these filters"
+msgstr "Ninguna ubicación cumple estos filtros"
+
+msgid "No confirmed tasks in this period"
+msgstr "No hay tareas confirmadas en este periodo"
+
+msgid "No counts awaiting approval"
+msgstr "No hay recuentos pendientes de aprobación"
+
+msgid "No delivery found."
+msgstr "No se encontró ninguna entrega."
+
+msgid "No doors: give a Storage Type the Door role and add bins to it."
+msgstr "Sin puertas: dé el rol Puerta a un tipo de almacenamiento y añádale ubicaciones."
+
+msgid "No negative quants"
+msgstr "No hay quants negativos"
+
+msgid "No open Kitting Orders"
+msgstr "No hay órdenes de kitting abiertas"
+
+msgid "No open differences"
+msgstr "No hay diferencias abiertas"
+
+msgid "No posted count variances found"
+msgstr "No se encontraron diferencias de recuento contabilizadas"
+
+msgid "No rearrangement recommendations"
+msgstr "No hay recomendaciones de reorganización"
+
+msgid "No resource holds this order: there is nothing to skip"
+msgstr "Ningún recurso tiene esta orden: no hay nada que omitir"
+
+msgid "No rows"
+msgstr "Sin filas"
+
+msgid "No searches yet"
+msgstr "Aún no hay búsquedas"
+
+msgid "No serial numbers on the marked rows."
+msgstr "Las filas marcadas no tienen números de serie."
+
+msgid "No serial-numbered stock in the marked rows."
+msgstr "No hay existencias con número de serie en las filas marcadas."
+
+msgid "No stalled Warehouse Orders"
+msgstr "No hay órdenes de almacén detenidas"
+
+msgid "No stock in this HU"
+msgstr "No hay existencias en esta UM"
+
+msgid "No stock stuck in interim bins"
+msgstr "No hay existencias atascadas en ubicaciones intermedias"
+
+msgid "Node"
+msgstr "Nodo"
+
+msgid "Not executed yet - set your criteria and click Execute."
+msgstr "Aún no ejecutado: defina sus criterios y pulse Ejecutar."
+
+msgid "Not moved"
+msgstr "No movido"
+
+msgid "Not possible"
+msgstr "No es posible"
+
+msgid "Not posted"
+msgstr "No contabilizado"
+
+msgid "Nothing is locked."
+msgstr "No hay nada bloqueado."
+
+msgid "Nothing left to confirm"
+msgstr "No queda nada por confirmar"
+
+msgid "Nothing to change"
+msgstr "Nada que cambiar"
+
+msgid "Nothing to show"
+msgstr "Nada que mostrar"
+
+msgid "Nothing waiting"
+msgstr "Nada pendiente"
+
+msgid "Nothing waiting - every posting reached ERPNext"
+msgstr "Nada pendiente: todas las contabilizaciones llegaron a ERPNext"
+
+msgid "Number of HUs"
+msgstr "Número de UM"
+
+msgid "Number of Handling Units"
+msgstr "Número de unidades de manipulación"
+
+msgid "Number of Product Items"
+msgstr "Número de artículos de producto"
+
+msgid "Number or pattern, * = any"
+msgstr "Número o patrón, * = cualquiera"
+
+msgid "Numbered automatically"
+msgstr "Numeración automática"
+
+msgid "OK"
+msgstr "Aceptar"
+
+msgid "Object"
+msgstr "Objeto"
+
+msgid "Off"
+msgstr "No"
+
+msgid "One per line - each gets its own transportation unit"
+msgstr "Una por línea: cada una tiene su propia unidad de transporte"
+
+msgid "Only Draft waves can be merged"
+msgstr "Solo se pueden fusionar oleadas en borrador"
+
+msgid "Only a Draft wave can be simulated"
+msgstr "Solo se puede simular una oleada en borrador"
+
+msgid "Only an order nobody has started can be skipped (status is {0})"
+msgstr "Solo se puede omitir una orden que nadie ha empezado (el estado es {0})"
+
+msgid "Open Advanced Search"
+msgstr "Abrir búsqueda avanzada"
+
+msgid "Open Differences"
+msgstr "Diferencias abiertas"
+
+msgid "Open HU WT"
+msgstr "Tarea de UM abierta"
+
+msgid "Open WT"
+msgstr "Tarea abierta"
+
+msgid "Open form"
+msgstr "Abrir formulario"
+
+msgid "Open in Desk"
+msgstr "Abrir en Desk"
+
+msgid "Open the marked delivery"
+msgstr "Abrir la entrega marcada"
+
+msgid "Operation"
+msgstr "Operación"
+
+msgid "Order"
+msgstr "Orden"
+
+msgid "Over-Tolerance Events"
+msgstr "Eventos fuera de tolerancia"
+
+msgid "Packing Center"
+msgstr "Centro de embalaje"
+
+msgid "Packing Material"
+msgstr "Material de embalaje"
+
+msgid "Pick HU"
+msgstr "UM de picking"
+
+msgid "Picked deliveries without a shipment"
+msgstr "Entregas con picking completo sin envío"
+
+msgid "Plan"
+msgstr "Planificar"
+
+msgid "Plan Cartons"
+msgstr "Planificar cajas"
+
+msgid "Plan Truck"
+msgstr "Planificar camión"
+
+msgid "Plan Truck for {0}"
+msgstr "Planificar camión para {0}"
+
+msgid "Post"
+msgstr "Contabilizar"
+
+msgid "Post difference"
+msgstr "Contabilizar diferencia"
+
+msgid "Posted Changes"
+msgstr "Cambios contabilizados"
+
+msgid "Posted {0} difference(s)"
+msgstr "Contabilizadas {0} diferencia(s)"
+
+msgid "Posting Change in Warehouse Number {0}"
+msgstr "Cambio de contabilización en número de almacén {0}"
+
+msgid "Preview"
+msgstr "Vista previa"
+
+msgid "Previous row"
+msgstr "Fila anterior"
+
+msgid "Process"
+msgstr "Procesar"
+
+msgid "Process in Ad Hoc Processing"
+msgstr "Procesar en procesamiento ad hoc"
+
+msgid "Process type {0} is not an ad hoc movement"
+msgstr "El tipo de proceso {0} no es un movimiento ad hoc"
+
+msgid "Product Group"
+msgstr "Grupo de productos"
+
+msgid "Product Name"
+msgstr "Nombre del producto"
+
+msgid "Production Material Requests"
+msgstr "Solicitudes de material de producción"
+
+msgid "Production Staging"
+msgstr "Aprovisionamiento de producción"
+
+msgid "Production Supply Area"
+msgstr "Área de aprovisionamiento de producción"
+
+msgid "Purpose"
+msgstr "Finalidad"
+
+msgid "Put On Hold"
+msgstr "Poner en espera"
+
+msgid "Raise Exception"
+msgstr "Registrar excepción"
+
+msgid "Raised"
+msgstr "Registrada"
+
+msgid "Rate"
+msgstr "Tarifa"
+
+msgid "Recent Picks"
+msgstr "Picks recientes"
+
+msgid "Recent searches"
+msgstr "Búsquedas recientes"
+
+msgid "Recycle {0} Handling Unit(s)? Frees their numbers for reuse; cannot be undone."
+msgstr "¿Reciclar {0} unidad(es) de manipulación? Libera sus números para reutilizarlos; no se puede deshacer."
+
+msgid "Recycled"
+msgstr "Reciclada"
+
+msgid "Refreshed {0} row(s)"
+msgstr "Actualizadas {0} fila(s)"
+
+msgid "Release {0} wave(s)? This allocates and creates pick tasks for every delivery in them."
+msgstr "¿Liberar {0} oleada(s)? Esto asigna existencias y crea tareas de picking para cada entrega."
+
+msgid "Repack HU"
+msgstr "Reembalar UM"
+
+msgid "Repack Product"
+msgstr "Reembalar producto"
+
+msgid "Repack into {0}"
+msgstr "Reembalar en {0}"
+
+msgid "Request"
+msgstr "Solicitud"
+
+msgid "Required"
+msgstr "Necesario"
+
+msgid "Result"
+msgstr "Resultado"
+
+msgid "Resume"
+msgstr "Reanudar"
+
+msgid "Resumed"
+msgstr "Reanudada"
+
+msgid "Retry now"
+msgstr "Reintentar ahora"
+
+msgid "Reverse"
+msgstr "Revertir"
+
+msgid "Reverse {0} confirmed task(s)? This posts a compensating move back to source for each."
+msgstr "¿Revertir {0} tarea(s) confirmada(s)? Esto contabiliza un movimiento compensatorio de vuelta al origen para cada una."
+
+msgid "Role"
+msgstr "Rol"
+
+msgid "Row {0}: serial {1} was not shipped on this Delivery Note"
+msgstr "Fila {0}: el número de serie {1} no se envió en este albarán de entrega"
+
+msgid "Row {0}: this return can only take back batch {1}"
+msgstr "Fila {0}: esta devolución solo puede recibir el lote {1}"
+
+msgid "Run the view's selection again at this interval (not while rows are marked or a dialog is open)"
+msgstr "Ejecutar de nuevo la selección de la vista con este intervalo (no mientras haya filas marcadas o un diálogo abierto)"
+
+msgid "SSCC"
+msgstr "SSCC"
+
+msgid "Scan Destination ({0})"
+msgstr "Escanear destino ({0})"
+
+msgid "Scan Source ({0})"
+msgstr "Escanear origen ({0})"
+
+msgid "Scan each serial number"
+msgstr "Escanee cada número de serie"
+
+msgid "Scan the {0} serial numbers you are moving."
+msgstr "Escanee los {0} números de serie que va a mover."
+
+msgid "Scan the {0} serial numbers you are taking."
+msgstr "Escanee los {0} números de serie que va a retirar."
+
+msgid "Scrapped"
+msgstr "Desechado"
+
+msgid "Scrapping in Warehouse Number {0}"
+msgstr "Desecho en número de almacén {0}"
+
+msgid "Seal No"
+msgstr "N.º de precinto"
+
+msgid "Searching…"
+msgstr "Buscando…"
+
+msgid "Section"
+msgstr "Sección"
+
+msgid "Select a warehouse first"
+msgstr "Seleccione primero un almacén"
+
+msgid "Select at least one bin"
+msgstr "Seleccione al menos una ubicación"
+
+msgid "Select at least one count"
+msgstr "Seleccione al menos un recuento"
+
+msgid "Select at least one recommendation"
+msgstr "Seleccione al menos una recomendación"
+
+msgid "Select at least one row (click its row number)."
+msgstr "Seleccione al menos una fila (pulse el número de su fila)."
+
+msgid "Selection resulted in {0} hit(s)"
+msgstr "La selección dio {0} resultado(s)"
+
+msgid "Send"
+msgstr "Enviar"
+
+msgid "Send {0} to a door"
+msgstr "Enviar {0} a una puerta"
+
+msgid "Serial"
+msgstr "Serie"
+
+msgid "Serial No."
+msgstr "N.º de serie"
+
+msgid "Serial No. Requirement"
+msgstr "Requisito de número de serie"
+
+msgid "Serial Nos"
+msgstr "Números de serie"
+
+msgid "Serial Numbers"
+msgstr "Números de serie"
+
+msgid "Serial Numbers (one per line)"
+msgstr "Números de serie (uno por línea)"
+
+msgid "Serial number(s) {0} are not in {1}"
+msgstr "Los números de serie {0} no están en {1}"
+
+msgid "Serial numbers needed"
+msgstr "Se necesitan números de serie"
+
+msgid "Serial numbers · {0} of {1}"
+msgstr "Números de serie · {0} de {1}"
+
+msgid "Shipments without a truck"
+msgstr "Envíos sin camión"
+
+msgid "Shipped batch: {0}"
+msgstr "Lote enviado: {0}"
+
+msgid "Shipping & Receiving"
+msgstr "Envíos y recepciones"
+
+msgid "Show"
+msgstr "Mostrar"
+
+msgid "Show / hide the menu"
+msgstr "Mostrar / ocultar el menú"
+
+msgid "Simulate"
+msgstr "Simular"
+
+msgid "Simulation of {0}: nothing was reserved"
+msgstr "Simulación de {0}: no se reservó nada"
+
+msgid "Since"
+msgstr "Desde"
+
+msgid "Skip Warehouse Order"
+msgstr "Omitir orden de almacén"
+
+msgid "Skip work"
+msgstr "Omitir trabajo"
+
+msgid "Skipped by {0}"
+msgstr "Omitida por {0}"
+
+msgid "Skipping…"
+msgstr "Omitiendo…"
+
+msgid "Slot"
+msgstr "Franja"
+
+msgid "Slotting"
+msgstr "Slotting"
+
+msgid "Source Storage Section"
+msgstr "Sección de almacenamiento de origen"
+
+msgid "Split…"
+msgstr "Dividir…"
+
+msgid "SrcStorSec"
+msgstr "SecAlmOrg"
+
+msgid "Stalled Warehouse Orders"
+msgstr "Órdenes de almacén detenidas"
+
+msgid "Start"
+msgstr "Inicio"
+
+msgid "Stock In Interim Bins"
+msgstr "Existencias en ubicaciones intermedias"
+
+msgid "Stock in Source Bin"
+msgstr "Existencias en la ubicación de origen"
+
+msgid "Stock lines"
+msgstr "Líneas de existencias"
+
+msgid "Storage Bin {0} does not exist"
+msgstr "La ubicación de almacenamiento {0} no existe"
+
+msgid "Storage Bin {0} is in storage section {1}, not {2}"
+msgstr "La ubicación de almacenamiento {0} está en la sección {1}, no en {2}"
+
+msgid "Storage Bin {0} is in storage type {1}, not {2}"
+msgstr "La ubicación de almacenamiento {0} está en el tipo de almacenamiento {1}, no en {2}"
+
+msgid "Storage Bin {0} would end up mixed: {1}. Change the whole quantity, or give the changed stock a destination bin"
+msgstr "La ubicación de almacenamiento {0} quedaría mezclada: {1}. Cambie la cantidad completa, o indique una ubicación de destino para las existencias cambiadas"
+
+msgid "Storage Section"
+msgstr "Sección de almacenamiento"
+
+msgid "Task Confirmation"
+msgstr "Confirmación de tarea"
+
+msgid "Task Throughput (per day)"
+msgstr "Rendimiento de tareas (por día)"
+
+msgid "Task Throughput (total)"
+msgstr "Rendimiento de tareas (total)"
+
+msgid "Task differences by category"
+msgstr "Diferencias de tareas por categoría"
+
+msgid "Task {0} confirmed"
+msgstr "Tarea {0} confirmada"
+
+msgid "Tasked"
+msgstr "Con tarea"
+
+msgid "Tasks"
+msgstr "Tareas"
+
+msgid "The wave has no deliveries"
+msgstr "La oleada no tiene entregas"
+
+msgid "The waves belong to different warehouses"
+msgstr "Las oleadas pertenecen a almacenes distintos"
+
+msgid "To door"
+msgstr "A puerta"
+
+msgid "Total Gain"
+msgstr "Ganancia total"
+
+msgid "Total Loss"
+msgstr "Pérdida total"
+
+msgid "Trailer"
+msgstr "Remolque"
+
+msgid "Trailer / Container"
+msgstr "Remolque / contenedor"
+
+msgid "Transactions"
+msgstr "Transacciones"
+
+msgid "Truck Without Appointment"
+msgstr "Camión sin cita"
+
+msgid "Truck planned"
+msgstr "Camión planificado"
+
+msgid "Truck without appointment"
+msgstr "Camión sin cita"
+
+msgid "Trucks"
+msgstr "Camiones"
+
+msgid "Units"
+msgstr "Unidades"
+
+msgid "Unknown action {0}"
+msgstr "Acción desconocida {0}"
+
+msgid "Unnest"
+msgstr "Desanidar"
+
+msgid "Unsupported document"
+msgstr "Documento no admitido"
+
+msgid "UoM"
+msgstr "UdM"
+
+msgid "Updated {0} bin(s)"
+msgstr "Actualizadas {0} ubicación(es)"
+
+msgid "Values placed into {0} row(s)"
+msgstr "Valores aplicados en {0} fila(s)"
+
+msgid "Vehicle"
+msgstr "Vehículo"
+
+msgid "Very large result - not all stock lines are shown. Narrow the selection."
+msgstr "Resultado muy grande: no se muestran todas las líneas de existencias. Acote la selección."
+
+msgid "Warehouse Orders: Hold / Resume"
+msgstr "Órdenes de almacén: poner en espera / reanudar"
+
+msgid "Warehouse Requests Without Tasks"
+msgstr "Solicitudes de almacén sin tareas"
+
+msgid "Warehouse Tasks: Exception / Reverse"
+msgstr "Tareas de almacén: excepción / revertir"
+
+msgid "Waves: Release / Simulate / Merge"
+msgstr "Oleadas: liberar / simular / fusionar"
+
+msgid "Whse Proc. Type"
+msgstr "Tipo proc. alm."
+
+msgid "With open WT"
+msgstr "Con tarea abierta"
+
+msgid "Without open WT"
+msgstr "Sin tarea abierta"
+
+msgid "Work Center Station"
+msgstr "Estación del centro de trabajo"
+
+msgid "Workbench"
+msgstr "Banco de trabajo"
+
+msgid "Yard & Doors"
+msgstr "Patio y puertas"
+
+msgid "Yard spot"
+msgstr "Plaza de patio"
+
+msgid "all"
+msgstr "todo"
+
+msgid "all {0} serial numbers - to repack only some, use Serial Numbers"
+msgstr "los {0} números de serie: para reembalar solo algunos, use Números de serie"
+
+msgid "bin already holds a different batch"
+msgstr "la ubicación ya contiene otro lote"
+
+msgid "bin already holds a different product"
+msgstr "la ubicación ya contiene otro producto"
+
+msgid "bin already holds a different stock type"
+msgstr "la ubicación ya contiene otro tipo de existencias"
+
+msgid "changed"
+msgstr "cambiado"
+
+msgid "done"
+msgstr "hecho"
+
+msgid "needs details: confirm in the foreground"
+msgstr "necesita detalles: confirmar en primer plano"
+
+msgid "new HU {0}"
+msgstr "nueva UM {0}"
+
+msgid "no HU"
+msgstr "sin UM"
+
+msgid "none"
+msgstr "ninguno"
+
+msgid "on time"
+msgstr "a tiempo"
+
+msgid "then"
+msgstr "luego"
+
+msgid "{0} - items"
+msgstr "{0} - artículos"
+
+msgid "{0} already has confirmed tasks: finish it, or report an exception on its task"
+msgstr "{0} ya tiene tareas confirmadas: termínela, o registre una excepción en su tarea"
+
+msgid "{0} bin(s), {1} HU(s), {2} product line(s)"
+msgstr "{0} ubicación(es), {1} UM, {2} línea(s) de producto"
+
+msgid "{0} chosen"
+msgstr "{0} elegido(s)"
+
+msgid "{0} delivery(ies) processed"
+msgstr "{0} entrega(s) procesada(s)"
+
+msgid "{0} delivery(ies) processed, {1} refused: {2}"
+msgstr "{0} entrega(s) procesada(s), {1} rechazada(s): {2}"
+
+msgid "{0} handling unit(s) locked by other users: display only"
+msgstr "{0} unidad(es) de manipulación bloqueada(s) por otros usuarios: solo visualización"
+
+msgid "{0} is already scanned."
+msgstr "{0} ya está escaneado."
+
+msgid "{0} is not in this stock."
+msgstr "{0} no está en estas existencias."
+
+msgid "{0} is {1} and cannot be changed"
+msgstr "{0} está {1} y no se puede cambiar"
+
+msgid "{0} min late"
+msgstr "{0} min de retraso"
+
+msgid "{0} now holds {1} deliveries"
+msgstr "{0} ahora tiene {1} entregas"
+
+msgid "{0} of {1} confirmed in the background"
+msgstr "{0} de {1} confirmadas en segundo plano"
+
+msgid "{0} of {1} planned"
+msgstr "{0} de {1} planificadas"
+
+msgid "{0} of {1} posted to ERPNext"
+msgstr "{0} de {1} contabilizadas en ERPNext"
+
+msgid "{0} of {1} skipped"
+msgstr "{0} de {1} omitidas"
+
+msgid "{0} posting change(s) posted"
+msgstr "{0} cambio(s) de contabilización contabilizado(s)"
+
+msgid "{0} row(s) by handling unit - mark rows and press Serial Numbers to go one level deeper"
+msgstr "{0} fila(s) por unidad de manipulación: marque filas y pulse Números de serie para bajar un nivel"
+
+msgid "{0} row(s) cannot be created: {1}"
+msgstr "No se pueden crear {0} fila(s): {1}"
+
+msgid "{0} row(s) checked: destinations determined"
+msgstr "{0} fila(s) comprobada(s): destinos determinados"
+
+msgid "{0} rows marked"
+msgstr "{0} filas marcadas"
+
+msgid "{0} scrapping document(s) posted"
+msgstr "{0} documento(s) de desecho contabilizado(s)"
+
+msgid "{0} serial number(s)"
+msgstr "{0} número(s) de serie"
+
+msgid "{0} serial numbers - mark the missing ones under Serial Numbers › Missing"
+msgstr "{0} números de serie: marque los faltantes en Números de serie › Faltante"
+
+msgid "{0} task(s) confirmed"
+msgstr "{0} tarea(s) confirmada(s)"
+
+msgid "{0} task(s) created"
+msgstr "{0} tarea(s) creada(s)"
+
+msgid "{0} task(s) created, {1} row(s) refused: {2}"
+msgstr "{0} tarea(s) creada(s), {1} fila(s) rechazada(s): {2}"
+
+msgid "{0} values"
+msgstr "{0} valores"
+
+msgid "{0} {1} is being changed by {2} since {3}. You can display it, but not change it until they leave it."
+msgstr "{0} {1} está siendo modificado por {2} desde {3}. Puede visualizarlo, pero no cambiarlo hasta que lo deje."
+
+msgid "{0}: {1} line(s)"
+msgstr "{0}: {1} línea(s)"
+
+msgid "{0}: {1} of {2}"
+msgstr "{0}: {1} de {2}"

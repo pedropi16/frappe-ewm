@@ -19,6 +19,7 @@
     "allows_quantity_change",
     "allows_bin_change",
     "follow_up_action",
+    "difference_category",
     "active"
   ],
   "fields": [
@@ -104,6 +105,13 @@
       "fieldtype": "Select",
       "options": "\nChange Bin\nSplit Task\nSkip Task\nPost Difference",
       "description": "What the system does when the code is raised. Change Bin: the task goes to another bin (destination for putaway-type tasks, else source). Split Task: part of the quantity becomes a new task, optionally to another bin. Skip Task: the task moves to the back of its order. Post Difference: the task closes at the quantity found and the shortfall is booked as a difference (same as 'Allows quantity change')."
+    },
+    {
+      "fieldname": "difference_category",
+      "fieldtype": "Select",
+      "label": "Difference Category",
+      "options": "\nMissing\nDamaged\nWrong Product\nExpired\nSurplus\nOther",
+      "description": "What a short confirmation under this code is booked as in the Difference Analyzer (SAP: difference reason)"
     }
   ],
   "autoname": "field:exception_code",

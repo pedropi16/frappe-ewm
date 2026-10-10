@@ -1585,3 +1585,10 @@ Partial moves of one Warehouse Order into the same bin (and, for picks, for the 
 ### Monitor: Production Material Requests and Confirm in Background
 - Monitor > *Production Material Requests*: selection screen over the PMRs of the warehouse (by order, status, material, supply area); **Items** shows each material with required / tasked / staged (%) / consumed, links to the Work Order and to Production Staging (where the staging is done).
 - Warehouse Tasks and Warehouse Orders lists: **Confirm in Background** (SAP's monitor method) confirms the full planned quantity of the marked tasks, or every open task of the marked orders in sequence, one document at a time (`services/background_confirm.py`). A task that needs details only a person can give (serial numbers, batch) is not guessed: it opens the foreground confirmation dialog.
+
+### Monitor auto refresh, order selection, waves, difference categories
+- Monitor header: **Auto refresh** (Off / 30 s / 1 min / 5 min, remembered per browser). The current view's executed selection runs again; it waits while rows are marked or a dialog is open.
+- Warehouse Order **Latest Start** (from the delivery date, else the wave's ship date; editable): the queue offers priority first, then the earliest latest start, then age. **Skip Warehouse Order** (desk: Warehouse Orders list; RF: "Skip work" on a task of an untouched order) gives it back to the queue and it is not offered to that resource again (`skipped_by`).
+- Waves (Ad Hoc Processing > Waves): **Simulate** runs the allocation of a Draft wave for real in a savepoint and rolls it back (nothing stays reserved); **Merge** moves the deliveries of several Draft waves of one warehouse into the first one.
+- Exception codes carry a **Difference Category** (Missing / Damaged / Wrong Product / Expired / Surplus / Other); a short confirmation under the code is booked with it, over-confirmations are Surplus. The Difference Analyzer shows task differences by category above the count variances.
+- Spanish: `locale/es.po` now covers the strings added during the monitor / worklist / pick HU / audit work (the rest of the file is older and partly untranslated).

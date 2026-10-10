@@ -40,7 +40,7 @@ def record_over_difference(task, excess_qty, idempotency_key):
         "doctype": "WMS Task Difference", "warehouse": task.warehouse, "warehouse_task": task.name, "task_type": task.task_type,
         "product": task.product, "stock_uom": task.stock_uom, "batch_no": task.batch_no, "serial_no": task.serial_no,
         "direction": "Over", "planned_quantity": task.planned_quantity, "difference_quantity": excess_qty,
-        "stock_type": stock_type, "storage_bin": bin_name, "status": "Open",
+        "stock_type": stock_type, "storage_bin": bin_name, "difference_category": "Surplus", "status": "Open",
     })
     doc.insert(ignore_permissions=True)
     from frappe_wms.services.erp_sync_queue import dispatch  # deferred: erpnext_sync imports a lot at module load
@@ -58,9 +58,20 @@ def record_short_difference(task, shortfall_qty, original_planned_quantity, exce
         "product": task.product, "stock_uom": task.stock_uom, "batch_no": task.batch_no, "serial_no": task.serial_no,
         "direction": "Short", "planned_quantity": original_planned_quantity, "difference_quantity": shortfall_qty,
         "stock_type": task.stock_type_from, "exception_code": exception_code, "clearance_remarks": remarks, "status": "Open",
+        "difference_category": (exception_code and frappe.db.get_value("WMS Exception Code", exception_code, "difference_category")) or "Missing",
     })
     doc.insert(ignore_permissions=True)
     return doc.name
+
+
+def difference_summary(warehouse, from_date=None, to_date=None, product=None):
+    """Task differences (over / short found while confirming tasks) per category: how many, how much, how many still open."""
+    require_role(*READ_ROLES)
+    return frappe.db.sql("""select ifnull(difference_category, '') as difference_category, direction, count(*) as differences, sum(difference_quantity) as quantity,
+            sum(status = 'Open') as open_differences
+        from `tabWMS Task Difference` where warehouse = %(warehouse)s and (%(product)s is null or product = %(product)s)
+            and (%(from_date)s is null or date(creation) >= %(from_date)s) and (%(to_date)s is null or date(creation) <= %(to_date)s)
+        group by difference_category, direction order by quantity desc""", {"warehouse": warehouse, "product": product, "from_date": from_date, "to_date": to_date}, as_dict=True)
 
 
 def list_open_differences(warehouse=None, direction=None):
@@ -70,7 +81,7 @@ def list_open_differences(warehouse=None, direction=None):
     if direction: filters["direction"] = direction
     return frappe.get_list("WMS Task Difference", filters=filters,
         fields=["name", "warehouse", "warehouse_task", "task_type", "product", "direction", "difference_quantity",
-            "storage_bin", "exception_code", "creation"],
+            "storage_bin", "exception_code", "difference_category", "creation"],
         order_by="creation asc", limit=100)
 
 

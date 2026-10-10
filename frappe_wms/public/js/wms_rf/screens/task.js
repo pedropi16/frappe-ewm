@@ -121,9 +121,18 @@ export default {
     }
     if (!step) return null;
     const exc = { label: _("Exception"), key: "F7", kind: "danger", run: () => nav.go(href("task", st.name, "exception")) };
-    return { primary: step === "review" ? { label: _("Confirm"), icon: "✓", run: confirmTask } : { label: _("Next"), run: () => next(step) }, secondary: [exc] };
+    const skip = { label: _("Skip work"), key: "F8", run: skipWork };
+    return { primary: step === "review" ? { label: _("Confirm"), icon: "✓", run: confirmTask } : { label: _("Next"), run: () => next(step) }, secondary: t.warehouse_order && !flt(t.confirmed_quantity) ? [exc, skip] : [exc] };
   },
 };
+
+// SAP "Skip Warehouse Order": give the untouched order back to the queue (a blocked aisle, a missing tool); it is not offered to this resource again.
+async function skipWork() {
+  const t = st.task;
+  if (!confirm_(_("Give this work back to the queue? You will not be offered it again."))) return;
+  const ok = await run(() => api("frappe_wms.api.warehouse_order.skip_warehouse_order", { wo_name: t.warehouse_order }), { label: _("Skipping…") });
+  if (ok) nav.go(`#/tasks/${groupOfType(t.task_type)}`);
+}
 
 function summary(t) {
   const rem = remaining(t);

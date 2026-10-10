@@ -47,6 +47,18 @@ def split_wave(wave_name, deliveries):
 
 @frappe.whitelist()
 @retry_on_deadlock
+def merge_waves(wave_names):
+    from frappe_wms.services.wave import merge_waves as _merge
+    return _merge(parse_json(wave_names, "wave_names"))
+
+@frappe.whitelist()
+@retry_on_deadlock
+def simulate_wave(wave_name):
+    from frappe_wms.services.wave import simulate_wave as _simulate
+    return _simulate(wave_name)
+
+@frappe.whitelist()
+@retry_on_deadlock
 def list_awaiting_release():
     return _list_awaiting_release()
 

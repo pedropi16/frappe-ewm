@@ -46,3 +46,11 @@ def block_warehouse_order(wo_name, reason=None):
 @guard("Warehouse Order", "wo_name")
 def resume_warehouse_order(wo_name):
     return _resume_warehouse_order(wo_name)
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+@guard("Warehouse Order", "wo_name")
+def skip_warehouse_order(wo_name):
+    from frappe_wms.services.warehouse_order import skip_warehouse_order as _skip
+    return _skip(wo_name)
