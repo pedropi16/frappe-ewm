@@ -37,6 +37,11 @@ jinja = {"methods": ["frappe_wms.services.printing.packing_list_data", "frappe_w
 
 _NUMBER_RANGE_AUTONAME = "frappe_wms.services.numbering.autoname_from_range"
 
+override_whitelisted_methods = {
+    "frappe.client.submit": "frappe_wms.api.erp_retry.submit",
+    "frappe.desk.form.save.savedocs": "frappe_wms.api.erp_retry.savedocs",
+}
+
 doc_events = {
     "*": {
         "validate": "frappe_wms.services.locks.on_validate",

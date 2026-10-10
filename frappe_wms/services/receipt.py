@@ -44,6 +44,30 @@ def find_putaway_tasks(reference):
         tasks = by_source + [t for t in by_dest if t.name not in seen]
     return sorted(tasks, key=lambda t: (t.sequence or 0, t.name))
 
+def shipped_identities(dn_item):
+    """(batches, serials) a Delivery Note row sent out - ERPNext lets a return take back only those."""
+    row = frappe.db.get_value("Delivery Note Item", dn_item, ["batch_no", "serial_no", "serial_and_batch_bundle"], as_dict=True)
+    if not row: return set(), set()
+    entries = frappe.get_all("Serial and Batch Entry", filters={"parent": row.serial_and_batch_bundle}, fields=["batch_no", "serial_no"]) if row.serial_and_batch_bundle else []
+    batches = {e.batch_no for e in entries if e.batch_no} | ({row.batch_no} if row.batch_no else set())
+    serials = {e.serial_no for e in entries if e.serial_no} | set((row.serial_no or "").split())
+    return batches, serials
+
+
+def _check_return_identity(row):
+    """A customer-return line must come back under the batch / serial the Delivery Note shipped: filled in when there is only one, refused here with the reason
+    instead of at the ERPNext mirror (which would leave the whole receipt stuck)."""
+    src = frappe.db.get_value("Inbound Delivery Item", row.inbound_delivery_item, ["source_document_type", "source_document_line"], as_dict=True) if row.inbound_delivery_item else None
+    if not src or src.source_document_type != "Delivery Note" or not src.source_document_line: return
+    batches, serials = shipped_identities(src.source_document_line)
+    if batches:
+        if not row.batch_no and len(batches) == 1: row.db_set("batch_no", next(iter(batches)), update_modified=False)
+        elif row.batch_no not in batches:
+            frappe.throw(_("Row {0}: this return can only take back batch {1}").format(row.idx, ", ".join(sorted(batches))))
+    if serials and row.serial_no and not {x for x in row.serial_no.split()} <= serials:
+        frappe.throw(_("Row {0}: serial {1} was not shipped on this Delivery Note").format(row.idx, row.serial_no))
+
+
 def post_goods_receipt(doc):
     if frappe.db.exists("WMS Stock Ledger Entry", {"reference_doctype": doc.doctype, "reference_name": doc.name}): return
     # Receipt progress moves on submit for every Goods Receipt - API, RF or a plain desk
@@ -59,6 +83,7 @@ def post_goods_receipt(doc):
     inspection_rows=[]
     for row in doc.items:
         if not row.handling_unit: frappe.throw(_("Row {0}: Handling Unit is required").format(row.idx))
+        _check_return_identity(row)
         product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
         if product and product.warehouse_managed:
             if product.serial_control in ("Required at Receipt", "Always") and not row.serial_no:

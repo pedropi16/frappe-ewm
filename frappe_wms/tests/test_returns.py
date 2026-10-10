@@ -174,3 +174,23 @@ class TestReturnItemType(IntegrationTestCase):
         frappe.db.set_value("Return Item Type", "RET-SCRAP", "active", 0)
         with self.assertRaises(frappe.ValidationError):
             return_stock_type("RET-SCRAP")
+
+
+class TestReturnIdentity(IntegrationTestCase):
+    """The batch / serial a customer return may come back under is the one the Delivery Note shipped."""
+
+    def _row(self, **kw):
+        row = frappe._dict({"idx": 1, "inbound_delivery_item": "IDI", "batch_no": None, "serial_no": None, "filled": {}, **kw})
+        row.db_set = lambda f, v, **_: row.filled.update({f: v})
+        return row
+
+    def test_batch_is_filled_in_when_only_one_shipped_and_refused_when_not_shipped(self):
+        from unittest import mock
+        from frappe_wms.services import receipt
+        src = frappe._dict(source_document_type="Delivery Note", source_document_line="DNI")
+        with mock.patch("frappe.db.get_value", return_value=src), mock.patch.object(receipt, "shipped_identities", return_value=({"B1"}, {"S1", "S2"})):
+            row = self._row(); receipt._check_return_identity(row)
+            self.assertEqual(row.filled, {"batch_no": "B1"})
+            with self.assertRaises(frappe.ValidationError): receipt._check_return_identity(self._row(batch_no="B9"))
+            with self.assertRaises(frappe.ValidationError): receipt._check_return_identity(self._row(batch_no="B1", serial_no="S1 S9"))
+            receipt._check_return_identity(self._row(batch_no="B1", serial_no="S2"))

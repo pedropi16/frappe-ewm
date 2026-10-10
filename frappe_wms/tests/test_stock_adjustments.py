@@ -103,6 +103,7 @@ class TestStockAdjustments(IntegrationTestCase):
 
     def test_posting_change_may_not_mix_stock_types_in_a_bin_that_forbids_it(self):
         st = f"{self.wh}-ST"
+        frappe.db.delete("WMS Stock Balance", {"warehouse": self.wh})  # subclasses (test_pick_hu) inherit this test with their own setUp
         frappe.db.set_value("Storage Type", st, "allow_mixed_stock_types", 0)
         frappe.db.set_single_value("WMS Settings", "enforce_storage_type_rules", 1)
         try:

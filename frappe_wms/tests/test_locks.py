@@ -124,3 +124,22 @@ class TestLocks(_base.TestStockAdjustments):
         frappe.set_user(a); locks.release("Handling Unit", hu)
         frappe.set_user(b)
         confirm_task(tasks[0], verify=False)
+
+
+class TestSubmitRetry(IntegrationTestCase):
+    def test_submit_and_save_are_routed_through_the_deadlock_retry(self):
+        overrides = frappe.get_hooks("override_whitelisted_methods")
+        self.assertEqual(overrides["frappe.client.submit"][-1], "frappe_wms.api.erp_retry.submit")
+        self.assertEqual(overrides["frappe.desk.form.save.savedocs"][-1], "frappe_wms.api.erp_retry.savedocs")
+        from unittest import mock
+        from frappe_wms.api import erp_retry
+        calls = []
+        def flaky(doc):
+            calls.append(doc)
+            if len(calls) == 1: raise frappe.QueryDeadlockError()
+            return "ok"
+        with mock.patch.object(erp_retry, "_submit", flaky), mock.patch("frappe.db.rollback"), mock.patch("time.sleep"):
+            frappe.flags.in_test = False
+            try: self.assertEqual(erp_retry.submit("{}"), "ok")
+            finally: frappe.flags.in_test = True
+        self.assertEqual(len(calls), 2)
