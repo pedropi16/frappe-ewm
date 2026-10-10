@@ -102,9 +102,14 @@ def create_adhoc_tasks(lines, destination_bin=None, priority="Normal", process_t
 def _create(lines, destination_bin, priority, process_type, reason, confirm, batch_key, destination_hu, unpack, dtype, dsec):
     plans = _plan(lines, destination_bin, priority, process_type, reason, batch_key, destination_hu, unpack, dtype, dsec)
     created = [p["task"] for p in plans]
-    if cint(confirm):  # immediate confirmation: the stock moves now, the tasks are done
-        from frappe_wms.services.task import _UNPACK, confirm_task
-        for name in created: confirm_task(name, verify=False, destination_hu=_UNPACK if frappe.db.get_value("Warehouse Task", name, "unpack_at_destination") else None)
+    if cint(confirm):
+        # Confirmation in the background (SAP): what needs nobody's choice is confirmed now and the stock moves. A task that needs details only the user can give (which serial
+        # numbers or batch leave a stock that holds more of them than the task takes) stays open: it is confirmed in the foreground (Confirm Task), where they are entered.
+        from frappe_wms.services.task import _UNPACK, confirm_task, details_needed
+        for plan in plans:
+            task = frappe.get_doc("Warehouse Task", plan["task"])
+            if any(k in details_needed(task, task.planned_quantity) for k in ("serial", "batch")): plan["foreground"] = True; continue
+            confirm_task(task.name, verify=False, destination_hu=_UNPACK if task.unpack_at_destination else None)
     return created, plans
 
 
@@ -152,7 +157,7 @@ def process_lines(lines, defaults=None):
             tasks, plans = _create([_core(line)], pick("destination_bin"), pick("priority", "Normal"), pick("process_type"), pick("reason"), line.get("confirm", defaults.get("confirm", 0)), batch_key,
                                    line.get("destination_hu"), line.get("unpack"), line.get("destination_storage_type"), line.get("destination_section"))
             first = plans[0]
-            out["created"].append({"line": i, "tasks": tasks, **{k: first[k] for k in ("process_type", "process_type_name", "destination_bin", "destination_storage_type", "destination_section")}})
+            out["created"].append({"line": i, "tasks": tasks, "foreground": [p["task"] for p in plans if p.get("foreground")], **{k: first[k] for k in ("process_type", "process_type_name", "destination_bin", "destination_storage_type", "destination_section")}})
         except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
             frappe.db.rollback(save_point=savepoint)
             out["errors"].append({"line": i, "error": _fail_text(e)})

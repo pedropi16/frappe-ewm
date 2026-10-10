@@ -172,7 +172,7 @@ def process_lines(lines):
         try:
             require_free_many([("WMS Stock Balance", line["name"])])
             name, tasks, plan = _apply(line, batch)
-            out["created"].append({"line": i, "documents": [name], "tasks": tasks, "balance": _after_balance(frappe.get_doc("WMS Posting Change", name)), **_plan_text(plan)})
+            out["created"].append({"line": i, "documents": [name], "tasks": tasks, "balance": _after_balance(frappe.get_doc("WMS Posting Change", name)), "foreground": [t for t in tasks if frappe.db.get_value("Warehouse Task", t, "status") != "Confirmed"] if line.get("confirm") else [], **_plan_text(plan)})
         except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
             frappe.db.rollback(save_point=savepoint)
             out["errors"].append({"line": i, "error": _fail_text(e)})

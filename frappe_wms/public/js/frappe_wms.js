@@ -22,6 +22,31 @@ frappe_wms.scan_dialog = function(title, fields, primary_label, action) {
     return dialog;
 };
 
+// Confirmation in the foreground (SAP): the task is confirmed in a dialog where the user gives what the system cannot guess - the quantity, which serial numbers or batch
+// leave the stock, a destination HU (blank: a new pick HU is created when only part of the stock moves). A task that needs nothing of that is confirmed in the background.
+frappe_wms.confirm_foreground = async function (task, onDone) {
+    const t = await frappe.db.get_value("Warehouse Task", task, ["planned_quantity", "confirmed_quantity", "product", "source_bin", "source_hu", "destination_bin", "destination_hu", "stock_uom"]).then((r) => r.message);
+    const open = flt(t.planned_quantity) - flt(t.confirmed_quantity);
+    const need = await frappe.call({ method: "frappe_wms.api.scanner.confirmation_details", args: { task_name: task, quantity: open } }).then((r) => r.message || {});
+    const key = `TC-${task}-${frappe.utils.get_random(10)}`;  // one per dialog: a resend of the same confirmation cannot post twice
+    const fields = [
+        { fieldname: "scanned_source", label: __("Scan Source ({0})", [t.source_hu || t.source_bin || "-"]), fieldtype: "Data", reqd: 1, cssClass: "wms-scan-input" },
+        { fieldname: "scanned_destination", label: __("Scan Destination ({0})", [t.destination_hu || t.destination_bin || "-"]), fieldtype: "Data", reqd: 1 },
+        { fieldname: "confirmed_quantity", label: __("Confirmed Quantity"), fieldtype: "Float", default: open, reqd: 1, description: `${__("Planned")}: ${flt(t.planned_quantity)} ${t.stock_uom || ""}` }];
+    if (need.serial) fields.push({ fieldname: "serial_text", label: __("Serial Numbers (one per line)"), fieldtype: "Small Text", reqd: 1,
+        description: __("Choose {0} of: {1}", [need.serial.count, need.serial.choices.slice(0, 40).join(", ") + (need.serial.choices.length > 40 ? " ..." : "")]) });
+    if (need.batch) fields.push({ fieldname: "batch_no", label: __("Batch"), fieldtype: "Select", options: ["", ...need.batch.choices].join("\n"), reqd: 1 });
+    fields.push({ fieldname: "destination_hu", label: __("Destination Handling Unit"), fieldtype: "Link", options: "Handling Unit", description: __("Blank: a new HU is created when only part of the stock moves.") });
+    const d = new frappe.ui.Dialog({ title: __("Confirm {0} (foreground)", [task]), fields, primary_action_label: __("Confirm"), primary_action: async (v) => {
+        const serials = (v.serial_text || "").split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+        await frappe.call({ method: "frappe_wms.api.scanner.confirm_task", args: { task_name: task, scanned_source: v.scanned_source, scanned_destination: v.scanned_destination, idempotency_key: key, confirmed_quantity: v.confirmed_quantity, destination_hu: v.destination_hu || undefined, batch_no: v.batch_no || undefined,
+            serial_numbers: serials.length ? JSON.stringify(serials) : undefined }, freeze: true });
+        d.hide(); frappe.show_alert({ message: __("Task {0} confirmed", [task]), indicator: "green" }); if (onDone) onDone();
+    } });
+    d.show();
+    return d;
+};
+
 $(document).on("toolbar_setup", function() {
     if (!frappe.user.has_role("WMS Operator")) return;
 });

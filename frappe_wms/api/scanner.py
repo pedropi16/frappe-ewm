@@ -53,14 +53,23 @@ def verify_check_digits(bin_name, value):
 
 @frappe.whitelist()
 @retry_on_deadlock
-def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None):
+def confirm_task(task_name, scanned_source=None, scanned_destination=None, confirmed_quantity=None, destination_hu=None, device=None, idempotency_key=None, scanned_product=None, serial_numbers=None, batch_no=None):
     # Over HTTP (not for in-process callers such as the tests) the "take stock from an HU, never a bin" rule and replay safety hold whatever
     # the require_scan_verification setting says: a source HU has to be scanned and a client key sent (the RF app does both).
     if frappe.request:
         if not idempotency_key: frappe.throw(_("An idempotency key is required to confirm a task"))
         hu, task_type = frappe.db.get_value("Warehouse Task", task_name, ["source_hu", "task_type"]) or (None, None)
         if hu and task_type not in BIN_SOURCE_TYPES and not scanned_source: frappe.throw(_("Scan the source Handling Unit before confirming"))
-    return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key,scanned_product)
+    return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key,scanned_product,serial_numbers=parse_json(serial_numbers,"serial_numbers") if serial_numbers else None,batch_no=batch_no)
+
+@frappe.whitelist()
+def confirmation_details(task_name, quantity=None):
+    """What confirming the task needs the user to say (SAP: confirm in the foreground): serial numbers to choose, a batch to choose. {} = it can be confirmed in the background."""
+    from frappe.utils import flt
+    from frappe_wms.services.task import details_needed
+    require_role("WMS Operator", "WMS Supervisor")
+    task = frappe.get_doc("Warehouse Task", task_name)
+    return details_needed(task, flt(quantity) if quantity else flt(task.planned_quantity) - flt(task.confirmed_quantity))
 
 @frappe.whitelist()
 @retry_on_deadlock
@@ -132,11 +141,12 @@ def list_open_packing_orders():
 
 @frappe.whitelist()
 @retry_on_deadlock
-def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None, idempotency_key=None, scanned_source=None, scanned_destination=None):
+def create_and_confirm_move(warehouse, product, quantity, stock_uom, stock_type, destination_bin, source_bin=None, source_hu=None, destination_hu=None, batch_no=None, serial_no=None, device=None, idempotency_key=None, scanned_source=None, scanned_destination=None, serial_numbers=None):
     return run_once(idempotency_key, lambda: _create_and_confirm_move(
         warehouse=warehouse, product=product, quantity=quantity, stock_uom=stock_uom, stock_type=stock_type,
         source_bin=source_bin, source_hu=source_hu, destination_bin=destination_bin, destination_hu=destination_hu,
         batch_no=batch_no, serial_no=serial_no, device=device, scanned_source=scanned_source, scanned_destination=scanned_destination,
+        serial_numbers=parse_json(serial_numbers, "serial_numbers") if serial_numbers else None,
     ))
 
 @frappe.whitelist()

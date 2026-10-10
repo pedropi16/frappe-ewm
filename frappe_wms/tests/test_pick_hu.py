@@ -54,3 +54,46 @@ class TestPickHU(_base.TestStockAdjustments):
         self.assertEqual([(r.handling_unit, flt(r.quantity)) for r in self._at(self.bin)], [(hu, 2)])
         out = self._move(2, source_hu=hu)  # what is left is the whole HU: it moves itself
         self.assertEqual(out["destination_hu"], hu)
+
+
+class TestForeground(_base.TestStockAdjustments):
+    """SAP's background / foreground confirmation: what nobody has to choose is confirmed as it is; when only some of the serial numbers (or one of several batches) leave, the user says which."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.sitem = frappe.db.get_value("Item", {"is_stock_item": 1, "has_serial_no": 1}, "name")
+        cls.bin2 = f"{cls.wh}-B2"
+        if not frappe.db.exists("Storage Bin", cls.bin2):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": cls.bin2, "warehouse": cls.wh, "storage_type": f"{cls.wh}-ST", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+
+    def setUp(self):
+        super().setUp()
+        if not self.sitem: self.skipTest("no serial-managed item on this site")
+        if not frappe.db.exists("WMS Product", {"item": self.sitem}):
+            frappe.get_doc({"doctype": "WMS Product", "item": self.sitem, "stock_uom": "Nos", "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+        self.sn = [f"FG-SN-{frappe.generate_hash(length=6)}-{i}" for i in range(3)]
+        for sn in self.sn:
+            if not frappe.db.exists("Serial No", sn): frappe.get_doc({"doctype": "Serial No", "serial_no": sn, "item_code": self.sitem}).insert(ignore_permissions=True)
+            post_entries([{"warehouse": self.wh, "product": self.sitem, "serial_no": sn, "storage_bin": self.bin, "stock_type": "AVAILABLE", "stock_uom": "Nos", "quantity": 1, "movement_type": "701"}],
+                         "Storage Bin", self.bin, f"test-fg:{sn}")
+
+    def _move(self, qty, **kw):
+        return create_and_confirm_move(warehouse=self.wh, product=self.sitem, quantity=qty, stock_uom="Nos", stock_type="AVAILABLE", source_bin=self.bin, destination_bin=self.bin2, **kw)
+
+    def _in(self, bin_):
+        return sorted(frappe.get_all("WMS Stock Balance", filters={"warehouse": self.wh, "product": self.sitem, "storage_bin": bin_, "quantity": [">", 0], "serial_no": ["in", self.sn]}, pluck="serial_no"))
+
+    def test_a_partial_move_of_serial_stock_needs_the_serial_numbers(self):
+        from frappe_wms.exceptions import ForegroundRequired
+        with self.assertRaises(ForegroundRequired):
+            self._move(2)
+        with self.assertRaisesRegex(ForegroundRequired, "not in"):
+            self._move(2, serial_numbers=[self.sn[0], "NOT-HERE"])
+        self._move(2, serial_numbers=[self.sn[0], self.sn[2]])
+        self.assertEqual(self._in(self.bin), [self.sn[1]])
+        self.assertEqual(self._in(self.bin2), sorted([self.sn[0], self.sn[2]]))
+
+    def test_moving_all_the_serial_numbers_needs_no_choice(self):
+        self._move(3)
+        self.assertEqual(self._in(self.bin2), sorted(self.sn))

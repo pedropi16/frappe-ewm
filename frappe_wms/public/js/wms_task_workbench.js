@@ -238,12 +238,14 @@ window.wms_workbench = (function () {
       if (!picked.length) { status(__("Select at least one row (click its row number)."), "warn"); return; }
       const lines = picked.map((r) => lineOf(r, confirmNow));
       const res = await call(M.doc ? M.api : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.doc ? undefined : "{}" }, { freeze: true });
-      res.created.forEach((c) => { const r = picked[c.line], made = M.doc ? [...c.documents, ...(c.tasks || [])] : c.tasks; state.created.push(...(M.doc ? c.documents : made)); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
+      res.created.forEach((c) => { const r = picked[c.line], made = M.doc ? [...c.documents, ...(c.tasks || [])] : c.tasks; state.created.push(...(M.doc ? c.documents : made)); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : "") + ((c.foreground || []).length ? " \u2014 " + __("needs details: confirm in the foreground") : ""); if (c.destination_bin) fill(r, c); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       await reread(res.created.map((c) => [c.balance, picked[c.line]]), new Set(res.created.map((c) => picked[c.line].key)),
         M.doc ? [] : res.created.filter((c) => c.destination_bin && (confirmNow || picked[c.line].confirm)).map((c) => c.destination_bin));
       draw();
       const n = res.created.reduce((a, c) => a + (M.doc ? c.documents : c.tasks).length, 0);
+      const foreground = res.created.flatMap((c) => c.foreground || []);   // tasks that need details only the user can give are confirmed in the foreground, one dialog each
+      if (foreground.length) { const queue = [...foreground]; const next = () => { const t = queue.shift(); if (t) frappe_wms.confirm_foreground(t, next); }; next(); }
       window.wms_grid.report(n ? (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])) : "", res.errors.map((e) => [picked[e.line].handling_unit || `${picked[e.line].product || ""} ${picked[e.line].source_bin || ""}`.trim(), e.error]));
       status(res.errors.length ? (M.doc ? __(M.posted + ", {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }

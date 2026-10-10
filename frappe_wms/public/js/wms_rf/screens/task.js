@@ -208,8 +208,8 @@ function stepView(wrap, step) {
     box.append(Field({ name: "qty", kind: "qty", label: `${_("Quantity")} · ${_("remaining {0}", [fmtQty(rem)])}${inUnit}`, value: f.uqty, unit: unit.uom, autofocus: true,
         hint: unit.factor !== 1 && isNumeric(f.uqty) ? _("= {0} {1}", [fmtQty(round6(parseNum(f.uqty) * unit.factor)), t.stock_uom])
           : rem > 1 ? _("Confirming less than planned keeps the task open for the rest.") : null,
-        onInput: (v) => { f.uqty = v; f.qtyOk = false; persist(); if (unit.factor !== 1) update(); } }),
-      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; persist(); S.focusRequest = "qty"; update(); } }),
+        onInput: (v) => { f.uqty = v; f.qtyOk = false; f.need = undefined; f.serials = []; persist(); if (unit.factor !== 1) update(); } }),
+      Btn({ label: _("All remaining ({0})", [fmtQty(rem)]), small: true, onClick: () => { f.uom = t.stock_uom; f.uqty = fmtQty(rem); f.qty = f.uqty; f.need = undefined; f.serials = []; persist(); S.focusRequest = "qty"; update(); } }),
       // The common floor exception (SAP EWM's BIDP/BIDF: an empty or partial quantity denial) -
       // carries what's already typed here straight into the exception entry as the found
       // quantity, so the operator doesn't have to pick a code first and then retype it there.
@@ -235,6 +235,29 @@ function stepView(wrap, step) {
     const unit = unitOf(t, f);
     box.append(KV([[_("Product"), t.product], [_("Quantity"), `${f.qty} ${t.stock_uom || ""}${unit.factor !== 1 ? ` (${f.uqty} ${unit.uom})` : ""}`], [_("From"), f.src || taskLocation(t, "src")], [_("To"), f.dst || taskLocation(t, "dst")]]));
     if (excess > 0) box.append(Hint(_("{0} more than planned ({1}) - the extra goes to the warehouse's difference bin, not here.", [fmtQty(excess), fmtQty(remaining(t))])));
+    // Foreground details (SAP): when only some of the serial numbers / one of several batches leave the stock, the operator says which - the system cannot guess
+    if (f.need === undefined) {
+      f.need = null;
+      api("frappe_wms.api.scanner.confirmation_details", { task_name: t.name, quantity: parseNum(f.qty) }, { read: true, timeoutMs: 6000 }).then((n) => { f.need = n || {}; persist(); update(); }).catch(() => { f.need = {}; });
+    }
+    if (f.need && f.need.serial) {
+      f.serials = f.serials || [];
+      box.append(h("div", { style: { height: "14px" } }),
+        Field({ name: "sn", kind: "scan", gs1: "serial", label: _("Serial numbers · {0} of {1}", [f.serials.length, f.need.serial.count]), placeholder: _("Scan each serial number"), autofocus: true,
+          hint: f.serials.length ? f.serials.join(", ") : _("Scan the {0} serial numbers you are taking.", [f.need.serial.count]),
+          onCommit: (v) => {
+            const sn = String(v || "").trim();
+            if (!sn) return;
+            if (!f.need.serial.choices.includes(sn)) return _("{0} is not in this stock.", [sn]);
+            if (f.serials.includes(sn)) return _("{0} is already scanned.", [sn]);
+            if (f.serials.length >= f.need.serial.count) return _("All {0} serial numbers are scanned.", [f.need.serial.count]);
+            f.serials.push(sn); persist(); update();
+          } }));
+      if (f.serials.length) box.append(Btn({ label: _("Clear serial numbers"), small: true, onClick: () => { f.serials = []; persist(); update(); } }));
+    }
+    if (f.need && f.need.batch) {
+      box.append(h("div", { style: { height: "14px" } }), Field({ name: "batch", kind: "select", label: _("Batch"), value: f.batch || "", options: [{ value: "", label: "" }, ...f.need.batch.choices.map((b) => ({ value: b, label: b }))], onInput: (v) => { f.batch = v; persist(); } }));
+    }
     box.append(h("div", { style: { height: "14px" } }),
       Field({ name: "hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan or leave as suggested"), value: f.hu,
         hint: _("Defaults to {0} if left as is. A fresh tote/carton barcode registers it automatically. If only part of the stock moves and you scan nothing, a new HU is created for it.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
@@ -286,7 +309,7 @@ async function confirmTask() {
   persist(true);
   const result = await run(() => api("frappe_wms.api.scanner.confirm_task", {
     task_name: t.name, scanned_source: f.src || undefined, scanned_destination: f.dst || undefined, scanned_product: f.prod || undefined,
-    confirmed_quantity: qty, destination_hu: f.hu || undefined, idempotency_key: key,
+    confirmed_quantity: qty, destination_hu: f.hu || undefined, idempotency_key: key, serial_numbers: f.serials && f.serials.length ? JSON.stringify(f.serials) : undefined, batch_no: f.batch || undefined,
   }), { label: _("Confirming…"), again: confirmTask });
   if (!result) return; // error shown with Retry; the draft (and its idempotency key) is kept, so a resend cannot double-post
   feedback.done();
