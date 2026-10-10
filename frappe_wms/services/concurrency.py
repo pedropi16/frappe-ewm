@@ -1,3 +1,4 @@
+import contextlib
 import functools
 import random
 import time
@@ -6,6 +7,26 @@ import frappe
 
 # How many times one API call is attempted in total before a deadlock is surfaced to the caller.
 ATTEMPTS = 4
+
+
+@contextlib.contextmanager
+def latest_committed_locks():
+    """MariaDB 11.6+ defaults to innodb_snapshot_isolation=ON: a locking read that has to wait for a hot row fails with error 1020 "Record has changed since last read"
+    once the other transaction commits, because the row is newer than this transaction's first read. For WMS's own serialising locks (a bin's Handling Units, the
+    Goods Receipt naming counter) that is exactly the contention they exist for - found under load as 31 of 33 HTTP 500s. Inside this block a locking read sees the
+    latest committed row instead. Use it ONLY around WMS's own lock reads: left off globally, ERPNext's non-locking Bin update loses updates (reproduced: Bin
+    under-counted by 89-120 units), the 1020 is what makes that path fail and retry."""
+    try: frappe.db.sql("set session innodb_snapshot_isolation=0")
+    except Exception: yield; return  # older server without the variable
+    try: yield
+    finally: frappe.db.sql("set session innodb_snapshot_isolation=1")
+
+
+def insert_hot(doc):
+    """Insert a document whose naming series counter is a hot lock row (tasks, warehouse orders, requests, receipts)."""
+    with latest_committed_locks():
+        doc.insert(ignore_permissions=True)
+    return doc
 
 
 def retry_on_deadlock(fn):

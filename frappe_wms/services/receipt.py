@@ -1,5 +1,6 @@
 import uuid
 import frappe
+from frappe_wms.services.concurrency import insert_hot
 from frappe import _
 from frappe.utils import add_days, getdate, now_datetime, flt
 from frappe_wms.services.stock import post_entries
@@ -176,7 +177,7 @@ def create_putaway_requests(receipt_name):
                     "destination_bin":match["staging_bin"],"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,
                     "reference_doctype":"Outbound Delivery","reference_name":match["delivery"],"reference_line":match["delivery_item"],
                     "process_type":cross_dock_process_type,"priority":"High","status":"Open"})
-                cd_req.insert(ignore_permissions=True); names.append(cd_req.name)
+                insert_hot(cd_req); names.append(cd_req.name)
                 if id(match) in planned_by_match: consume_plan(planned_by_match[id(match)], match["quantity"])
                 else: reserve_cross_dock_demand(match)
                 remaining_qty -= match["quantity"]
@@ -205,7 +206,7 @@ def create_putaway_requests(receipt_name):
         if receipt.inbound_delivery and not (owner or party):
             owner, party = frappe.db.get_value("Inbound Delivery", receipt.inbound_delivery, ["stock_owner", "entitled_party"]) or (None, None)
         req=frappe.get_doc({"doctype":"Warehouse Request","stock_owner":owner,"entitled_party":party,**_row_attrs(row),**_origin(row, receipt.warehouse),"request_type":"Putaway","warehouse":receipt.warehouse,"product":row.item,"requested_quantity":remaining_qty,"stock_uom":row.stock_uom,"source_bin":receipt.receiving_bin,"source_hu":row.handling_unit,"destination_bin":direct_bin or None,"stock_type":row.stock_type,"batch_no":row.batch_no,"serial_no":row.serial_no,"reference_doctype":receipt.doctype,"reference_name":receipt.name,"reference_line":row.name,"process_type":process_type,"storage_process":storage_process,"process_step":process_step,"priority":"Normal","status":"Open"})
-        req.insert(ignore_permissions=True); names.append(req.name)
+        insert_hot(req); names.append(req.name)
     return names
 
 def list_open_inbound_deliveries(user=None):
@@ -228,8 +229,9 @@ def receiving_worklist(inbound_delivery):
         if remaining <= 0.000001: continue
         product = frappe.db.get_value("WMS Product", row.item, ["warehouse_managed", "batch_control", "serial_control"], as_dict=True) or {}
         managed = bool(product.get("warehouse_managed"))
+        shipped = shipped_identities(row.source_document_line) if row.source_document_type == "Delivery Note" and row.source_document_line else (set(), set())
         lines.append({
-            "inbound_delivery_item": row.name, "line_number": row.line_number, "item": row.item,
+            "inbound_delivery_item": row.name, "return_batches": sorted(shipped[0]), "return_serials": sorted(shipped[1]), "line_number": row.line_number, "item": row.item,
             "item_name": row.item_name or frappe.db.get_value("Item", row.item, "item_name"),
             "remaining": remaining, "stock_uom": row.stock_uom, "stock_type": row.expected_stock_type,
             "barcodes": frappe.get_all("Item Barcode", filters={"parent": row.item}, pluck="barcode"),
@@ -387,7 +389,7 @@ def create_and_submit_goods_receipt(inbound_delivery, items, create_tasks=True):
         "doctype": "Goods Receipt", "inbound_delivery": delivery.name, "warehouse": delivery.warehouse,
         "receiving_bin": delivery.receiving_bin, "items": items,
     })
-    gr.insert(ignore_permissions=True)
+    insert_hot(gr)
     gr.flags.ignore_permissions = True
     gr.submit()
     request_names = create_putaway_requests(gr.name)

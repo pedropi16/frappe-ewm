@@ -143,3 +143,13 @@ class TestSubmitRetry(IntegrationTestCase):
             try: self.assertEqual(erp_retry.submit("{}"), "ok")
             finally: frappe.flags.in_test = True
         self.assertEqual(len(calls), 2)
+
+
+class TestAutoGoodsIssueDeadlock(IntegrationTestCase):
+    def test_a_deadlock_is_not_swallowed_by_the_savepoint_guard(self):
+        from unittest import mock
+        from frappe_wms.services import shipping
+        with mock.patch.object(shipping, "post_goods_issue_for_delivery", side_effect=frappe.QueryDeadlockError()), mock.patch("frappe.db.savepoint"), \
+                mock.patch("frappe.db.rollback") as rb:
+            with self.assertRaises(frappe.QueryDeadlockError): shipping._auto_post_goods_issue("X")
+            rb.assert_not_called()  # the savepoint is gone with the transaction: rolling back to it is the error seen under load

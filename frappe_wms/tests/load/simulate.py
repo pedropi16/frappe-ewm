@@ -297,17 +297,19 @@ class Sim:
                 d = rng.choice(open_[:4])  # everyone works the oldest trucks first -> real overlap
                 doc = c.call("frappe.client.get", doctype="Inbound Delivery", name=d["name"])
                 items = []
+                wl = {l["inbound_delivery_item"]: l for l in c.call("frappe_wms.api.inbound.receiving_worklist", inbound_delivery=d["name"]).get("lines", [])}
                 for row in doc["items"]:
                     remaining = (row["expected_quantity"] or 0) - (row["received_quantity"] or 0)
                     if remaining <= 0: continue
                     p = self.product.get(row["item"], {})
+                    shipped = wl.get(row["name"], {})  # a customer return can only come back under what was shipped
                     qty = remaining if rng.random() < 0.75 else max(1, int(remaining * rng.uniform(0.3, 0.8)))
                     line = {"inbound_delivery_item": row["name"], "item": row["item"], "quantity": qty, "stock_uom": row["stock_uom"],
                             "handling_unit": f"PAL{uuid.uuid4().int % 10**12:012d}", "stock_type": row["expected_stock_type"]}
-                    if p.get("batch_control"): line["batch_no"] = f"{row['item']}-L{rng.randint(100, 999)}"
+                    if p.get("batch_control"): line["batch_no"] = rng.choice(shipped["return_batches"]) if shipped.get("return_batches") else f"{row['item']}-L{rng.randint(100, 999)}"
                     if p.get("serial_control") not in (None, "None"):
                         line["quantity"] = 1
-                        line["serial_no"] = f"SN{uuid.uuid4().hex[:10].upper()}"
+                        line["serial_no"] = rng.choice(shipped["return_serials"]) if shipped.get("return_serials") else f"SN{uuid.uuid4().hex[:10].upper()}"
                     items.append(line)
                 if not items: return False
                 idem = f"GR:{uuid.uuid4().hex}"

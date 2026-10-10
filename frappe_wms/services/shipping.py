@@ -197,6 +197,8 @@ def _auto_post_goods_issue(delivery_name):
     frappe.db.savepoint(savepoint)
     try:
         post_goods_issue_for_delivery(delivery_name)
+    except (frappe.QueryDeadlockError, frappe.QueryTimeoutError):
+        raise  # the database already rolled the whole transaction back (the savepoint is gone): the endpoint's retry re-runs it
     except frappe.ValidationError:
         frappe.db.rollback(save_point=savepoint)
     except Exception:

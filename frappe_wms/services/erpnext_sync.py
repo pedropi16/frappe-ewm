@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 import frappe
+from frappe_wms.services.concurrency import insert_hot  # naming series lock only - ERPNext's own Bin updates stay under snapshot isolation
 from frappe import _
 from frappe.utils import flt
 
@@ -52,7 +53,7 @@ def _insert_and_submit_as_system(doc):
     # Batch Bundle" - another native ERPNext doctype no warehouse-floor role should need direct
     # access to just to post a WMS movement that happens to touch a batch/serial item.
     with _as_system_user():
-        doc.insert(ignore_permissions=True)
+        insert_hot(doc)
         doc.submit()
 
 def _erpnext_warehouse(wms_warehouse):
@@ -336,7 +337,7 @@ def _sync_goods_receipt_to_purchase_receipt(doc, erpnext_warehouse, po_links):
         pr.items = kept
         pr.flags.ignore_permissions = True
         pr.flags.wms_managed_posting = True
-        pr.insert(ignore_permissions=True)
+        insert_hot(pr)
         pr.submit()
     doc.db_set("erpnext_purchase_receipt", pr.name, update_modified=False)
 
@@ -401,7 +402,7 @@ def _sync_goods_receipt_to_return_delivery_note(doc, erpnext_warehouse, return_l
         ret.items = kept
         ret.flags.ignore_permissions = True
         ret.flags.wms_managed_posting = True
-        ret.insert(ignore_permissions=True)
+        insert_hot(ret)
         ret = _submit_return(ret)
     doc.db_set("erpnext_delivery_note", ret.name, update_modified=False)
 
@@ -635,7 +636,7 @@ def _sync_goods_issue_to_delivery_note(doc, erpnext_warehouse, so_links):
         dn.items = kept
         dn.flags.ignore_permissions = True
         dn.flags.wms_managed_posting = True
-        dn.insert(ignore_permissions=True)
+        insert_hot(dn)
         dn.submit()
     doc.db_set("erpnext_delivery_note", dn.name, update_modified=False)
 
@@ -678,7 +679,7 @@ def _sync_goods_issue_to_return_purchase_receipt(doc, erpnext_warehouse, return_
         ret.items = kept
         ret.flags.ignore_permissions = True
         ret.flags.wms_managed_posting = True
-        ret.insert(ignore_permissions=True)
+        insert_hot(ret)
         ret = _submit_return(ret)
     doc.db_set("erpnext_purchase_receipt", ret.name, update_modified=False)
 

@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.concurrency import insert_hot
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.utils import require_role
@@ -118,7 +119,7 @@ def get_or_create_warehouse_order(warehouse, activity, queue, batch_key, priorit
         "assigned_resource": None, "status": "Open",
         "reference_doctype": reference_doctype, "reference_name": reference_name,
     })
-    wo.insert(ignore_permissions=True)
+    insert_hot(wo)
     if activity == "Pick" and rule and rule.pick_hu_type and destination_bin:
         # SAP EWM's packing profile: every task this Warehouse Order ever bundles shares one
         # destination HU, created once right here rather than left to whatever the first picker

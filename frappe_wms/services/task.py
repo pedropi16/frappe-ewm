@@ -1,4 +1,5 @@
 import frappe
+from frappe_wms.services.concurrency import insert_hot
 from frappe import _
 from frappe.utils import flt, now_datetime
 from frappe_wms.services.stock import transfer_stock, release_allocation, dim_values, OWNER_KEYS
@@ -90,7 +91,7 @@ def create_tasks_for_request(request_name, batch_key=None):
         from frappe_wms.services.layout_control import reroute
         reroute(task)  # layout-oriented storage control: via an intermediate bin when a rule applies
         attach_task(task, batch_key, reference_doctype="Warehouse Request", reference_name=request.name, default_queue=process_type.default_queue)
-        task.insert(ignore_permissions=True)
+        insert_hot(task)
         created.append(task.name)
     frappe.db.set_value("Warehouse Request", request.name, {"created_quantity": flt(request.created_quantity) + remaining, "status": "Fully Tasked"})
     return created[0] if len(created) == 1 else created
@@ -132,7 +133,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
         "stock_type_from": stock_type, "stock_type_to": stock_type, "movement_type": process_type.movement_type,
         "priority": "Normal", "status": "Open",
     })
-    task.insert(ignore_permissions=True)
+    insert_hot(task)
     # scanned_source/scanned_destination here are only ever the RF app's check-digit entry (the
     # bin itself is already this call's own source_bin/destination_bin, not something separate to
     # re-match) - confirm_task's check-digit branch below is what actually verifies them.
@@ -265,7 +266,7 @@ def _create_pick_task_for_group(allocations, wave, batch_key):
         "stock_allocations": [{"stock_allocation": a.name, "allocated_quantity": a.allocated_quantity} for a in allocations],
     })
     attach_task(task, batch_key, reference_doctype="Outbound Delivery", reference_name=first.outbound_delivery)
-    task.insert(ignore_permissions=True)
+    insert_hot(task)
     return task.name
 
 OPEN_TASK_STATUSES = ("Open", "On Hold", "Available", "Assigned", "In Process", "Partially Confirmed")
@@ -409,7 +410,7 @@ def split_task(task, quantity, new_bin=None):
         "final_destination_bin", "stock_type_from", "stock_type_to", "movement_type", "priority", "warehouse_order", "queue", "assigned_resource", "predecessor_task", "wave", "sequence")}
     new = frappe.get_doc({"doctype": "Warehouse Task", **values, "planned_quantity": quantity, "status": task.status if task.status in ("Open", "Assigned", "On Hold") else "Open"})
     if new_bin: new.destination_bin = new_bin
-    new.insert(ignore_permissions=True)
+    insert_hot(new)
     task.db_set("planned_quantity", open_qty - quantity + flt(task.confirmed_quantity), update_modified=True)
     if task.warehouse_order: frappe.db.sql("update `tabWarehouse Order` set task_count=task_count+1 where name=%s", task.warehouse_order)
     return new.name

@@ -179,6 +179,8 @@ def mixing_violations(bin_name, storage_type, item=None, stock_type=None, batch_
 
 
 def validate_destination_bin(bin_name, **kwargs):
-    reasons = bin_violations(bin_name, lock=True, **kwargs)  # every caller writes next: serialize on the bin
+    from frappe_wms.services.concurrency import latest_committed_locks
+    with latest_committed_locks():
+        reasons = bin_violations(bin_name, lock=True, **kwargs)  # every caller writes next: serialize on the bin
     if reasons:
         frappe.throw(_("Storage Bin {0} cannot be used as a destination: {1}").format(bin_name, "; ".join(reasons)))

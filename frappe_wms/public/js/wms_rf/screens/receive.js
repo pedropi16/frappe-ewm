@@ -158,7 +158,7 @@ function entryView(l) {
     Field({ name: "hutype", kind: "select", label: _("If new HU, type"), value: e.huType, options: types, onInput: (v) => { e.huType = v; persist(); } }));
   if (l.batch_required) {
     box.append(Field({ name: "batch", kind: "scan", gs1: "batch", label: _("Batch"), placeholder: _("Scan the batch"), value: e.batch,
-      hint: e.expiry ? _("Expiry {0} (from the label)", [e.expiry]) : null,
+      hint: e.expiry ? _("Expiry {0} (from the label)", [e.expiry]) : (l.return_batches || []).length ? _("Shipped batch: {0}", [l.return_batches.join(", ")]) : null,
       onInput: (v) => { e.batch = v; persist(); }, onCommit: (v, via, raw) => { const gs = parseGS1(raw); if (gs && gs.batch) { e.batch = gs.batch; if (gs.expiry) e.expiry = gs.expiry; } else e.batch = v; persist(); } }));
   }
   if (l.serial_required) {
