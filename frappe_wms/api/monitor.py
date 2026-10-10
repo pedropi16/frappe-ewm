@@ -498,4 +498,28 @@ def find_deliveries(doctype, by, value, warehouse=None):
     if not where: frappe.throw(_("Unknown search"))
     rows = frappe.db.sql(f"""select d.name, d.{number} as number, d.{partner} as partner, d.status, d.warehouse, d.{date} as date, d.docstatus, d.external_reference
         from `tab{doctype}` d where {where} {"and d.warehouse=%(w)s" if warehouse else ""} and d.docstatus < 2 order by d.creation desc limit 50""", {"v": like, "w": warehouse}, as_dict=True)
-    return rows
+    from frappe_wms.services.delivery_worklist import rows as worklist_rows
+    return worklist_rows(doctype, [r.name for r in rows])
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def delivery_rows(doctype, names):
+    """List rows (statuses included) of the named deliveries - the advanced selection and Refresh fill the delivery worklist with them."""
+    require_wms_access()
+    if doctype not in ("Outbound Delivery", "Inbound Delivery"): frappe.throw(_("Unsupported document"))
+    from frappe_wms.services.delivery_worklist import rows
+    from frappe_wms.utils import parse_json
+    return rows(doctype, parse_json(names, "names"))
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def process_deliveries(doctype, action, names, values=None):
+    """Mass processing of the marked deliveries: allocate / pick / cartons / issue / putaway / change, one delivery at a time."""
+    require_wms_access()
+    if doctype not in ("Outbound Delivery", "Inbound Delivery"): frappe.throw(_("Unsupported document"))
+    from frappe_wms.services.delivery_worklist import process
+    from frappe_wms.utils import parse_json
+    return process(doctype, action, parse_json(names, "names"), parse_json(values, "values") if values else None)
+

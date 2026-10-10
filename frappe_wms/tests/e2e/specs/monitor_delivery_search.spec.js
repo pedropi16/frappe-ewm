@@ -16,7 +16,19 @@ test("delivery screen search: latest deliveries, find by number, nothing found",
   const s = seed();
   expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
   await page.goto("/app/wms-outbound-delivery");
-  await expect(page.locator(".wms-dm-hits tr", { hasText: demo.delivery }).first()).toBeVisible();   // the latest deliveries are listed without searching
+  await expect(page.locator(".wms-dm-list tr", { hasText: demo.delivery }).first()).toBeVisible();   // the latest deliveries are listed without searching
+  // the list is a worklist: mark the delivery, Mass Change puts the priority into it, an action runs per delivery, Display opens it and List comes back
+  const row = page.locator(".wms-dm-list tr", { hasText: demo.delivery }).first();
+  await row.locator("th.wms-grid-rowhead").click();
+  await page.locator(".wms-dm-mass").click();
+  await page.locator(".modal.show [data-fieldname='priority'] select").selectOption("High");
+  await page.locator(".modal.show .btn-primary").click();
+  await expect(page.locator(".wms-dm-res").first()).toContainText("changed");
+  await expect(row).toContainText("High");
+  await page.locator(".wms-dm-open").click();
+  await expect(page.locator(".wms-dm-head")).toContainText("Customer");
+  await page.locator(".wms-dm-back").click();
+  await expect(page.locator(".wms-dm-list")).toBeVisible();
   await page.locator(".wms-dm-value").fill("zzzz-no-such");
   await page.locator(".wms-dm-go").click();
   await expect(page.locator(".wms-dm-hits")).toContainText("No delivery found");

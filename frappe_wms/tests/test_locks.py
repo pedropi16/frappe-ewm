@@ -73,6 +73,23 @@ class TestLocks(_base.TestStockAdjustments):
             allocate_delivery("LOCK-OBD")
         frappe.set_user(a); locks.release("Outbound Delivery", "LOCK-OBD")
 
+    def test_delivery_worklist_goes_delivery_by_delivery(self):
+        from frappe_wms.services.delivery_worklist import process
+        names = []
+        for _i in range(2):
+            d = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "customer": frappe.get_all("Customer", limit=1, pluck="name")[0], "delivery_date": frappe.utils.nowdate(),
+                                "items": [{"line_number": 1, "item": self.item, "requested_quantity": 1, "stock_uom": frappe.db.get_value("Item", self.item, "stock_uom"), "required_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
+            d.submit(); names.append(d.name)
+        a, b = self.users
+        frappe.set_user(a); locks.acquire("Outbound Delivery", names[0])
+        frappe.set_user(b)
+        out = process("Outbound Delivery", "change", names, {"priority": "High", "route": ""})
+        self.assertEqual([x["name"] for x in out["done"]], [names[1]])
+        self.assertIn("being changed by", out["errors"][0]["error"])
+        self.assertEqual(frappe.db.get_value("Outbound Delivery", names[1], "priority"), "High")
+        self.assertNotEqual(frappe.db.get_value("Outbound Delivery", names[0], "priority"), "High")
+        frappe.set_user(a); locks.release("Outbound Delivery", names[0])
+
     def test_form_saves_are_refused_but_service_saves_are_not(self):
         self._seed(5)
         doc = frappe.get_doc({"doctype": "WMS Stock Adjustment", "warehouse": self.wh, "adjustment_type": "Scrapping", "product": self.item, "storage_bin": self.bin, "quantity": 1, "reason": "lock test"}).insert(ignore_permissions=True)
