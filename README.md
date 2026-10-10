@@ -1571,3 +1571,6 @@ Messages on the worklists follow SAP: a successful Create / Post / action shows 
 
 ### Delivery item toolbar
 The Items tab of the delivery screens has a toolbar on the marked lines: **Details** (the line's fields, the stock allocated to it and the warehouse tasks of its product) and, outbound, **Split…** (the Split Delivery dialog with the marked lines preselected).
+
+### Pick HU (partial moves)
+A partial move never leaves the moved stock loose. When a task confirms only part of an HU's stock, or part of the loose stock of a bin, and no destination HU is scanned, a new Handling Unit is created at that moment in the destination bin and the moved quantity goes into it (SAP's pick HU); picks always end in an HU so shipping can find them. This holds on the desk (ad hoc worklists with confirmation, direct moves) and on the RF app (task confirmation and Move), whose confirmation message names the new HU, and the confirm result returns `destination_hu`. A scanned HU still wins, "No HU WT" / unpack and storage types that forbid HUs still move loose, and a whole-HU move still travels as the same HU. The HU type is the product's default HU type, else *WMS Settings > Default Handling Unit Type* (needed - the move says so if it is missing).

@@ -200,4 +200,4 @@ def hu_master(handling_unit):
 
 def task_status(names):
     require_role("WMS Operator", "WMS Supervisor", "WMS Inventory Controller")
-    return frappe.get_all("Warehouse Task", filters={"name": ["in", names or [""]]}, fields=["name", "task_type", "status", "product", "planned_quantity", "confirmed_quantity", "source_bin", "destination_bin", "source_hu", "warehouse_order", "reason"], order_by="creation asc")
+    return frappe.get_all("Warehouse Task", filters={"name": ["in", names or [""]]}, fields=["name", "task_type", "status", "product", "planned_quantity", "confirmed_quantity", "source_bin", "destination_bin", "source_hu", "destination_hu", "warehouse_order", "reason"], order_by="creation asc")

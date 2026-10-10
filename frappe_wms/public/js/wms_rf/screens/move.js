@@ -128,7 +128,7 @@ export const moveManual = {
             if (needsCheckDigits(f.destination_bin, f.destination_hu)) { update(); return; }
             go("review");
           } }),
-          Field({ name: "destination_hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan HU barcode"), value: f.destination_hu,
+          Field({ name: "destination_hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan HU barcode"), hint: _("Leave empty to create a new HU when only part of the stock moves."), value: f.destination_hu,
             onInput: (v) => { f.destination_hu = v; persist(); },
             onCommit: async (v) => {
               const m = await resolve(v, "hu");
@@ -177,7 +177,8 @@ async function submit() {
   }), { label: _("Moving…"), again: submit });
   if (!result) return;
   feedback.done();
-  const msg = _("Moved {0} {1} to {2}", [fmtQty(result.quantity != null ? result.quantity : parseNum(f.quantity)), f.product, f.destination_bin]);
+  let msg = _("Moved {0} {1} to {2}", [fmtQty(result.quantity != null ? result.quantity : parseNum(f.quantity)), f.product, f.destination_bin]);
+  if (result.destination_hu && result.destination_hu !== f.source_hu && result.destination_hu !== f.destination_hu) msg += ` — ${_("new HU {0}", [result.destination_hu])}`;  // a partial move gets a new HU of its own
   const w0 = f.w0;
   clearDraft(KEY); st.form = blank(); st.fromDraft = false;
   finishFlow(w0, sectionHash("internal"), msg);

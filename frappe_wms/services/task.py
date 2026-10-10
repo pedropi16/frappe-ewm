@@ -105,6 +105,7 @@ def create_tasks_for_request(request_name, batch_key=None):
 # moved quantity still tagged to the source HU, now claiming to be in a bin that HU never
 # entered).
 _UNPACK = "\x00unpack\x00"
+_PICK_HU = "\x00pickhu\x00"  # confirm into a new Handling Unit created now for exactly what is moved (SAP: the pick HU)
 
 def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_type, source_bin=None, source_hu=None, destination_bin, destination_hu=None, batch_no=None, serial_no=None, device=None, scanned_source=None, scanned_destination=None):
     # The ad-hoc "move this HU/bin's stock to that bin now" action an RF operator does
@@ -136,7 +137,7 @@ def create_and_confirm_move(*, warehouse, product, quantity, stock_uom, stock_ty
     # bin itself is already this call's own source_bin/destination_bin, not something separate to
     # re-match) - confirm_task's check-digit branch below is what actually verifies them.
     return confirm_task(task.name, scanned_source=scanned_source, scanned_destination=scanned_destination,
-        confirmed_quantity=quantity, device=device, destination_hu=destination_hu or _UNPACK)
+        confirmed_quantity=quantity, device=device, destination_hu=destination_hu)
 
 def create_pick_tasks(delivery_name, strategy="Single Order"):
     require_role("WMS Operator", "WMS Picker", "WMS Supervisor")
@@ -594,6 +595,8 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if excess > 0:
         from frappe_wms.services.difference import difference_bin_for_warehouse
         difference_bin_for_warehouse(task.warehouse)  # fail loud before anything posts, not after
+    pick_hu = destination_hu == _PICK_HU
+    if pick_hu: destination_hu = None
     if destination_hu == _UNPACK:
         resolved_destination_hu = None
     elif destination_hu and not frappe.db.exists("Handling Unit", destination_hu):
@@ -623,7 +626,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
         # stock to the very HU it was being deconsolidated out of, undoing the split entirely).
         resolved_destination_hu = None
     else:
-        resolved_destination_hu = task.destination_hu or task.source_hu
+        resolved_destination_hu = None if pick_hu else (task.destination_hu or task.source_hu)
     if resolved_destination_hu and task.destination_bin and hu_requirement(frappe.get_cached_doc("Storage Type", frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type"))) == "Forbidden":
         resolved_destination_hu, destination_hu = None, _UNPACK  # Handling Units are not put into this storage type: the stock goes in loose
     source = {"warehouse": task.warehouse, "product": task.product, "batch_no": task.batch_no, "serial_no": task.serial_no, "handling_unit": task.source_hu, "storage_bin": task.source_bin, "stock_type": task.stock_type_from, "stock_uom": task.stock_uom}
@@ -637,7 +640,11 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     if posted_qty > 0 and resolved_destination_hu and resolved_destination_hu == task.source_hu and task.destination_bin != task.source_bin:
         resolved_destination_hu = _resolve_partial_hu_move(task, posted_qty)
         destination["handling_unit"] = resolved_destination_hu
-        if resolved_destination_hu is None: destination_hu = _UNPACK
+        if resolved_destination_hu != task.source_hu: destination_hu = resolved_destination_hu
+    elif posted_qty > 0 and not resolved_destination_hu and destination_hu != _UNPACK and not task.unpack_at_destination and task.destination_bin and task.destination_bin != task.source_bin \
+            and (pick_hu or task.task_type in ("Pick", "Cross Dock") or _remaining_after(task, posted_qty) > 0.000001):
+        # Part of the stock moves (or a pick, which must end in an HU for shipping): it goes into a Handling Unit created right now for it - a partial pick is never left loose
+        resolved_destination_hu = destination["handling_unit"] = destination_hu = _new_pick_hu(task)
     if posted_qty > 0 and verify and task.source_hu and task.task_type != "Repack":
         from frappe_wms.services.handling_indicators import check_unpack
         check_unpack(task.product, task.source_hu, resolved_destination_hu)
@@ -695,7 +702,7 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     sync_warehouse_order(task.warehouse_order)
     released_tasks = release_next_in_sequence(task.warehouse_order) if fully_confirmed else []
     if fully_confirmed: released_tasks += _release_predecessor_gated_tasks(task.name)
-    result = {"task": task.name, "status": status, "quantity": posted_qty, "released_tasks": released_tasks}
+    result = {"task": task.name, "status": status, "quantity": posted_qty, "released_tasks": released_tasks, "destination_hu": resolved_destination_hu}
     if difference_name: result["difference"] = difference_name
     if sort_task: result["sort_task"] = sort_task
     return result
@@ -726,13 +733,29 @@ def _resolve_partial_hu_move(task, qty):
     remaining = sum(flt(r[0]) for r in held) - flt(qty)
     if remaining <= 0.000001:
         return task.source_hu
-    storage_type = frappe.db.get_value("Storage Bin", task.destination_bin, "storage_type")
-    # A Pick/Cross Dock must end in an HU: shipping finds the staged HU through the task's destination_hu.
-    if task.task_type not in ("Pick", "Cross Dock") and hu_requirement(frappe.get_cached_doc("Storage Type", storage_type)) != "Mandatory":
-        return None
-    frappe.throw(_("Handling Unit {0} still holds {1} {2} in {3} after this - scan the Handling Unit (tote, carton or new pallet) you are putting these {4} into, or move the whole Handling Unit.").format(
-        task.source_hu, frappe.format(remaining, "Float"), task.stock_uom or "", task.source_bin, frappe.format(qty, "Float")),
-        title=_("Destination Handling Unit required"))
+    return _new_pick_hu(task)  # only part of the HU's stock moves: that part gets its own HU (an operator can still scan one - then this is not reached)
+
+
+def _remaining_after(task, qty):
+    """What stays behind in the source bin after `qty` of the task's stock moves: the rest of the source HU, or the rest of the loose stock of the same product / batch / stock type."""
+    if task.source_hu:
+        held = frappe.db.sql("select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where handling_unit=%s and storage_bin=%s", (task.source_hu, task.source_bin))[0][0]
+    else:
+        held = frappe.db.sql("""select coalesce(sum(quantity), 0) from `tabWMS Stock Balance` where warehouse=%s and product=%s and storage_bin=%s and stock_type=%s and ifnull(handling_unit, '')=''
+            and ifnull(batch_no, '')=%s""", (task.warehouse, task.product, task.source_bin, task.stock_type_from, task.batch_no or ""))[0][0]
+    return flt(held) - flt(qty)
+
+
+def _new_pick_hu(task):
+    """The pick HU (SAP): a Handling Unit created at the moment of the partial move, in the destination bin, so the moved stock keeps travelling the flow as a unit.
+    Its type: the product's default HU type, else the warehouse settings' default."""
+    hu_type = frappe.db.get_value("WMS Product", {"item": task.product}, "default_hu_type") or frappe.db.get_single_value("WMS Settings", "default_handling_unit_type")
+    if not hu_type:
+        frappe.throw(_("A partial move needs a new Handling Unit for what is moved, but no Handling Unit Type is set: choose a default in WMS Settings (or on the product)"), title=_("Pick HU"))
+    hu = frappe.get_doc({"doctype": "Handling Unit", "hu_number": frappe.generate_hash(length=10), "hu_type": hu_type, "current_bin": task.destination_bin, "warehouse": task.warehouse})
+    hu.flags.wms_service_update = True
+    hu.insert(ignore_permissions=True)
+    return hu.name
 
 def _create_sort_task_after_pick(task):
     # Two-Step Picking's second hop: the Pick task's own destination was the warehouse's shared

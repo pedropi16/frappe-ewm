@@ -237,7 +237,7 @@ function stepView(wrap, step) {
     if (excess > 0) box.append(Hint(_("{0} more than planned ({1}) - the extra goes to the warehouse's difference bin, not here.", [fmtQty(excess), fmtQty(remaining(t))])));
     box.append(h("div", { style: { height: "14px" } }),
       Field({ name: "hu", kind: "scan", label: _("Destination Handling Unit (optional)"), placeholder: _("Scan or leave as suggested"), value: f.hu,
-        hint: _("Defaults to {0} if left as is. A fresh tote/carton barcode registers it automatically.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
+        hint: _("Defaults to {0} if left as is. A fresh tote/carton barcode registers it automatically. If only part of the stock moves and you scan nothing, a new HU is created for it.", [t.destination_hu || t.source_hu || _("no HU")]), onInput: (v) => { f.hu = v; persist(); }, submitOnEmpty: true,
         onCommit: () => { persist(); } }));
   }
   wrap.append(box);
@@ -299,6 +299,7 @@ async function confirmTask() {
   let msg = _("{0} {1} ({2})", [_(type), _(result.status || "Confirmed").toLowerCase(), fmtQty(result.quantity != null ? result.quantity : qty)]);
   const excess = round6(qty - flt(result.quantity != null ? result.quantity : qty));
   if (excess > 0) msg += ` — ${_("{0} extra sent to the difference bin", [fmtQty(excess)])}`;
+  if (result.destination_hu && result.destination_hu !== t.source_hu && result.destination_hu !== f.hu && result.destination_hu !== t.destination_hu) msg += ` — ${_("new HU {0}", [result.destination_hu])}`;
   if (result.sort_task) msg += ` — ${_("a Sort task was created to move it on")}`;
   if (nextTask) {
     // Chaining straight into the next task's own wizard: land exactly at w0 (not w0-1, the way
