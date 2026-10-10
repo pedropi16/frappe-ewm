@@ -97,3 +97,15 @@ class TestForeground(_base.TestStockAdjustments):
     def test_moving_all_the_serial_numbers_needs_no_choice(self):
         self._move(3)
         self.assertEqual(self._in(self.bin2), sorted(self.sn))
+
+
+class TestSharedPickHU(TestPickHU):
+    def test_partial_moves_of_one_warehouse_order_share_its_pick_hu(self):
+        from frappe_wms.services.adhoc_tasks import create_adhoc_tasks
+        self._seed(6)
+        self._seed(6, item=self.item2)
+        lines = [{"name": self._line(item=i).name, "quantity": 2} for i in (self.item, self.item2)]
+        tasks = create_adhoc_tasks(lines, self.bin2, confirm=1, reason="share")
+        hus = {frappe.db.get_value("Warehouse Task", t, "destination_hu") for t in tasks}
+        self.assertEqual(len(hus), 1)
+        self.assertTrue(hus.pop())

@@ -795,9 +795,27 @@ def _remaining_after(task, qty):
     return flt(held) - flt(qty)
 
 
+def _delivery_of(task):
+    return frappe.db.get_value("Stock Allocation", task.stock_allocation, "outbound_delivery") if task.get("stock_allocation") else None
+
+
+def _shared_pick_hu(task):
+    """The Warehouse Order is one work package: its partial picks into the same bin (and for the same delivery) share the pick HU the first of them created (SAP: the pick HU of the order)."""
+    if not task.warehouse_order: return None
+    mine = _delivery_of(task)
+    for sibling in frappe.get_all("Warehouse Task", filters={"warehouse_order": task.warehouse_order, "destination_hu": ["is", "set"], "name": ["!=", task.name], "destination_bin": task.destination_bin},
+                                  fields=["destination_hu", "stock_allocation", "source_hu"], order_by="creation asc"):
+        if sibling.destination_hu == sibling.source_hu or sibling.destination_hu == task.source_hu or _delivery_of(sibling) != mine: continue
+        hu = frappe.db.get_value("Handling Unit", sibling.destination_hu, ["current_bin", "status"], as_dict=True)
+        if hu and hu.current_bin == task.destination_bin and hu.status != "Blocked": return sibling.destination_hu
+    return None
+
+
 def _new_pick_hu(task):
     """The pick HU (SAP): a Handling Unit created at the moment of the partial move, in the destination bin, so the moved stock keeps travelling the flow as a unit.
     Its type: the product's default HU type, else the warehouse settings' default."""
+    shared = _shared_pick_hu(task)
+    if shared: return shared
     hu_type = frappe.db.get_value("WMS Product", {"item": task.product}, "default_hu_type") or frappe.db.get_single_value("WMS Settings", "default_handling_unit_type")
     if not hu_type:
         frappe.throw(_("A partial move needs a new Handling Unit for what is moved, but no Handling Unit Type is set: choose a default in WMS Settings (or on the product)"), title=_("Pick HU"))
