@@ -173,6 +173,7 @@ window.wms_delivery_page = (function () {
       const fresh = await frappe.call({ method: "frappe_wms.api.monitor.delivery_rows", args: { doctype, names: JSON.stringify(rows.map((r) => r.name)) } }).then((r) => r.message || []);
       fresh.forEach((f) => Object.assign(by[f.name], f, { result: by[f.name].result }));
       drawList(new Set(rows.map((r) => r.name)));
+      window.wms_grid.report(res.done.length ? __("{0} delivery(ies) processed", [res.done.length]) : "", res.errors.map((x) => [by[x.name].number || x.name, x.error]));
       listStatus(res.errors.length ? __("{0} delivery(ies) processed, {1} refused: {2}", [res.done.length, res.errors.length, res.errors[0].error]) : __("{0} delivery(ies) processed", [res.done.length]), res.errors.length ? "danger" : "success");
     }
     function massChange() {

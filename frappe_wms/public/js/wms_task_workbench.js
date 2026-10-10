@@ -224,6 +224,7 @@ window.wms_workbench = (function () {
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       draw();
       const n = res.created.reduce((a, c) => a + (M.doc ? c.documents : c.tasks).length, 0);
+      window.wms_grid.report(n ? (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])) : "", res.errors.map((e) => [picked[e.line].handling_unit || `${picked[e.line].product || ""} ${picked[e.line].source_bin || ""}`.trim(), e.error]));
       status(res.errors.length ? (M.doc ? __(M.posted + ", {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }
 

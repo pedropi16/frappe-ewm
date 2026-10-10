@@ -121,7 +121,12 @@ test("posting change worklist: mass change fills the marked rows", async ({ page
   await expect(rows.nth(1).locator("input[data-f='to_stock_type']")).toHaveValue("");     // only the marked row
   await rows.nth(0).locator("input[data-f='destination_bin']").fill(s.bins[1]);          // a destination: Enter says what the change does and where the stock goes
   await rows.nth(0).locator("input[data-f='destination_bin']").press("Enter");
-  await expect(page.locator(".wb-res").first()).toContainText(/free to change|WAREHOUSE_BLOCKED/);   // the seeded balances are not real ledger stock, so Enter may refuse them; the server test covers the destination
+  await expect(page.locator(".wb-res").first()).toContainText(/free to change|WAREHOUSE_BLOCKED/);
+  await page.locator(".wb-create").click();                                                // a refused row is a popup that Enter dismisses (the status bar keeps the text)
+  const popup = page.locator(".modal.show", { hasText: "Not possible" });
+  await expect(popup).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(popup).toBeHidden();   // the seeded balances are not real ledger stock, so Enter may refuse them; the server test covers the destination
   expect(errors).toEqual([]);
 });
 

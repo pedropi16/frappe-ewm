@@ -680,5 +680,19 @@ class DataGrid {
 // '*' as an explicit wildcard placeholder (no '*' -> exact match; 'AB*'/'*AB'/'*AB*' -> prefix/
 // suffix/contains). This one-line hint plus the empty-until-executed state is shared everywhere.
 
-  window.wms_grid = { DataGrid };
+  // SAP's message convention: success is a short notice that goes away by itself; a refusal is a popup that Enter (or Esc) dismisses, so the user can correct the rows and try again.
+  function report(successText, errors) {
+    if (successText) frappe.show_alert({ message: successText, indicator: errors && errors.length ? "orange" : "green" }, 6);
+    if (!errors || !errors.length) return;
+    const esc = frappe.utils.escape_html;
+    const d = new frappe.ui.Dialog({ title: __("Not possible"), primary_action_label: __("OK"), primary_action: () => d.hide(),
+      fields: [{ fieldtype: "HTML", fieldname: "list", options: `<div style="max-height:320px;overflow:auto">${errors.map(([what, why]) => `<div style="margin-bottom:6px"><b>${esc(what)}</b><br>${esc(why)}</div>`).join("")}</div>` }] });
+    d.$wrapper.find(".modal-header .modal-title").prepend('<span class="indicator red" style="margin-right:6px"></span>');
+    d.show();
+    $(document).on("keydown.wmsreport", (e) => { if (e.key === "Enter") { e.preventDefault(); d.hide(); setTimeout(() => { if (d.$wrapper.hasClass("show")) d.hide(); }, 400); } });  // a hide during the fade-in is ignored, so try again  // Enter dismisses wherever the focus is
+    d.$wrapper.one("hidden.bs.modal", () => $(document).off("keydown.wmsreport"));
+    setTimeout(() => d.get_primary_btn().focus(), 300);
+  }
+
+  window.wms_grid = { DataGrid, report };
 })();
