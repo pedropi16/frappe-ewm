@@ -7,6 +7,7 @@ const VIEWS = [
   { key: "overview", label: __("Overview") },
   { key: "inbound", label: __("Inbound Monitor") },
   { key: "outbound", label: __("Outbound Monitor") },
+  { key: "production_requests", label: __("Production Material Requests") },
   { key: "yard", page: "wms-yard", label: __("Yard & Doors") },
   { key: "cockpit", page: "wms-yard", label: __("Shipping & Receiving") },
   { key: "stock", label: __("Stock Overview") },
@@ -280,6 +281,7 @@ class WMSMonitor {
       overview: () => this.load_overview(),
       inbound: () => this.load_inbound(),
       outbound: () => this.load_outbound(),
+      production_requests: () => this.load_production_requests(),
       stock: () => this.load_stock_overview(),
       tasks: () => this.load_tasks(),
       warehouse_orders: () => this.load_warehouse_orders(),
@@ -408,6 +410,35 @@ class WMSMonitor {
       });
       this.selection("waves", $wrap.find(".wms-mon-wave-sel"), $wrap.find(".wms-mon-wave-table"), { actions: this.process_actions("wave") });
     }
+  }
+
+  // ---------- Production Material Requests (PMR) ----------
+  // The Monitor displays: a request's items with how far each is, and links to its Work Order and to Production Staging, where the material is staged.
+  async load_production_requests() {
+    const $wrap = this.body_for("production_requests");
+    if (!$wrap.find(".wms-mon-pmr-sel").length) {
+      $wrap.html(`<div class="wms-mon-pmr-sel"></div><div class="wms-mon-pmr-table">${sap_unexecuted_html()}</div>`);
+      this.selection("production_requests", $wrap.find(".wms-mon-pmr-sel"), $wrap.find(".wms-mon-pmr-table"), {
+        renderers: { work_order: this.link_cell("Work Order", "work_order"), name: this.link_cell("Production Material Request", "name") },
+        actions: [
+          { label: __("Items"), kind: "primary", run: (rows) => this.pmr_items_dialog(rows[0]) },
+          { label: __("Production Staging"), run: () => frappe.set_route("wms-production-staging") },
+        ],
+      });
+    }
+  }
+
+  search_production_requests() { return this.execute_selection("production_requests"); }
+
+  async pmr_items_dialog(row) {
+    const items = await frappe.xcall("frappe_wms.api.monitor.pmr_items", { pmr: row.name });
+    const d = new frappe.ui.Dialog({ title: __("{0} - items", [row.name]), size: "extra-large", fields: [{ fieldtype: "HTML", fieldname: "body" }] });
+    const pct = (a, b) => flt(b) ? Math.min(100, Math.round(100 * flt(a) / flt(b))) + "%" : "";
+    const cols = [["product", __("Material")], ["operation", __("Operation")], ["psa", __("Production Supply Area")], ["required_quantity", __("Required")],
+      ["tasked_quantity", __("Tasked")], ["staged_quantity", __("Staged")], ["consumed_quantity", __("Consumed")], ["staging_method", __("Staging")]];
+    d.fields_dict.body.$wrapper.empty().append(this.render_table(items.map((r) => ({ ...r, staged_quantity: `${r.staged_quantity} (${pct(r.staged_quantity, r.required_quantity)})` })),
+      cols, "Production Material Request Item", { noDetails: true }));
+    d.show();
   }
 
   search_outbound_deliveries() { return this.execute_selection("outbound"); }
@@ -599,7 +630,24 @@ class WMSMonitor {
   }
 
   // The Monitor only finds and links: changing tasks, warehouse orders and handling units happens on the Ad Hoc Processing page.
-  process_actions(tx) { return [{ label: __("Process in Ad Hoc Processing"), kind: "primary", run: () => frappe.set_route("wms-adhoc", tx) }]; }
+  process_actions(tx) {
+    const actions = [{ label: __("Process in Ad Hoc Processing"), kind: "primary", run: () => frappe.set_route("wms-adhoc", tx) }];
+    const doctype = { tasks: "Warehouse Task", wo: "Warehouse Order" }[tx];
+    if (doctype) actions.unshift({ label: __("Confirm in Background"), kind: "primary", run: (rows) => this.confirm_in_background(doctype, rows, tx === "wo" ? "warehouse_orders" : "tasks") });
+    return actions;
+  }
+
+  // SAP "Confirm Warehouse Task / Order in Background": the full planned quantity at once; a task that needs details (serial numbers, batch) is confirmed in the foreground.
+  async confirm_in_background(doctype, rows, view) {
+    const names = rows.map((r) => r.name);
+    const res = await frappe.xcall("frappe_wms.api.monitor.confirm_in_background", { doctype, names: JSON.stringify(names) });
+    const done = res.done.length;
+    window.wms_grid.report(done ? __("{0} of {1} confirmed in the background", [done, names.length]) : "", res.errors.map((e) => [e.name, e.error]));
+    await this.execute_selection(view);
+    const queue = [...res.foreground];
+    const next = () => { const t = queue.shift(); if (t) frappe_wms.confirm_foreground(t, () => { next(); if (!queue.length) this.execute_selection(view); }); };
+    next();
+  }
 
   search_handling_units() { return this.execute_selection("hu"); }
 

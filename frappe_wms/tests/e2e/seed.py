@@ -354,3 +354,23 @@ def serial_task():
     task.insert(ignore_permissions=True)
     frappe.db.commit()
     print("E2E_TASK " + task.name)
+
+
+def plain_task():
+    """Two planned Internal Moves of 3 units of the staging_demo() item (real stock in the first E2E bin) to the second bin, in one Warehouse Order: background-confirmable."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.warehouse_order import attach_task
+    from frappe_wms.services.determination import determine_process_type
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    pt = determine_process_type(WAREHOUSE, "Internal Move", item=item, stock_type="AVAILABLE", default="INTERNAL_MOVE")
+    key, names = frappe.generate_hash(length=10), []
+    for _ in range(2):
+        task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": WAREHOUSE, "product": item, "planned_quantity": 3, "stock_uom": uom, "source_bin": BINS[0],
+                               "destination_bin": BINS[1], "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": frappe.db.get_value("Warehouse Process Type", pt, "movement_type"),
+                               "priority": "Normal", "status": "Open"})
+        attach_task(task, key)
+        task.insert(ignore_permissions=True)
+        names.append(task.name)
+    frappe.db.commit()
+    print("E2E_TASKS " + json.dumps(names))

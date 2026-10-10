@@ -1581,3 +1581,7 @@ Like SAP, a task is confirmed in the **background** when nobody has to choose an
 The RF **Move** screen has the same foreground step: its review asks for the serial numbers (or the batch) when only part of the stock moves (`scanner.move_details` tells it what is needed). Browser specs: `move_serial.spec.js` (RF) and `monitor_foreground.spec.js` (desk dialog, refusal and confirmation).
 
 Partial moves of one Warehouse Order into the same bin (and, for picks, for the same delivery) share the pick HU the first of them created, so a picker's several partial picks end up in one HU, not one each.
+
+### Monitor: Production Material Requests and Confirm in Background
+- Monitor > *Production Material Requests*: selection screen over the PMRs of the warehouse (by order, status, material, supply area); **Items** shows each material with required / tasked / staged (%) / consumed, links to the Work Order and to Production Staging (where the staging is done).
+- Warehouse Tasks and Warehouse Orders lists: **Confirm in Background** (SAP's monitor method) confirms the full planned quantity of the marked tasks, or every open task of the marked orders in sequence, one document at a time (`services/background_confirm.py`). A task that needs details only a person can give (serial numbers, batch) is not guessed: it opens the foreground confirmation dialog.

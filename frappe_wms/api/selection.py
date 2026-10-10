@@ -131,6 +131,17 @@ VIEWS = {
                     "wave", "batch_key", "reference_doctype", "reference_name", "started_at", "completed_at", "blocking_reason", "modified"],
         "virtual": {},
     },
+    "production_requests": {
+        "doctype": "Production Material Request", "title": "Production Material Requests",
+        "selection": ["name", "work_order", "status", "production_item", "planned_date", "product", "psa"],
+        "columns": ["name", "work_order", "production_item", "qty", "planned_date", "status", "deconsolidation_bin", "modified"],
+        "virtual": {
+            "product": {"label": "Material", "fieldtype": "Link", "options": "Item", "column": "`sel_line`.`product`",
+                        "sql": "`tabProduction Material Request`.name in (select `sel_line`.parent from `tabProduction Material Request Item` `sel_line` where {cond})"},
+            "psa": {"label": "Production Supply Area", "fieldtype": "Link", "options": "Production Supply Area", "column": "`sel_line`.`psa`",
+                    "sql": "`tabProduction Material Request`.name in (select `sel_line`.parent from `tabProduction Material Request Item` `sel_line` where {cond})"},
+        },
+    },
     "hu": {
         "doctype": "Handling Unit", "title": "Handling Units",
         "selection": ["hu_number", "status", "hu_type", "current_bin", "storage_type", "outbound_delivery", "contains_product", "modified"],

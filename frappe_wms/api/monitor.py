@@ -523,3 +523,22 @@ def process_deliveries(doctype, action, names, values=None):
     from frappe_wms.utils import parse_json
     return process(doctype, action, parse_json(names, "names"), parse_json(values, "values") if values else None)
 
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def confirm_in_background(doctype, names):
+    """Monitor method "Confirm in Background" on the marked Warehouse Tasks / Warehouse Orders."""
+    require_wms_access()
+    from frappe_wms.services.background_confirm import confirm_in_background as run
+    from frappe_wms.utils import parse_json
+    return run(doctype, parse_json(names, "names"))
+
+
+@frappe.whitelist()
+def pmr_items(pmr):
+    """The items of a Production Material Request with how far each is (required -> tasked -> staged -> consumed): the monitor's display of one request."""
+    require_wms_access()
+    frappe.has_permission("Production Material Request", "read", pmr, throw=True)
+    return frappe.db.sql("""select i.product, i.stock_uom, i.operation, i.psa, i.required_quantity, i.tasked_quantity, i.staged_quantity, i.consumed_quantity, i.staging_method
+        from `tabProduction Material Request Item` i where i.parent=%s order by i.idx""", pmr, as_dict=True)
