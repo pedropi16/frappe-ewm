@@ -10,7 +10,13 @@ INDEXES = {
     "WMS Stock Balance": [
         ["warehouse", "product", "storage_bin"], ["handling_unit", "product"], ["serial_no"],
     ],
-    "Warehouse Task": [["warehouse", "status", "priority"], ["warehouse_request"]],
+    # the lookups every confirmation / pull / delivery screen makes (load audit 2026-10-10: these were full table scans - EXPLAIN type=ALL - at 600 tasks)
+    "Warehouse Task": [["warehouse", "status", "priority"], ["warehouse_request"], ["warehouse_order"], ["stock_allocation"], ["source_hu"], ["destination_hu"], ["assigned_resource"]],
+    "Stock Allocation": [["outbound_delivery"], ["stock_balance"], ["outbound_delivery_item"]],
+    "Warehouse Order": [["warehouse", "activity", "status", "batch_key"], ["assigned_resource"]],
+    "Warehouse Request": [["reference_doctype", "reference_name"], ["warehouse", "status"]],
+    "Outbound Delivery": [["warehouse", "status"]],
+    "Inbound Delivery": [["warehouse", "status"]],
     "Handling Unit": [["warehouse", "current_bin", "status"], ["parent_hu"]],
 }
 

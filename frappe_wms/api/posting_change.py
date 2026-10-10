@@ -35,5 +35,6 @@ def process_lines(lines):
 def check_lines(lines):
     """Enter on the worklist: what each line would change and where it would go, or why it is refused - nothing is created."""
     from frappe_wms.services.posting_change import check_lines as _check
-    from frappe_wms.utils import parse_json
+    from frappe_wms.utils import parse_json, require_wms_access
+    require_wms_access()
     return _check(parse_json(lines, "lines"))

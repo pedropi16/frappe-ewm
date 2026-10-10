@@ -11,6 +11,8 @@ def start_indirect_labor(resource, activity):
 
 @frappe.whitelist()
 def stop_indirect_labor(resource):
+    from frappe_wms.utils import require_wms_access
+    require_wms_access()
     return labor.stop_indirect(resource)
 
 
