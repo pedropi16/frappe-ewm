@@ -10,7 +10,7 @@ window.wms_delivery_page = (function () {
 
   function mount(wrapper, doctype) {
     const out = doctype === "Outbound Delivery", side = out ? "Outbound" : "Inbound", route = out ? "wms-outbound-delivery" : "wms-inbound-delivery";
-    const page = frappe.ui.make_app_page({ parent: wrapper, title: out ? __("Maintain Outbound Delivery Order") : __("Maintain Inbound Delivery"), single_column: true });
+    const page = wrapper.__page || frappe.ui.make_app_page({ parent: wrapper, title: out ? __("Maintain Outbound Delivery Order") : __("Maintain Inbound Delivery"), single_column: true });
     const slug = frappe.router.slug(doctype);
     const FINDS = [["number", __("Delivery number")], ["external", __("External reference")], ["partner", out ? __("Customer") : __("Supplier")], ["source", __("Source document")], ["product", __("Product")]];
     const $root = $(`<div class="wms-dm">
@@ -234,6 +234,8 @@ window.wms_delivery_page = (function () {
     document.head.appendChild(el);
   });
   function boot(wrapper, doctype) {
+    // the header is made now, not once the scripts below have loaded: Frappe has finished the page view by then and the title would never show
+    wrapper.__page = frappe.ui.make_app_page({ parent: wrapper, title: doctype === "Outbound Delivery" ? __("Maintain Outbound Delivery Order") : __("Maintain Inbound Delivery"), single_column: true });
     wrapper.__dm_ready = load("/assets/frappe_wms/js/wms_grid.js").then(() => load("/assets/frappe_wms/js/wms_selection.js")).then(() => { wrapper.__dm = mount(wrapper, doctype); })
       .catch((e) => frappe.msgprint({ title: __("Delivery"), indicator: "red", message: esc(e.message) }));
   }
