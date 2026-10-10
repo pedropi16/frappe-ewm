@@ -63,6 +63,15 @@ def confirm_task(task_name, scanned_source=None, scanned_destination=None, confi
     return _confirm_task(task_name,scanned_source,scanned_destination,confirmed_quantity,destination_hu,device,idempotency_key,scanned_product,serial_numbers=parse_json(serial_numbers,"serial_numbers") if serial_numbers else None,batch_no=batch_no)
 
 @frappe.whitelist()
+def move_details(warehouse, product, quantity, stock_type, source_bin=None, source_hu=None):
+    """The same for a direct move that has no task yet: which serial numbers / batch the user has to choose for this quantity."""
+    from frappe.utils import flt
+    from frappe_wms.services.task import details_needed
+    require_role("WMS Operator", "WMS Supervisor")
+    return details_needed(frappe._dict(warehouse=warehouse, product=product, source_bin=source_bin, source_hu=source_hu, stock_type_from=stock_type, serial_no=None, batch_no=None), flt(quantity))
+
+
+@frappe.whitelist()
 def confirmation_details(task_name, quantity=None):
     """What confirming the task needs the user to say (SAP: confirm in the foreground): serial numbers to choose, a batch to choose. {} = it can be confirmed in the background."""
     from frappe.utils import flt

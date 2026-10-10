@@ -137,6 +137,27 @@ export const moveManual = {
             } }));
       }
     } else {
+      // Foreground details (SAP): serial numbers / a batch the system cannot guess when only part of the stock moves
+      if (f.need === undefined) {
+        f.need = null;
+        api("frappe_wms.api.scanner.move_details", { warehouse: S.resource && S.resource.warehouse, product: f.product, quantity: parseNum(f.quantity), stock_type: f.stock_type, source_bin: f.source_bin || undefined, source_hu: f.source_hu || undefined },
+          { read: true, timeoutMs: 6000 }).then((n) => { f.need = n || {}; persist(); update(); }).catch(() => { f.need = {}; });
+      }
+      if (f.need && f.need.serial) {
+        f.serials = f.serials || [];
+        box.append(Field({ name: "sn", kind: "scan", gs1: "serial", label: _("Serial numbers · {0} of {1}", [f.serials.length, f.need.serial.count]), placeholder: _("Scan each serial number"), autofocus: true,
+          hint: f.serials.length ? f.serials.join(", ") : _("Scan the {0} serial numbers you are moving.", [f.need.serial.count]),
+          onCommit: (v) => {
+            const sn = String(v || "").trim();
+            if (!sn) return;
+            if (!f.need.serial.choices.includes(sn)) return _("{0} is not in this stock.", [sn]);
+            if (f.serials.includes(sn)) return _("{0} is already scanned.", [sn]);
+            if (f.serials.length >= f.need.serial.count) return _("All {0} serial numbers are scanned.", [f.need.serial.count]);
+            f.serials.push(sn); persist(); update();
+          } }));
+        if (f.serials.length) box.append(Btn({ label: _("Clear serial numbers"), small: true, onClick: () => { f.serials = []; persist(); update(); } }));
+      }
+      if (f.need && f.need.batch) box.append(Field({ name: "batch", kind: "select", label: _("Batch"), value: f.batch || "", options: [{ value: "", label: "" }, ...f.need.batch.choices.map((b) => ({ value: b, label: b }))], onInput: (v) => { f.batch = v; persist(); } }));
       box.append(KV([[_("Product"), `${f.product} · ${fmtQty(parseNum(f.quantity))} ${f.stock_uom}`], [_("Stock type"), _(f.stock_type)], [_("From"), f.source_bin + (f.source_hu ? ` / ${f.source_hu}` : "")], [_("To"), f.destination_bin + (f.destination_hu ? ` / ${f.destination_hu}` : "")]]));
     }
     wrap.append(box);
@@ -153,7 +174,7 @@ function nextFromButton(step) {
   const f = st.form;
   if (step === "quantity") {
     if (!isNumeric(f.quantity) || parseNum(f.quantity) <= 0) return fail("quantity", _("Enter a quantity greater than zero."));
-    f.quantity = fmtQty(parseNum(f.quantity)); return go("source");
+    f.quantity = fmtQty(parseNum(f.quantity)); f.need = undefined; f.serials = []; return go("source");
   }
   const name = { item: "product",
     source: f.source_bin && needsCheckDigits(f.source_bin, f.source_hu) && !f.source_checked ? "source_check" : "source_bin",
@@ -173,6 +194,7 @@ async function submit() {
     warehouse, product: f.product, quantity: parseNum(f.quantity), stock_uom: f.stock_uom, stock_type: f.stock_type,
     source_bin: f.source_bin || undefined, source_hu: f.source_hu || undefined, destination_bin: f.destination_bin, destination_hu: f.destination_hu || undefined,
     scanned_source: f.source_checked ? f.source_check : undefined, scanned_destination: f.destination_checked ? f.destination_check : undefined,
+    serial_numbers: f.serials && f.serials.length ? JSON.stringify(f.serials) : undefined, batch_no: f.batch || undefined,
     idempotency_key: key,
   }), { label: _("Moving…"), again: submit });
   if (!result) return;

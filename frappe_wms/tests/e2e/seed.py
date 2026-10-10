@@ -322,3 +322,35 @@ def worklist_stock():
                      "Storage Bin", BINS[0], f"e2e-wl:{frappe.generate_hash(length=8)}")
     frappe.db.commit()
     print("E2E_HU " + hu)
+
+
+def serial_stock():
+    """Three real serial-numbered units (E2ESNM0-2) of the site's serial item, loose in the first E2E bin, for the RF Move serial spec. cleanup() removes them."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.stock import post_entries
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_serial_no": 1}, limit=1, pluck="name")[0]
+    if not frappe.db.exists("WMS Product", {"item": item}):
+        frappe.get_doc({"doctype": "WMS Product", "item": item, "stock_uom": frappe.db.get_value("Item", item, "stock_uom"), "warehouse_managed": 1, "active": 1}).insert(ignore_permissions=True)
+    for n in range(3):
+        sn = f"E2ESNM{n}"
+        if not frappe.db.exists("Serial No", sn): frappe.get_doc({"doctype": "Serial No", "serial_no": sn, "item_code": item}).insert(ignore_permissions=True)
+        post_entries([{"warehouse": WAREHOUSE, "product": item, "serial_no": sn, "storage_bin": BINS[0], "stock_type": "AVAILABLE", "stock_uom": frappe.db.get_value("Item", item, "stock_uom"), "quantity": 1,
+                       "movement_type": "701"}], "Storage Bin", BINS[0], f"e2e-snm:{sn}:{frappe.generate_hash(length=6)}")
+    frappe.db.commit()
+    print("E2E_SERIAL_ITEM " + item)
+
+
+def serial_task():
+    """A planned Internal Move of 2 units of the serial item (no serial numbers named) from the first to the second E2E bin: it needs foreground confirmation. Needs serial_stock() first."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.warehouse_order import attach_task
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_serial_no": 1}, limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    from frappe_wms.services.determination import determine_process_type
+    pt = determine_process_type(WAREHOUSE, "Internal Move", item=item, stock_type="AVAILABLE", default="INTERNAL_MOVE")
+    task = frappe.get_doc({"doctype": "Warehouse Task", "task_type": "Internal Move", "warehouse": WAREHOUSE, "product": item, "planned_quantity": 2, "stock_uom": uom, "source_bin": BINS[0],
+                           "destination_bin": BINS[1], "stock_type_from": "AVAILABLE", "stock_type_to": "AVAILABLE", "movement_type": frappe.db.get_value("Warehouse Process Type", pt, "movement_type"), "priority": "Normal", "status": "Open"})
+    attach_task(task, frappe.generate_hash(length=10))
+    task.insert(ignore_permissions=True)
+    frappe.db.commit()
+    print("E2E_TASK " + task.name)
