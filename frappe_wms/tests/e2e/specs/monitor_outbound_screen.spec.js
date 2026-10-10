@@ -25,6 +25,15 @@ test("outbound delivery screen: allocate, create pick tasks, read the tabs", asy
   await page.getByRole("button", { name: "Allocate Stock" }).click();
   await expect(page.locator(".indicator-pill", { hasText: "Allocation: Fully Allocated" })).toBeVisible();
   await page.getByRole("button", { name: "Create Pick Tasks" }).click();
+  const line = page.locator(".wms-dm-pane[data-pane='items'] tbody tr").first();          // the item toolbar works on the marked line
+  await page.locator(".it-details").click();
+  await expect(page.getByText("Mark a line first")).toBeVisible();
+  await line.locator("th.wms-grid-rowhead").click();
+  await page.locator(".it-details").click();
+  const details = page.locator(".modal.show", { hasText: "Stock Allocations" });
+  await expect(details).toContainText("E2E-WH-A1");                                        // the allocation of this line
+  await details.locator(".modal-header .btn-modal-close").click();
+  await expect(details).toBeHidden();
   await page.locator(".wms-dm-tab", { hasText: /^Status$/ }).click();
   await expect(page.locator("tr:visible", { hasText: "Pick" }).first()).toBeVisible();
   await page.locator(".wms-dm-tab", { hasText: /^Locations$/ }).click();

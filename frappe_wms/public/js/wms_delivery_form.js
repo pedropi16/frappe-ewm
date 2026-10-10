@@ -135,8 +135,8 @@ window.frappe_wms_delivery = (function () {
     d.show();
   }
 
-  function splitDialog(frm) {
-    const open = frm.doc.items.filter((r) => flt(r.requested_quantity) - Math.max(flt(r.allocated_quantity), flt(r.picked_quantity), flt(r.packed_quantity), flt(r.issued_quantity)) > 0);
+  function splitDialog(frm, only) {
+    const open = frm.doc.items.filter((r) => (!only || only.includes(r.name)) && flt(r.requested_quantity) - Math.max(flt(r.allocated_quantity), flt(r.picked_quantity), flt(r.packed_quantity), flt(r.issued_quantity)) > 0);
     if (!open.length) return frappe.msgprint(__("Nothing is left that has not been allocated, picked or issued."));
     const d = new frappe.ui.Dialog({ title: __("Split {0}", [frm.doc.name]), fields: [
       { fieldname: "lines", fieldtype: "Table", label: __("Quantity to move to the new delivery"), cannot_add_rows: true, in_place_edit: true, data: open.map((r) => ({ line: r.name, item: r.item, quantity: 0 })),
@@ -198,17 +198,36 @@ window.frappe_wms_delivery = (function () {
   }
 
   // The items of the delivery as an ALV grid with each line's own statuses (the Items tab).
-  function renderItems(frm, side, $host) {
+  function renderItems(frm, side, $host, v) {
     const out = side === "Outbound";
     const cols = out
       ? [["line_number", __("Line")], ["item", __("Product"), (r) => lnk("Item", r.item)], ["requested_quantity", __("Quantity")], ["allocated_quantity", __("Allocated")], ["picked_quantity", __("Picked")], ["packed_quantity", __("Packed")],
          ["issued_quantity", __("Issued")], ["stock_uom", __("UoM")], ["required_stock_type", __("Stock Type")], ["required_batch", __("Batch")], ["status", __("Status")]]
       : [["line_number", __("Line")], ["item", __("Product"), (r) => lnk("Item", r.item)], ["item_name", __("Description")], ["expected_quantity", __("Expected")], ["received_quantity", __("Received")], ["putaway_quantity", __("Put away")],
          ["stock_uom", __("UoM")], ["expected_stock_type", __("Stock Type")], ["status", __("Status")]];
-    $host.empty().append(window.wms_grid.DataGrid
-      ? new window.wms_grid.DataGrid(frm.doc.items || [], cols, out ? "Outbound Delivery Item" : "Inbound Delivery Item", { noGroup: true, totals: true, exportName: frm.doc.name,
-        numeric: out ? ["requested_quantity", "allocated_quantity", "picked_quantity", "packed_quantity", "issued_quantity"] : ["expected_quantity", "received_quantity", "putaway_quantity"] }).$el
-      : table(cols, frm.doc.items));
+    if (!window.wms_grid || !window.wms_grid.DataGrid) { $host.empty().append(table(cols, frm.doc.items)); return; }
+    // the item toolbar (SAP: Details / Split on the items table): works on the marked lines
+    let marked = [];
+    const $bar = $(`<div style="display:flex;gap:6px;margin-bottom:6px"><button type="button" class="btn btn-default btn-xs it-details">${__("Details")}</button>${out ? `<button type="button" class="btn btn-default btn-xs it-split">${__("Split…")}</button>` : ""}</div>`);
+    const need = () => { if (!marked.length) { frappe.show_alert({ message: __("Mark a line first (click its row number)."), indicator: "orange" }); return false; } return true; };
+    $bar.find(".it-details").on("click", () => { if (need()) itemDetails(frm, side, marked[0], v); });
+    $bar.find(".it-split").on("click", () => { if (need()) splitDialog(frm, marked.map((r) => r.name)); });
+    const grid = new window.wms_grid.DataGrid(frm.doc.items || [], cols, out ? "Outbound Delivery Item" : "Inbound Delivery Item", { noGroup: true, totals: true, exportName: frm.doc.name, onSelect: (sel) => { marked = sel; },
+      numeric: out ? ["requested_quantity", "allocated_quantity", "picked_quantity", "packed_quantity", "issued_quantity"] : ["expected_quantity", "received_quantity", "putaway_quantity"] });
+    $host.empty().append($bar).append(grid.$el);
+  }
+
+  // Details of one line: its fields, the stock allocated to it and the tasks for its product.
+  function itemDetails(frm, side, row, v) {
+    const out = side === "Outbound", line = (frm.doc.items || []).find((i) => i.name === row.name) || row;
+    const skip = new Set(["name", "owner", "creation", "modified", "modified_by", "parent", "parentfield", "parenttype", "idx", "docstatus", "doctype"]);
+    const fields = Object.entries(line).filter(([k, val]) => !skip.has(k) && val !== "" && val != null && val !== 0).map(([k, val]) => [frappe.model.unscrub(k), esc(val)]);
+    const allocations = out ? (v.allocations || []).filter((a) => a.outbound_delivery_item === line.name) : [];
+    const tasks = (v.tasks || []).filter((t) => t.product === line.item);
+    const d = new frappe.ui.Dialog({ title: __("Item {0} · {1}", [line.line_number || "", line.item || ""]), size: "large", fields: [{ fieldtype: "HTML", fieldname: "body" }] });
+    d.fields_dict.body.$wrapper.html(kv(fields) + (out ? section(__("Stock Allocations"), table([["storage_bin", __("Bin"), (r) => lnk("Storage Bin", r.storage_bin)], ["handling_unit", __("HU")], ["batch_no", __("Batch")], ["allocated_quantity", __("Allocated"), (r) => num(r.allocated_quantity)],
+      ["picked_quantity", __("Picked"), (r) => num(r.picked_quantity)], ["status", __("Status")]], allocations)) : "") + section(__("Warehouse Tasks"), table(taskCols, tasks)));
+    d.show();
   }
 
   // Fetches the delivery's tabs and draws everything the screen shows besides the header: indicators, items, tabs and the buttons.
@@ -218,7 +237,7 @@ window.frappe_wms_delivery = (function () {
     indicators(frm, side === "Outbound"
       ? [[__("Delivery"), d.status], [__("Allocation"), d.allocation_status], [__("Picking"), d.picking_status], [__("Packing"), d.packing_status], [__("Loading"), d.loading_status], [__("Goods Issue"), d.goods_issue_status]]
       : [[__("Delivery"), d.status], [__("Receipt"), d.receipt_status], [__("Process"), d.process_status], [__("Yard"), d.yard_status]]);
-    if (frm.fields_dict.items_html) renderItems(frm, side, frm.fields_dict.items_html.$wrapper);
+    if (frm.fields_dict.items_html) renderItems(frm, side, frm.fields_dict.items_html.$wrapper, v);
     side === "Outbound" ? renderOutbound(frm, v) : renderInbound(frm, v);
     renderCommon(frm, v, side);
     if (frm.render_header) frm.render_header(v);

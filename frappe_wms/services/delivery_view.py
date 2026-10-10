@@ -39,7 +39,7 @@ def delivery_view(doctype, name):
 
 
 def _outbound(doc):
-    allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": doc.name}, fields=["name", "product", "storage_bin", "handling_unit", "batch_no", "serial_no", "allocated_quantity", "picked_quantity", "status"])
+    allocations = frappe.get_all("Stock Allocation", filters={"outbound_delivery": doc.name}, fields=["name", "outbound_delivery_item", "product", "storage_bin", "handling_unit", "batch_no", "serial_no", "allocated_quantity", "picked_quantity", "status"])
     task_names = list(task_names_for_allocations([a.name for a in allocations]))
     tasks = frappe.get_all("Warehouse Task", filters={"name": ["in", task_names or [""]]}, fields=TASK_FIELDS, order_by="sequence asc, creation asc")
     requests = frappe.get_all("Warehouse Request", filters={"request_type": "Cross Dock", "reference_doctype": "Outbound Delivery", "reference_name": doc.name}, fields=["name", "status", "product", "requested_quantity", "source_bin", "destination_bin"])
