@@ -120,6 +120,7 @@ class TestStockAdjustments(IntegrationTestCase):
         self.assertEqual([e["line"] for e in res["errors"]], [1])
         self.assertEqual(self._qty(stock_type="WAREHOUSE_BLOCKED"), 3)
         self.assertEqual(self._qty(item=self.item2), 4)
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", res["created"][0]["balance"], "stock_type"), "WAREHOUSE_BLOCKED")  # the screen reads the stock left behind
 
     def _bin2(self):
         name = f"{self.wh}-B2"
