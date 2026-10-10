@@ -306,3 +306,19 @@ def posting_stock():
     post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": BINS[0], "stock_type": "AVAILABLE", "stock_uom": frappe.db.get_value("Item", item, "stock_uom"), "quantity": 5, "movement_type": "701"}],
                  "Storage Bin", BINS[0], f"e2e-pc:{frappe.generate_hash(length=8)}")
     frappe.db.commit()
+
+
+def worklist_stock():
+    """Real stock for the worklist specs in the first E2E bin: 5 loose units and a handling unit (E2EPC9) holding 4. cleanup() removes them."""
+    frappe.set_user("Administrator")
+    from frappe_wms.services.stock import post_entries
+    item = frappe.get_all("Item", filters={"is_stock_item": 1, "has_batch_no": 0, "has_serial_no": 0}, order_by="creation asc", limit=1, pluck="name")[0]
+    uom = frappe.db.get_value("Item", item, "stock_uom")
+    frappe.db.set_value("Storage Type", f"{WAREHOUSE}-ST", "hu_managed", 0)
+    hu = frappe.db.get_value("Handling Unit", {"hu_number": "E2EPC9"}) or frappe.get_doc({"doctype": "Handling Unit", "hu_number": "E2EPC9", "hu_type": "E2E-PAL", "warehouse": WAREHOUSE,
+        "current_bin": BINS[0], "status": "Open"}).insert(ignore_permissions=True).name
+    for qty, extra in ((5, {}), (4, {"handling_unit": hu})):
+        post_entries([{"warehouse": WAREHOUSE, "product": item, "storage_bin": BINS[0], "stock_type": "AVAILABLE", "stock_uom": uom, "quantity": qty, "movement_type": "701", **extra}],
+                     "Storage Bin", BINS[0], f"e2e-wl:{frappe.generate_hash(length=8)}")
+    frappe.db.commit()
+    print("E2E_HU " + hu)
