@@ -36,7 +36,11 @@ window.wms_workbench = (function () {
     ...MODES.posting, title: (wh) => __("Scrapping in Warehouse Number {0}", [wh]), verb: __("Scrap"), api: "stock_adjustment.process_scrap_lines", doctype: "WMS Stock Adjustment", posted: __("{0} scrapping document(s) posted"),
     edit: [["quantity", __("Quantity"), 70], ["reason", __("Reason"), 220]], mass: [["reason", __("Reason"), "Small Text"]], tabs: [["created", __("Scrapped")], ["content", __("Stock in Source Bin")]],
   };
-  Object.assign(MODES.posting, { verb: __("Post"), api: "posting_change.process_lines", doctype: "WMS Posting Change", posted: __("{0} posting change(s) posted") });
+  // The posting change can also relocate the stock (SAP: it then creates a warehouse task): the same destination fields as the ad hoc tasks, checked with Enter.
+  const MOVE = ["process_type", "destination_storage_type", "destination_section", "destination_bin", "confirm"];
+  Object.assign(MODES.posting, { verb: __("Post"), api: "posting_change.process_lines", checkApi: "posting_change.check_lines", doctype: "WMS Posting Change", posted: __("{0} posting change(s) posted"),
+    edit: [...MODES.posting.edit, ["process_type", __("Whse Proc. Type"), 90], ["destination_storage_type", __("Dest. Storage Type"), 100], ["destination_section", __("DstStorSec"), 80], ["destination_bin", __("Destination Bin"), 130]],
+    mass: [...MODES.posting.mass, ...MODES.stock.mass.filter((m) => MOVE.includes(m[0]))] });
   const CSS = `.wms-wb .wb-bar select.form-control,.wms-wb .wb-bar input.wb-value{width:auto;display:inline-block}.wms-wb .wb-title{margin:4px 0 10px}.wms-wb .wb-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.wms-wb .wb-bar label{margin:0;color:var(--text-muted);font-size:12px}
     .wms-wb .wb-strip{border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:6px 0}.wms-wb .wb-table{margin:8px 0}.wms-wb .wb-table .wms-grid-scroll{max-height:340px}
     .wms-wb table{margin:0;font-size:12px}.wms-wb th{background:var(--control-bg);white-space:nowrap}.wms-wb tr.sel td{background:var(--highlight-color,#eef)}.wms-wb input.wb-cell{width:110px;height:24px;font-size:12px}
@@ -66,7 +70,7 @@ window.wms_workbench = (function () {
         <button class="btn btn-default btn-xs wb-toggle">${__("Detail")}</button>
         <button class="btn btn-default btn-xs wb-del">${__("Delete Row")}</button>
         <button class="btn btn-default btn-xs wb-refresh">${__("Refresh")}</button>
-        ${M.doc ? "" : `<button class="btn btn-default btn-xs wb-check" title="${__("Determine process type and destination for the marked rows (all rows if none is marked) without creating anything")}">&#10003; ${__("Check (Enter)")}</button>`}
+        ${M.doc && !M.checkApi ? "" : `<button class="btn btn-default btn-xs wb-check" title="${__("Determine process type and destination for the marked rows (all rows if none is marked) without creating anything")}">&#10003; ${__("Check (Enter)")}</button>`}
         <button class="btn btn-default btn-xs wb-mass" title="${__("Enter values once and put them into all marked rows")}">&#9998; ${__("Mass Change")}</button>
         <button class="btn btn-primary btn-xs wb-create">${M.doc ? M.verb : __("Create")}</button>
         ${M.doc ? "" : `<button class="btn btn-default btn-xs wb-create-confirm">${__("Create + Confirm")}</button>`}
@@ -104,7 +108,7 @@ window.wms_workbench = (function () {
     function draw() {
       const rows = shown();
       const cols = [...M.cols, ...M.edit.map(([f, l, w]) => [f, l, inp(f, w)]),
-        ...(M.doc ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
+        ...(M.doc && !M.checkApi ? [] : [["confirm", __("Task Confirmation"), (r) => `<input type="checkbox" class="wb-in" data-k="${esc(r.key)}" data-f="confirm" ${r.confirm ? "checked" : ""}>`]]),
         ["result", __("Result"), (r) => `<span class="wb-res ${(r.result || "").startsWith("\u2714") ? "text-success" : "text-danger"}" data-k="${esc(r.key)}" title="${esc(r.result || "")}">${esc((r.result || "").slice(0, 90))}</span>`]];
       state.picked = [];
       const grid = new window.wms_grid.DataGrid(rows, cols, null, { numeric: ["quantity", "available", "open_wt"],
@@ -125,7 +129,7 @@ window.wms_workbench = (function () {
       const chk = (k, l, on, ro) => `<div class="f"><span class="l">${esc(l)}</span><input type="checkbox" class="${ro ? "" : "d-chk"}" data-f="${k}" ${on ? "checked" : ""} ${ro ? "disabled" : ""}></div>`;
       if (M.doc) {
         $root.find(".wb-detail").html(`<div class="col">${[["product", __("Product")], ["batch_no", __("Batch")], ["stock_type", __("Stock Type")], ["handling_unit", __("Source HU")], ["source_bin", __("Source Bin")], ["available", __("Available")]].map(f).join("")}${inpf("quantity", __("Quantity"), 90)}</div>
-          <div class="col">${M.edit.slice(1).map(([k, l]) => inpf(k, l, k === "reason" ? 260 : 200)).join("")}<div class="text-muted" style="text-align:right">${state.cur + 1} / ${n}</div></div>`);
+          <div class="col">${M.edit.slice(1).map(([k, l]) => inpf(k, l, k === "reason" ? 260 : 200)).join("")}${M.checkApi ? chk("confirm", __("Confirmation"), r.confirm) : ""}<div class="f"><span class="l">${__("Result")}</span><span class="${(r.result || "").startsWith("\u2714") ? "text-success" : "text-danger"}">${esc(r.result || "")}</span></div><div class="text-muted" style="text-align:right">${state.cur + 1} / ${n}</div></div>`);
         return;
       }
       $root.find(".wb-detail").html(`<div class="col">${M.detail[0].map(f).join("")}${f(["storage_type", __("Source Storage Type")])}${f(["storage_section", __("Source Storage Section")])}
@@ -187,7 +191,7 @@ window.wms_workbench = (function () {
       state.selection.openDialog();
     }
 
-    const lineOf = (r, confirmNow) => M.doc ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])) }
+    const lineOf = (r, confirmNow) => M.doc ? { name: r.name, quantity: flt(r.quantity), ...Object.fromEntries(M.edit.slice(1).map(([k]) => [k, r[k]])), confirm: confirmNow || r.confirm ? 1 : 0 }
       : { ...(mode === "hu" ? { handling_unit: r.handling_unit, unpack: r.unpack ? 1 : 0 } : { name: r.name, quantity: flt(r.quantity) }), destination_bin: r.destination_bin, destination_hu: r.destination_hu,
           destination_storage_type: r.destination_storage_type, destination_section: r.destination_section, process_type: r.process_type, priority: r.priority, reason: r.reason, confirm: confirmNow || r.confirm ? 1 : 0 };
     // what a result fills into a row: the process type and the destination bin with its storage type and section (Enter in SAP)
@@ -202,10 +206,10 @@ window.wms_workbench = (function () {
     const where = (x) => `${x.destination_bin} (${x.destination_storage_type || "-"} / ${x.destination_section || "-"})`;
     // Enter: resolve the marked rows (or the one being edited) without creating anything - the destination the process type would give, or why it is refused
     async function check(rows) {
-      if (M.doc || !rows.length) return;
-      const res = await call("adhoc.check_lines", { lines: JSON.stringify(rows.map((r) => lineOf(r))) });
+      if ((M.doc && !M.checkApi) || !rows.length) return;
+      const res = await call(M.checkApi || "adhoc.check_lines", { lines: JSON.stringify(rows.map((r) => lineOf(r))) });
       let bad = 0;
-      res.forEach((x) => { const r = rows[x.line]; if (x.ok) { fill(r, x); showResult(r, `\u2714 ${x.process_type_name || x.process_type} \u2192 ${where(x)}${x.destinations > 1 ? " ..." : ""}`); } else { bad++; showResult(r, `\u2718 ${x.error}`); } });
+      res.forEach((x) => { const r = rows[x.line]; if (x.ok) { fill(r, x); showResult(r, `\u2714 ${x.summary ? x.summary + (x.destination_bin ? " \u00b7 " : "") : ""}${x.destination_bin ? `${x.process_type_name || x.process_type || ""} \u2192 ${where(x)}${x.destinations > 1 ? " ..." : ""}` : ""}`); } else { bad++; showResult(r, `\u2718 ${x.error}`); } });
       status(bad ? __("{0} row(s) cannot be created: {1}", [bad, res.find((x) => !x.ok).error]) : __("{0} row(s) checked: destinations determined", [rows.length]), bad ? "err" : "ok");
       drawDetail();
     }
@@ -216,14 +220,14 @@ window.wms_workbench = (function () {
       if (!picked.length) { status(__("Select at least one row (click its row number)."), "warn"); return; }
       const lines = picked.map((r) => lineOf(r, confirmNow));
       const res = await call(M.doc ? M.api : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.doc ? undefined : "{}" }, { freeze: true });
-      res.created.forEach((c) => { const r = picked[c.line], made = c.tasks || c.documents; state.created.push(...made); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
+      res.created.forEach((c) => { const r = picked[c.line], made = M.doc ? [...c.documents, ...(c.tasks || [])] : c.tasks; state.created.push(...(M.doc ? c.documents : made)); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
       draw();
-      const n = res.created.reduce((a, c) => a + (c.tasks || c.documents).length, 0);
+      const n = res.created.reduce((a, c) => a + (M.doc ? c.documents : c.tasks).length, 0);
       status(res.errors.length ? (M.doc ? __(M.posted + ", {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error]) : __("{0} task(s) created, {1} row(s) refused: {2}", [n, res.errors.length, res.errors[0].error])) : (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])), res.errors.length ? "err" : "ok");
     }
 
-    const CHECKED = ["destination_bin", "destination_hu", "destination_storage_type", "destination_section", "process_type"];
+    const CHECKED = ["destination_bin", "destination_hu", "destination_storage_type", "destination_section", "process_type", ...(M.checkApi ? ["quantity", "to_stock_type", "to_stock_owner", "to_entitled_party", "to_country_of_origin", "to_batch_no"] : [])];
     $root.on("change", ".wb-in", (e) => { const $i = $(e.currentTarget), r = rowOf($i.data("k")); if (!r) return; r[$i.data("f")] = $i.is(":checkbox") ? $i.prop("checked") : $i.val(); if (CHECKED.includes($i.data("f")) && $i.val()) check([r]); });
     $root.on("keydown", ".wb-in", (e) => { if (e.key !== "Enter") return; const r = rowOf($(e.currentTarget).data("k")); if (r) { r[$(e.currentTarget).data("f")] = e.currentTarget.value; check([r]); } });
     $root.on("click", ".wb-check", () => check(state.picked.length ? state.picked : shown()));

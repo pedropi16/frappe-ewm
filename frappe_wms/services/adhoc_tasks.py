@@ -180,7 +180,7 @@ def find_rows(warehouse, mode, by="handling_unit", value=None, names=None, limit
     cond, args = ["s.warehouse = %(wh)s", "s.quantity > 0", "s.available_quantity > 0", "s.storage_bin is not null"], {"wh": warehouse, "limit": limit}
     if names: cond.append("s.name in %(names)s"); args["names"] = tuple(names)
     elif by == "storage_bin": cond.append("s.storage_bin like %(v)s"); args["v"] = _like(value)
-    elif by == "handling_unit": cond.append("s.handling_unit like %(v)s"); args["v"] = _like(value)
+    elif by == "handling_unit": cond.append("(s.handling_unit like %(v)s or s.handling_unit in (select name from `tabHandling Unit` where top_hu like %(v)s))"); args["v"] = _like(value)  # nested HUs: their content too
     else: cond.append("s.product like %(v)s"); args["v"] = _like(value)
     rows = frappe.db.sql(f"""select s.name, s.product, s.batch_no, s.serial_no, s.stock_type, s.handling_unit, s.storage_bin as source_bin, b.storage_type, b.storage_section,
         s.available_quantity as available, s.stock_uom from `tabWMS Stock Balance` s left join `tabStorage Bin` b on b.name = s.storage_bin

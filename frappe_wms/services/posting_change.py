@@ -107,21 +107,72 @@ def create_posting_change(line, reason, to_stock_type=None, changes=None):
     return doc.name
 
 
-def process_lines(lines):
-    """The posting change worklist's Create: every line carries its own new values and reason, goes through on its own (a locked or refused line does not stop the rest).
-    -> {"created": [{"line": i, "documents": [name]}], "errors": [{"line": i, "error": text}]}"""
+MOVE_KEYS = ("destination_bin", "process_type", "destination_storage_type", "destination_section")
+
+
+def _after_balance(doc):
+    """The stock balance the posted change leaves behind (new identity, same bin / HU) - what a following move task works on."""
+    _before, after = sides(doc)
+    return _balance_name({"warehouse": doc.warehouse, "product": after["product"], "batch_no": after["batch_no"], "serial_no": doc.serial_no, "handling_unit": doc.handling_unit,
+                          "storage_bin": doc.storage_bin, "stock_type": after["stock_type"], **{k: after[k] for k in OWNER_KEYS}})
+
+
+def _apply(line, defaults_batch, dry=False):
+    """Creates and posts the line's change; when the line has a destination (bin / process type / storage type / section) the changed stock is moved there with an
+    Internal Move task (confirmed at once on request) - SAP: a posting change that also relocates the stock creates a warehouse task. dry: resolves only, the caller rolls back.
+    -> (document, tasks, plan or None)"""
+    from frappe_wms.services import adhoc_tasks
+    changes = {k: line.get(k) for k in ("to_product", "to_batch_no", "to_stock_owner", "to_entitled_party", "to_country_of_origin", "to_special_stock_type", "to_special_stock_ref")}
+    name = create_posting_change(line, line.get("reason"), line.get("to_stock_type"), changes)
+    post_posting_change(name)
+    if not any(line.get(k) for k in MOVE_KEYS): return name, [], None
+    core = {"name": _after_balance(frappe.get_doc("WMS Posting Change", name)), "quantity": flt(line.get("quantity")) or None}
+    args = (line.get("destination_bin"), line.get("priority") or "Normal", line.get("process_type"), line.get("reason"))
+    if dry:
+        return name, [], adhoc_tasks._plan([core], *args[:3], args[3], None, None, 0, line.get("destination_storage_type"), line.get("destination_section"), dry=True)[0]
+    tasks, plans = adhoc_tasks._create([core], *args, 1 if line.get("confirm") else 0, defaults_batch, None, 0, line.get("destination_storage_type"), line.get("destination_section"))
+    return name, tasks, plans[0]
+
+
+def _plan_text(plan):
+    return {k: plan[k] for k in ("process_type", "process_type_name", "destination_bin", "destination_storage_type", "destination_section")} if plan else {}
+
+
+def check_lines(lines):
+    """The worklist's Enter: what each line would do - the change, and where the stock goes when a destination / process type is given - or why it is refused. Nothing stays."""
     from frappe_wms.services.locks import require_free_many
     from frappe_wms.services.packing_center import _fail_text
-    out = {"created": [], "errors": []}
+    out = []
+    for i, line in enumerate(lines):
+        savepoint = f"pcw_chk_{i}"
+        frappe.db.savepoint(savepoint)
+        try:
+            require_free_many([("WMS Stock Balance", line["name"])])
+            name, _tasks, plan = _apply(line, None, dry=True)
+            doc = frappe.get_doc("WMS Posting Change", name)
+            before, after = sides(doc)
+            changed = ", ".join(f"{k.replace('_', ' ')} {before[k] or '-'} \u2192 {after[k] or '-'}" for k in after if before[k] != after[k])
+            out.append({"line": i, "ok": 1, "summary": changed, **_plan_text(plan)})
+        except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
+            out.append({"line": i, "ok": 0, "error": _fail_text(e)})
+        finally:
+            frappe.db.rollback(save_point=savepoint)
+    return out
+
+
+def process_lines(lines):
+    """The posting change worklist's Create: every line carries its own new values, reason and optional destination, goes through on its own (a locked or refused line does not stop the rest).
+    -> {"created": [{"line": i, "documents": [name], "tasks": [...], destination...}], "errors": [{"line": i, "error": text}]}"""
+    from frappe_wms.services.locks import require_free_many
+    from frappe_wms.services.packing_center import _fail_text
+    batch, out = frappe.generate_hash(length=10), {"created": [], "errors": []}
     for i, line in enumerate(lines):
         savepoint = f"pcw_{i}"
         frappe.db.savepoint(savepoint)
         try:
             require_free_many([("WMS Stock Balance", line["name"])])
-            changes = {k: line.get(k) for k in ("to_product", "to_batch_no", "to_stock_owner", "to_entitled_party", "to_country_of_origin", "to_special_stock_type", "to_special_stock_ref")}
-            name = create_posting_change(line, line.get("reason"), line.get("to_stock_type"), changes)
-            post_posting_change(name)
-            out["created"].append({"line": i, "documents": [name]})
+            name, tasks, plan = _apply(line, batch)
+            out["created"].append({"line": i, "documents": [name], "tasks": tasks, **_plan_text(plan)})
         except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError) as e:
             frappe.db.rollback(save_point=savepoint)
             out["errors"].append({"line": i, "error": _fail_text(e)})

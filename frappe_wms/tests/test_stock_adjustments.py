@@ -121,6 +121,33 @@ class TestStockAdjustments(IntegrationTestCase):
         self.assertEqual(self._qty(stock_type="WAREHOUSE_BLOCKED"), 3)
         self.assertEqual(self._qty(item=self.item2), 4)
 
+    def _bin2(self):
+        name = f"{self.wh}-B2"
+        if not frappe.db.exists("Storage Bin", name):
+            frappe.get_doc({"doctype": "Storage Bin", "bin_code": name, "warehouse": self.wh, "storage_type": f"{self.wh}-ST", "active": 1, "sequence": 2}).insert(ignore_permissions=True)
+        return name
+
+    def test_posting_change_check_and_destination(self):
+        from frappe_wms.api.posting_change import check_lines, process_lines
+        self._seed(10)
+        dest = self._bin2()
+        line = {"name": self._line().name, "quantity": 4, "to_stock_type": "WAREHOUSE_BLOCKED", "reason": "hold", "destination_bin": dest}
+        res = check_lines([line, {"name": self._line().name, "reason": "nothing changes"}, {**line, "destination_section": "NO-SUCH-SECTION"}])
+        self.assertEqual([r["ok"] for r in res], [1, 0, 0])
+        self.assertIn("WAREHOUSE_BLOCKED", res[0]["summary"])
+        self.assertEqual(res[0]["destination_bin"], dest)
+        self.assertEqual((self._qty(), self._qty(stock_type="WAREHOUSE_BLOCKED")), (10, 0))  # the check leaves nothing behind
+        out = process_lines([{**line, "confirm": 1}])
+        self.assertEqual(out["errors"], [])
+        self.assertTrue(out["created"][0]["tasks"])
+        self.assertEqual(frappe.db.get_value("WMS Stock Balance", {"warehouse": self.wh, "storage_bin": dest, "stock_type": "WAREHOUSE_BLOCKED"}, "quantity"), 4)
+
+    def test_stock_search_by_product_lists_all_its_stock(self):
+        from frappe_wms.services.adhoc_tasks import find_rows
+        self._seed(3)
+        rows = find_rows(self.wh, "stock", "product", self.item)
+        self.assertTrue(rows and all(r["product"] == self.item for r in rows))
+
     def test_scrap_worklist_goes_line_by_line(self):
         from frappe_wms.api.stock_adjustment import process_scrap_lines
         self._seed(10)

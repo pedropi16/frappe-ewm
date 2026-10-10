@@ -28,3 +28,12 @@ def process_lines(lines):
     from frappe_wms.services.posting_change import process_lines as _process
     from frappe_wms.utils import parse_json
     return _process(parse_json(lines, "lines"))
+
+
+@frappe.whitelist()
+@retry_on_deadlock
+def check_lines(lines):
+    """Enter on the worklist: what each line would change and where it would go, or why it is refused - nothing is created."""
+    from frappe_wms.services.posting_change import check_lines as _check
+    from frappe_wms.utils import parse_json
+    return _check(parse_json(lines, "lines"))
