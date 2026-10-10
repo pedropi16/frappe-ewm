@@ -215,7 +215,7 @@ window.wms_workbench = (function () {
     }
 
     // What was posted or moved changes the stock the rows show: read them again, and add the stock a posting change left behind (its new stock type / owner ...)
-    async function reread(added, done) {
+    async function reread(added, done, arrived) {
       const old = new Map(state.rows.map((r) => [r.key, r]));
       const keys = [...old.keys(), ...added.map(([k]) => k).filter((k) => k && !old.has(k))];
       const found = await load({ names: JSON.stringify(keys) });
@@ -224,6 +224,11 @@ window.wms_workbench = (function () {
         if (was) Object.assign(r, { result: was.result, created_n: was.created_n, step_done: was.step_done });
         if (old.has(r.key) && !done.has(r.key)) M.edit.forEach(([f]) => { r[f] = old.get(r.key)[f]; });  // a refused row keeps what was typed, so it can be corrected and tried again
       });
+      // product tasks that were confirmed: the stock now sits in the destination bin - show it too
+      if (M.view !== "hu") {
+        const have = new Set(found.map((r) => r.key));
+        for (const bin of new Set(arrived || [])) (await call("adhoc.find_rows", { warehouse: wh(), mode: "stock", by: "storage_bin", value: bin })).forEach((r) => { if (!have.has(r.key)) { have.add(r.key); found.push(r); } });
+      }
       state.rows = found;
     }
 
@@ -235,7 +240,8 @@ window.wms_workbench = (function () {
       const res = await call(M.doc ? M.api : "adhoc.process_lines", { lines: JSON.stringify(lines), defaults: M.doc ? undefined : "{}" }, { freeze: true });
       res.created.forEach((c) => { const r = picked[c.line], made = M.doc ? [...c.documents, ...(c.tasks || [])] : c.tasks; state.created.push(...(M.doc ? c.documents : made)); r.open_wt = flt(r.open_wt) + made.length; r.created_n = flt(r.created_n) + made.length; r.step_done = confirmNow || r.confirm; r.result = "\u2714 " + made.join(", ") + (c.destination_bin ? " \u2192 " + where(c) : ""); if (c.destination_bin) fill(r, c); });
       res.errors.forEach((e) => { picked[e.line].result = "\u2718 " + e.error; });
-      await reread(res.created.map((c) => [c.balance, picked[c.line]]), new Set(res.created.map((c) => picked[c.line].key)));
+      await reread(res.created.map((c) => [c.balance, picked[c.line]]), new Set(res.created.map((c) => picked[c.line].key)),
+        M.doc ? [] : res.created.filter((c) => c.destination_bin && (confirmNow || picked[c.line].confirm)).map((c) => c.destination_bin));
       draw();
       const n = res.created.reduce((a, c) => a + (M.doc ? c.documents : c.tasks).length, 0);
       window.wms_grid.report(n ? (M.doc ? __(M.posted, [n]) : __("{0} task(s) created", [n])) : "", res.errors.map((e) => [picked[e.line].handling_unit || `${picked[e.line].product || ""} ${picked[e.line].source_bin || ""}`.trim(), e.error]));

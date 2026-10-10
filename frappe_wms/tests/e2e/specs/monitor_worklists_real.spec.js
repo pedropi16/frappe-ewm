@@ -51,6 +51,8 @@ test("adprod: a partial move leaves the rest in the row", async ({ page }) => {
   await page.locator(".wb-create").click();
   await expect(page.locator(".wb-status")).toContainText("1 task(s) created");
   await expect(rows.filter({ hasNotText: "E2EPC9" }).filter({ has: page.locator("td", { hasText: /^3$/ }) })).toHaveCount(1);                             // 5 - 2 left in the source bin
+  await expect(rows).toHaveCount(3);                                                          // and the 2 that arrived show as their own row in the destination bin
+  await expect(rows.nth(2)).toContainText(s.bins[1]);
   expect(errors).toEqual([]);
 });
 
@@ -66,5 +68,23 @@ test("scrapping: the scrapped quantity leaves the row", async ({ page }) => {
   await page.locator(".wb-create").click();
   await expect(page.locator(".wb-status")).toContainText("posted");
   await expect(rows.filter({ hasNotText: "E2EPC9" }).filter({ has: page.locator("td", { hasText: /^3$/ }) })).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("ad hoc processing: block a handling unit, the result list shows it blocked", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  const s = seed();
+  expect((await page.request.post("/api/method/login", { form: { usr: s.admin, pwd: s.admin_password } })).ok()).toBeTruthy();
+  await page.goto("/app/wms-adhoc/hublock");
+  await page.locator(".wms-ah-wh").selectOption(s.warehouse);
+  await page.locator(".modal.show", { hasText: "Selection - Handling Units" }).getByRole("button", { name: /Execute/ }).click();
+  const row = page.locator(".wms-ah-res tbody tr", { hasText: "E2EPC9" });
+  await expect(row).toBeVisible();
+  await row.locator("th.wms-grid-rowhead").click();
+  await page.locator(".wms-ah-res").getByRole("button", { name: "Block", exact: true }).click();
+  await page.locator(".modal.show textarea").fill("e2e block");
+  await page.locator(".modal.show .btn-primary").click();
+  await expect(page.locator(".wms-ah-res tbody tr", { hasText: "E2EPC9" })).toContainText("Blocked");
   expect(errors).toEqual([]);
 });

@@ -25,6 +25,12 @@ test("delivery screen search: latest deliveries, find by number, nothing found",
   await page.locator(".modal.show .btn-primary").click();
   await expect(page.locator(".wms-dm-res").first()).toContainText("changed");
   await expect(row).toContainText("High");
+  await page.locator(".wms-dm-act[data-act='allocate']").click();                         // the actions run per marked delivery on the real stock (8 units in the bin, 4 asked)
+  await expect(page.locator(".wms-dm-res").first()).toContainText("done");
+  await expect(row).toContainText("Fully Allocated");
+  await page.locator(".wms-dm-act[data-act='pick']").click();                             // the rows stayed marked, so the next action works on the same delivery
+  await expect(page.locator(".wms-dm-res").first()).toContainText("done");
+  await expect(row).toContainText("Picking");
   await page.locator(".wms-dm-open").click();
   await expect(page.locator(".wms-dm-head")).toContainText("Customer");
   await page.locator(".wms-dm-back").click();
