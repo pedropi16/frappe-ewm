@@ -61,16 +61,26 @@ def validate_change(doc):
         frappe.throw(_("Only {0} {1} of this stock is free to change (allocated stock stays as it is)").format(flt(balance.available_quantity) if balance else 0, doc.product))
 
 
-def post_posting_change(name):
+def _check_mixing(doc):
+    """A partial change leaves the rest of the line in the bin under the old identity: where the storage type forbids mixing, the bin may not end up with both.
+    Only the dimensions the change touches are checked, so a bin that was already mixed does not block an unrelated change."""
+    if not doc.storage_bin: return
+    from frappe_wms.services.bin_rules import mixing_violations
+    before, after = sides(doc)
+    storage_type = frappe.get_cached_doc("Storage Type", frappe.db.get_value("Storage Bin", doc.storage_bin, "storage_type"))
+    reasons = mixing_violations(doc.storage_bin, storage_type, *(after[k] if after[k] != before[k] else None for k in ("product", "stock_type", "batch_no")), lock=True)
+    if reasons:
+        frappe.throw(_("Storage Bin {0} would end up mixed: {1}. Change the whole quantity, or give the changed stock a destination bin").format(doc.storage_bin, "; ".join(reasons)))
+
+
+def post_posting_change(name, check_mixing=True):
     require_role(*POSTING_CHANGE_ROLES)
     doc = frappe.get_doc("WMS Posting Change", name, for_update=True)
     if doc.status != "Draft":
         frappe.throw(_("This posting change has already been posted or cancelled"))
     validate_change(doc)
-    # No validate_destination_bin call here, matching the existing Quality Inspection precedent for this exact operation shape
-    # (services/quality.py::complete_inspection): the bin's own product/stock-type mixing rules are about what's allowed to newly ARRIVE in a bin,
-    # not about stock already resident there changing its own status in place.
     _move(doc, True, f"PSC:{doc.name}")
+    if check_mixing: _check_mixing(doc)
     from frappe_wms.services.erp_sync_queue import dispatch
     doc.db_set({"status": "Posted", "posted_by": frappe.session.user, "posted_at": now_datetime()}, update_modified=True)
     dispatch("posting_change", doc)
@@ -124,8 +134,9 @@ def _apply(line, defaults_batch, dry=False):
     from frappe_wms.services import adhoc_tasks
     changes = {k: line.get(k) for k in ("to_product", "to_batch_no", "to_stock_owner", "to_entitled_party", "to_country_of_origin", "to_special_stock_type", "to_special_stock_ref")}
     name = create_posting_change(line, line.get("reason"), line.get("to_stock_type"), changes)
-    post_posting_change(name)
-    if not any(line.get(k) for k in MOVE_KEYS): return name, [], None
+    moving = any(line.get(k) for k in MOVE_KEYS)
+    post_posting_change(name, check_mixing=not moving)  # a destination takes the changed stock out of the bin: its task checks the destination
+    if not moving: return name, [], None
     core = {"name": _after_balance(frappe.get_doc("WMS Posting Change", name)), "quantity": flt(line.get("quantity")) or None}
     args = (line.get("destination_bin"), line.get("priority") or "Normal", line.get("process_type"), line.get("reason"))
     if dry:

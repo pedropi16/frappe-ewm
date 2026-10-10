@@ -160,15 +160,21 @@ def bin_violations(bin_name, *, item=None, stock_type=None, hu_type=None, batch_
     if require_hu and hu_requirement(storage_type) == "Mandatory" and not destination_hu:
         reasons.append(_("storage type requires a Handling Unit"))
 
-    if _mixing_rules_enforced():
-        occupants = frappe.db.sql("select product, stock_type, batch_no from `tabWMS Stock Balance` where storage_bin=%s and quantity>0" + (" for update" if lock else ""),
-            bin_name, as_dict=True)
-        if item and not storage_type.allow_mixed_products and any(o.product != item for o in occupants):
-            reasons.append(_("bin already holds a different product"))
-        if stock_type and not storage_type.allow_mixed_stock_types and any(o.stock_type != stock_type for o in occupants):
-            reasons.append(_("bin already holds a different stock type"))
-        if batch_no and not storage_type.allow_mixed_batches and any(o.batch_no and o.batch_no != batch_no for o in occupants):
-            reasons.append(_("bin already holds a different batch"))
+    return reasons + mixing_violations(bin_name, storage_type, item, stock_type, batch_no, lock)
+
+
+def mixing_violations(bin_name, storage_type, item=None, stock_type=None, batch_no=None, lock=False):
+    """What the bin already holds against the storage type's product / stock type / batch mixing rules."""
+    if not _mixing_rules_enforced(): return []
+    reasons = []
+    occupants = frappe.db.sql("select product, stock_type, batch_no from `tabWMS Stock Balance` where storage_bin=%s and quantity>0" + (" for update" if lock else ""),
+        bin_name, as_dict=True)
+    if item and not storage_type.allow_mixed_products and any(o.product != item for o in occupants):
+        reasons.append(_("bin already holds a different product"))
+    if stock_type and not storage_type.allow_mixed_stock_types and any(o.stock_type != stock_type for o in occupants):
+        reasons.append(_("bin already holds a different stock type"))
+    if batch_no and not storage_type.allow_mixed_batches and any(o.batch_no and o.batch_no != batch_no for o in occupants):
+        reasons.append(_("bin already holds a different batch"))
     return reasons
 
 

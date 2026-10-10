@@ -101,6 +101,23 @@ class TestStockAdjustments(IntegrationTestCase):
         self.assertEqual(self._qty(item=self.item2), 2)
         self.assertEqual(self._qty(), 2)  # 10 - 3 - 2 - 1 - 2
 
+    def test_posting_change_may_not_mix_stock_types_in_a_bin_that_forbids_it(self):
+        st = f"{self.wh}-ST"
+        frappe.db.set_value("Storage Type", st, "allow_mixed_stock_types", 0)
+        frappe.db.set_single_value("WMS Settings", "enforce_storage_type_rules", 1)
+        try:
+            self._seed(10)
+            frappe.db.savepoint("mix")
+            with self.assertRaises(frappe.ValidationError):
+                change_stock([{"name": self._line().name, "quantity": 3}], "recall hold", "WAREHOUSE_BLOCKED")
+            frappe.db.rollback(save_point="mix")
+            self.assertEqual((self._qty(), self._qty(stock_type="WAREHOUSE_BLOCKED")), (10, 0))  # refused, nothing moved
+            change_stock([{"name": self._line().name, "quantity": 10}], "recall hold", "WAREHOUSE_BLOCKED")  # the whole line: nothing is left behind
+            self.assertEqual(self._qty(stock_type="WAREHOUSE_BLOCKED"), 10)
+        finally:
+            frappe.db.set_value("Storage Type", st, "allow_mixed_stock_types", 1)
+            frappe.db.set_single_value("WMS Settings", "enforce_storage_type_rules", 0)
+
     def test_a_posting_change_that_changes_nothing_is_refused_and_cancel_reverses(self):
         self._seed(5)
         with self.assertRaisesRegex(frappe.ValidationError, "Nothing changes"):
