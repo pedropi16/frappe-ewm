@@ -23,11 +23,11 @@ def generate_waves_from_templates():
     # nothing, so repeated daily runs don't produce empty waves.
     created = []
     for template in frappe.get_all("Wave Template", filters={"active": 1}, fields=["*"]):
-        # Outbound Delivery.status stays "Draft" throughout the whole pre-pick lifecycle in
-        # this codebase - nothing sets it to "Open"/"Allocated" anywhere; "Picking" is the
+        # Outbound Delivery.status is "Open" (after submit) throughout the whole pre-pick lifecycle in
+        # this codebase - nothing sets it to "Allocated" anywhere; "Picking" is the
         # first real transition, made by create_pick_tasks_for_wave once a wave releases.
-        # So "Draft" (not yet on any wave) is the correct scope for a fresh sweep.
-        filters = {"warehouse": template.warehouse, "docstatus": 1, "status": "Draft", "delivery_date": ["<=", nowdate()]}
+        # So "Open" (not yet on any wave) is the correct scope for a fresh sweep.
+        filters = {"warehouse": template.warehouse, "docstatus": 1, "status": ["in", ["Draft", "Open"]], "delivery_date": ["<=", nowdate()]}
         if template.route: filters["route"] = template.route
         deliveries = frappe.get_all("Outbound Delivery", filters=filters, pluck="name")
         if not deliveries: continue

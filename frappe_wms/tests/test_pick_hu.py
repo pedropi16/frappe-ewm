@@ -98,6 +98,17 @@ class TestForeground(_base.TestStockAdjustments):
         self._move(3)
         self.assertEqual(self._in(self.bin2), sorted(self.sn))
 
+    def test_serial_level_everywhere_names_the_serials_even_when_all_move(self):
+        from frappe_wms.exceptions import ForegroundRequired
+        frappe.db.set_value("WMS Product", {"item": self.sitem}, "serial_control", "Everywhere")
+        try:
+            with self.assertRaises(ForegroundRequired):
+                self._move(3)
+            self._move(3, serial_numbers=self.sn)
+            self.assertEqual(self._in(self.bin2), sorted(self.sn))
+        finally:
+            frappe.db.set_value("WMS Product", {"item": self.sitem}, "serial_control", "None")
+
 
 class TestSharedPickHU(TestPickHU):
     def test_partial_moves_of_one_warehouse_order_share_its_pick_hu(self):

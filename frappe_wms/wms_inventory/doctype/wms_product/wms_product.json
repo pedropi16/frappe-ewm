@@ -58,7 +58,7 @@
       "fieldname": "serial_control",
       "label": "Serial Control",
       "fieldtype": "Select",
-      "options": "None\nRequired at Receipt\nRequired at Issue\nAlways",
+      "options": "None\nRequired at Receipt\nRequired at Issue\nAlways\nEverywhere",
       "reqd": 1,
       "default": "None"
     },

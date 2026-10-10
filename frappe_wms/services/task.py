@@ -756,7 +756,9 @@ def details_needed(task, qty):
     out = {}
     if item.get("has_serial_no") and not task.serial_no:
         serials = sorted({r.serial_no for r in rows if r.serial_no})
-        if len(serials) > flt(qty) + 0.000001: out["serial"] = {"count": int(flt(qty)), "choices": serials}
+        # "Everywhere" (SAP: serial numbers at inventory level): every movement names its serial numbers, even when all of them would move anyway
+        everywhere = frappe.db.get_value("WMS Product", {"item": task.product, "warehouse_managed": 1}, "serial_control") == "Everywhere"
+        if len(serials) > flt(qty) + 0.000001 or (everywhere and serials): out["serial"] = {"count": int(flt(qty)), "choices": serials}
         elif serials: out["serial_auto"] = serials  # all of them move: nothing to choose
     if item.get("has_batch_no") and not task.batch_no:
         batches = sorted({r.batch_no for r in rows if r.batch_no})

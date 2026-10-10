@@ -78,8 +78,8 @@ frappe.pages["wms-adhoc"].on_page_load = function (wrapper) {
   load("/assets/frappe_wms/js/wms_grid.js").then(() => load("/assets/frappe_wms/js/wms_selection.js")).then(async () => {
     const r = await frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Warehouse", fields: ["name"], limit_page_length: 100 } });
     state.warehouses = (r.message || []).map((w) => w.name);
-    const mine = frappe.defaults.get_user_default("WMS Warehouse");
-    $root.find(".wms-ah-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(state.warehouses.includes(mine) ? mine : state.warehouses[0]);
+    $root.find(".wms-ah-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frappe_wms.my_warehouse(state.warehouses))
+      .on("change", (e) => frappe_wms.remember_warehouse(e.target.value));
     const tx = frappe.get_route()[1];
     if (tx === "adhu" || tx === "adprod" || tx === "posting") { frappe.set_route(`wms-${tx}`); return; }
     if (tx === "scrap") { frappe.set_route("wms-scrapping"); return; }

@@ -87,7 +87,7 @@ def post_goods_receipt(doc):
         _check_return_identity(row)
         product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
         if product and product.warehouse_managed:
-            if product.serial_control in ("Required at Receipt", "Always") and not row.serial_no:
+            if product.serial_control in ("Required at Receipt", "Always", "Everywhere") and not row.serial_no:
                 frappe.throw(_("Row {0}: {1} requires a serial number at receipt").format(row.idx, row.item))
             if product.batch_control and not row.batch_no:
                 frappe.throw(_("Row {0}: {1} requires a batch number at receipt").format(row.idx, row.item))
@@ -239,7 +239,7 @@ def receiving_worklist(inbound_delivery):
             # stock UOM - the ERPNext Item's UOM conversions, the order line's UOM first.
             "uoms": _receiving_uoms(row),
             "batch_required": bool(managed and product.get("batch_control")),
-            "serial_required": bool(managed and product.get("serial_control") in ("Required at Receipt", "Always")),
+            "serial_required": bool(managed and product.get("serial_control") in ("Required at Receipt", "Always", "Everywhere")),
         })
     return {
         "name": doc.name, "inbound_delivery_number": doc.inbound_delivery_number, "supplier": doc.supplier,

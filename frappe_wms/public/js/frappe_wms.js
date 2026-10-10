@@ -1,5 +1,16 @@
 frappe.provide("frappe_wms");
 
+// The warehouse a user works in: their WMS Warehouse default, else the one they last picked on any WMS page, else the first.
+frappe_wms.my_warehouse = function (names) {
+  let last = null;
+  try { last = localStorage.getItem("wms_last_warehouse"); } catch (e) { /* storage blocked: not remembered */ }
+  const mine = frappe.defaults.get_user_default("WMS Warehouse");
+  return [mine, last].find((w) => w && names.includes(w)) || names[0] || "";
+};
+frappe_wms.remember_warehouse = function (name) {
+  try { if (name) localStorage.setItem("wms_last_warehouse", name); } catch (e) { /* storage blocked: not remembered */ }
+};
+
 frappe_wms.call = function(method, args = {}, freeze_message = __("Processing warehouse transaction...")) {
     return frappe.call({ method, args, freeze: true, freeze_message });
 };

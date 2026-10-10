@@ -80,6 +80,7 @@ class TestLocks(_base.TestStockAdjustments):
             d = frappe.get_doc({"doctype": "Outbound Delivery", "outbound_delivery_number": frappe.generate_hash(length=8), "warehouse": self.wh, "customer": frappe.get_all("Customer", limit=1, pluck="name")[0], "delivery_date": frappe.utils.nowdate(),
                                 "items": [{"line_number": 1, "item": self.item, "requested_quantity": 1, "stock_uom": frappe.db.get_value("Item", self.item, "stock_uom"), "required_stock_type": "AVAILABLE"}]}).insert(ignore_permissions=True)
             d.submit(); names.append(d.name)
+            self.assertEqual(frappe.db.get_value("Outbound Delivery", d.name, "status"), "Open")  # submitted, nothing done on it yet
         a, b = self.users
         frappe.set_user(a); locks.acquire("Outbound Delivery", names[0])
         frappe.set_user(b)

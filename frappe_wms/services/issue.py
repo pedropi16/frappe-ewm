@@ -27,7 +27,7 @@ def post_goods_issue(doc):
         # confirmed by grep - a product configured to require a serial on the way OUT could ship
         # with none at all.
         product = frappe.get_cached_doc("WMS Product", row.item) if frappe.db.exists("WMS Product", row.item) else None
-        if product and product.warehouse_managed and product.serial_control in ("Required at Issue", "Always") and not row.serial_no:
+        if product and product.warehouse_managed and product.serial_control in ("Required at Issue", "Always", "Everywhere") and not row.serial_no:
             frappe.throw(_("Row {0}: {1} requires a serial number at issue").format(row.idx, row.item))
         # The HU's actual current bin (the door it was loaded to), not the delivery's staging
         # bin - loading may have moved it on since staging, and the stock ledger only has a

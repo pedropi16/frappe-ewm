@@ -250,6 +250,7 @@ class WMSMonitor {
     try { if (localStorage.getItem("wms_monitor_nav_hidden")) this.$body.find(".wms-monitor-nav").hide(); } catch (e) { /* ignore */ }
     $filters.find(".wms-mon-warehouse").on("change", (e) => {
       this.warehouse = e.target.value || null;
+      frappe_wms.remember_warehouse(this.warehouse);
       this.reset_unexecuted_searches();
       if (this.warehouse) this.load_view(this.view);
     });
@@ -257,8 +258,7 @@ class WMSMonitor {
     const wantedView = this.views.find((v) => v.label === frappe.defaults.get_user_default("wms_monitor_view"));
     if (wantedView) this.view = wantedView.key;
     this.show_view(this.view);
-    const defaultWh = frappe.defaults.get_user_default("WMS Warehouse");
-    const start = warehouses.length === 1 ? warehouses[0].name : (warehouses.some((w) => w.name === defaultWh) ? defaultWh : null);
+    const start = frappe_wms.my_warehouse(warehouses.map((w) => w.name));
     if (start) $filters.find(".wms-mon-warehouse").val(start).trigger("change");
   }
 

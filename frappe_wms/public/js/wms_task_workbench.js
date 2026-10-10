@@ -272,13 +272,12 @@ window.wms_workbench = (function () {
     $root.on("click", ".wb-create-confirm", () => create(true));
     $root.on("show.bs.dropdown", () => $root.find(".wb-hist").html(hist().map((h, i) => `<li><a href="#" data-i="${i}">${esc(h.value)} <span class="text-muted">(${esc(h.by)})</span></a></li>`).join("") || `<li class="disabled"><a>${__("No searches yet")}</a></li>`));
     $root.on("click", ".wb-hist a", (e) => { e.preventDefault(); const h = hist()[$(e.currentTarget).data("i")]; $root.find(".wb-by").val(h.by); $root.find(".wb-value").val(h.value); find(); });
-    $root.on("change", ".wb-wh", () => { setTitle(); state.rows = []; draw(); });
+    $root.on("change", ".wb-wh", (e) => { frappe_wms.remember_warehouse(e.target.value); setTitle(); state.rows = []; draw(); });
     $root.on("change", ".wb-show", draw);
 
     return frappe.call({ method: "frappe.client.get_list", args: { doctype: "WMS Warehouse", fields: ["name"], limit_page_length: 100 } }).then((r) => {
       state.warehouses = (r.message || []).map((w) => w.name);
-      const mine = frappe.defaults.get_user_default("WMS Warehouse");
-      $root.find(".wb-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(state.warehouses.includes(mine) ? mine : state.warehouses[0]);
+      $root.find(".wb-wh").html(state.warehouses.map((w) => `<option>${esc(w)}</option>`).join("")).val(frappe_wms.my_warehouse(state.warehouses));
       setTitle(); draw();
       return { find: (by, value) => { $root.find(".wb-by").val(by); $root.find(".wb-value").val(value); return find(); } };
     });

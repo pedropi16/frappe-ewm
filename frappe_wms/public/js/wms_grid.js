@@ -313,8 +313,8 @@ class DataGrid {
         <button type="button" class="btn btn-default btn-xs wms-grid-csv" title="${__("Download the visible rows and columns as CSV")}">${__("Export")}</button>
         <button type="button" class="btn btn-default btn-xs wms-grid-totals" title="${__("Totals of numeric columns")}">&Sigma;</button>
         <span class="wms-grid-groupbar">
-          <span class="text-muted">${__("Group by")}</span>
-          ${[0, 1, 2].map((i) => `<select class="form-control input-xs wms-grid-group" data-lvl="${i}"><option value="">${i ? "› " + __("then") + "…" : __("(none)")}</option>${this.columns.map(([f, l]) => `<option value="${frappe.utils.escape_html(f)}" ${this.groupBy[i] === f ? "selected" : ""}>${frappe.utils.escape_html(l)}</option>`).join("")}</select>`).join("")}
+          <button type="button" class="btn btn-default btn-xs wms-grid-group-toggle" title="${__("Group the rows by one to three columns")}">${__("Group by")} &#9662;</button>
+          <span class="wms-grid-groupsel" style="${this.groupBy.length ? "" : "display:none;"}">${[0, 1, 2].map((i) => `<select class="form-control input-xs wms-grid-group" data-lvl="${i}"><option value="">${i ? "› " + __("then") + "…" : __("(none)")}</option>${this.columns.map(([f, l]) => `<option value="${frappe.utils.escape_html(f)}" ${this.groupBy[i] === f ? "selected" : ""}>${frappe.utils.escape_html(l)}</option>`).join("")}</select>`).join("")}</span>
         </span>
         <span class="wms-grid-treebar">
           <button type="button" class="btn btn-default btn-xs wms-grid-expand" title="${this.opts.hierarchy ? __("Expand the marked rows (everything when none is marked)") : __("Expand all groups")}">&#9662; ${__("Expand")}</button>
@@ -344,6 +344,7 @@ class DataGrid {
     $toolbar.find(".wms-grid-layout-toggle").on("click", () => $toolbar.find(".wms-grid-layoutbar").toggle());
     if (this.opts.noGroup) $toolbar.find(".wms-grid-groupbar").remove();
     if (this.opts.extraToolbar) $toolbar.find(".wms-grid-extra").append(this.opts.extraToolbar);
+    $toolbar.find(".wms-grid-group-toggle").on("click", () => $toolbar.find(".wms-grid-groupsel").toggle());
     $toolbar.find(".wms-grid-group").on("change", () => {
       this.groupBy = Array.from(new Set($toolbar.find(".wms-grid-group").map((_, el) => el.value).get().filter(Boolean)));
       this._applyGroupOrder(); this.expanded = new Set(); this._expandInit = false; this.sels = [];
